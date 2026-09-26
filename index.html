@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js 測試頁面</title>
+</head>
+<body>
+  <h1>OPM.js 測試頁面</h1>
+  <p>點擊播放，測試四運算子 FM 合成的銅管和弦。</p>
+  <button id="play" type="button">播放和弦</button>
+  <button id="stop" type="button" disabled>停止</button>
+  <output id="status" role="status" aria-live="polite"></output>
+  <script type="module">
+    import { OPM } from './src/api/index.js';
+
+    const opm = new OPM();
+    const play = document.querySelector('#play');
+    const stop = document.querySelector('#stop');
+    const status = document.querySelector('#status');
+    let notes = [];
+
+    play.addEventListener('click', async () => {
+      play.disabled = true;
+      try {
+        await opm.start();
+        notes = [60, 64, 67].map(note => opm.playNote({ note, duration: 3 }));
+        stop.disabled = false;
+        status.textContent = '播放中：C 大調銅管和弦';
+      } catch (error) {
+        play.disabled = false;
+        status.textContent = `播放失敗：${error.message}`;
+      }
+    });
+
+    stop.addEventListener('click', () => {
+      for (const id of notes) opm.stop(id);
+      notes = [];
+      stop.disabled = true;
+      play.disabled = false;
+      status.textContent = '已停止';
+    });
+  </script>
+</body>
+</html>
