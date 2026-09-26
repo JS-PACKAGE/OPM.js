@@ -6,6 +6,8 @@ OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator sy
 
 > **Status:** initial usable implementation; the public API may still change before 1.0.
 
+Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.md).
+
 ## About
 
 The Yamaha YM2151 (OPM) powered a generation of arcade boards and the Sharp X68000, defining the sound of the mid-1980s with its 8-channel, 4-operator FM architecture. OPM.js brings that architecture to the browser as a pure JavaScript synthesis engine.

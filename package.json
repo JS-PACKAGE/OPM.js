@@ -5,7 +5,7 @@
   "type": "module",
   "license": "Apache-2.0",
   "exports": { ".": "./src/api/index.js", "./core": "./src/core/index.js", "./voices/*": "./src/voices/*" },
-  "files": ["src/", "LICENSE", "README.md", "SECURITY.md"],
+  "files": ["src/", "doc/", "LICENSE", "README.md", "SECURITY.md"],
   "scripts": { "test": "node --test" },
   "engines": { "node": ">=18" }
 }
