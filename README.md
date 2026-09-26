@@ -33,6 +33,8 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 Run `python3 -m http.server` at the repository root and open `index.html` on localhost. Press **播放曲子** to hear the complete *Twinkle, Twinkle, Little Star* melody with brass accompaniment (about 24 seconds); **停止** ends it early. `demo/index.html` plays a single chord instead. No build step or runtime dependencies are required.
 
+For another website, the browser entry point is `src/api/index.js`. Keep the entire `src/` directory on the site and import `OPM` from the path relative to your HTML page (the example below assumes the page is beside `src/`):
+
 ```js
 import { OPM } from './src/api/index.js';
 
