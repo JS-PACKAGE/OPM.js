@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. It is a pure JavaScript synthesis engine powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
-- **Status:** early draft. Public API (`playNote()`, voice format) is a design sketch and may change. Update the README when it does.
+- **Status:** initial usable implementation. Public API (`playNote()`, voice format) may change before 1.0. Update the README when it does.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
 
 ## Non-negotiables

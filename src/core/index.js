@@ -4,6 +4,7 @@ import { sineOperator, finiteOrSilence, TAU } from './operator.js';
 import { ALGORITHMS, feedbackPhase } from './algorithms.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
+export { Synth, normalizeVoice } from './synth.js';
 export const HEADROOM = 0.7; // -3.098 dB, with margin for Float32 rounding.
 export const OVERSAMPLE = 4;
 export const MAX_RENDER_SAMPLES = 4_000_000;

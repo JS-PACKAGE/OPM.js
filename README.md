@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator synthesis with multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-dependency JavaScript engine powered by the Web Audio API.
 
-> **Status:** early draft. The API described below is a design sketch and may change.
+> **Status:** initial usable implementation; the public API may still change before 1.0.
 
 ## About
 
@@ -15,50 +15,61 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 ## Features
 
 - **4-operator FM synthesis** with 8 connection algorithms and hardware-style feedback
-- **Per-operator ADSR envelopes** with key-scaled timing
+- **Per-operator ADSR envelopes** in the dB domain
 - **LFO** with AM / PM modulation (tremolo & vibrato)
-- **Polyphonic voice allocation** across multiple channels
+- **Eight-voice polyphony** with oldest-note stealing
 - **AudioWorklet-based DSP** — synthesis runs off the main thread
 - **Zero dependencies**, built on the Web Audio API
 - Works in the browser and Node.js (offline rendering)
 
 ## Requirements
 
-- Chrome/Chromium 90+, Firefox 88+, Safari 14.1+, Edge 90+
-- ES6 and the Web Audio API (AudioWorklet)
+- Modern browser with ES modules and AudioWorklet (served over HTTPS or localhost)
+- Node.js 18+ for offline rendering and tests
 
-## Installation
+## Getting started
 
-```bash
-npm install opm.js
-```
-
-Or drop the build into your page:
-
-```html
-<script type="module" src="path/to/opm.js"></script>
-```
-
-## Quick start
+Run `python3 -m http.server` at the repository root and open `demo/index.html` on localhost. Press **Play chord** to hear the bundled brass voice. No build step or runtime dependencies are required.
 
 ```js
-import { OPM } from 'opm.js';
+import { OPM } from './src/api/index.js';
 
 const opm = new OPM({ sampleRate: 44100 });
-await opm.start();            // attaches to an AudioContext
+await opm.start(); // call from a user gesture to allow audio playback
 
-opm.playNote({ voice: 'brass', note: 60, time: 0, duration: 0.5 });
+const id = opm.playNote({ voice: 'brass', note: 60, time: 0, duration: 0.5 });
+// time is a nonnegative delay in seconds; duration is required (0, 60].
+// opm.stop(id) releases the note early; await opm.close() closes the AudioContext.
+```
+
+Pass a voice object directly to `playNote()`, or register one with `opm.loadVoice('name', voice)`. Notes use MIDI numbers 0–127. At most eight voices sound concurrently; starting a ninth steals the oldest. The worklet accepts up to 256 pending note events.
+
+For deterministic offline rendering without Web Audio:
+
+```js
+import { Synth } from './src/core/index.js';
+import { brass } from './src/voices/brass.js';
+
+const synth = new Synth(44100);
+const id = synth.noteOn(brass, 60);
+const left = new Float32Array(44100);
+const right = new Float32Array(44100);
+synth.render(left, right, 0, 22050);
+synth.noteOff(id);
+synth.render(left, right, 22050, 22050);
 ```
 
 ## Voice format
 
-A voice is a small JSON object: 4 operators, an algorithm, and feedback.
+A voice has four operators, an algorithm (0–7), and feedback (0–7). The example is valid as a version 1 JSON voice-bank entry. `modIndex` controls phase modulation strength (0–16); `detune` and `pmDepth` are in cents, `amDepth` is 0–1, and ADSR times are in seconds. Individual voice objects may omit `version`, `name`, `modIndex` (defaults to 4), and `lfo` (defaults to off).
 
 ```json
 {
+  "version": 1,
   "name": "brass",
   "algorithm": 4,
   "feedback": 3,
+  "modIndex": 4,
   "lfo": { "rate": 5.2, "amDepth": 0, "pmDepth": 12 },
   "ops": [
     { "ratio": 1.0, "level": 0.8, "detune": 0,
@@ -91,7 +102,7 @@ A voice is a small JSON object: 4 operators, an algorithm, and feedback.
 
 ## Roadmap
 
-- [ ] v0.1 — core engine: 4 operators, common algorithms, ADSR
+- [x] v0.1 — core engine: 4 operators, common algorithms, ADSR
 - [ ] v0.2 — LFO, detune, key scaling
 - [ ] v0.3 — full algorithm set + feedback modes
 - [ ] v0.4 — DX7 SysEx voice import
