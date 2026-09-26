@@ -6,8 +6,8 @@ OPM.js is a client-side audio synthesis engine. It has no network stack, no auth
 
 | Version | Supported |
 | --- | --- |
-| main (pre-1.0) | ✅ |
-| < 1.0 forks | ❌ |
+| 1.x | ✅ |
+| < 1.0 | ❌ |
 
 ## Reporting a vulnerability
 
@@ -56,7 +56,7 @@ A security review is required before:
 **D. Supply chain**
 - [ ] Zero runtime dependencies still holds (`npm ls --omit=dev` is empty)
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
-- [ ] `package.json` `files` whitelist ships only `src/`, `LICENSE`, `README.md`, `SECURITY.md`
+- [ ] `package.json` `files` whitelist ships only intended source, usage docs, and legal/project files
 
 ### 3. Automated gates (CI)
 

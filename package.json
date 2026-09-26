@@ -1,11 +1,11 @@
 {
   "name": "opm.js",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A zero-dependency four-operator FM synthesis engine",
   "type": "module",
   "license": "Apache-2.0",
   "exports": { ".": "./src/api/index.js", "./core": "./src/core/index.js", "./voices/*": "./src/voices/*" },
-  "files": ["src/", "doc/", "LICENSE", "README.md", "SECURITY.md"],
+  "files": ["src/", "doc/", "LICENSE", "README.md", "CHANGELOG.md", "SECURITY.md"],
   "scripts": { "test": "node --test" },
   "engines": { "node": ">=18" }
 }

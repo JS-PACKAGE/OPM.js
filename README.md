@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator synthesis with multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-dependency JavaScript engine powered by the Web Audio API.
 
-> **Status:** initial usable implementation; the public API may still change before 1.0.
+> **Status:** v1.0.0 — the documented browser and offline-rendering APIs are available.
 
 Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.md).
 
@@ -106,11 +106,8 @@ A voice has four operators, an algorithm (0–7), and feedback (0–7). The exam
 
 ## Roadmap
 
-- [x] v0.1 — core engine: 4 operators, common algorithms, ADSR
-- [ ] v0.2 — LFO, detune, key scaling
-- [ ] v0.3 — full algorithm set + feedback modes
-- [ ] v0.4 — DX7 SysEx voice import
-- [ ] v0.5 — Node.js offline rendering + WAV export
+- [x] v1.0 — 4-operator FM engine, eight algorithms, feedback, ADSR, LFO, detune, browser API, and offline rendering
+- [ ] Future — key scaling, DX7 SysEx voice import, and WAV export
 
 ## Limitations
 
