@@ -7,8 +7,8 @@
 </head>
 <body>
   <h1>OPM.js 測試頁面</h1>
-  <p>點擊播放，測試四運算子 FM 合成的銅管和弦。</p>
-  <button id="play" type="button">播放和弦</button>
+  <p>播放完整的《小星星》旋律與和弦（約 24 秒）。</p>
+  <button id="play" type="button">播放曲子</button>
   <button id="stop" type="button" disabled>停止</button>
   <output id="status" role="status" aria-live="polite"></output>
   <script type="module">
@@ -18,22 +18,66 @@
     const play = document.querySelector('#play');
     const stop = document.querySelector('#stop');
     const status = document.querySelector('#status');
+    const beatSeconds = 0.5;
+    // Each bar has four beats; a three-note bar holds its last note for two beats.
+    const melody = [
+      [72, 72, 79, 79], [81, 81, 79],
+      [77, 77, 76, 76], [74, 74, 72],
+      [79, 79, 77, 77], [76, 76, 74],
+      [79, 79, 77, 77], [76, 76, 74],
+      [72, 72, 79, 79], [81, 81, 79],
+      [77, 77, 76, 76], [74, 74, 72],
+    ];
+    const chords = [
+      [48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50],
+      [43, 47, 50], [48, 52, 55], [43, 47, 50], [48, 52, 55],
+      [48, 52, 55], [45, 48, 52], [41, 45, 48], [48, 52, 55],
+    ];
+    const songSeconds = melody.length * 4 * beatSeconds;
     let notes = [];
+    let finishTimer;
+
+    function playSong() {
+      for (let bar = 0; bar < melody.length; bar++) {
+        const start = bar * 4 * beatSeconds;
+        for (const note of chords[bar]) {
+          notes.push(opm.playNote({ note, time: start, duration: 4 * beatSeconds - 0.1 }));
+        }
+        let beat = 0;
+        for (let i = 0; i < melody[bar].length; i++) {
+          const length = i === 2 && melody[bar].length === 3 ? 2 : 1;
+          notes.push(opm.playNote({
+            note: melody[bar][i], time: start + beat * beatSeconds,
+            duration: length * beatSeconds - 0.05,
+          }));
+          beat += length;
+        }
+      }
+    }
 
     play.addEventListener('click', async () => {
       play.disabled = true;
       try {
         await opm.start();
-        notes = [60, 64, 67].map(note => opm.playNote({ note, duration: 3 }));
+        playSong();
         stop.disabled = false;
-        status.textContent = '播放中：C 大調銅管和弦';
+        status.textContent = '播放中：《小星星》';
+        finishTimer = setTimeout(() => {
+          notes = [];
+          stop.disabled = true;
+          play.disabled = false;
+          status.textContent = '播放完畢';
+        }, (songSeconds + 0.2) * 1000);
       } catch (error) {
+        for (const id of notes) opm.stop(id);
+        notes = [];
         play.disabled = false;
         status.textContent = `播放失敗：${error.message}`;
       }
     });
 
     stop.addEventListener('click', () => {
+      clearTimeout(finishTimer);
       for (const id of notes) opm.stop(id);
       notes = [];
       stop.disabled = true;

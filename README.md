@@ -31,7 +31,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 ## Getting started
 
-Run `python3 -m http.server` at the repository root and open `demo/index.html` on localhost. Press **Play chord** to hear the bundled brass voice. No build step or runtime dependencies are required.
+Run `python3 -m http.server` at the repository root and open `index.html` on localhost. Press **播放曲子** to hear the complete *Twinkle, Twinkle, Little Star* melody with brass accompaniment (about 24 seconds); **停止** ends it early. `demo/index.html` plays a single chord instead. No build step or runtime dependencies are required.
 
 ```js
 import { OPM } from './src/api/index.js';
