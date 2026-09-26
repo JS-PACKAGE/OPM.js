@@ -1,0 +1,176 @@
+[
+  {
+    "version": 1,
+    "name": "bell",
+    "algorithm": 4,
+    "feedback": 0,
+    "modIndex": 5,
+    "lfo": {
+      "rate": 0,
+      "amDepth": 0,
+      "pmDepth": 0
+    },
+    "ops": [
+      {
+        "ratio": 3.5,
+        "level": 0.7,
+        "detune": 0,
+        "adsr": {
+          "a": 0.002,
+          "d": 1.2,
+          "s": 0,
+          "r": 1.0
+        }
+      },
+      {
+        "ratio": 1,
+        "level": 0.8,
+        "detune": 0,
+        "adsr": {
+          "a": 0.002,
+          "d": 1.8,
+          "s": 0.05,
+          "r": 1.2
+        }
+      },
+      {
+        "ratio": 7,
+        "level": 0.4,
+        "detune": 2,
+        "adsr": {
+          "a": 0.002,
+          "d": 0.6,
+          "s": 0,
+          "r": 0.8
+        }
+      },
+      {
+        "ratio": 2,
+        "level": 0.5,
+        "detune": 0,
+        "adsr": {
+          "a": 0.002,
+          "d": 1.2,
+          "s": 0.03,
+          "r": 1
+        }
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "name": "brass",
+    "algorithm": 2,
+    "feedback": 4,
+    "modIndex": 4,
+    "lfo": {
+      "rate": 0,
+      "amDepth": 0,
+      "pmDepth": 0
+    },
+    "ops": [
+      {
+        "ratio": 1,
+        "level": 0.8,
+        "detune": 0,
+        "adsr": {
+          "a": 0.03,
+          "d": 0.2,
+          "s": 0.6,
+          "r": 0.2
+        }
+      },
+      {
+        "ratio": 1,
+        "level": 0.5,
+        "detune": 3,
+        "adsr": {
+          "a": 0.02,
+          "d": 0.2,
+          "s": 0.4,
+          "r": 0.2
+        }
+      },
+      {
+        "ratio": 2,
+        "level": 0.4,
+        "detune": -3,
+        "adsr": {
+          "a": 0.04,
+          "d": 0.3,
+          "s": 0.4,
+          "r": 0.2
+        }
+      },
+      {
+        "ratio": 1,
+        "level": 0.9,
+        "detune": 0,
+        "adsr": {
+          "a": 0.03,
+          "d": 0.2,
+          "s": 0.7,
+          "r": 0.25
+        }
+      }
+    ]
+  },
+  {
+    "version": 1,
+    "name": "bass",
+    "algorithm": 0,
+    "feedback": 3,
+    "modIndex": 3,
+    "lfo": {
+      "rate": 0,
+      "amDepth": 0,
+      "pmDepth": 0
+    },
+    "ops": [
+      {
+        "ratio": 1,
+        "level": 0.5,
+        "detune": 0,
+        "adsr": {
+          "a": 0.002,
+          "d": 0.08,
+          "s": 0.15,
+          "r": 0.08
+        }
+      },
+      {
+        "ratio": 2,
+        "level": 0.4,
+        "detune": 0,
+        "adsr": {
+          "a": 0.003,
+          "d": 0.1,
+          "s": 0.2,
+          "r": 0.08
+        }
+      },
+      {
+        "ratio": 1,
+        "level": 0.65,
+        "detune": 0,
+        "adsr": {
+          "a": 0.003,
+          "d": 0.15,
+          "s": 0.3,
+          "r": 0.08
+        }
+      },
+      {
+        "ratio": 1,
+        "level": 0.9,
+        "detune": 0,
+        "adsr": {
+          "a": 0.005,
+          "d": 0.2,
+          "s": 0.5,
+          "r": 0.12
+        }
+      }
+    ]
+  }
+]

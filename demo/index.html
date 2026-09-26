@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — 4-op FM demo</title>
+</head>
+<body>
+  <h1>OPM.js</h1>
+  <p>Press Play to hear a four-operator brass chord.</p>
+  <button id="play" type="button">Play chord</button>
+  <output id="status" aria-live="polite"></output>
+  <script type="module">
+    import { OPM } from '../src/api/index.js';
+
+    const opm = new OPM();
+    const button = document.querySelector('#play');
+    const status = document.querySelector('#status');
+    button.addEventListener('click', async () => {
+      button.disabled = true;
+      try {
+        await opm.start();
+        for (const note of [60, 64, 67]) opm.playNote({ note, duration: 0.7 });
+        status.textContent = 'Playing brass chord';
+      } catch (error) {
+        status.textContent = error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
