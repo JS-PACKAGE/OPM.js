@@ -2,7 +2,7 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-OPM.js provides browser AudioWorklet synthesis through `OPM` and offline PCM rendering through `Synth` and `renderNote`. The examples below use the 1.0 ESM package; Node.js 18+ is required for the Node examples.
+OPM.js provides browser AudioWorklet synthesis through `OPM` and offline PCM rendering through `Synth` and `renderNote`. The examples below use the 1.1 ESM package; Node.js 18+ is required for the Node examples.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
@@ -15,17 +15,17 @@ npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.0.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.1.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.0.0.tgz
+npm install ../OPM.js/opm.js-1.1.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.0.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps do not need this project's build dependencies. The installed package contains built `dist/` JavaScript/JSON and documentation/legal files, but **not** `src/`, `scripts/`, `demo/`, or precompressed `.br`/`.gz` files. Run maintainer scripts only in the checkout. Node ESM imports from the installed package use `opm.js/core` and `opm.js/voices/brass.js`; a plain browser cannot resolve bare package specifiers without an import map or bundler.
+For an existing app, run `npm install /actual/path/to/opm.js-1.1.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps do not need this project's build dependencies. The installed package contains built `dist/` JavaScript/JSON and documentation/legal files, but **not** `src/`, `scripts/`, `demo/`, or precompressed `.br`/`.gz` files. Run maintainer scripts only in the checkout. Node ESM imports from the installed package use `opm.js/core` and `opm.js/voices/brass.js`; a plain browser cannot resolve bare package specifiers without an import map or bundler.
 
 ## Browser quick start
 
