@@ -8,6 +8,7 @@ OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the 
 
 - **Status:** 1.0 release. Keep the public API (`playNote()`, voice format) and README in sync when changing behavior.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
+- **Usage:** Start with [README: Getting started](./README.md#getting-started); the [English](./doc/usage.en.md) and [繁體中文](./doc/usage.zh-TW.md) guides cover installation, deployment, and executable examples.
 
 ## Non-negotiables
 
@@ -25,8 +26,8 @@ OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the 
 main thread                          AudioWorklet thread
 ─────────────                        ───────────────────
 OPM (public API)                     processor
-  playNote() / stop() / setLFO() ──►   voice allocation
-  voice bank (JSON)                    operator graph (4-op, 8 algorithms, feedback)
+  playNote() / stop()           ──►   voice allocation
+  loadVoice() / voice bank (JSON)      operator graph (4-op, 8 algorithms, feedback)
                                        ADSR envelopes (dB domain)
                                        LFO (AM / PM) → stereo out
 ```
@@ -35,6 +36,9 @@ OPM (public API)                     processor
 - `src/worklet/` — AudioWorkletProcessor and message protocol.
 - `src/api/` — public facade (`OPM` class), voice loading, scheduling.
 - `src/voices/` — voice bank JSON (format below).
+- `dist/` — generated, minified ESM/JSON used by package exports and both browser demos. Deploy the complete tree.
+
+LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
 ## Voice format
 
@@ -50,7 +54,9 @@ A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedb
 
 ## Development workflow
 
-- No build step required. `node --test` for unit tests; browser smoke test via a minimal `demo/index.html`.
+- Consumers use committed `dist/` or an installed package without a build toolchain.
+- For development, use Node.js 18+ and run `npm ci` in the repository root; run `node --test` for unit tests.
+- After editing source, run `npm run build` before browser smoke checks: the demos import `dist/`, not `src/`. From the repository root, run `python3 -m http.server 8000` and open `http://localhost:8000/demo/index.html` or `http://localhost:8000/index.html`. `npm pack` rebuilds automatically before packaging.
 - Test the core offline in Node.js (render Float32Array, assert envelope shape / silence / no NaN).
 - Before claiming a milestone in `README.md` Roadmap is done, it must have: a test, a demo sound, and a README mention.
 - Keep commits focused; document non-obvious DSP math in comments with the formula.

@@ -2,6 +2,8 @@
 
 OPM.js is a client-side audio synthesis engine. It has no network stack, no authentication, and zero runtime dependencies — but it does parse untrusted data (voice banks) and runs DSP code in a hot loop inside an AudioWorklet. This document defines what "security-relevant" means here and how it is reviewed.
 
+For installation, browser deployment, and API examples, start with the [README](./README.md#getting-started) or the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guide.
+
 ## Supported versions
 
 | Version | Supported |
@@ -12,6 +14,13 @@ OPM.js is a client-side audio synthesis engine. It has no network stack, no auth
 ## Reporting a vulnerability
 
 Report privately to the repository owner (GitHub Security Advisories preferred). Do not open public issues for exploitable bugs. Acknowledgement target: 72 hours.
+
+## Safe embedding
+
+- Serve the complete, matching `dist/` module tree over HTTPS or localhost. Keep worklet and shared-chunk paths intact; retain `LICENSE` when redistributing.
+- Use `loadVoice()` or `parseVoiceBank()` rather than bypassing validation. Single-voice APIs reject out-of-range fields; bank parsing clamps finite numeric fields but still rejects malformed data and invalid version/algorithm/feedback values.
+- The engine has no download API. The usage-guide loader fetches a trusted bundled asset. If your application downloads untrusted banks, restrict sources, MIME types, and response size **before** reading the body; `parseVoiceBank()` enforces its 256 KiB JSON-string cap only after download.
+- Keep host-page security controls intact. For a CSP that disallows inline scripts, move the examples' module code to an allowed external `.js` file; no `unsafe-eval` is needed.
 
 ## Threat model
 
@@ -49,7 +58,7 @@ A security review is required before:
 - [ ] Worklet receives only plain data (no objects with prototypes, no functions)
 
 **C. DSP loop safety**
-- [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (visible in debug builds)
+- [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (`Synth.errorCount` or `renderNote()`'s `diagnostics.errors`)
 - [ ] Per-voice CPU ceiling: hard cap on active voices (documented), oldest-note stealing
 - [ ] Determinism preserved after changes (same inputs → same Float32Array)
 
@@ -58,7 +67,9 @@ A security review is required before:
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
 - [ ] `package.json` `files` whitelist ships only intended `dist/` assets, usage docs, and legal/project files
 
-### 3. Automated gates (CI)
+### 3. Verification gates
+
+Run development commands from a source checkout after `npm ci`; installed npm packages do not contain the development tooling.
 
 - `node --test` — unit tests including malformed-voice fuzz cases
 - `npm audit` and `npm audit --omit=dev` — audit development tooling; runtime dependencies must remain empty
