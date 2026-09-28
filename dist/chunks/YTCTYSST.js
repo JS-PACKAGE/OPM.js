@@ -1,0 +1,1 @@
+var e={version:1,name:"brass",algorithm:4,feedback:3,modIndex:4,lfo:{rate:5.2,amDepth:0,pmDepth:12},ops:[{ratio:1,level:.8,detune:0,adsr:{a:.01,d:.2,s:.6,r:.1}},{ratio:1,level:.6,detune:3,adsr:{a:.01,d:.15,s:.5,r:.1}},{ratio:2,level:.4,detune:-3,adsr:{a:.02,d:.3,s:.4,r:.15}},{ratio:1,level:.7,detune:0,adsr:{a:.01,d:.2,s:.55,r:.1}}]};export{e as brass};

@@ -31,7 +31,7 @@ Report privately to the repository owner (GitHub Security Advisories preferred).
 A security review is required before:
 
 - [ ] Any release tag (`vX.Y.Z`)
-- [ ] Merging a PR that touches: `src/worklet/`, `src/core/`, voice parsing (`src/api/` loaders)
+- [ ] Merging a PR that touches: `src/worklet/`, `src/core/`, or voice parsing (`src/voices/`, `src/api/` loaders)
 - [ ] Adding any dependency, build plugin, or CI action
 - [ ] Supporting a new voice-bank source (file import, URL, user paste)
 
@@ -44,7 +44,7 @@ A security review is required before:
 - [ ] File/URL loaders reject: `..` paths, non-JSON content types, payloads over a fixed size cap
 
 **B. Worklet boundary**
-- [ ] Every `message` is shape-checked in `process()` (no direct property access on `event.data`)
+- [ ] Every `message` is shape-checked in `receive()` before payload reads, enqueueing, or rendering
 - [ ] No `eval`, `new Function`, `import()` of dynamic strings anywhere in the codebase
 - [ ] Worklet receives only plain data (no objects with prototypes, no functions)
 
@@ -56,12 +56,12 @@ A security review is required before:
 **D. Supply chain**
 - [ ] Zero runtime dependencies still holds (`npm ls --omit=dev` is empty)
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
-- [ ] `package.json` `files` whitelist ships only intended source, usage docs, and legal/project files
+- [ ] `package.json` `files` whitelist ships only intended `dist/` assets, usage docs, and legal/project files
 
 ### 3. Automated gates (CI)
 
 - `node --test` — unit tests including malformed-voice fuzz cases
-- `npm audit --omit=dev` (dev deps only; runtime must be empty)
+- `npm audit` and `npm audit --omit=dev` — audit development tooling; runtime dependencies must remain empty
 - grep gate: fail CI if `eval(`, `new Function(`, or `import(` with non-literal appear in `src/`
 - Determinism test: render the same fixture twice, byte-compare
 

@@ -2,7 +2,7 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-OPM.js provides `OPM` for real-time AudioWorklet synthesis in the browser and `Synth` for offline rendering without Web Audio (for example in Node.js). The public API may still change before 1.0.
+OPM.js provides `OPM` for real-time AudioWorklet synthesis in the browser and `Synth` for offline rendering without Web Audio (for example in Node.js). The documented APIs are available in 1.0.
 
 ## Start and play in a browser
 
@@ -17,7 +17,7 @@ Visit `http://localhost:8000/demo/index.html` and click **Play chord**. To creat
 ```html
 <button id="play" type="button">Play</button>
 <script type="module">
-  import { OPM } from '../src/api/index.js';
+  import { OPM } from '../dist/api/index.js';
 
   const opm = new OPM();
   document.querySelector('#play').addEventListener('click', async () => {
@@ -27,14 +27,16 @@ Visit `http://localhost:8000/demo/index.html` and click **Play chord**. To creat
 </script>
 ```
 
+Deploy the entire prebuilt `dist/` directory, including its shared chunks and worklet; no consumer build step is needed. For npm imports, use `opm.js`, `opm.js/core`, and `opm.js/voices/brass.js`. Optional `.br`/`.gz` files require server content-encoding negotiation; continue importing `.js` URLs. See the README's [distribution instructions](../README.md#optimized-distribution).
+
 `brass` is the bundled voice. `playNote({ voice, note, time, duration })` returns a note ID: `note` is an integer MIDI note 0–127; `time` is a delay in seconds relative to the current AudioContext time (default 0, at most 60); `duration` is required and must be in `(0, 60]` seconds. `voice` may be a registered name (default `brass`) or a voice object. Up to eight notes can sound at once; a ninth steals the oldest. The worklet can hold up to 256 pending events.
 
 To load a voice under a custom name and release a note early, replace the page's `<script type="module">` with:
 
 ```html
 <script type="module">
-  import { OPM } from '../src/api/index.js';
-  import { brass } from '../src/voices/brass.js';
+  import { OPM } from '../dist/api/index.js';
+  import { brass } from '../dist/voices/brass.js';
 
   const opm = new OPM();
   document.querySelector('#play').addEventListener('click', async () => {
@@ -53,8 +55,8 @@ To load a voice under a custom name and release a note early, replace the page's
 Requires Node.js 18+. Create `render.mjs` in the repository root:
 
 ```js
-import { Synth } from './src/core/index.js';
-import { brass } from './src/voices/brass.js';
+import { Synth } from './dist/core/index.js';
+import { brass } from './dist/voices/brass.js';
 
 const sampleRate = 44100;
 const synth = new Synth(sampleRate);
@@ -71,7 +73,7 @@ Run `node render.mjs`. `render(left, right, offset, length)` writes into equally
 
 ## Voice format
 
-A complete JSON voice-bank entry uses version 1; see [voice.schema.json](../src/voices/voice.schema.json) and [examples.json](../src/voices/examples.json). The four `ops` are in signal order:
+A complete JSON voice-bank entry uses version 1; see [voice.schema.json](../dist/voices/voice.schema.json) and [examples.json](../dist/voices/examples.json). The four `ops` are in signal order:
 
 ```json
 {
@@ -94,11 +96,11 @@ A complete JSON voice-bank entry uses version 1; see [voice.schema.json](../src/
 - Per operator: `ratio` is a frequency multiplier (0.125–32), `level` is amplitude (0–1), and `detune` is in cents (±1200). ADSR `a`/`d`/`r` are seconds (0–10) and `s` is 0–1.
 - `lfo.rate` is 0–20 Hz, `amDepth` is 0–1, and `pmDepth` is 0–1200 cents.
 - A single voice passed to `playNote()`, `loadVoice()`, or `Synth.noteOn()` may omit `version`, `name`, `lfo`, and `modIndex`; the latter two default to LFO off and 4. Out-of-range or nonfinite numeric values are rejected.
-- For complete JSON voice banks use `parseVoiceBank()` from `src/voices/schema.js`: all the fields above are required, with at most 128 voices and 256 KiB per JSON string. Unlike the single-voice path, the bank import clamps **finite** out-of-range numeric values to the Schema limits; it still rejects nonfinite values and unknown fields. It returns a `Map<name, voice>`.
+- For complete JSON voice banks use `parseVoiceBank()` from `dist/voices/schema.js`: all the fields above are required, with at most 128 voices and 256 KiB per JSON string. Unlike the single-voice path, the bank import clamps **finite** out-of-range numeric values to the Schema limits; it still rejects nonfinite values and unknown fields. It returns a `Map<name, voice>`.
 
 ```js
-import { parseVoiceBank } from '../src/voices/schema.js';
-const response = await fetch('../src/voices/examples.json');
+import { parseVoiceBank } from '../dist/voices/schema.js';
+const response = await fetch('../dist/voices/examples.json');
 const bank = parseVoiceBank(await response.text());
 for (const [name, voice] of bank) opm.loadVoice(name, voice);
 ```

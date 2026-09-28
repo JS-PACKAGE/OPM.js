@@ -1,7 +1,7 @@
 import { validateVoice, bounded } from '../voices/schema.js';
-import { envelopeAt } from './envelope.js';
+import { prepareEnvelope, preparedEnvelopeAt } from './envelope.js';
 import { sineOperator, finiteOrSilence, TAU } from './operator.js';
-import { ALGORITHMS, feedbackPhase } from './algorithms.js';
+import { ALGORITHMS } from './algorithms.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
 export { Synth, normalizeVoice } from './synth.js';
@@ -31,6 +31,14 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, sam
   const samples = new Float32Array(length);
   const diagnostics = { errors: 0 };
   const graph = ALGORITHMS[voice.algorithm];
+  const ops = voice.ops;
+  const envelopes = ops.map(({ adsr }) => prepareEnvelope(adsr.a, adsr.d, adsr.s, adsr.r, duration));
+  const levels = ops.map(op => op.level);
+  const inputs = graph.inputs;
+  const carriers = graph.carriers;
+  const hasFeedback = voice.feedback !== 0;
+  const feedbackStrength = hasFeedback ? 2 ** (voice.feedback - 7) : 0;
+  const mixScale = HEADROOM * velocity / carriers.length;
   const rate = sampleRate * OVERSAMPLE;
   const frequency = 440 * 2 ** ((note - 69) / 12);
   const phases = new Float64Array(4);
@@ -49,16 +57,18 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, sam
       let mix = 0;
       if (time < end && duration > 0) {
         for (let op = 0; op < 4; op++) {
-          let modulation = op === 0 ? feedbackPhase(previous, older, voice.feedback) : 0;
-          for (const source of graph.inputs[op]) modulation += values[source] * voice.modIndex;
-          const gain = voice.ops[op].level * envelopeAt(time, duration, voice.ops[op].adsr);
+          let modulation = op === 0 && hasFeedback
+            ? (previous + older) * 0.5 * feedbackStrength * Math.PI : 0;
+          for (const source of inputs[op]) modulation += values[source] * voice.modIndex;
+          const gain = levels[op] * preparedEnvelopeAt(time, duration, envelopes[op]);
           values[op] = finiteOrSilence(sineOperator(phases[op], modulation, gain), diagnostics);
-          phases[op] = finiteOrSilence((phases[op] + increments[op]) % TAU, diagnostics);
+          const phase = phases[op] + increments[op];
+          phases[op] = finiteOrSilence(phase >= TAU ? phase - TAU : phase, diagnostics);
         }
         older = previous;
         previous = values[0];
-        for (const carrier of graph.carriers) mix += values[carrier];
-        mix *= HEADROOM * velocity / graph.carriers.length;
+        for (const carrier of carriers) mix += values[carrier];
+        mix *= mixScale;
       }
       for (let pole = 0; pole < filters.length; pole++) {
         filters[pole] = finiteOrSilence(filters[pole] + alpha * (mix - filters[pole]), diagnostics);

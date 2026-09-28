@@ -4,8 +4,31 @@
   "description": "A zero-dependency four-operator FM synthesis engine",
   "type": "module",
   "license": "Apache-2.0",
-  "exports": { ".": "./src/api/index.js", "./core": "./src/core/index.js", "./voices/*": "./src/voices/*" },
-  "files": ["src/", "doc/", "LICENSE", "README.md", "CHANGELOG.md", "SECURITY.md"],
-  "scripts": { "test": "node --test" },
-  "engines": { "node": ">=18" }
+  "exports": {
+    ".": "./dist/api/index.js",
+    "./core": "./dist/core/index.js",
+    "./voices/*": "./dist/voices/*"
+  },
+  "files": [
+    "dist/**/*.js",
+    "dist/**/*.json",
+    "doc/",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md"
+  ],
+  "scripts": {
+    "test": "node --test",
+    "benchmark": "node scripts/benchmark.js",
+    "build": "node scripts/build.js",
+    "prepack": "npm run build"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "terser": "5.51.2"
+  }
 }

@@ -85,3 +85,33 @@ test('messages with extra or accessor fields cannot schedule or stop notes', () 
   processor.receive({ type: 'noteOff', id: 13 });
   assert.ok(processor.synth.voices[0].releaseTime >= 0);
 });
+
+test('out-of-order same-frame starts survive partial consumption, cancellation, and queue refill', () => {
+  const processor = new Processor();
+  const expected = new Processor();
+  const note = (id, pitch, frame, frames = 128) => ({
+    type: 'noteOn', id, voice: brass, note: pitch, at: frame / 16000, duration: frames / 16000
+  });
+
+  processor.receive(note(1, 60, 32, 300));
+  expected.receive(note(1, 60, 32, 300));
+  processor.receive(note(2, 84, 192));
+  processor.receive(note(1, 72, 32, 300)); // First same-frame start wins the duplicate ID.
+  processor.receive(note(3, 53, 640));
+  expected.receive(note(3, 53, 640));
+  for (let id = 4; id <= 127; id++) processor.receive(note(id, 60, 16000 + id * 128));
+
+  const first = block(processor, 0);
+  assert.deepEqual(first, block(expected, 0));
+  assert.ok(first.subarray(0, 32).every(sample => sample === 0));
+  assert.ok(first.subarray(32).some(sample => sample !== 0));
+
+  processor.receive({ type: 'noteOff', id: 2 });
+  for (const [id, pitch, frame] of [[200, 69, 384], [201, 76, 512]]) {
+    processor.receive(note(id, pitch, frame));
+    expected.receive(note(id, pitch, frame));
+  }
+  for (let frame = 128; frame < 896; frame += 128) {
+    assert.deepEqual(block(processor, frame), block(expected, frame), `audio differs at frame ${frame}`);
+  }
+});

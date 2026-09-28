@@ -1,4 +1,4 @@
-import { normalizeVoice } from '../core/synth.js';
+import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 
 const MAX_DURATION = 60;

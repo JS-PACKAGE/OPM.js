@@ -1,19 +1,23 @@
-import { Synth, normalizeVoice } from '../core/synth.js';
+import { Synth } from '../core/synth.js';
+import { normalizeVoice } from '../voices/normalize.js';
 
 const MAX_PENDING_EVENTS = 256;
 const MAX_DURATION = 60;
+const NOTE_ON_KEYS = ['type', 'id', 'voice', 'note', 'at', 'duration'];
+const NOTE_OFF_KEYS = ['type', 'id'];
 function isMessage(data) {
-  if (data === null || typeof data !== 'object' || Array.isArray(data) ||
-      ![Object.prototype, null].includes(Object.getPrototypeOf(data))) return false;
+  if (data === null || typeof data !== 'object' || Array.isArray(data)) return false;
+  const prototype = Object.getPrototypeOf(data);
+  if (prototype !== Object.prototype && prototype !== null) return false;
   const type = Object.getOwnPropertyDescriptor(data, 'type');
   if (!type || !Object.hasOwn(type, 'value')) return false;
-  const keys = type.value === 'noteOn'
-    ? ['type', 'id', 'voice', 'note', 'at', 'duration']
-    : ['type', 'id'];
-  return Reflect.ownKeys(data).length === keys.length && keys.every((key) => {
-    const descriptor = Object.getOwnPropertyDescriptor(data, key);
-    return descriptor && Object.hasOwn(descriptor, 'value');
-  });
+  const keys = type.value === 'noteOn' ? NOTE_ON_KEYS : NOTE_OFF_KEYS;
+  if (Reflect.ownKeys(data).length !== keys.length) return false;
+  for (let index = 0; index < keys.length; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(data, keys[index]);
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) return false;
+  }
+  return true;
 }
 
 
@@ -36,7 +40,12 @@ class OPMProcessor extends AudioWorkletProcessor {
     if (data.type === 'noteOff') {
       if (!Number.isSafeInteger(data.id) || data.id <= 0) return;
       // A note cancelled before its start must not sound later.
-      this.events = this.events.filter((event) => event.id !== data.id);
+      let kept = 0;
+      for (let index = 0; index < this.events.length; index++) {
+        const event = this.events[index];
+        if (event.id !== data.id) this.events[kept++] = event;
+      }
+      this.events.length = kept;
       this.synth.noteOff(data.id);
       return;
     }
@@ -62,11 +71,12 @@ class OPMProcessor extends AudioWorkletProcessor {
     const left = output[0];
     const right = output[1];
     const start = currentFrame;
+    let consumed = 0;
     let position = 0;
     while (position < left.length) {
-      const next = this.events[0];
+      const next = this.events[consumed];
       if (next && next.frame <= start + position) {
-        this.events.shift();
+        consumed++;
         if (next.type === 'noteOn') {
           try {
             this.synth.noteOn(next.voice, next.note, next.id);
@@ -80,6 +90,7 @@ class OPMProcessor extends AudioWorkletProcessor {
       this.synth.render(left, right, position, length);
       position += length;
     }
+    if (consumed !== 0) this.events.splice(0, consumed);
     return true;
   }
 }

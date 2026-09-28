@@ -33,10 +33,10 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 Run `python3 -m http.server` at the repository root and open `index.html` on localhost. Press **播放曲子** to hear the complete *Twinkle, Twinkle, Little Star* melody with brass accompaniment (about 24 seconds); **停止** ends it early. `demo/index.html` plays a single chord instead. No build step or runtime dependencies are required.
 
-For another website, the browser entry point is `src/api/index.js`. Keep the entire `src/` directory on the site and import `OPM` from the path relative to your HTML page (the example below assumes the page is beside `src/`):
+For another website, the browser entry point is `dist/api/index.js`. Keep the entire `dist/` directory on the site and import `OPM` from the path relative to your HTML page (the example below assumes the page is beside `dist/`):
 
 ```js
-import { OPM } from './src/api/index.js';
+import { OPM } from './dist/api/index.js';
 
 const opm = new OPM({ sampleRate: 44100 });
 await opm.start(); // call from a user gesture to allow audio playback
@@ -51,8 +51,8 @@ Pass a voice object directly to `playNote()`, or register one with `opm.loadVoic
 For deterministic offline rendering without Web Audio:
 
 ```js
-import { Synth } from './src/core/index.js';
-import { brass } from './src/voices/brass.js';
+import { Synth } from './dist/core/index.js';
+import { brass } from './dist/voices/brass.js';
 
 const synth = new Synth(44100);
 const id = synth.noteOn(brass, 60);
@@ -62,6 +62,25 @@ synth.render(left, right, 0, 22050);
 synth.noteOff(id);
 synth.render(left, right, 22050, 22050);
 ```
+
+## Optimized distribution
+
+`dist/` ships ready-to-use, tree-shaken ES modules with shared chunks and compact voice JSON. Public exports, voice fields, validation, 4× oversampling, and output headroom are preserved. Readable implementation files remain in `src/`; do not edit generated files in `dist/`.
+
+The npm package uses the same minified modules: import `OPM` from `opm.js`, `Synth` or `renderNote` from `opm.js/core`, and voices from `opm.js/voices/brass.js`. Consumers need no build tools or runtime dependencies. The npm tarball omits precompressed alternatives to avoid storing the same assets three times.
+
+In a repository checkout or after `npm run build`, every asset also has gzip level 9 (`.gz`) and Brotli quality 11 (`.br`) variants. Configure your server to negotiate these using `Accept-Encoding`, send the matching `Content-Encoding` and original JavaScript/JSON content type, and set `Vary: Accept-Encoding`. Import the normal `.js` paths, not `.br` or `.gz`. A simple static server can serve the uncompressed minified files.
+
+To regenerate the distribution from a repository checkout:
+
+```sh
+npm ci
+npm run build
+npm test
+npm run benchmark
+```
+
+Only development tooling is installed. The build uses pinned esbuild and Terser, up to ten compression passes, and no unsafe floating-point transformations or property mangling. `npm pack` rebuilds automatically. The benchmark reports warmed median render times at 48 kHz in 128-frame blocks; results depend on the machine and JavaScript engine.
 
 ## Voice format
 
