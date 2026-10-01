@@ -2,7 +2,7 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.2.0
 
 ### CI failure repairs
 
@@ -14,7 +14,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 - Locked Playwright 1.56.1 / Firefox 142.0.1 passed real stereo, held/released notes, routing, suspend/resume, diagnostics and context ownership smoke against built assets on Linux arm64 with PulseAudio. The local host was Ubuntu 26.04 using Playwright's Ubuntu 24.04 arm64 binary override, not the GitHub Ubuntu 24.04 x64 runner. Chromium 153 and WebKit 26.6 smoke also passed on macOS using the existing matching Playwright 1.63.0 launcher. The repaired external CI run has not yet been observed.
 - **Security:** independent source reviewer **CiRepairSecurity** approved scoped A/B/C/D checks with no blockers: finite/bounded frame-local envelope computation, unchanged trust boundaries, and native CI audio setup. 語喵 executed the integration checks above; the reviewer did not execute runtime gates.
 
-## v1.2.0
+### Final deadline repair
+
+- The follow-up CI run still exceeded the unchanged burst deadline on Node 22 (p99 3.043 ms, 31 misses). Replace hot-loop base-10 exponentiation with `exp(db * ln(10) / 20)` without changing envelope stages, re-anchoring, bounds, or the benchmark workload/budget.
+- Fresh verification passed 74 tests on Node 26 and Node 22.23.3, build, public types, AST/installed-package gates, and both npm audits (zero vulnerabilities). Apple M5 / Node 22 burst p99 was 1.009 ms with zero misses against the original 2.667 ms budget; external CI must independently confirm runner performance.
+- Independent reviewer **ReleaseExpSecurity** approved the final arithmetic change under A/B/C/D with no blockers (static review only). Real Chromium AudioWorklet smoke passed again against rebuilt assets using the cached Playwright 1.63 launcher; remote locked-browser gates remain authoritative.
 
 ### Readiness and additive features
 

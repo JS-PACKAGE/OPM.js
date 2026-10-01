@@ -8,6 +8,7 @@ const OVERSAMPLE = 4;
 const HEADROOM = 0.7;
 const MAX_VOICES = 8;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
+const DB_TO_LOG_GAIN = Math.LN10 / 20;
 
 function removeAt(items, index) {
   const removed = items[index];
@@ -27,12 +28,12 @@ function gainAt(time, op, sustainDb, sustainGain, releaseTime, releaseDb) {
   if (releaseTime >= 0) {
     if (adsr.r === 0 || time >= releaseTime + adsr.r) return 0;
     const db = releaseDb + (FLOOR_DB - releaseDb) * ((time - releaseTime) / adsr.r);
-    return db <= FLOOR_DB ? 0 : 10 ** (db / 20);
+    return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
   }
   if (time >= adsr.a + adsr.d) return sustainGain;
   if (time === 0 && adsr.a > 0) return 0;
   const db = heldDb(time, adsr, sustainDb);
-  return db <= FLOOR_DB ? 0 : 10 ** (db / 20);
+  return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
 }
 
 function prepareGains(active, time, subTimes) {
@@ -225,7 +226,6 @@ export class Synth {
       let sample = 0;
       if (!finished) {
         for (let op = 0; op < 4; op++) {
-          const source = voice.ops[op];
           let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
           const inputs = graph.inputs[op];
           for (let j = 0; j < inputs.length; j++) modulation += values[inputs[j]] * voice.modIndex;
