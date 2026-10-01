@@ -1,6 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { brass } from '../src/voices/brass.js';
+import { renderNote } from '../src/core/index.js';
 
 const globals = ['sampleRate', 'currentFrame', 'AudioWorkletProcessor', 'registerProcessor'];
 const originals = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
@@ -44,7 +45,6 @@ test('a note starts and finishes at exact mid-block frame boundaries', () => {
   const samples = block(processor, 0);
   assert.ok(samples.subarray(0, 32).every(sample => sample === 0));
   assert.ok(samples.subarray(32, 64).some(sample => sample !== 0));
-  assert.equal(processor.synth.voices[0].releaseTime, 32 / 16000);
   assert.equal(processor.events.length, 0);
   for (let frame = 128; frame < 4096; frame += 128) block(processor, frame);
   assert.ok(block(processor, 4096).every(sample => sample === 0));
@@ -54,12 +54,28 @@ test('noteOff stops an already active note before its scheduled duration', () =>
   const processor = new Processor();
   processor.receive({ type: 'noteOn', id: 12, voice: brass, note: 69, at: 0, duration: 1 });
   assert.ok(block(processor, 0).some(sample => sample !== 0));
-  assert.equal(processor.synth.voices[0].releaseTime, -1);
   processor.receive({ type: 'noteOff', id: 12 });
   assert.equal(processor.events.length, 0);
-  assert.equal(processor.synth.voices[0].releaseTime, 128 / 16000);
   for (let frame = 128; frame < 4096; frame += 128) block(processor, frame);
   assert.ok(block(processor, 4096).every(sample => sample === 0));
+});
+
+test('late, repeated and unknown stops are harmless and do not report rejected admissions', () => {
+  globalThis.currentFrame = 0;
+  const processor = new Processor();
+  const replies = [];
+  processor.port.postMessage = message => replies.push(message);
+  processor.receive({ type: 'noteOn', id: 1, voice: brass, note: 69, at: 0, duration: 32 / 16000 });
+  for (let frame = 0; frame <= 4096; frame += 128) block(processor, frame);
+  assert.ok(replies.some(message => message.id === 1 && message.state === 'ended'));
+  const lifecycle = replies.slice();
+  for (const id of [1, 1, 999]) processor.receive({ type: 'noteOff', id });
+  assert.deepEqual(replies, lifecycle);
+  processor.receive({ type: 'diagnostics', requestId: 1 });
+  assert.equal(replies.at(-1).rejectedNotes, 0);
+  assert.equal(replies.at(-1).activeVoices, 0);
+  assert.equal(replies.at(-1).pendingEvents, 0);
+  assert.ok(block(processor, 4224).every(sample => sample === 0));
 });
 
 test('messages with extra or accessor fields cannot schedule or stop notes', () => {
@@ -81,9 +97,11 @@ test('messages with extra or accessor fields cannot schedule or stop notes', () 
   Object.defineProperty(offAccessor, 'id', { enumerable: true, get() { reads++; throw Error('getter ran'); } });
   processor.receive(offAccessor);
   assert.equal(reads, 0);
-  assert.equal(processor.synth.voices[0].releaseTime, -1);
+  for (let frame = 256; frame < 8192; frame += 128) block(processor, frame);
+  assert.ok(block(processor, 8192).some(sample => sample !== 0), 'malformed offs must leave the gate held');
   processor.receive({ type: 'noteOff', id: 13 });
-  assert.ok(processor.synth.voices[0].releaseTime >= 0);
+  for (let frame = 8320; frame < 12416; frame += 128) block(processor, frame);
+  assert.ok(block(processor, 12416).every(sample => sample === 0));
 });
 
 test('out-of-order same-frame starts survive partial consumption, cancellation, and queue refill', () => {
@@ -114,4 +132,20 @@ test('out-of-order same-frame starts survive partial consumption, cancellation, 
   for (let frame = 128; frame < 896; frame += 128) {
     assert.deepEqual(block(processor, frame), block(expected, frame), `audio differs at frame ${frame}`);
   }
+});
+
+test('fractional absolute starts preserve exact offline gate, velocity and stereo rendering', () => {
+  globalThis.currentFrame = 0;
+  const processor = new Processor();
+  const duration = 32.2 / 16000;
+  const offline = renderNote({ voice: brass, note: 69, duration, sampleRate: 16000, velocity: 0.6, pan: 0.4 });
+  processor.receive({ type: 'noteOn', id: 1, voice: brass, note: 69, at: 32.4 / 16000,
+    duration, velocity: 0.6, pan: 0.4 });
+  const left = new Float32Array(offline.left.length + 32);
+  const right = new Float32Array(offline.right.length + 32);
+  processor.process([], [[left, right]]);
+  assert.ok(left.subarray(0, 32).every(sample => sample === 0));
+  assert.ok(right.subarray(0, 32).every(sample => sample === 0));
+  assert.deepEqual(left.subarray(32), offline.left);
+  assert.deepEqual(right.subarray(32), offline.right);
 });

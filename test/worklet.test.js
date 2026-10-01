@@ -1,55 +1,171 @@
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after } from 'node:test';
 import { brass } from '../src/voices/brass.js';
 
+const globals = ['sampleRate', 'currentFrame', 'AudioWorkletProcessor', 'registerProcessor'];
+const originals = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
 let Processor;
 globalThis.sampleRate = 44100;
 globalThis.currentFrame = 0;
 globalThis.AudioWorkletProcessor = class {
-  constructor() { this.port = {}; }
+  constructor() {
+    this.messages = [];
+    this.port = { postMessage: message => this.messages.push(message), close: () => {} };
+  }
 };
-globalThis.registerProcessor = (name, constructor) => {
-  assert.equal(name, 'opm-processor');
-  Processor = constructor;
-};
+globalThis.registerProcessor = (name, constructor) => { Processor = constructor; };
 await import('../src/worklet/processor.js');
+after(() => {
+  for (const [key, descriptor] of originals) {
+    if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+    else delete globalThis[key];
+  }
+});
 
-function block(processor, frame) {
+function block(processor, frame, length = 128) {
   globalThis.currentFrame = frame;
-  const left = new Float32Array(128);
-  const right = new Float32Array(128);
-  processor.process([], [[left, right]]);
-  assert.deepEqual(left, right);
+  const left = new Float32Array(length);
+  const right = new Float32Array(length);
+  assert.equal(processor.process([], [[left, right]]), true);
   assert.ok(left.every(Number.isFinite));
+  assert.ok(right.every(Number.isFinite));
   return left;
 }
 
-test('scheduled note starts at its requested frame and expires after release', () => {
+function note(id, frame = 0, duration = 60) {
+  return { type: 'noteOn', id, voice: brass, note: 69, at: frame / sampleRate, duration };
+}
+
+function diagnostics(processor) {
+  processor.receive({ type: 'diagnostics', requestId: 1 });
+  return processor.messages.at(-1);
+}
+
+test('a stream longer than the pending cap reclaims stolen offs and retains only live note IDs', () => {
+  globalThis.currentFrame = 0;
   const processor = new Processor();
-  processor.receive({ type: 'noteOn', id: 1, voice: brass, note: 69, at: 128 / 44100, duration: 0.02 });
-  assert.ok(block(processor, 0).every(sample => sample === 0));
-  assert.ok(block(processor, 128).some(sample => sample !== 0));
-  for (let frame = 256; frame < 12000; frame += 128) block(processor, frame);
-  assert.ok(block(processor, 12000).every(sample => sample === 0));
+  for (let id = 1; id <= 600; id++) {
+    const frame = (id - 1) * 16;
+    globalThis.currentFrame = frame;
+    processor.receive(note(id, frame));
+    block(processor, frame, 16);
+  }
+  const report = diagnostics(processor);
+  assert.equal(report.activeVoices, 8);
+  assert.equal(report.pendingEvents, 8);
+  assert.equal(report.rejectedNotes, 0);
+  assert.equal(report.errors, 0);
+  assert.equal(processor.messages.filter(message => message.state === 'accepted').length, 600);
+  assert.equal(processor.messages.filter(message => message.state === 'stolen').length, 592);
+  assert.equal(processor.notes.size, 8);
+  for (let id = 593; id <= 600; id++) processor.receive({ type: 'noteOff', id });
+  for (let frame = 9600; frame < 20000; frame += 128) block(processor, frame);
+  const ended = diagnostics(processor);
+  assert.equal(ended.activeVoices, 0);
+  assert.equal(ended.pendingEvents, 0);
+  assert.equal(processor.notes.size, 0);
 });
 
-test('cancelling a future note prevents it from sounding; malformed messages are ignored', () => {
+test('duplicate IDs with different starts and offs cannot shorten or replace the first admission', () => {
+  globalThis.currentFrame = 0;
   const processor = new Processor();
-  const accessor = { get type() { throw new Error('Unexpected accessor'); }, id: 9 };
-  for (const input of [null, [], {}, accessor, { type: 'noteOn', id: 2, note: 60, at: 0, duration: 1, voice: { ops: [] } },
-    { type: 'noteOn', id: 3, note: 60, at: Infinity, duration: 1, voice: brass }]) {
-    assert.doesNotThrow(() => processor.receive(input));
+  const reference = new Processor();
+  const original = note(1, 32, 0.02);
+  processor.receive(original);
+  reference.receive(original);
+  processor.receive(note(1, 256, 1 / sampleRate));
+  for (let frame = 0; frame < 14000; frame += 128) {
+    assert.deepEqual(block(processor, frame), block(reference, frame), `duplicate changed sound at frame ${frame}`);
+    if (frame === 128) processor.receive(note(1, 512, 1 / sampleRate));
   }
-  processor.receive({ type: 'noteOn', id: 4, voice: brass, note: 60, at: 0.1, duration: 0.1 });
-  processor.receive({ type: 'noteOff', id: 4 });
-  assert.equal(processor.events.length, 0);
+  const lifecycle = processor.messages.filter(message => message.type === 'note' && message.state !== 'rejected');
+  assert.deepEqual(lifecycle.map(message => message.state), ['accepted', 'started', 'released', 'ended']);
+  assert.equal(diagnostics(processor).rejectedNotes, 2);
+  assert.equal(processor.notes.size, 0);
+});
+
+test('held future notes have bounded admission and cancelling them restores capacity without orphan starts', () => {
+  globalThis.currentFrame = 0;
+  const processor = new Processor();
+  for (let id = 1; id <= 257; id++) processor.receive(note(id, 4410, null));
+  assert.equal(diagnostics(processor).pendingEvents, 256);
+  assert.equal(diagnostics(processor).rejectedNotes, 1);
+  processor.receive({ type: 'noteOff', id: 17 });
+  processor.receive(note(258, 4410, null));
+  assert.ok(processor.messages.some(message => message.id === 258 && message.state === 'accepted'));
+  for (let id = 1; id <= 256; id++) if (id !== 17) processor.receive({ type: 'noteOff', id });
+  processor.receive({ type: 'noteOff', id: 258 });
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.equal(processor.notes.size, 0);
   assert.ok(block(processor, 4410).every(sample => sample === 0));
+  for (let id = 1; id <= 8; id++) processor.receive(note(id, 4538, null));
+  block(processor, 4538);
+  for (let id = 100; id < 348; id++) processor.receive(note(id, 88200, null));
+  processor.receive(note(999, 88200, null));
+  const full = diagnostics(processor);
+  assert.equal(full.activeVoices, 8);
+  assert.equal(full.pendingEvents, 248);
+  assert.equal(full.rejectedNotes, 2, 'active IDs must count against admission even before the event cap is full');
 });
 
-test('pending events cannot exceed the worklet cap', () => {
+test('optional fields and diagnostics use strict own data without invoking accessors or coercions', () => {
+  globalThis.currentFrame = 0;
   const processor = new Processor();
-  for (let id = 1; id <= 200; id++) {
-    processor.receive({ type: 'noteOn', id, voice: brass, note: 60, at: 10 + id / 100, duration: 0.1 });
-  }
-  assert.equal(processor.events.length, 256);
+  let reads = 0;
+  const getter = () => { reads++; throw Error('accessor ran'); };
+  const optional = note(1, 0, null);
+  Object.defineProperty(optional, 'pan', { enumerable: true, get: getter });
+  const inherited = Object.create({ velocity: 0.5 });
+  Object.assign(inherited, note(2, 0, null));
+  const typeObject = { [Symbol.toPrimitive]: getter };
+  const request = { type: 'diagnostics' };
+  Object.defineProperty(request, 'requestId', { enumerable: true, get: getter });
+  for (const input of [null, [], {}, optional, inherited, request, { ...note(3), surprise: true },
+    { ...note(4), type: typeObject }, { ...note(5), velocity: undefined }, { ...note(6), pan: Infinity },
+    { ...note(7), duration: undefined }, note(8, sampleRate * 61, null)]) processor.receive(input);
+  assert.equal(reads, 0);
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.ok(block(processor, 0).every(sample => sample === 0));
+  const plain = Object.assign(Object.create(null), note(10, 128, null), { velocity: 0.5, pan: -1 });
+  processor.receive(plain);
+  const left = new Float32Array(128);
+  const right = new Float32Array(128);
+  globalThis.currentFrame = 128;
+  processor.process([], [[left, right]]);
+  assert.ok(left.some(sample => sample !== 0));
+  assert.ok(right.every(sample => Math.abs(sample) < 1e-10));
+});
+
+test('core errors terminate a note once, reclaim its off, and surface accurate diagnostics', () => {
+  globalThis.currentFrame = 0;
+  const processor = new Processor();
+  processor.receive(note(1));
+  block(processor, 0);
+  processor.synth.voices[0].phases[0] = NaN;
+  block(processor, 128);
+  const errorEvents = processor.messages.filter(message => message.id === 1 && message.state === 'ended');
+  assert.equal(errorEvents.length, 1);
+  assert.equal(errorEvents[0].reason, 'error');
+  const report = diagnostics(processor);
+  assert.equal(report.activeVoices, 0);
+  assert.equal(report.pendingEvents, 0);
+  assert.equal(report.errors, 1);
+  processor.receive(note(1, 256, null));
+  assert.ok(block(processor, 256).some(sample => sample !== 0));
+  assert.equal(diagnostics(processor).activeVoices, 1);
+});
+
+test('broken ports cannot break rendering, and clean shutdown stops processing in a reused context', () => {
+  globalThis.currentFrame = 0;
+  const processor = new Processor();
+  processor.port.postMessage = () => { throw Error('port failed'); };
+  processor.receive(note(1, 0, null));
+  assert.ok(block(processor, 0, 1024).some(sample => sample !== 0));
+  processor.receive({ type: 'close', extra: true });
+  assert.ok(block(processor, 1024).some(sample => sample !== 0));
+  processor.receive({ type: 'close' });
+  assert.equal(processor.process([], [[new Float32Array(128), new Float32Array(128)]]), false);
+  processor.receive(note(2));
+  assert.equal(processor.events.length, 0);
+  assert.equal(processor.notes.size, 0);
 });
