@@ -1,6 +1,6 @@
 [
   {
-    "version": 1,
+    "version": 2,
     "name": "bell",
     "algorithm": 4,
     "feedback": 0,
@@ -58,7 +58,7 @@
     ]
   },
   {
-    "version": 1,
+    "version": 2,
     "name": "brass",
     "algorithm": 2,
     "feedback": 4,
@@ -116,7 +116,7 @@
     ]
   },
   {
-    "version": 1,
+    "version": 2,
     "name": "bass",
     "algorithm": 0,
     "feedback": 3,
@@ -171,6 +171,49 @@
           "r": 0.12
         }
       }
+    ]
+  },
+  {
+    "version": 2, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
+    "lfo": { "rate": 3.5, "amDepth": 0.1, "pmDepth": 0 },
+    "ops": [
+      { "ratio": 1, "level": 0.7, "detune": 0, "adsr": { "a": 0.002, "d": 1.2, "s": 0, "r": 0.2 },
+        "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
+      { "ratio": 1, "level": 0.8, "detune": 0, "adsr": { "a": 0.003, "d": 2, "s": 0.08, "r": 0.3 } },
+      { "ratio": 14, "level": 0.25, "detune": 3, "adsr": { "a": 0.001, "d": 0.25, "s": 0, "r": 0.1 },
+        "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 9 } },
+      { "ratio": 1, "level": 0.6, "detune": -2, "adsr": { "a": 0.003, "d": 1.5, "s": 0.05, "r": 0.3 } }
+    ]
+  },
+  {
+    "version": 2, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
+    "lfo": { "rate": 5, "amDepth": 0.08, "pmDepth": 3 },
+    "ops": [
+      { "ratio": 0.5, "level": 0.8, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
+      { "ratio": 1, "level": 0.9, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
+      { "ratio": 2, "level": 0.5, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
+      { "ratio": 3, "level": 0.3, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } }
+    ]
+  },
+  {
+    "version": 2, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
+    "lfo": { "rate": 5.5, "amDepth": 0, "pmDepth": 15 },
+    "ops": [
+      { "ratio": 1, "level": 0.6, "detune": 0, "adsr": { "a": 0.01, "d": 0.1, "s": 0.6, "r": 0.1 } },
+      { "ratio": 2, "level": 0.4, "detune": 0, "adsr": { "a": 0.01, "d": 0.15, "s": 0.5, "r": 0.1 } },
+      { "ratio": 1, "level": 0.5, "detune": 0, "adsr": { "a": 0.01, "d": 0.15, "s": 0.7, "r": 0.1 },
+        "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
+      { "ratio": 1, "level": 0.9, "detune": 0, "adsr": { "a": 0.01, "d": 0.1, "s": 0.8, "r": 0.15 } }
+    ]
+  },
+  {
+    "version": 2, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
+    "lfo": { "rate": 4.8, "amDepth": 0.08, "pmDepth": 9 },
+    "ops": [
+      { "ratio": 1, "level": 0.45, "detune": -5, "adsr": { "a": 0.2, "d": 0.4, "s": 0.6, "r": 0.5 } },
+      { "ratio": 1, "level": 0.8, "detune": -5, "adsr": { "a": 0.3, "d": 0.4, "s": 0.8, "r": 0.6 } },
+      { "ratio": 2, "level": 0.35, "detune": 5, "adsr": { "a": 0.2, "d": 0.4, "s": 0.6, "r": 0.5 } },
+      { "ratio": 1, "level": 0.8, "detune": 5, "adsr": { "a": 0.3, "d": 0.4, "s": 0.8, "r": 0.6 } }
     ]
   }
 ]

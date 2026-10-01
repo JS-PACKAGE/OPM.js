@@ -7,14 +7,20 @@
 </head>
 <body>
   <h1>OPM.js 測試頁面</h1>
-  <p>播放完整的《小星星》旋律與和弦（約 24 秒）。</p>
+  <p>播放完整的《小星星》旋律與和弦（約 24 秒）；和弦偏左、旋律偏右。</p>
   <button id="play" type="button">播放曲子</button>
   <button id="stop" type="button" disabled>停止</button>
   <output id="status" role="status" aria-live="polite"></output>
   <script type="module">
     import { OPM } from './dist/api/index.js';
 
-    const opm = new OPM();
+    const opm = new OPM({ onEvent(event) {
+      if (event.type === 'note' && event.state === 'rejected') {
+        status.textContent = `音符未被接受：${event.reason}`;
+      } else if (event.type === 'error') {
+        status.textContent = `音訊失敗：${event.error.message}`;
+      }
+    } });
     const play = document.querySelector('#play');
     const stop = document.querySelector('#stop');
     const status = document.querySelector('#status');
@@ -41,14 +47,15 @@
       for (let bar = 0; bar < melody.length; bar++) {
         const start = bar * 4 * beatSeconds;
         for (const note of chords[bar]) {
-          notes.push(opm.playNote({ note, time: start, duration: 4 * beatSeconds - 0.1 }));
+          notes.push(opm.playNote({ note, time: start, duration: 4 * beatSeconds - 0.1,
+            velocity: 0.55, pan: -0.35 }));
         }
         let beat = 0;
         for (let i = 0; i < melody[bar].length; i++) {
           const length = i === 2 && melody[bar].length === 3 ? 2 : 1;
           notes.push(opm.playNote({
             note: melody[bar][i], time: start + beat * beatSeconds,
-            duration: length * beatSeconds - 0.05,
+            duration: length * beatSeconds - 0.05, velocity: 0.85, pan: 0.35,
           }));
           beat += length;
         }
