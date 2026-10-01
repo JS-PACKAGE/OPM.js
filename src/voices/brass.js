@@ -1,5 +1,5 @@
 export const brass = {
-  version: 1,
+  version: 2,
   name: 'brass',
   algorithm: 4,
   feedback: 3,

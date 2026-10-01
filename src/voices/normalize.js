@@ -43,7 +43,7 @@ export function normalizeVoice(input) {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  if (Object.hasOwn(input, 'version') && field(input, 'version') !== 1) {
+  if (Object.hasOwn(input, 'version') && ![1, 2].includes(field(input, 'version'))) {
     throw new RangeError('Unsupported voice version');
   }
   const rawOps = field(input, 'ops');
@@ -53,7 +53,7 @@ export function normalizeVoice(input) {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
     const op = descriptor.value;
-    object(op, ['ratio', 'level', 'detune', 'adsr'], [], 'operator');
+    object(op, ['ratio', 'level', 'detune', 'adsr'], field(input, 'version') === 1 ? [] : ['keyScale'], 'operator');
     const adsr = field(op, 'adsr');
     object(adsr, ['a', 'd', 's', 'r'], [], 'adsr');
     ops[i] = {
@@ -65,6 +65,15 @@ export function normalizeVoice(input) {
         s: number(field(adsr, 's'), 's'), r: number(field(adsr, 'r'), 'r'),
       },
     };
+    if (Object.hasOwn(op, 'keyScale')) {
+      const scale = field(op, 'keyScale');
+      object(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], [], 'keyScale');
+      const breakpoint = number(field(scale, 'breakpoint'), 'breakpoint');
+      if (!Number.isInteger(breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
+      ops[i].keyScale = { breakpoint,
+        leftDbPerOctave: number(field(scale, 'leftDbPerOctave'), 'leftDbPerOctave'),
+        rightDbPerOctave: number(field(scale, 'rightDbPerOctave'), 'rightDbPerOctave') };
+    }
   }
   let lfo = ZERO_LFO;
   if (Object.hasOwn(input, 'lfo')) {
@@ -79,6 +88,6 @@ export function normalizeVoice(input) {
   const voice = { algorithm, feedback, ops, lfo,
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4 };
   if (name !== undefined) voice.name = name;
-  if (Object.hasOwn(input, 'version')) voice.version = 1;
+  if (Object.hasOwn(input, 'version')) voice.version = 2;
   return voice;
 }

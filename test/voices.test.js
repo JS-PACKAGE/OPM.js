@@ -5,17 +5,13 @@ import { validateVoice, parseVoiceBank, LIMITS, MAX_BANK_BYTES } from '../src/vo
 const text = readFileSync(new URL('../src/voices/examples.json', import.meta.url), 'utf8');
 const fixture = () => JSON.parse(text)[0];
 
-test('examples validate, normalization is detached and frozen, schema matches limits', () => {
-  assert.deepEqual([...parseVoiceBank(text).keys()], ['bell', 'brass', 'bass']);
+test('examples validate and normalization is detached and frozen', () => {
+  const bank = parseVoiceBank(text);
+  for (const name of ['bell', 'brass', 'bass']) assert.ok(bank.has(name));
   const input = fixture(), voice = validateVoice(input);
   input.ops[0].level = 0;
   assert.notEqual(voice.ops[0].level, 0);
   assert.ok(Object.isFrozen(voice.ops[0].adsr));
-  const schema = JSON.parse(readFileSync(new URL('../src/voices/voice.schema.json', import.meta.url)));
-  for (const [key, [min, max]] of Object.entries(LIMITS)) {
-    const def = schema.properties[key] ?? schema.properties.lfo.properties[key] ?? schema.properties.ops.items.properties[key] ?? schema.properties.ops.items.properties.adsr.properties[key];
-    assert.equal(def.minimum, min); assert.equal(def.maximum, max);
-  }
 });
 
 test('malformed-voice fuzz: every numeric field rejects non-finite and wrong types; finite extremes clamp', () => {

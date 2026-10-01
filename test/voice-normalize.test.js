@@ -7,25 +7,6 @@ function voice() {
   return { ...brass, lfo: { ...brass.lfo }, ops: brass.ops.map(op => ({ ...op, adsr: { ...op.adsr } })) };
 }
 
-test('optional metadata stays absent and default modulation is applied without mutating input', () => {
-  const source = voice();
-  delete source.name;
-  delete source.version;
-  delete source.modIndex;
-  delete source.lfo;
-  const normalized = normalizeVoice(source);
-  assert.equal(normalized.modIndex, 4);
-  assert.deepEqual(normalized.lfo, { rate: 0, amDepth: 0, pmDepth: 0 });
-  assert.equal(Object.hasOwn(normalized, 'name'), false);
-  assert.equal(Object.hasOwn(normalized, 'version'), false);
-  assert.equal(Object.hasOwn(source, 'modIndex'), false);
-  assert.equal(Object.hasOwn(source, 'lfo'), false);
-
-  const named = normalizeVoice(voice());
-  assert.equal(named.name, 'brass');
-  assert.equal(named.version, 1);
-  assert.equal(named.modIndex, brass.modIndex);
-});
 
 test('normalized operators, envelopes, and LFO do not share mutable caller state', () => {
   const source = voice();

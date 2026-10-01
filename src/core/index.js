@@ -1,7 +1,5 @@
 import { validateVoice, bounded } from '../voices/schema.js';
-import { prepareEnvelope, preparedEnvelopeAt } from './envelope.js';
-import { sineOperator, finiteOrSilence, TAU } from './operator.js';
-import { ALGORITHMS } from './algorithms.js';
+import { Synth } from './synth.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
 export { Synth, normalizeVoice } from './synth.js';
@@ -18,64 +16,27 @@ export function sampleRateValue(value) {
 
 // Pure offline renderer: no globals, IO, randomness or Web Audio dependencies.
 // The returned buffer includes the longest release and a short filter tail.
-export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, sampleRate = 44100 } = {}) {
+export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100 } = {}) {
   voice = validateVoice(voice);
   sampleRate = sampleRateValue(sampleRate);
   note = bounded(note, 0, 127, 'note');
   duration = bounded(duration, 0, 30, 'duration');
   velocity = bounded(velocity, 0, 1, 'velocity');
-  const release = Math.max(...voice.ops.map(op => op.adsr.r));
-  const end = duration + release;
-  const length = Math.ceil((end + 0.01) * sampleRate);
+  pan = bounded(pan, -1, 1, 'pan');
+  let release = 0;
+  for (const op of voice.ops) release = Math.max(release, op.adsr.r);
+  const length = Math.ceil((duration + release + 0.01) * sampleRate);
   if (length > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
-  const samples = new Float32Array(length);
-  const diagnostics = { errors: 0 };
-  const graph = ALGORITHMS[voice.algorithm];
-  const ops = voice.ops;
-  const envelopes = ops.map(({ adsr }) => prepareEnvelope(adsr.a, adsr.d, adsr.s, adsr.r, duration));
-  const levels = ops.map(op => op.level);
-  const inputs = graph.inputs;
-  const carriers = graph.carriers;
-  const hasFeedback = voice.feedback !== 0;
-  const feedbackStrength = hasFeedback ? 2 ** (voice.feedback - 7) : 0;
-  const mixScale = HEADROOM * velocity / carriers.length;
-  const rate = sampleRate * OVERSAMPLE;
-  const frequency = 440 * 2 ** ((note - 69) / 12);
-  const phases = new Float64Array(4);
-  const increments = voice.ops.map(op => TAU * Math.min(rate * 0.45,
-    frequency * op.ratio * 2 ** (op.detune / 1200)) / rate);
-  const values = new Float64Array(4);
-  const filters = new Float64Array(4);
-  // Four cascaded one-pole low-passes before decimation. Convex updates preserve
-  // headroom; alpha = 1-exp(-2*pi*cutoff/internalRate). This reduces aliasing,
-  // but is intentionally not a claim of band-limited FM at extreme indices.
-  const alpha = 1 - Math.exp(-TAU * sampleRate * 0.2 / rate);
-  let previous = 0, older = 0;
-  for (let frame = 0; frame < length; frame++) {
-    for (let sub = 0; sub < OVERSAMPLE; sub++) {
-      const time = (frame * OVERSAMPLE + sub) / rate;
-      let mix = 0;
-      if (time < end && duration > 0) {
-        for (let op = 0; op < 4; op++) {
-          let modulation = op === 0 && hasFeedback
-            ? (previous + older) * 0.5 * feedbackStrength * Math.PI : 0;
-          for (const source of inputs[op]) modulation += values[source] * voice.modIndex;
-          const gain = levels[op] * preparedEnvelopeAt(time, duration, envelopes[op]);
-          values[op] = finiteOrSilence(sineOperator(phases[op], modulation, gain), diagnostics);
-          const phase = phases[op] + increments[op];
-          phases[op] = finiteOrSilence(phase >= TAU ? phase - TAU : phase, diagnostics);
-        }
-        older = previous;
-        previous = values[0];
-        for (const carrier of carriers) mix += values[carrier];
-        mix *= mixScale;
-      }
-      for (let pole = 0; pole < filters.length; pole++) {
-        filters[pole] = finiteOrSilence(filters[pole] + alpha * (mix - filters[pole]), diagnostics);
-        mix = filters[pole];
-      }
-    }
-    samples[frame] = finiteOrSilence(filters[3], diagnostics);
+  const left = new Float32Array(length);
+  const right = new Float32Array(length);
+  const synth = new Synth(sampleRate);
+  if (duration > 0) {
+    const id = synth.noteOn(voice, note, undefined, { velocity, pan });
+    // Gate changes occur on output-frame boundaries, exactly as in the worklet.
+    const gateFrame = Math.ceil(duration * sampleRate);
+    synth.render(left, right, 0, gateFrame);
+    synth.noteOff(id);
+    synth.render(left, right, gateFrame, length - gateFrame);
   }
-  return { samples, sampleRate, diagnostics };
+  return { samples: left, left, right, sampleRate, diagnostics: { errors: synth.errorCount } };
 }

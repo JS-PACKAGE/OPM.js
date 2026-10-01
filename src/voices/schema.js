@@ -5,20 +5,24 @@ export const LIMITS = Object.freeze({
   ratio: [0.125, 32], level: [0, 1], detune: [-1200, 1200],
   a: [0, 10], d: [0, 10], s: [0, 1], r: [0, 10],
   modIndex: [0, 16], rate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200],
+  breakpoint: [0, 127], leftDbPerOctave: [0, 24], rightDbPerOctave: [0, 24],
 });
 
-function record(value, keys, label) {
+function record(value, keys, label, optional = []) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
     throw new TypeError(`${label} must be a plain object`);
   }
   const own = Reflect.ownKeys(value);
-  if (own.length !== keys.length || own.some(key => !keys.includes(key))) {
+  if (own.length < keys.length || own.some(key => !keys.includes(key) && !optional.includes(key))) {
     throw new TypeError(`${label} has missing or unknown fields`);
   }
   for (const key of keys) {
+    if (!Object.hasOwn(value, key)) throw new TypeError(`${label}.${key} is required`);
+  }
+  for (const key of own) {
     if (!Object.hasOwn(Object.getOwnPropertyDescriptor(value, key), 'value')) {
-      throw new TypeError(`${label}.${key} must be data`);
+      throw new TypeError(`${label}.${String(key)} must be data`);
     }
   }
 }
@@ -49,7 +53,7 @@ function array(value, min, max, label) {
 
 export function validateVoice(input) {
   record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice');
-  if (input.version !== 1) throw new RangeError('Unsupported voice version');
+  if (input.version !== 1 && input.version !== 2) throw new RangeError('Unsupported voice version');
   if (typeof input.name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
     throw new TypeError('Voice name must contain 1..64 letters, digits, underscores or hyphens');
   }
@@ -60,15 +64,25 @@ export function validateVoice(input) {
   const ops = [];
   for (let i = 0; i < 4; i++) {
     const op = input.ops[i];
-    record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator');
+    record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator', input.version === 1 ? [] : ['keyScale']);
     record(op.adsr, ['a', 'd', 's', 'r'], 'adsr');
-    ops.push(Object.freeze({ ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
+    const normalized = { ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
       detune: numeric(op.detune, 'detune'), adsr: Object.freeze({
         a: numeric(op.adsr.a, 'a'), d: numeric(op.adsr.d, 'd'),
         s: numeric(op.adsr.s, 's'), r: numeric(op.adsr.r, 'r'),
-      }) }));
+      }) };
+    if (Object.hasOwn(op, 'keyScale')) {
+      record(op.keyScale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
+      if (!Number.isInteger(op.keyScale.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
+      normalized.keyScale = Object.freeze({
+        breakpoint: numeric(op.keyScale.breakpoint, 'breakpoint'),
+        leftDbPerOctave: numeric(op.keyScale.leftDbPerOctave, 'leftDbPerOctave'),
+        rightDbPerOctave: numeric(op.keyScale.rightDbPerOctave, 'rightDbPerOctave'),
+      });
+    }
+    ops.push(Object.freeze(normalized));
   }
-  return Object.freeze({ version: 1, name: input.name,
+  return Object.freeze({ version: 2, name: input.name,
     algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
     modIndex: numeric(input.modIndex, 'modIndex'), lfo, ops: Object.freeze(ops) });
 }
