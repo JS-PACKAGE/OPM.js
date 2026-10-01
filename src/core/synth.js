@@ -35,6 +35,44 @@ function gainAt(time, op, sustainDb, sustainGain, releaseTime, releaseDb) {
   return db <= FLOOR_DB ? 0 : 10 ** (db / 20);
 }
 
+function prepareGains(active, time, subTimes) {
+  const { voice, sustainDb, sustainGain, releaseDb, gains, attackStep, decayStep, releaseStep } = active;
+  const lastTime = time + subTimes[OVERSAMPLE - 1];
+  for (let op = 0; op < 4; op++) {
+    const source = voice.ops[op];
+    const adsr = source.adsr;
+    let step;
+    if (active.releaseTime >= 0) {
+      if (adsr.r === 0 || time >= active.releaseTime + adsr.r) {
+        gains[op] = gains[op + 4] = gains[op + 8] = gains[op + 12] = 0;
+        continue;
+      }
+      if (lastTime < active.releaseTime + adsr.r) step = releaseStep[op];
+    } else if (time >= adsr.a + adsr.d) {
+      gains[op] = gains[op + 4] = gains[op + 8] = gains[op + 12] = sustainGain[op];
+      continue;
+    } else if (time > 0 && lastTime < adsr.a) {
+      step = attackStep[op];
+    } else if (time >= adsr.a && lastTime < adsr.a + adsr.d) {
+      step = decayStep[op];
+    }
+    // Re-anchor every output frame, so rounding cannot accumulate across time
+    // or depend on render chunking. Boundary-crossing frames keep exact dB rules.
+    if (step !== undefined) {
+      let gain = gainAt(time, source, sustainDb[op], sustainGain[op], active.releaseTime, releaseDb[op]);
+      for (let sub = 0; sub < OVERSAMPLE; sub++) {
+        gains[op + sub * 4] = gain;
+        gain *= step;
+      }
+    } else {
+      for (let sub = 0; sub < OVERSAMPLE; sub++) {
+        gains[op + sub * 4] = gainAt(time + subTimes[sub], source, sustainDb[op], sustainGain[op],
+          active.releaseTime, releaseDb[op]);
+      }
+    }
+  }
+}
+
 export class Synth {
   constructor(sampleRate, maxVoices = MAX_VOICES) {
     if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) {
@@ -107,6 +145,9 @@ export class Synth {
     const sustainDb = new Float64Array(4);
     const sustainGain = new Float64Array(4);
     const steps = new Float64Array(4);
+    const attackStep = new Float64Array(4);
+    const decayStep = new Float64Array(4);
+    const releaseStep = new Float64Array(4);
     const rate = this.sampleRate * OVERSAMPLE;
     const levels = new Float64Array(4);
     for (let i = 0; i < 4; i++) {
@@ -119,6 +160,8 @@ export class Synth {
       sustainDb[i] = op.adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(op.adsr.s));
       sustainGain[i] = sustainDb[i] <= FLOOR_DB ? 0 : 10 ** (sustainDb[i] / 20);
       steps[i] = Math.min(TAU * 0.45, increments[i]);
+      attackStep[i] = op.adsr.a === 0 ? 1 : 10 ** (-FLOOR_DB / (20 * op.adsr.a * rate));
+      decayStep[i] = op.adsr.d === 0 ? 1 : 10 ** (sustainDb[i] / (20 * op.adsr.d * rate));
     }
     const graph = ALGORITHMS[voice.algorithm];
     // Constant-power pan normalized to preserve the previous dual-mono center.
@@ -126,6 +169,7 @@ export class Synth {
     const leftGain = pan === 1 ? 0 : pan === 0 ? velocity : velocity * Math.SQRT2 * Math.cos(angle);
     const rightGain = pan === -1 ? 0 : pan === 0 ? velocity : velocity * Math.SQRT2 * Math.sin(angle);
     this.voices.push({ id, sequence: this.sequence++, voice, graph, increments, steps, sustainDb, sustainGain,
+      attackStep, decayStep, releaseStep, gains: new Float64Array(4 * OVERSAMPLE),
       levels, leftGain, rightGain, lastSample: 0, fadeRemaining: 0,
       carrierGain: HEADROOM / graph.carriers.length,
       phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(4),
@@ -147,6 +191,9 @@ export class Synth {
     active.releaseEnd = active.releaseTime + maxRelease;
     for (let op = 0; op < 4; op++) {
       active.releaseDb[op] = heldDb(active.releaseTime, active.voice.ops[op].adsr, active.sustainDb[op]);
+      const release = active.voice.ops[op].adsr.r;
+      active.releaseStep[op] = release === 0 ? 0 :
+        10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * OVERSAMPLE));
     }
     return true;
   }
@@ -159,7 +206,7 @@ export class Synth {
 
   // One output frame, with no temporary arrays or objects in the hot path.
   renderVoice(active) {
-    const { voice, graph, phases, values, filters, increments, steps, sustainDb, sustainGain, releaseDb, levels } = active;
+    const { voice, graph, phases, values, filters, increments, steps, gains, levels } = active;
     const time = active.elapsed / this.sampleRate;
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
     let tremolo = 0;
@@ -173,8 +220,8 @@ export class Synth {
       const pitch = 2 ** (voice.lfo.pmDepth * tremolo / 1200);
       for (let op = 0; op < 4; op++) steps[op] = Math.min(TAU * 0.45, increments[op] * pitch);
     }
+    if (!finished) prepareGains(active, time, this.subTimes);
     for (let sub = 0; sub < OVERSAMPLE; sub++) {
-      const subTime = time + this.subTimes[sub];
       let sample = 0;
       if (!finished) {
         for (let op = 0; op < 4; op++) {
@@ -182,8 +229,7 @@ export class Synth {
           let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
           const inputs = graph.inputs[op];
           for (let j = 0; j < inputs.length; j++) modulation += values[inputs[j]] * voice.modIndex;
-          const gain = gainAt(subTime, source, sustainDb[op], sustainGain[op], active.releaseTime, releaseDb[op]);
-          values[op] = Math.sin(phases[op] + modulation) * gain * levels[op] * amGain;
+          values[op] = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * amGain;
           const phase = phases[op] + steps[op];
           phases[op] = phase < TAU ? phase : phase - TAU;
           if (!Number.isFinite(values[op]) || !Number.isFinite(phases[op])) return NaN;

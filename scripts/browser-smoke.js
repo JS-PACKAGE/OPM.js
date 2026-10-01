@@ -33,11 +33,44 @@ await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 let browser;
 try {
   browser = await engines[engine].launch({ headless: true, ...(engine === 'chromium' ? { channel: 'chromium' } : {}) });
+  console.log(`[${engine}] ${browser.version()} on ${process.platform}/${process.arch}`);
   const page = await browser.newPage();
   const pageErrors = [];
-  page.on('pageerror', error => pageErrors.push(error.message));
+  page.on('pageerror', error => {
+    pageErrors.push(error.message);
+    console.error(`[${engine}] page error: ${error.stack ?? error.message}`);
+  });
+  page.on('console', message => {
+    if (message.text().startsWith('[audio smoke]') || ['warning', 'error'].includes(message.type())) {
+      console.error(`[${engine}] ${message.type()}: ${message.text()}`);
+    }
+  });
+  page.on('requestfailed', request => console.error(`[${engine}] request failed: ${request.url()} ${request.failure()?.errorText}`));
   await page.goto(`http://127.0.0.1:${server.address().port}/`);
   await page.evaluate(async () => {
+    let stage = 'loading modules';
+    let borrowedContext;
+    let borrowed;
+    let owned;
+    let failure;
+    window.smokeStatus = () => ({
+      stage, failure,
+      contexts: [
+        { role: 'borrowed', context: borrowedContext, synth: borrowed },
+        { role: 'owned', context: owned?.context, synth: owned },
+      ].filter(entry => entry.context).map(({ role, context, synth }) => ({
+        role, state: context.state, currentTime: context.currentTime, sampleRate: context.sampleRate,
+        maxChannelCount: context.destination.maxChannelCount, workletReady: Boolean(synth?.node),
+      })),
+      userActivation: navigator.userActivation ? {
+        isActive: navigator.userActivation.isActive, hasBeenActive: navigator.userActivation.hasBeenActive,
+      } : null,
+    });
+    const mark = name => {
+      stage = name;
+      console.info(`[audio smoke] ${JSON.stringify(window.smokeStatus())}`);
+    };
+    mark(stage);
     const { OPM } = await import('/dist/api/index.js');
     const { HEADROOM } = await import('/dist/core/index.js');
     const voice = {
@@ -58,8 +91,10 @@ try {
     document.querySelector('#start').onclick = () => {
       window.smoke = (async () => {
         const context = new AudioContext();
+        borrowedContext = context;
         const events = [];
         const synth = new OPM({ context, destination: null, onEvent: event => events.push(event) });
+        borrowed = synth;
         const splitter = context.createChannelSplitter(2);
         const analysers = [context.createAnalyser(), context.createAnalyser()];
         const mute = context.createGain();
@@ -81,62 +116,89 @@ try {
           return Math.sqrt(sum / buffers[index].length);
         }
         try {
+          mark('borrowed context start / worklet initialization');
           await Promise.all([synth.start(), synth.start()]);
           check(context.state === 'running', 'start must resume borrowed context');
           const id = synth.playNote({ voice, note: 69 }); // Omitted duration holds.
           await sleep(150);
           check(rms(0) < 1e-6 && rms(1) < 1e-6, 'destination:null must not auto-connect');
           synth.connect(splitter);
+          mark('held stereo signal');
           await until(() => rms(0) > 0.05 && rms(1) > 0.05, 'held note must produce routed stereo audio');
           const signal = [rms(0), rms(1)];
           await sleep(350);
           check(rms(0) > 0.05, 'held gate must remain audible');
+          mark('held diagnostics');
           const held = await synth.getDiagnostics();
           check(held.activeVoices === 1 && held.errors === 0, 'held diagnostic state');
+          mark('disconnect / reconnect');
           synth.disconnect(splitter);
           await until(() => rms(0) < 1e-6 && rms(1) < 1e-6, 'disconnect must stop routed signal');
           synth.connect(splitter);
           await until(() => rms(0) > 0.05, 'reconnect must restore held signal');
+          mark('context suspend');
           await context.suspend();
           const suspendedTime = context.currentTime;
           await sleep(100);
           check(context.state === 'suspended' && context.currentTime === suspendedTime, 'suspended audio clock');
+          mark('initialized context start / resume');
           await synth.start();
           check(context.state === 'running', 'start resumes initialized context');
+          mark('context suspend before explicit resume');
           await context.suspend();
+          mark('explicit resume');
           await synth.resume();
           check(context.state === 'running', 'explicit resume');
+          mark('held note release');
           synth.stop(id);
           await until(() => events.some(event => event.type === 'note' && event.id === id && event.state === 'ended'), 'released note must end');
           await until(() => rms(0) < 1e-5 && rms(1) < 1e-5, 'release/filter tail must become silent');
+          mark('panned stereo signal');
           const panned = synth.playNote({ voice, note: 69, pan: 1, velocity: 0.5 });
           await until(() => rms(1) > 0.03, 'panned note right signal');
           check(rms(0) < 1e-6, 'full right pan silences opposite channel');
           const panSignal = [rms(0), rms(1)];
           synth.stop(panned);
+          mark('panned note release / idle diagnostics');
           await until(() => events.some(event => event.type === 'note' && event.id === panned && event.state === 'ended'), 'panned release ends');
           const diagnostics = await synth.getDiagnostics();
           check(diagnostics.activeVoices === 0 && diagnostics.pendingEvents === 0 && diagnostics.errors === 0, 'idle diagnostics after release');
+          mark('borrowed synth close');
           await synth.close();
           check(context.state === 'running', 'closing borrowed context must not suspend or close it');
-          const owned = new OPM({ destination: null });
+          owned = new OPM({ destination: null });
           try {
+            mark('owned context start');
             await owned.start();
             const original = owned.context;
+            mark('owned context close');
             await owned.close();
             check(original.state === 'closed', 'owned context teardown');
+            mark('owned context restart');
             await owned.start();
             check(owned.context !== original && owned.context.state === 'running', 'owned context restart creates fresh running context');
-          } finally { await owned.close(); }
+          } catch (error) {
+            failure = { stage, message: error.message };
+            throw error;
+          } finally {
+            mark('owned context cleanup');
+            await owned.close();
+          }
           for (const noteId of [id, panned]) {
             for (const state of ['accepted', 'started', 'released', 'ended']) {
               check(events.filter(event => event.type === 'note' && event.id === noteId && event.state === state).length === 1,
                 `note ${noteId} must emit ${state} exactly once`);
             }
           }
+          mark('lifecycle verified');
           return { sampleRate: context.sampleRate, signal, panSignal, diagnostics,
             lifecycle: events.filter(event => event.type === 'note').map(event => ({ id: event.id, state: event.state })) };
+        } catch (error) {
+          failure ??= { stage, message: error.message };
+          console.error(`[audio smoke] ${JSON.stringify(window.smokeStatus())}`);
+          throw error;
         } finally {
+          mark('borrowed context cleanup');
           await synth.close();
           splitter.disconnect();
           analysers.forEach(analyser => analyser.disconnect());
@@ -145,12 +207,21 @@ try {
         }
       })();
     };
+    mark('waiting for trusted click');
   });
   await page.click('#start'); // Real trusted gesture; no fake AudioContext/worklet.
-  const result = await page.evaluate(() => Promise.race([
-    window.smoke,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('browser audio smoke timed out')), 30000)),
-  ]));
+  let result;
+  try {
+    result = await page.evaluate(() => Promise.race([
+      window.smoke,
+      new Promise((_, reject) => setTimeout(() => reject(new Error(
+        `browser audio smoke timed out: ${JSON.stringify(window.smokeStatus())}`)), 30000)),
+    ]));
+  } catch (error) {
+    const status = await page.evaluate(() => window.smokeStatus()).catch(statusError => ({ diagnosticError: statusError.message }));
+    console.error(`[${engine}] smoke failed: ${JSON.stringify(status)}`);
+    throw error;
+  }
   assert.deepEqual(pageErrors, []);
   console.log(JSON.stringify({ browser: engine, ...result, passed: true }, null, 2));
   await page.close();

@@ -83,6 +83,7 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 - `npm run security -- --package-smoke` — AST dynamic-execution gate over source/generated JS, exact development pins, zero runtime dependencies, isolated installed exports/type smoke
 - `npm audit` and `npm audit --omit=dev` — record actual tooling/runtime audit results; runtime dependency tree must be empty
 - `npx --no-install playwright install --with-deps chromium` then `npm run browser-smoke -- chromium` — real AudioWorklet smoke; Firefox/WebKit alternatives are configured separately
+- Headless Linux Firefox requires a running native audio server. CI starts PulseAudio and a null sink before real worklet smoke; it does not mock audio or relax browser permission/autoplay controls. Consult the usage guides for setup and stage diagnostics.
 - `npm run benchmark` — host-dependent 128-frame render deadlines, with optional explicit budget environment variables
 
 ### 4. Review record

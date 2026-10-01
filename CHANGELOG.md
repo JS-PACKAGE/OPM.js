@@ -2,6 +2,18 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### CI failure repairs
+
+- Inspect [the first quality run](https://github.com/YueyuHoshizora/OPM.js/actions/runs/36922999106): Node 18/22 passed functional gates but exceeded the unchanged 2.667 ms burst p99 budget (3.205/3.019 ms); Firefox timed out without stage diagnostics.
+- Reduce attack/decay/release envelope exponentiation within each 4x output frame. Re-anchor analytic gain every frame and retain direct evaluation at stage boundaries; validation, eight-voice/eight-fade bounds, workload, and deadline budget remain unchanged. Double-precision rounding can differ from the previous implementation; no universal byte-identity promise.
+- Provide Linux Firefox CI with a running native PulseAudio server and null output sink. Keep real AudioContext/AudioWorklet processing and trusted clicks; add stage, audio-clock/context, and request/error diagnostics rather than autoplay overrides or fake audio.
+- Verification: Node 18.20.8 and 22.23.3 each passed 74 tests, including analytic envelope boundaries and very short stages. Build, public types, AST/security and installed-package ESM/type smoke passed. On Apple M5, the unchanged 300-warmup/2,000-block benchmark passed every p99 gate; burst p99 was 1.499/1.478 ms with zero missed deadlines in those runs. These measurements do not prove the GitHub x64 hosts' performance.
+- Audio comparison covered 387 cases and 2,045,248 channel samples, including burst steals at 8–192 kHz: observed Float32 output matched the previous implementation exactly; source/distribution parity also passed the same cases.
+- Locked Playwright 1.56.1 / Firefox 142.0.1 passed real stereo, held/released notes, routing, suspend/resume, diagnostics and context ownership smoke against built assets on Linux arm64 with PulseAudio. The local host was Ubuntu 26.04 using Playwright's Ubuntu 24.04 arm64 binary override, not the GitHub Ubuntu 24.04 x64 runner. Chromium 153 and WebKit 26.6 smoke also passed on macOS using the existing matching Playwright 1.63.0 launcher. The repaired external CI run has not yet been observed.
+- **Security:** independent source reviewer **CiRepairSecurity** approved scoped A/B/C/D checks with no blockers: finite/bounded frame-local envelope computation, unchanged trust boundaries, and native CI audio setup. 語喵 executed the integration checks above; the reviewer did not execute runtime gates.
+
 ## v1.2.0
 
 ### Readiness and additive features

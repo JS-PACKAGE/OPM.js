@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, normalizeVoice } from '../src/core/synth.js';
+import { envelopeAt } from '../src/core/envelope.js';
 
 function voice(overrides = {}) {
   return {
@@ -51,6 +52,55 @@ test('note-on, sustain, and note-off follow per-operator attack, decay, and rele
   const released = audio(synth, 2400);
   assert.ok(rms(released, 1700, 2000) < rms(released, 0, 300) * 0.02, 'release fades to silence');
   assert.ok(released.subarray(2100).every(value => value === 0));
+});
+
+test('rendered ADSR matches analytic dB gain through subsample boundaries and short stages', () => {
+  for (const sampleRate of [8000, 48000]) {
+    for (const [a, d, s, r, gate] of [
+      [9.375, 13.375, 0.25, 11.375, 5],
+      [9.375, 13.375, 0.25, 11.375, 15],
+      [9.375, 13.375, 0.25, 11.375, 32],
+      [8, 12, 0.5, 11, 32],
+      [0.125, 0.125, 0.5, 0.125, 2],
+      [0, 0, 1, 0, 8],
+      [0, 7.375, 0, 10, 16],
+      [1e-300, 1e-300, 0.5, 1e-300, 8],
+    ]) {
+      const adsr = { a: a / sampleRate, d: d / sampleRate, s, r: r / sampleRate };
+      const input = voice({ algorithm: 7, ops: Array.from({ length: 4 }, () => ({
+        ratio: 1, level: 1, detune: 0, adsr,
+      })) });
+      const synth = new Synth(sampleRate);
+      const id = synth.noteOn(input, 69);
+      const actual = new Float32Array(160);
+      synth.render(actual, actual, 0, gate);
+      synth.noteOff(id);
+      // Uneven chunks must not reset or accumulate envelope rounding.
+      synth.render(actual, actual, gate, 7);
+      synth.render(actual, actual, gate + 7, actual.length - gate - 7);
+      const filters = new Float64Array(4);
+      const alpha = 1 - Math.exp(-2 * Math.PI * 0.2 / 4);
+      for (let frame = 0; frame < actual.length; frame++) {
+        for (let sub = 0; sub < 4; sub++) {
+          const time = frame / sampleRate + sub / (sampleRate * 4);
+          let signal = 0.7 * Math.sin(2 * Math.PI * 440 * time) *
+            envelopeAt(time, gate / sampleRate, adsr);
+          for (let pole = 0; pole < 4; pole++) {
+            filters[pole] += alpha * (signal - filters[pole]);
+            signal = filters[pole];
+          }
+        }
+        const expected = 0.7 * Math.tanh(filters[3] / 0.7);
+        assert.ok(Math.abs(actual[frame] - expected) < 2e-7,
+          `ADSR ${a}/${d}/${s}/${r}, gate ${gate}, rate ${sampleRate}, frame ${frame}`);
+        // Once a completed release falls below -96 dB, subsequent frames are
+        // silence rather than an indefinitely decaying filter tail.
+        if (frame / sampleRate >= gate / sampleRate + adsr.r &&
+            Math.abs(filters[3]) < 10 ** (-96 / 20)) filters.fill(0);
+      }
+      assert.equal(synth.errorCount, 0);
+    }
+  }
 });
 
 test('all eight algorithms route distinct carrier/modulator topologies, and feedback changes timbre', () => {

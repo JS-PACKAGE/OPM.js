@@ -55,5 +55,13 @@ jobs:
       - run: npm run build
       - name: Install the locked development tool's browser and system dependencies
         run: npx --no-install playwright install --with-deps ${{ matrix.browser }}
+      - name: Provide Firefox with a native headless audio output
+        if: matrix.browser == 'firefox'
+        run: |
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=opm_ci
+          pactl set-default-sink opm_ci
+          pactl info
       - name: Exercise built AudioWorklet, signal, routing, gates and context lifecycle
         run: node scripts/browser-smoke.js ${{ matrix.browser }}
