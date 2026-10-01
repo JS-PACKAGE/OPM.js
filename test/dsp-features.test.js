@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { Synth, renderNote, normalizeVoice } from '../src/core/index.js';
+import { Synth, renderNote, normalizeVoice, encodeWav } from '../src/core/index.js';
 import { validateVoice } from '../src/voices/schema.js';
 
 function voice() {
@@ -177,4 +177,47 @@ test('version1 is legacy-only; canonical v2 keyScale validates strict versus cla
   Object.defineProperty(input.ops[0].keyScale, 'rightDbPerOctave', { get() { throw Error('getter invoked'); } });
   assert.throws(() => normalizeVoice(input), /must be data/);
   assert.throws(() => validateVoice(input), /must be data/);
+});
+
+test('WAV headers and PCM16 mono/stereo endpoints are interoperable and interleaved', () => {
+  const left = Float32Array.of(-1, -0.5, 0, 0.5, 1);
+  const mono = encodeWav({ left, sampleRate: 44100 });
+  const m = new DataView(mono.buffer);
+  const ascii = (start, end) => String.fromCharCode(...mono.subarray(start, end));
+  assert.equal(ascii(0, 4), 'RIFF'); assert.equal(ascii(8, 12), 'WAVE');
+  assert.equal(ascii(12, 16), 'fmt '); assert.equal(ascii(36, 40), 'data');
+  assert.equal(m.getUint32(4, true), mono.length - 8);
+  assert.equal(m.getUint16(20, true), 1);
+  assert.equal(m.getUint16(22, true), 1);
+  assert.equal(m.getUint32(24, true), 44100);
+  assert.equal(m.getUint32(28, true), 88200);
+  assert.equal(m.getUint16(32, true), 2);
+  assert.equal(m.getUint16(34, true), 16);
+  assert.equal(m.getUint32(40, true), 10);
+  assert.deepEqual(Array.from({ length: 5 }, (_, i) => m.getInt16(44 + i * 2, true)),
+    [-32768, -16384, 0, 16384, 32767]);
+  const stereo = encodeWav({ left: Float32Array.of(-1, 0.5), right: Float32Array.of(1, -0.5), sampleRate: 8000 });
+  const s = new DataView(stereo.buffer);
+  assert.equal(s.getUint16(22, true), 2);
+  assert.equal(s.getUint16(32, true), 4);
+  assert.equal(s.getUint32(28, true), 32000);
+  assert.deepEqual(Array.from({ length: 4 }, (_, i) => s.getInt16(44 + i * 2, true)),
+    [-32768, 32767, 16384, -16384]);
+});
+
+test('WAV rejects malformed audio and enforces its frame and rate budgets', () => {
+  for (const left of [[], new Float32Array(0), Float32Array.of(NaN), Float32Array.of(Infinity),
+    Float32Array.of(1.01), new Float32Array(4_000_001)]) {
+    assert.throws(() => encodeWav({ left, sampleRate: 8000 }));
+  }
+  const left = Float32Array.of(0);
+  for (const sampleRate of [7999, 192001, 8000.5, NaN]) assert.throws(() => encodeWav({ left, sampleRate }));
+  for (const right of [null, [], new Float32Array(2), Float32Array.of(-Infinity)]) {
+    assert.throws(() => encodeWav({ left, right, sampleRate: 8000 }));
+  }
+  const input = { left, sampleRate: 8000 };
+  Object.defineProperty(input, 'left', { get() { throw Error('getter invoked'); } });
+  assert.throws(() => encodeWav(input), /audio data fields/);
+  const maximum = encodeWav({ left: new Float32Array(4_000_000), sampleRate: 192000 });
+  assert.equal(maximum.byteLength, 8_000_044);
 });
