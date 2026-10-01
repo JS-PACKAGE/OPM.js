@@ -43,6 +43,17 @@ for (const file of voiceFiles.filter(file => extname(file) === '.json')) {
   files.push({ path: join(outdir, 'voices', file), data: Buffer.from(JSON.stringify(data) + '\n') });
 }
 
+async function copyDeclarations(directory) {
+  for (const entry of await readdir(directory, { withFileTypes: true })) {
+    const source = join(directory, entry.name);
+    if (entry.isDirectory()) await copyDeclarations(source);
+    else if (entry.name.endsWith('.d.ts')) {
+      files.push({ path: join(outdir, relative(join(root, 'src'), source)), data: await readFile(source) });
+    }
+  }
+}
+await copyDeclarations(join(root, 'src'));
+
 // dist is generated only; retain readable source and legal files outside it.
 await rm(outdir, { recursive: true, force: true });
 const sizes = [];

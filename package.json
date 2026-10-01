@@ -4,14 +4,21 @@
   "description": "A zero-dependency four-operator FM synthesis engine",
   "type": "module",
   "license": "Apache-2.0",
+  "types": "./dist/api/index.d.ts",
   "exports": {
-    ".": "./dist/api/index.js",
-    "./core": "./dist/core/index.js",
+    ".": { "types": "./dist/api/index.d.ts", "import": "./dist/api/index.js" },
+    "./core": { "types": "./dist/core/index.d.ts", "import": "./dist/core/index.js" },
+    "./voices/schema.js": { "types": "./dist/voices/schema.d.ts", "import": "./dist/voices/schema.js" },
+    "./voices/normalize.js": { "types": "./dist/voices/normalize.d.ts", "import": "./dist/voices/normalize.js" },
+    "./voices/brass.js": { "types": "./dist/voices/brass.d.ts", "import": "./dist/voices/brass.js" },
+    "./voices/dx7.js": { "types": "./dist/voices/dx7.d.ts", "import": "./dist/voices/dx7.js" },
+    "./voices/*.js": { "types": "./dist/voices/*.d.ts", "import": "./dist/voices/*.js" },
     "./voices/*": "./dist/voices/*"
   },
   "files": [
     "dist/**/*.js",
     "dist/**/*.json",
+    "dist/**/*.d.ts",
     "doc/",
     "LICENSE",
     "README.md",
@@ -22,6 +29,7 @@
     "test": "node --test",
     "benchmark": "node scripts/benchmark.js",
     "build": "node scripts/build.js",
+    "typecheck": "tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM scripts/types/public-api.ts",
     "prepack": "npm run build"
   },
   "engines": {
@@ -29,6 +37,7 @@
   },
   "devDependencies": {
     "esbuild": "0.28.2",
-    "terser": "5.51.2"
+    "terser": "5.51.2",
+    "typescript": "5.9.3"
   }
 }
