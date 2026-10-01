@@ -2,7 +2,7 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-OPM.js 提供瀏覽器 AudioWorklet 即時合成的 `OPM`，以及 Node.js 離線 PCM 渲染的 `Synth` 與 `renderNote`。請先取得包含本文件的儲存庫 checkout／封存檔；以下路徑皆以明示的工作目錄為準。
+OPM.js 1.2 提供瀏覽器 AudioWorklet 即時合成的 `OPM`、Node.js 離線立體聲 PCM 渲染的 `Synth`／`renderNote`、PCM16 WAV 匯出與近似 DX7 音色匯入。公開 ESM 入口皆附 TypeScript 型別宣告。請先取得包含本文件的 checkout／封存檔；以下路徑皆以明示的工作目錄為準。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -21,17 +21,17 @@ npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.1.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
+此 checkout 的套件版本產生 `opm.js-1.2.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.1.0.tgz
+npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-既有專案只需在該專案目錄以 tarball 的實際相對或絕對路徑執行 `npm install`，不需 `npm init`。此流程不假設套件已上架 npm registry；套件使用端不需要安裝建置用依賴。封裝內容有 `dist` 的 JS／JSON、文件與法律檔案，沒有 `src`、`scripts`、範例頁面或 `.br`／`.gz`；維護者的建置指令應在 checkout 執行，而非已安裝的套件內。
+既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的 JS／JSON、`.d.ts`、文件與法律檔案，不含 `src`、`scripts`、範例頁面或壓縮側檔；維護指令應在 checkout 執行。
 
 要直接試用儲存庫的範例，請在 **OPM.js 儲存庫根目錄** 啟動伺服器：
 
@@ -94,14 +94,18 @@ python3 -m http.server 8000 --directory public
 
 | API | 用法與限制 |
 | --- | --- |
-| `new OPM({ sampleRate } = {})` | 可省略採用瀏覽器預設取樣率；指定時須為 8000–96000 的整數，瀏覽器硬體也可能拒絕指定值。 |
-| `await opm.start()` | 從點擊等使用者互動中呼叫並等待；已啟動後依序重複呼叫無妨。`start()`／`close()` 應依序等待，並行的 `start()` 不會自動合併。 |
-| `opm.loadVoice(name, voice)` | 在 `start()` 前即可註冊；驗證並複製音色。名稱為 1–64 個 ASCII 英文字母、數字、`_` 或 `-`；重複名稱會取代後續音符使用的音色。 |
-| `opm.playNote({ voice = 'brass', note, time = 0, duration })` | `note` 必須是 MIDI 整數 0–127；`time` 是**從現在起算的延遲** 0–60 秒，不是絕對 AudioContext 時間；必填 `duration` 為 `(0, 60]` 秒，**不含 release 尾音**。`voice` 可為已註冊名稱或音色物件。回傳正的安全整數 ID，並非完成 Promise 或排程確定被接收的證明。 |
-| `opm.stop(id)` | 需已啟動且 ID 為正的安全整數；取消待開始的音符，或讓發聲中的音符進入 release。回傳 `undefined`，不是立即靜音。 |
-| `await opm.close()` | 斷線並關閉 AudioContext，停止音效與佇列中的工作；再次使用須呼叫 `start()`。 |
+| `new OPM({ sampleRate, context, destination, onEvent } = {})` | 可指定整數 8000–96000 Hz。傳入 `AudioContext` 代表借用，OPM 絕不關閉或暫停它。省略 destination 會接到 context.destination；`null` 則不自動接線。 |
+| `await opm.start()`／`await opm.resume()` | 在使用者互動中啟動／恢復並等待，再播放。並行啟動會合併；既有 context 被瀏覽器暫停後可恢復。 |
+| `opm.connect(destination)`／`opm.disconnect(destination?)` | 對已啟動的輸出接線／斷線，回傳 opm；目的節點必須來自相同 context。省略斷線目的地會移除所有輸出連線。 |
+| `opm.loadVoice(name, voice)` | 啟動前即可驗證、複製並註冊音色；名稱為 1–64 個 ASCII 英文字母、數字、`_` 或 `-`。覆蓋只影響未來音符。 |
+| `opm.playNote({ voice='brass', note, time=0, duration=null, velocity=1, pan=0 })` | MIDI 整數 0–127；time 是從現在起的延遲 0–60 秒。duration 為 `(0,60]`，或預設 `null` 持續到 stop。力度 0–1，聲像 −1–1。回傳不循環重用的正安全整數 ID，不代表排程已被接收。 |
+| `opm.stop(id)` | 已啟動且 ID 為正安全整數時，取消未來音符或開始 release；未知、已結束、被搶走或已 release 的 ID 不會再產生事件。沒有回傳值，不會立即靜音。 |
+| `await opm.getDiagnostics()` | 回傳 `{type:'diagnostics',requestId,activeVoices,pendingEvents,errors,rejectedNotes}`；context 須在 running，最多 64 個未完成請求。暫停／關閉／processor 失敗會拒絕待回覆請求，請先 resume 再重試。 |
+| `await opm.close()` | 與初始化依序處理，斷開 node，只關閉自行建立的 context。再次啟動會重建自有 context；借用的 context 仍可由宿主使用。 |
 
-最多同時八個音符（含 release 尾音），第九個會取代最早的音符。Worklet 待處理事件最多 256 筆，單一未來音符需佔開始與結束兩筆；空佇列至多容納 128 個完整的未來音符，溢出事件會被忽略。請勿把 `playNote()` 回傳 ID 當成事件已被接收的確認。沒有全域 `setLFO()`：應在載入或播放音色前設定音色本身的 `lfo`。
+`onEvent` 會收到 `{type:'note',id,state,reason?}`，state 為 `accepted`、`started`、`released`、`ended`、`stolen`、`cancelled` 或 `rejected`；也會收到診斷回覆與 `{type:'error',error}` processor 失敗事件。回呼拋出的例外不會破壞引擎。請監聽拒絕事件，不要把 ID 當作接收確認。
+
+最多八個邏輯聲部（含 release），另有最多八個約 5 ms 的搶音淡出；滿額取代最早聲部，避免突然重設波形。待處理事件與追蹤 ID 各最多 256 筆；未來定時音符佔兩筆、持續音符一筆。重複／溢出在入列前拒絕，終止事件移除過期 note-off。長曲分批排程；沒有 setLFO，請設定音色本身的 lfo。
 
 要自訂 LFO、排程與提早停止，保留上方 **`public/index.html`** 的 `#play` 按鈕與 `#status` 輸出，將其原本的 `<script type="module">…</script>` **完整替換**為以下區塊；從 `opm-app` 根目錄照前節提供 `public/`：
 
@@ -124,7 +128,7 @@ python3 -m http.server 8000 --directory public
     play.disabled = true;
     try {
       await opm.start();
-      const id = opm.playNote({ voice: 'my-brass', note: 64, time: 0.1, duration: 1 });
+      const id = opm.playNote({ voice: 'my-brass', note: 64, time: 0.1, velocity: 0.7, pan: -0.5 });
       setTimeout(() => opm.stop(id), 300);
       status.textContent = 'Playing custom brass note';
     } catch (error) {
@@ -137,6 +141,52 @@ python3 -m http.server 8000 --directory public
 ```
 
 `setTimeout` 只是頁面側的提早停止示範；真正的排程延遲由 `time` 指定。完成使用後可在應用程式生命週期中 `await opm.close()`，下次要播放時再由使用者互動呼叫 `start()`。
+
+### 共用 context 與輸出接線
+
+若宿主已有 AudioContext，可將快速範例的 module script 替換成以下區塊。按播放後音符持續到按停止；`disposeOPM()` 只清除本合成器，不會關閉宿主 context：
+
+```html
+<script type="module">
+  import { OPM } from './opm/api/index.js';
+  const context = new AudioContext();
+  const gain = context.createGain();
+  gain.gain.value = 0.3;
+  gain.connect(context.destination);
+  const status = document.querySelector('#status');
+  const opm = new OPM({
+    context, destination: null,
+    onEvent(event) {
+      status.textContent = event.type === 'error'
+        ? event.error.message
+        : event.type === 'note' ? `${event.id}: ${event.state}` : `聲部：${event.activeVoices}`;
+    }
+  });
+  const stop = document.createElement('button');
+  stop.textContent = '停止持續音';
+  document.body.append(stop);
+  let id;
+  let connected = false;
+  document.querySelector('#play').addEventListener('click', async () => {
+    try {
+      await opm.resume();
+      if (!connected) { opm.connect(gain); connected = true; }
+      if (id !== undefined) opm.stop(id);
+      id = opm.playNote({ note: 60, velocity: 0.7, pan: 0.5 });
+      console.log(await opm.getDiagnostics());
+    } catch (error) { status.textContent = error.message; }
+  });
+  stop.addEventListener('click', () => { if (id !== undefined) opm.stop(id); });
+  window.disposeOPM = async () => {
+    await opm.close();
+    connected = false;
+    id = undefined;
+    gain.disconnect();
+  };
+</script>
+```
+
+移除此應用程式的音訊介面時呼叫 `await window.disposeOPM()`。context／下游節點由宿主管理；不要為了停止單一合成器而暫停整個共用 context。
 
 ## Node.js 離線渲染
 
@@ -157,9 +207,9 @@ synth.render(left, right, 22050, 22050);
 console.log(left.some(sample => sample !== 0), synth.errorCount);
 ```
 
-在同一目錄執行 `node render.mjs`，預期顯示 `true 0`。左右聲道目前輸出相同；此例只產生記憶體內的 PCM 緩衝區，**不會**播放至喇叭或寫出 WAV。在 checkout 根目錄直接執行時，將上述兩行匯入路徑分別改為 `./dist/core/index.js` 與 `./dist/voices/brass.js`。使用 ESM 的 `.mjs` 或專案的 `"type": "module"`；沒有宣告 CommonJS 入口。
+在同一目錄執行 `node render.mjs`，預期顯示 `true 0`。中央聲像為左右相同，其他位置產生立體聲；此例只產生記憶體 PCM，不會自動播放或寫檔。checkout 匯入改為 `./dist/core/index.js` 與 `./dist/voices/brass.js`。使用 `.mjs` 或 `"type":"module"`，沒有 CommonJS 入口。
 
-`new Synth(sampleRate, maxVoices = 8)` **必須**提供有限且 8000–192000 的取樣率；`maxVoices` 是 1–8 的整數。`noteOn(voice, note, id?)` 嚴格驗證音色與整數 MIDI 音高 0–127；可選 ID 必須是目前未被使用中音符占用的正安全整數，不給則自動產生，回傳 ID。超過同時發聲數會取代最早的音符。`noteOff(id)` 僅首次成功進入 release 回傳 `true`，未知或已釋放 ID 回傳 `false`。
+`new Synth(sampleRate,maxVoices=8)` 需要有限的 8000–192000 Hz 與整數 1–8 聲部。`noteOn(voice,note,id?,{velocity=1,pan=0}={})` 嚴格驗證／複製音色；核心允許有限的 MIDI 小數 0–127，力度 0–1、聲像 −1–1 超界則拒絕。ID 為目前未占用的正安全整數。`noteOff(id)` 首次 release 回傳 true，未知／已釋放則 false。`lastStolenId` 為最後成功 note-on 搶走的 ID，沒有搶音則 null；可設定 `onVoiceEnded(id,reason)`，每個邏輯音符只收到一次 `stolen`／`ended`／`error` 終止通知。
 
 `render(left, right, offset = 0, length = left.length - offset)` 寫入 `Float32Array`：`offset`／`length` 須為非負安全整數且區間須容納於**兩個**陣列內，陣列總長可不同。自行分段呼叫 `render` 來排程，沒有即時定時器；`currentFrame` 為累計渲染影格，`errorCount` 記錄數值計算失敗次數。release 仍須足夠長的後續緩衝區與渲染時間。
 
@@ -178,9 +228,9 @@ const { samples, sampleRate, diagnostics } = renderNote({
 console.log(samples.length, sampleRate, diagnostics.errors);
 ```
 
-在同一目錄執行 `node render-note.mjs`；若改在 checkout 根目錄執行，將匯入路徑改成 `./dist/core/index.js` 與 `./dist/voices/brass.js`。`renderNote({ voice, note = 60, duration = 0.5, velocity = 1, sampleRate = 44100 })` 回傳 `{ samples, sampleRate, diagnostics: { errors } }`，其中 `samples` 為單聲道 PCM。它要求**完整 Schema 音色**，包含 `version`、`name`、`modIndex`、`lfo`。`voice` 的有限但超界數值會被限制到有效範圍，但不合法的 `version`、`algorithm`、`feedback` 仍會拒絕；`note` 必須有限，限制於 0–127 且可為小數；`duration` 必須有限，限制於 0–30 秒；`velocity` 必須有限，限制於 0–1。`sampleRate` 則必須是 8000–96000 的整數，超界會拒絕。
+執行 `node render-note.mjs`；checkout 改用 `./dist/...` 匯入。`renderNote({voice,note=60,duration=0.5,velocity=1,pan=0,sampleRate=44100})` 回傳 `{samples,left,right,sampleRate,diagnostics:{errors}}`，`samples === left`。要求完整 Schema 音色；有限的音色數值會限制到範圍，但無效版本／algorithm／feedback 仍拒絕。有限 note／duration／velocity／pan 分別限制至 0–127／0–30 秒／0–1／−1–1；note 可為小數，sampleRate 必須是整數 8000–96000。
 
-它會配置 `ceil((duration + 最長 release + 0.01) × sampleRate)` 個樣本，超過 4,000,000 個會拒絕。此輔助函式雖驗證 LFO 欄位，**並不套用 LFO**，且輸出／混音與 `Synth` 不相同；需要對應瀏覽器引擎的 LFO 或複音行為時，請用 `Synth`。
+此函式與 `Synth` 使用相同的包絡時序、LFO、濾波、力度、聲像與飽和路徑。長度維持 `ceil((duration+最長release+0.01)*sampleRate)`，上限 4,000,000 影格。飽和前左右聲像增益為 `sqrt(2)*cos/sin((pan+1)*pi/4)`；中央保留原本每聲道增益，最左／右會關閉另一側並以 `sqrt(2)` 提升選定側。飽和後不保證感知音量恆定。
 
 其他 `opm.js/core` 公開項目：`normalizeVoice`（嚴格驗證並產生獨立複本）、`envelopeAt(time, gate, adsr)`（以秒為單位的時間／gate 計算 dB 包絡對應振幅）、不可變的八種訊號圖 `ALGORITHMS`、`HEADROOM = 0.7`、`OVERSAMPLE = 4`、`MAX_RENDER_SAMPLES = 4000000`，以及整數 8000–96000 取樣率驗證器 `sampleRateValue`。
 
@@ -190,14 +240,14 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "name": "simple",
   "algorithm": 7,
   "feedback": 0,
   "modIndex": 4,
   "lfo": { "rate": 0, "amDepth": 0, "pmDepth": 0 },
   "ops": [
-    { "ratio": 1, "level": 0.8, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.6, "r": 0.2 } },
+    { "ratio": 1, "level": 0.8, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.6, "r": 0.2 }, "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
     { "ratio": 2, "level": 0.4, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.5, "r": 0.2 } },
     { "ratio": 3, "level": 0.3, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.5, "r": 0.2 } },
     { "ratio": 4, "level": 0.2, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.5, "r": 0.2 } }
@@ -207,12 +257,13 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 | 欄位 | 範圍 |
 | --- | --- |
-| `version`／`name` | 完整音色的版本固定為 `1`；名稱為 1–64 個 ASCII 英文字母、數字、`_` 或 `-`。 |
+| `version`／`name` | 完整音色使用版本 `2`；舊版 `1` 仍可匯入，但不能加 keyScale。名稱為 1–64 個 ASCII 英文字母、數字、`_` 或 `-`。 |
 | `algorithm`／`feedback`／`modIndex` | 前兩者是 0–7 的整數；調變強度 `modIndex` 是 0–16。 |
 | 四個 `ops` 各項 | 必須提供 `ratio` 0.125–32、`level` 0–1、`detune` -1200–1200 音分，以及 `adsr` 的 `a`、`d`、`s`、`r`；`a`／`d`／`r` 是 0–10 秒，`s` 是 0–1。 |
 | `lfo` | `rate` 0–20 Hz、`amDepth` 0–1、`pmDepth` 0–1200 音分。 |
+| `ops[i].keyScale` | 可省略表示平坦；breakpoint 為 MIDI 整數 0–127，leftDbPerOctave／rightDbPerOctave 為 0–24 dB／八度。 |
 
-直接交給 `OPM.playNote()`、`OPM.loadVoice()`、`Synth.noteOn()` 或 `normalizeVoice()` 的**單一音色**，可省略 `version`、`name`、`lfo`、`modIndex`；但須提供 `algorithm`、`feedback` 與四個完整運算子。省略時 `modIndex` 預設 4、LFO 停用；若提供 `version`，必須是 1。此嚴格路徑會拒絕超界數值。欄位型別錯誤、非有限數值、未知欄位、存取器或稀疏欄位亦不符合要求。
+交給 `OPM`、`Synth.noteOn()` 或 `normalizeVoice()` 的單一音色可省略 version／name／lfo／modIndex，但須提供 algorithm／feedback 與四個完整運算子。預設 modIndex 為 4、LFO 停用；有版本時接受 2 或舊版 1（不能含 keyScale），輸出有版本者統一為 2。嚴格路徑拒絕超界／非有限數值、錯誤型別、未知欄位、存取器與稀疏陣列。鍵位縮放依音高距離，以 `10 ** (-斜率*abs(note-breakpoint)/12/20)` 衰減該運算子 level；聲像屬於音符選項，不是音色欄位。
 
 `parseVoiceBank()` 由 `opm.js/voices/schema.js`（瀏覽器靜態樹中為 `./opm/voices/schema.js`）匯出，可接受 JSON 字串或音色陣列，要求 **1–128 筆完整音色**且名稱不重複，回傳 `Map<name, voice>`，其音色為已驗證且凍結的完整物件。字串輸入最多 256 KiB（UTF-8）；陣列輸入也有數量限制。和 `validateVoice()`、`renderNote()` 相同，此路徑將**有限但超界**的數值限制在範圍內，與嚴格的單音色 `normalizeVoice()` 不同；不合法的 `version`／`algorithm`／`feedback`、非有限數值、錯誤型別、未知欄位仍會拒絕。`schema.js` 也提供 `validateVoice(voice)`、有限數值邊界函式 `bounded(value, min, max, label = 'number')`、`LIMITS`、`MAX_BANK_BYTES` 與 `MAX_BANK_VOICES`。
 
@@ -248,6 +299,52 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 仍在 `opm-app` 根目錄以 `python3 -m http.server 8000 --directory public` 提供頁面。此例只下載套件所附、站內可信任的資產；銀行大小限制在取得回應文字**之後**才生效。若接收不可信任的遠端下載，服務端必須自行限制來源、Content-Type 與下載大小；合成引擎沒有內建網路下載 API。
 
+## WAV 匯出與 DX7 匯入
+
+在 **opm-app** 建立 `export.mjs`，執行 `node export.mjs` 會寫出立體聲 WAV：
+
+```js
+import { writeFile, readFile } from 'node:fs/promises';
+import { renderNote, encodeWav } from 'opm.js/core';
+import { brass } from 'opm.js/voices/brass.js';
+import { importDX7, describeDX7 } from 'opm.js/voices/dx7.js';
+const audio = renderNote({ voice: brass, duration: 0.7, velocity: 0.8, pan: -0.5 });
+await writeFile('brass.wav', encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate }));
+// 有檔案時：node export.mjs /實際路徑/voice.syx
+if (process.argv[2]) {
+  const bytes = new Uint8Array(await readFile(process.argv[2]));
+  const voices = importDX7(bytes);
+  console.log(describeDX7(bytes));
+  const imported = renderNote({ voice: voices[0], duration: 1 });
+  await writeFile('imported.wav', encodeWav({ left: imported.left, right: imported.right, sampleRate: imported.sampleRate }));
+}
+```
+
+checkout 匯入改為 `./dist/core/index.js`、`./dist/voices/brass.js` 與 `./dist/voices/dx7.js`。`encodeWav({left,right?,sampleRate})` 回傳 PCM16 小端序 RIFF 位元組；省略 right 為單聲道。Float32Array 樣本須有限且在 −1–1，超界拒絕而非削波；立體聲長度須相同。取樣率整數 8000–192000，上限 4,000,000 影格。只傳這些自有資料欄位：整個 renderNote 結果有額外欄位，會被拒絕。編碼不會自動寫檔，範例頁使用 Blob 下載。
+
+`importDX7(Uint8Array)` 只接受一個標準、完整框架的 **163-byte 單音色**或 **4104-byte／32 音色銀行** SysEx 訊息，驗證長度、框架、7-bit 資料與 checksum。原始 payload、串接訊息與其他格式會拒絕；結果是完整、正規化的版本 2 音色。`describeDX7` 對同一資料回傳各音色的 `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`：原始 algorithm 為 1–32，轉換後 0–7；operator 編號為 DX7 的 1–6，selected 順序為 OPM 訊號順序。
+
+這是**六運算子轉四運算子的近似轉換**，不是 DX7 合成／模擬，也不是無損音色交換。運算子與路由會縮減，包絡、力度層級、鍵位縮放、detune、LFO 皆近似；固定頻率以 MIDI 60 為參考轉比例並限制範圍。音高包絡、各運算子的力度／速率縮放、LFO 延遲／波形／同步不支援。請查看 warnings 並試聽，轉換說明與音色 schema 分開。瀏覽器使用 `./opm/voices/dx7.js`、`new Uint8Array(await file.arrayBuffer())`，再以 `opm.loadVoice(voice.name,voice)` 註冊；不可信任檔案或下載須先限制大小再緩衝。
+
+## 品質與發佈驗收
+
+在 checkout 執行維護指令，不是在已安裝的套件中：
+
+```sh
+npm ci
+npm run build
+npm test
+npm run typecheck
+npm run security -- --package-smoke
+npx --no-install playwright install --with-deps chromium
+npm run browser-smoke -- chromium
+npm run benchmark
+```
+
+可改用 firefox／webkit 安裝與測試其他引擎。CI 設定 Node 18／22／24 與三種瀏覽器，但不代表外部 CI 已執行或本機全數實測；實際結果以 CHANGELOG 為準。瀏覽器驗收觀察真正 AudioWorklet 訊號、有限輸出、生命週期／release 與發佈路徑。路線圖完成還需測試、範例聲音／匯出與 README 說明。
+
+效能報告列出暖機後 128 影格區塊 p95／p99／最慢值與超過 `128/sampleRate` 秒的次數；`OPM_BENCH_BLOCKS`、`OPM_BENCH_WARMUP`、`OPM_BENCH_SAMPLE_RATE` 調整負載，p99／worst budget ratio 可設主機相關門檻。本機預設只報告；CI 設定 48 kHz 的 `OPM_BENCH_P99_BUDGET_RATIO=1`（2.667 ms），最慢值／GC 停頓僅報告，非所有平台即時保證。頻譜驗收比較 48 kHz 下折疊到 18 kHz 的 30 kHz 振盪器與同強度 1760 Hz 控制，要求至少 30 dB 衰減，不能宣稱所有 FM 無混疊。
+
 ## 壓縮部署
 
 原始縮小版 `.js`／`.json` 可直接使用。checkout 建置時會產生 Brotli `.br`（品質 11）與 gzip `.gz`（等級 9）側檔，但 npm tarball 不包含這些檔案；選用壓縮可在 checkout 建置，或由網站主機自行壓縮。程式始終匯入 `.js` URL，**不要**匯入 `.br`／`.gz`。只有當伺服器實際送出對應壓縮位元組時才設定正確的 `Content-Encoding` 與 `Vary: Accept-Encoding`，並提供適當 JS／JSON MIME 類型。基本的 Python HTTP 伺服器不會協商側檔。整套 `dist` 與 chunks 須維持同一建置版本；詳見 README 的[最佳化發佈](../README.md#optimized-distribution)。
@@ -261,9 +358,9 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 | worklet／chunk 404，或拿到 HTML、MIME 類型錯誤 | 重新複製完整 `dist` 目錄並確認站點路徑；不要讓 SPA rewrite 將資產請求改送 `index.html`。 |
 | 尚未啟動就播放、瀏覽器自動播放被擋 | 在點擊事件內 `await opm.start()` 後才呼叫 `playNote()`。 |
 | 音高、名稱、延遲、時長或未知音色出錯 | 依[瀏覽器 API](#瀏覽器-api-與自訂音色)檢查範圍，先註冊自訂音色。 |
-| 多音符遺失 | 考慮八聲部上限與 256 筆待處理事件限制；ID 並非事件接收回執。 |
-| Node 無聲、找不到 WAV | `Synth`／`renderNote` 只產生 PCM 資料，需自行播放或編碼檔案；release 需額外渲染。 |
-| `renderNote` 的 LFO 無效 | 此輔助函式不套用 LFO；改用 `Synth`。 |
+| 多音符遺失 | 檢查事件的 rejected／stolen 與診斷；注意八個邏輯聲部及有界事件／ID，分批排程。 |
+| Node 無聲、找不到 WAV | PCM 不會自動播放／寫檔；依上方 WAV 範例編碼並儲存。 |
+| Processor 失敗 | 處理 onEvent error 與拒絕的診斷請求，關閉／重啟；不要以不安全 fallback 掩蓋錯誤。 |
 | npm 回報 E404 | 不假設 registry 有此套件；依[安裝步驟](#安裝與範例頁面)打包並安裝 checkout 的本機 tarball。 |
 | 音色銀行格式錯誤 | 必須是完整音色組成的**陣列**，並符合名稱、欄位、數量與大小限制；單一 JSON 物件須包入 `[...]`。 |
 | `.br` 回傳亂碼 | 設定正確的壓縮協商與 `Content-Encoding`，或直接提供原始 `.js`／`.json`。 |

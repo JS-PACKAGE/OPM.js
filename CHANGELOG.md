@@ -2,6 +2,36 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## v1.2.0
+
+### Readiness and additive features
+
+- Add borrowed AudioContext ownership, resumable/coalesced initialization, serialized disposal, explicit output routing, held notes, velocity, and stereo pan.
+- Surface worklet note admission/lifecycle/rejection events, diagnostics, and processor errors. Bound tracked IDs/events, reject duplicates before enqueueing, and remove stale off events when notes terminate.
+- Preserve eight logical voices with bounded short steal fades and exactly-once terminal notifications. Unify offline rendering with the live Synth DSP path, including LFO, filtering, saturation, velocity, and pan.
+- Introduce version 2 voices with optional per-operator key scaling; retain legacy version 1 input without new fields. Expand the bundled example bank.
+- Add finite/bounded PCM16 mono/stereo WAV encoding and clean-room approximate six-to-four-operator DX7 SysEx import, with separate conversion descriptions/warnings.
+- Ship TypeScript declarations through conditional package exports and copy their dependent declarations intact during builds. Keep zero runtime dependencies.
+- Add development-only AST security/package gates, an installed-package type consumer, configurable 128-frame deadline statistics, spectral regression coverage, and configured Node/browser CI. Browser tooling is development-only; no fallback hides missing AudioWorklet support.
+- Update English and Traditional Chinese runnable installation, lifecycle, routing, rendering, import/export, and quality instructions; extend the browser demo with key scaling, DX7 preview, and WAV download.
+
+### Verification and release gate
+
+- Integration verification passed 73 tests, the distribution build, strict public-API TypeScript checks, source/built AST security gates, isolated tarball installation exercising ESM and TypeScript consumers, and full/runtime-only npm audits with zero vulnerabilities.
+- Source and minified distribution produced byte-identical stereo PCM and WAV bytes across 189 offline cases (7,944,138 stereo samples), plus 40 live stealing/render blocks.
+- Real Chromium, Firefox, and WebKit AudioWorklet smoke scenarios passed signal/stereo, routing, held-note lifecycle, suspend/resume, diagnostics, and context ownership checks. Local browser downloads for pinned Playwright 1.56.1 did not complete; the unchanged scenarios used an already cached matching Playwright 1.63.0 browser launcher. The pinned CI browser installation and external Node 18/22/24 CI jobs remain configured, not observed runs.
+- The actual demos produced finite audio for key scaling and the expanded presets, previewed an independently generated DX7 fixture, downloaded and decoded a stereo WAV (48 kHz, 39,384 frames), and reported no page errors or rejected notes. Root-demo stop behavior was reproduced and fixed.
+- On Apple M5 / Node 26.7.0, the isolated 48 kHz / 128-frame benchmark passed its p99 deadline budget after 300 warm-up and 2,000 measured blocks per scenario. Burst p99 was 1.347 ms; worst was 3.703 ms with 5 missed 2.667 ms deadlines. A concurrent large offline-render workload exceeded the p99 budget (2.789 ms, 23 misses). These host/load-specific measurements are not a hard real-time guarantee.
+
+### Security review
+
+語喵 coordinated integration verification. Independent source reviewer **FinalSecurity** approved A/B/C/D after remediation, with no remaining blockers; **FinalConsumerReview** approved the consumer/lifecycle/DSP review after the reentrant voice-admission fix. Reviewers did not independently execute the runtime gates above; no release tag, publication, or external CI run is claimed.
+
+- **A — Untrusted data:** approved own-data voice/key-scaling validation, bounded bank/DX7 parsing, framing/checksum/seven-bit checks, and WAV limits. Remediated forged typed-array metadata and inherited WAV-field reads using native kind/length intrinsics and own descriptors; samples are captured, validated, and encoded once. Boundary regressions passed.
+- **B — Worklet boundary:** approved malformed-message handling, pre-enqueue duplicate/capacity checks, held-note cancellation, lifecycle ID cleanup, diagnostics, and processor-error propagation. Late or repeated note-off is an idempotent no-op, avoiding false rejection after completion/stealing.
+- **C — DSP safety:** approved eight logical voices/eight bounded fading remnants, terminal callbacks, finite output, LFO/offline parity, stereo gain, key scaling, and deterministic rendering. Admit replacements before notifying stolen callbacks so reentrant admission cannot exceed the voice limit; regression and spectral tests passed. Deadline limitations are recorded above.
+- **D — Supply chain:** approved zero runtime dependencies, exact esbuild/Terser/Acorn/Playwright/TypeScript development pins and lockfile, pinned CI actions, package whitelist, and installed ESM/type exports. Generated-code/package gates and both npm audits passed.
+
 ## v1.1.0
 
 Release gate: 語喵 coordinated independent security reviewers ReleaseBoundary (A/B) and ReleaseDsp (C/D), both approving their assigned source/security slices with no blockers. Fresh verification passed all 37 tests, full and runtime-only npm audits (zero vulnerabilities), an empty runtime dependency tree, the distribution build, and an isolated v1.1.0 tarball installation exercising public exports, finite stereo PCM, note release, mono rendering, and bank parsing. The browser and differential-audio evidence below was obtained during the preceding optimization/documentation work; runtime code is unchanged since those checks.
