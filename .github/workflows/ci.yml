@@ -1,0 +1,59 @@
+name: Quality and security
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  node:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['18', '22', '24']
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm audit
+      - run: npm audit --omit=dev
+      - name: Runtime-zero-deps, parsed dynamic-code gate and installed package smoke
+        run: node scripts/security-check.js --package-smoke
+      - name: Check warmed p99 deadline budget and report worst-case stalls
+        run: npm run benchmark
+        env:
+          OPM_BENCH_P99_BUDGET_RATIO: '1'
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Install the locked development tool's browser and system dependencies
+        run: npx --no-install playwright install --with-deps ${{ matrix.browser }}
+      - name: Exercise built AudioWorklet, signal, routing, gates and context lifecycle
+        run: node scripts/browser-smoke.js ${{ matrix.browser }}
