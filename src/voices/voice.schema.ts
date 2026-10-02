@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v3",
+  "title": "OPM.js canonical voice v4",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 3
+      "const": 4
     },
     "name": {
       "type": "string",
@@ -41,9 +41,14 @@ export const voiceSchema = {
       "required": [
         "rate",
         "amDepth",
-        "pmDepth"
+        "pmDepth",
+        "waveform"
       ],
       "properties": {
+        "waveform": {
+          "type": "string",
+          "enum": ["sine", "triangle", "saw", "square"]
+        },
         "rate": {
           "type": "number",
           "minimum": 0,

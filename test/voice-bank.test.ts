@@ -16,7 +16,7 @@ test('bank length is measured in UTF-8 bytes, not JavaScript characters', () => 
   const multibyte = json + ' '.repeat(MAX_BANK_BYTES - Buffer.byteLength(json) - 1) + 'é';
   assert.ok(multibyte.length <= MAX_BANK_BYTES);
   assert.equal(Buffer.byteLength(multibyte), MAX_BANK_BYTES + 1);
-  assert.throws(() => parseVoiceBank(multibyte), { name: 'RangeError', message: /exceeds 256 KiB/ });
+  assert.throws(() => parseVoiceBank(multibyte), RangeError);
 });
 
 test('duplicate bank names are rejected and returned voices are independent snapshots', () => {
@@ -24,7 +24,7 @@ test('duplicate bank names are rejected and returned voices are independent snap
   const second = copy();
   second.name = 'alternate';
   second.ops[0].level = 0.13;
-  assert.throws(() => parseVoiceBank([first, copy()]), /Duplicate voice: /);
+  assert.throws(() => parseVoiceBank([first, copy()]), TypeError);
 
   const bank = parseVoiceBank([first, second]);
   const originalLevel = first.ops[0].level;

@@ -5,11 +5,21 @@ export interface ADSR {
     s: number;
     r: number;
 }
+export interface LegacyLFO {
+    rate: number;
+    amDepth: number;
+    pmDepth: number;
+    waveform?: never;
+}
 export interface LFO {
     rate: number;
     amDepth: number;
     pmDepth: number;
+    waveform: 'sine' | 'triangle' | 'saw' | 'square';
 }
+export type LFOInput = Omit<LFO, 'waveform'> & {
+    waveform?: LFO['waveform'];
+};
 export interface KeyScale {
     breakpoint: number;
     leftDbPerOctave: number;
@@ -35,21 +45,27 @@ interface VoiceBase {
     algorithm: Algorithm;
     feedback: Algorithm;
     modIndex?: number;
-    lfo?: LFO;
 }
-/** Strict single-voice input; omitted version uses the current operator shape. */
+/** Strict single-voice input; omitted version uses the current shape. */
 export type VoiceInput = (VoiceBase & {
-    version?: 3;
+    version?: 4;
+    lfo?: LFOInput;
+    ops: readonly [Operator, Operator, Operator, Operator];
+}) | (VoiceBase & {
+    version: 3;
+    lfo?: LegacyLFO;
     ops: readonly [Operator, Operator, Operator, Operator];
 }) | (VoiceBase & {
     version: 2;
+    lfo?: LegacyLFO;
     ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2];
 }) | (VoiceBase & {
     version: 1;
+    lfo?: LegacyLFO;
     ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator];
 });
 export interface Voice {
-    version: 3;
+    version: 4;
     name: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -63,15 +79,19 @@ export interface LegacyVoice {
     algorithm: Algorithm;
     feedback: Algorithm;
     modIndex: number;
-    lfo: LFO;
+    lfo: LegacyLFO;
     ops: FourOperators<LegacyOperator>;
 }
 export interface LegacyVoiceV2 extends Omit<LegacyVoice, 'version' | 'ops'> {
     version: 2;
     ops: FourOperators<LegacyOperatorV2>;
 }
-export interface NormalizedVoice {
+export interface LegacyVoiceV3 extends Omit<LegacyVoice, 'version' | 'ops'> {
     version: 3;
+    ops: FourOperators;
+}
+export interface NormalizedVoice {
+    version: 4;
     name?: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -79,7 +99,7 @@ export interface NormalizedVoice {
     lfo: LFO;
     ops: FourOperators;
 }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2;
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops'>> & {
     readonly lfo: Readonly<LFO>;
     readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
@@ -101,5 +121,6 @@ export declare const MAX_BANK_VOICES = 128;
 type LimitKey = 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
 export declare const LIMITS: Readonly<Record<LimitKey, readonly [number, number]>>;
 export declare function bounded(value: unknown, min: number, max: number, label?: string): number;
+export declare function lfoWaveform(value: unknown): LFO['waveform'];
 export declare function validateVoice(input: unknown): FrozenVoice;
 export declare function parseVoiceBank(source: string | readonly unknown[]): Map<string, FrozenVoice>;

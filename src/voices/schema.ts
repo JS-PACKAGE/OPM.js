@@ -1,21 +1,25 @@
 export type Algorithm = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export interface ADSR { a: number; d: number; s: number; r: number }
-export interface LFO { rate: number; amDepth: number; pmDepth: number }
+export interface LegacyLFO { rate: number; amDepth: number; pmDepth: number; waveform?: never }
+export interface LFO { rate: number; amDepth: number; pmDepth: number; waveform: 'sine' | 'triangle' | 'saw' | 'square' }
+export type LFOInput = Omit<LFO, 'waveform'> & { waveform?: LFO['waveform'] };
 export interface KeyScale { breakpoint: number; leftDbPerOctave: number; rightDbPerOctave: number }
 export interface LegacyOperator { ratio: number; level: number; detune: number; adsr: ADSR; keyScale?: never; velocitySensitivity?: never }
 export interface LegacyOperatorV2 extends Omit<LegacyOperator, 'keyScale'> { keyScale?: KeyScale }
 export interface Operator extends Omit<LegacyOperatorV2, 'velocitySensitivity'> { velocitySensitivity?: number }
 export type FourOperators<T = Operator> = [T, T, T, T];
-interface VoiceBase { name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex?: number; lfo?: LFO }
-/** Strict single-voice input; omitted version uses the current operator shape. */
-export type VoiceInput = (VoiceBase & { version?: 3; ops: readonly [Operator, Operator, Operator, Operator] }) |
-  (VoiceBase & { version: 2; ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2] }) |
-  (VoiceBase & { version: 1; ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator] });
-export interface Voice { version: 3; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
-export interface LegacyVoice { version: 1; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators<LegacyOperator> }
+interface VoiceBase { name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex?: number }
+/** Strict single-voice input; omitted version uses the current shape. */
+export type VoiceInput = (VoiceBase & { version?: 4; lfo?: LFOInput; ops: readonly [Operator, Operator, Operator, Operator] }) |
+  (VoiceBase & { version: 3; lfo?: LegacyLFO; ops: readonly [Operator, Operator, Operator, Operator] }) |
+  (VoiceBase & { version: 2; lfo?: LegacyLFO; ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2] }) |
+  (VoiceBase & { version: 1; lfo?: LegacyLFO; ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator] });
+export interface Voice { version: 4; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
+export interface LegacyVoice { version: 1; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LegacyLFO; ops: FourOperators<LegacyOperator> }
 export interface LegacyVoiceV2 extends Omit<LegacyVoice, 'version' | 'ops'> { version: 2; ops: FourOperators<LegacyOperatorV2> }
-export interface NormalizedVoice { version: 3; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2;
+export interface LegacyVoiceV3 extends Omit<LegacyVoice, 'version' | 'ops'> { version: 3; ops: FourOperators }
+export interface NormalizedVoice { version: 4; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops'>> & {
   readonly lfo: Readonly<LFO>;
   readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
@@ -79,6 +83,7 @@ function array(value: unknown, min: number, max: number, label: string): asserts
   if (!Array.isArray(value) || value.length < min || value.length > max) {
     throw new TypeError(`${label} has invalid length`);
   }
+  if (Reflect.ownKeys(value).length !== value.length + 1) throw new TypeError(`${label} has unknown fields`);
   // Reject sparse arrays and accessor elements without invoking accessors.
   for (let i = 0; i < value.length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
@@ -86,16 +91,23 @@ function array(value: unknown, min: number, max: number, label: string): asserts
   }
 }
 
+export function lfoWaveform(value: unknown): LFO['waveform'] {
+  if (value !== 'sine' && value !== 'triangle' && value !== 'saw' && value !== 'square') {
+    throw new RangeError('Unsupported LFO waveform');
+  }
+  return value;
+}
 export function validateVoice(input: unknown): FrozenVoice {
   record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice');
-  if (input.version !== 1 && input.version !== 2 && input.version !== 3) throw new RangeError('Unsupported voice version');
+  if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4) throw new RangeError('Unsupported voice version');
   if (typeof input.name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
     throw new TypeError('Voice name must contain 1..64 letters, digits, underscores or hyphens');
   }
   array(input.ops, 4, 4, 'ops');
-  record(input.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo');
+  record(input.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo', input.version === 4 ? ['waveform'] : []);
   const lfo = Object.freeze({ rate: numeric(input.lfo.rate, 'rate'),
-    amDepth: numeric(input.lfo.amDepth, 'amDepth'), pmDepth: numeric(input.lfo.pmDepth, 'pmDepth') });
+    amDepth: numeric(input.lfo.amDepth, 'amDepth'), pmDepth: numeric(input.lfo.pmDepth, 'pmDepth'),
+    waveform: Object.hasOwn(input.lfo, 'waveform') ? lfoWaveform(input.lfo.waveform) : 'sine' as const });
   const ops: FrozenOperator[] = [];
   for (let i = 0; i < 4; i++) {
     const op = input.ops[i];
@@ -119,7 +131,7 @@ export function validateVoice(input: unknown): FrozenVoice {
     }
     ops.push(Object.freeze(normalized));
   }
-  return Object.freeze({ version: 3, name: input.name,
+  return Object.freeze({ version: 4, name: input.name,
     algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
     modIndex: numeric(input.modIndex, 'modIndex'), lfo, ops: Object.freeze(ops) as FrozenVoice['ops'] });
 }

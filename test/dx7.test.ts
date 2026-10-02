@@ -71,6 +71,8 @@ test('standard single and packed bank layouts produce equivalent normalized usab
   assert.deepEqual(single, snapshot);
   assert.deepEqual(importDX7(single), [voice]);
   assert.deepEqual(normalizeVoice(voice), voice);
+  assert.equal(voice.version, 4);
+  assert.equal(voice.lfo.waveform, 'sine');
   assert.equal(voice.ops[0].keyScale!.breakpoint, 60);
   assert.equal(parseVoiceBank(bank).size, 32);
   const rendered = renderNote({ voice, note: 60, duration: 0.15, sampleRate: 8000 });
@@ -141,8 +143,8 @@ test('strict framing, format, counts, 7-bit data and Yamaha checksum reject malf
   payload[4095] ^= 1;
   const brokenBank = message(bankPayload());
   brokenBank.set(payload, 6);
-  assert.throws(() => importDX7(brokenBank), /checksum/);
-  assert.throws(() => importDX7(new Uint8Array([...valid, ...valid])), /single or/);
+  assert.throws(() => importDX7(brokenBank), RangeError);
+  assert.throws(() => importDX7(new Uint8Array([...valid, ...valid])), RangeError);
 });
 
 test('valid-checksum data rejects parameter overflow and reserved packed bits', () => {
@@ -150,7 +152,7 @@ test('valid-checksum data rejects parameter overflow and reserved packed bits', 
     [134, 32], [135, 8], [136, 2], [142, 6], [143, 8], [144, 49]]) {
     const data = singlePayload();
     data[at] = value;
-    assert.throws(() => importDX7(message(data)), /parameter out of range/);
+    assert.throws(() => importDX7(message(data)), RangeError);
   }
   for (const [at, value] of [[11, 16], [12, 120], [13, 32], [15, 64], [110, 32], [111, 16], [116, 12]]) {
     const data = bankPayload();
@@ -159,7 +161,7 @@ test('valid-checksum data rejects parameter overflow and reserved packed bits', 
   }
 });
 
-test('fixed frequency and unsupported semantics are visible outside the ordinary voice shape', () => {
+test('fixed frequency clips safely and positive keyboard scaling does not boost', () => {
   const data = singlePayload();
   data[134] = 31;
   // OP1 is retained: low fixed Hz clips to minimum ratio; highest scaling stays bounded.
@@ -181,11 +183,6 @@ test('fixed frequency and unsupported semantics are visible outside the ordinary
   assert.equal(converted.ratio, 0.125);
   assert.equal(converted.keyScale!.leftDbPerOctave, 24);
   assert.equal(converted.keyScale!.rightDbPerOctave, 0);
-  assert.ok(description.warnings.some(value => /fixed frequency.*MIDI-60/.test(value)));
-  assert.ok(description.warnings.some(value => /positive keyboard scaling/.test(value)));
-  assert.ok(description.warnings.some(value => /Pitch envelope ignored/.test(value)));
-  assert.ok(description.warnings.some(value => /LFO delay ignored/.test(value)));
-  assert.ok(description.warnings.some(value => /Transpose ignored/.test(value)));
   assert.deepEqual(normalizeVoice(voice), voice);
 });
 

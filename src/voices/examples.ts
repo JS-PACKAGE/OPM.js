@@ -2,7 +2,7 @@ import type { Voice } from './schema.js';
 
 export const examples: readonly Voice[] = [
   {
-    "version": 3,
+    "version": 4,
     "name": "bell",
     "algorithm": 4,
     "feedback": 0,
@@ -10,7 +10,8 @@ export const examples: readonly Voice[] = [
     "lfo": {
       "rate": 0,
       "amDepth": 0,
-      "pmDepth": 0
+      "pmDepth": 0,
+      "waveform": "sine"
     },
     "ops": [
       {
@@ -60,7 +61,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3,
+    "version": 4,
     "name": "brass",
     "algorithm": 2,
     "feedback": 4,
@@ -68,7 +69,8 @@ export const examples: readonly Voice[] = [
     "lfo": {
       "rate": 0,
       "amDepth": 0,
-      "pmDepth": 0
+      "pmDepth": 0,
+      "waveform": "sine"
     },
     "ops": [
       {
@@ -118,7 +120,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3,
+    "version": 4,
     "name": "bass",
     "algorithm": 0,
     "feedback": 3,
@@ -126,7 +128,8 @@ export const examples: readonly Voice[] = [
     "lfo": {
       "rate": 0,
       "amDepth": 0,
-      "pmDepth": 0
+      "pmDepth": 0,
+      "waveform": "sine"
     },
     "ops": [
       {
@@ -176,8 +179,8 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
-    "lfo": { "rate": 3.5, "amDepth": 0.1, "pmDepth": 0 },
+    "version": 4, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
+    "lfo": { "rate": 3.5, "amDepth": 0.1, "pmDepth": 0, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.7, "detune": 0, "adsr": { "a": 0.002, "d": 1.2, "s": 0, "r": 0.2 },
         "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
@@ -188,8 +191,8 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
-    "lfo": { "rate": 5, "amDepth": 0.08, "pmDepth": 3 },
+    "version": 4, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
+    "lfo": { "rate": 5, "amDepth": 0.08, "pmDepth": 3, "waveform": "sine" },
     "ops": [
       { "ratio": 0.5, "level": 0.8, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
       { "ratio": 1, "level": 0.9, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
@@ -198,8 +201,8 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
-    "lfo": { "rate": 5.5, "amDepth": 0, "pmDepth": 15 },
+    "version": 4, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
+    "lfo": { "rate": 5.5, "amDepth": 0, "pmDepth": 15, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.6, "detune": 0, "adsr": { "a": 0.01, "d": 0.1, "s": 0.6, "r": 0.1 } },
       { "ratio": 2, "level": 0.4, "detune": 0, "adsr": { "a": 0.01, "d": 0.15, "s": 0.5, "r": 0.1 } },
@@ -209,8 +212,8 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 3, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
-    "lfo": { "rate": 4.8, "amDepth": 0.08, "pmDepth": 9 },
+    "version": 4, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
+    "lfo": { "rate": 4.8, "amDepth": 0.08, "pmDepth": 9, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.45, "detune": -5, "adsr": { "a": 0.2, "d": 0.4, "s": 0.6, "r": 0.5 } },
       { "ratio": 1, "level": 0.8, "detune": -5, "adsr": { "a": 0.3, "d": 0.4, "s": 0.8, "r": 0.6 } },

@@ -216,12 +216,13 @@ export function importDX7(input: Uint8Array): Voice[] {
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
     return normalizeVoice({
-      version: 3, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+      version: 4, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
       ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
       lfo: {
         rate: data[137] / 99 * 20,
         amDepth: data[140] / 99 * amSensitivity,
         pmDepth: data[139] / 99 * data[143] / 7 * 1200,
+        waveform: 'sine',
       },
     }) as Voice;
   });

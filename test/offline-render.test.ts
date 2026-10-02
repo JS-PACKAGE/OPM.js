@@ -5,8 +5,8 @@ import type { Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
   return {
-    version: 3, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 0, amDepth: 0, pmDepth: 0 },
+    version: 4, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
+    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, index) => ({
       ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: 0.06 },

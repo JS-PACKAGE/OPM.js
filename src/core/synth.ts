@@ -1,5 +1,6 @@
 import type { ADSR, FrozenOperator, PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { AlgorithmGraph } from './algorithms.js';
+import { lfoValue } from './lfo.js';
 
 export type VoiceEndReason = 'stolen' | 'ended' | 'error';
 export interface NoteOptions { velocity?: number; pan?: number }
@@ -376,7 +377,10 @@ export class Synth {
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
     let tremolo = 0;
     if (active.lfoIncrement !== 0) {
-      if (active.amDepth !== 0 || active.pmDepth !== 0) tremolo = Math.sin(active.lfoPhase);
+      if (active.amDepth !== 0 || active.pmDepth !== 0) {
+        if (!Number.isFinite(active.lfoPhase)) return NaN;
+        tremolo = lfoValue(active.lfoPhase, active.voice.lfo.waveform);
+      }
       const phase = active.lfoPhase + active.lfoIncrement;
       active.lfoPhase = phase < TAU ? phase : phase - TAU;
     }

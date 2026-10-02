@@ -5,8 +5,8 @@ import { validateVoice } from '../src/voices/schema.js';
 import type { LegacyVoice, LegacyVoiceV2, Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return { version: 3, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 0, amDepth: 0, pmDepth: 0 },
+  return { version: 4, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
+    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 1 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.03 } })) as Voice['ops'] };
 }
@@ -120,7 +120,7 @@ test('offline audio exactly follows Synth LFO, pan, velocity and fractional gate
   input.feedback = 4;
   input.algorithm = 0;
   input.ops.forEach(op => { op.level = 0.6; });
-  input.lfo = { rate: 7, amDepth: 0.5, pmDepth: 200 };
+  input.lfo = { rate: 7, amDepth: 0.5, pmDepth: 200, waveform: 'sine' };
   const duration = 0.10003, sampleRate = 8000;
   const offline = renderNote({ voice: input, note: 60.4, duration, velocity: 0.7, pan: 0.4, sampleRate });
   const synth = new Synth(sampleRate);
@@ -134,7 +134,7 @@ test('offline audio exactly follows Synth LFO, pan, velocity and fractional gate
   assert.deepEqual(offline.left, left);
   assert.deepEqual(offline.right, right);
   const flat = structuredClone(input);
-  flat.lfo = { rate: 0, amDepth: 0, pmDepth: 0 };
+  flat.lfo = { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' };
   const unmodulated = renderNote({ voice: flat, note: 60.4, duration, velocity: 0.7, pan: 0.4, sampleRate });
   assert.ok(offline.left.some((sample, i) => Math.abs(sample - unmodulated.left[i]) > 0.001));
   assert.ok(renderNote({ voice: input, duration: 0 }).left.every(sample => sample === 0));
@@ -158,7 +158,9 @@ test('key scaling attenuates on each side of the breakpoint and defaults to flat
 });
 
 test('legacy versions retain old shapes; keyScale validates strict versus clamped bounds', () => {
-  const legacy: Omit<Voice, 'version'> & { version: number } = voice(); legacy.version = 1;
+  const source = voice();
+  const legacy = { ...source, version: 1,
+    lfo: { rate: source.lfo.rate, amDepth: source.lfo.amDepth, pmDepth: source.lfo.pmDepth } };
   const normalized = normalizeVoice(legacy as unknown as Parameters<typeof normalizeVoice>[0]);
   assert.deepEqual(normalized.ops, legacy.ops);
   assert.deepEqual(validateVoice(legacy).ops, legacy.ops);
@@ -184,6 +186,7 @@ test('legacy versions retain old shapes; keyScale validates strict versus clampe
 test('v1/v2 input shapes preserve old audio and only current operators accept velocity sensitivity', () => {
   const current = voice();
   const legacy1: LegacyVoice = { ...structuredClone(current), version: 1,
+    lfo: { rate: current.lfo.rate, amDepth: current.lfo.amDepth, pmDepth: current.lfo.pmDepth },
     ops: current.ops.map(({ ratio, level, detune, adsr }) => ({ ratio, level, detune, adsr })) as LegacyVoice['ops'] };
   const legacy2: LegacyVoiceV2 = { ...legacy1, version: 2 };
   const options = { duration: 0.06, sampleRate: 8000, velocity: 0.4 };

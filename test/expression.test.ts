@@ -5,8 +5,8 @@ import type { NoteControls, Voice } from '../src/core/index.js';
 import type { PreparedVoice } from '../src/voices/schema.js';
 
 function tone(): Voice {
-  return { version: 3, name: 'expression-tone', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 0, amDepth: 0, pmDepth: 0 },
+  return { version: 4, name: 'expression-tone', algorithm: 7, feedback: 0, modIndex: 0,
+    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 0.8 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.08 } })) as Voice['ops'] };
 }
@@ -186,7 +186,7 @@ test('modulation scales patch FM and capped AM/PM and zero modulation restores s
   patch.algorithm = 4;
   patch.modIndex = 3;
   patch.ops.forEach(op => { op.level = 0.7; });
-  patch.lfo = { rate: 6, amDepth: 0.8, pmDepth: 900 };
+  patch.lfo = { rate: 6, amDepth: 0.8, pmDepth: 900, waveform: 'sine' };
   const expected = structuredClone(patch);
   expected.modIndex = 6;
   expected.lfo.amDepth = 1;

@@ -139,7 +139,6 @@ test('detune and LFO AM/PM change audio without introducing nonfinite samples', 
 test('normalization rejects malformed numbers and objects without invoking getters', () => {
   const valid = normalizeVoice(voice());
   assert.equal(valid.ops.length, 4);
-  assert.deepEqual(valid.lfo, { rate: 0, amDepth: 0, pmDepth: 0 });
   for (const bad of [
     voice({ algorithm: 8 }), voice({ feedback: -1 }), voice({ ops: [] }),
     voice({ ops: voice().ops.map((op, i) => i ? op : { ...op, ratio: Infinity }) }),

@@ -1,7 +1,7 @@
-import { LIMITS } from './schema.js';
+import { LIMITS, lfoWaveform } from './schema.js';
 import type { Algorithm, LFO, NormalizedVoice, Operator, PreparedVoice, VoiceInput } from './schema.js';
 
-const ZERO_LFO = Object.freeze({ rate: 0, amDepth: 0, pmDepth: 0 });
+const ZERO_LFO: Readonly<LFO> = Object.freeze({ rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' });
 
 function object(value: unknown, required: readonly string[], optional: readonly string[], label: string): asserts value is Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value) ||
@@ -45,11 +45,12 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  if (Object.hasOwn(input, 'version') && ![1, 2, 3].includes(field(input, 'version') as number)) {
+  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4].includes(field(input, 'version') as number)) {
     throw new RangeError('Unsupported voice version');
   }
   const rawOps = field(input, 'ops');
   if (!Array.isArray(rawOps) || rawOps.length !== 4) throw new TypeError('ops must contain four operators');
+  if (Reflect.ownKeys(rawOps).length !== 5) throw new TypeError('ops has unknown fields');
   const ops = new Array<Operator>(4);
   for (let i = 0; i < 4; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
@@ -85,14 +86,16 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   let lfo: LFO = ZERO_LFO;
   if (Object.hasOwn(input, 'lfo')) {
     const rawLfo = field(input, 'lfo');
-    object(rawLfo, ['rate', 'amDepth', 'pmDepth'], [], 'lfo');
+    const version = field(input, 'version');
+    object(rawLfo, ['rate', 'amDepth', 'pmDepth'], version === undefined || version === 4 ? ['waveform'] : [], 'lfo');
     lfo = {
       rate: number(field(rawLfo, 'rate'), 'rate'),
       amDepth: number(field(rawLfo, 'amDepth'), 'amDepth'),
       pmDepth: number(field(rawLfo, 'pmDepth'), 'pmDepth'),
+      waveform: Object.hasOwn(rawLfo, 'waveform') ? lfoWaveform(field(rawLfo, 'waveform')) : 'sine',
     };
   }
-  const voice: NormalizedVoice = { version: 3, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
+  const voice: NormalizedVoice = { version: 4, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4 };
   if (name !== undefined) voice.name = name as string;
   return voice;

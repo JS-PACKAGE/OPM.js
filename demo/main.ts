@@ -80,7 +80,7 @@ action('release', async () => {
 });
 action('scaling', async () => {
   await opm.start();
-  const voice: Voice = { ...brass, version: 3, ops: brass.ops.map(op => ({
+  const voice: Voice = { ...brass, ops: brass.ops.map(op => ({
     ...op, keyScale: { breakpoint: 60, leftDbPerOctave: 0, rightDbPerOctave: 12 },
   })) as unknown as FourOperators<Operator> };
   [48, 60, 72, 84].forEach((note, index) => {

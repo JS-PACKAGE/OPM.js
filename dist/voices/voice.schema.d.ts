@@ -32,6 +32,10 @@ export declare const voiceSchema: {
             additionalProperties: boolean;
             required: string[];
             properties: {
+                waveform: {
+                    type: string;
+                    enum: string[];
+                };
                 rate: {
                     type: string;
                     minimum: number;
