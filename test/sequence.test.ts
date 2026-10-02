@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeWav, prepareSequence, renderNote, renderSequence, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS } from '../src/core/index.js';
 import type { SequenceEvent, SequenceNoteEvent } from '../src/core/sequence.js';
+import { estimateSequenceCapacity, prepareLongSequence, renderSequenceChunks, MAX_LONG_SEQUENCE_EVENTS } from '../src/core/sequence.js';
 import type { Voice } from '../src/voices/schema.js';
 
 function toneVoice(release = 0.006): Voice {
   return {
-    version: 4, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 5, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { waveform: 'sine', rate: 0, amDepth: 0, pmDepth: 0 },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: release } })) as Voice['ops'],
@@ -145,4 +146,110 @@ test('render budgets include release/filter tails and reject invalid engine conf
   assert.throws(() => renderSequence([], { tuning: { referenceHz: NaN } }), /referenceHz/);
   const mute = renderSequence([{ ...events[0], duration: 0.01 }], { sampleRate, mixGain: 0 });
   assert.ok(mute.left.every(value => value === 0) && mute.right.every(value => value === 0));
+});
+
+test('borrowed chunks concatenate bit-exactly across stop/onset/control boundaries with cumulative diagnostics', () => {
+  const score: SequenceEvent[] = [
+    { type: 'note', id: 1, time: 7 / sampleRate, duration: 25 / sampleRate, note: 69, voice: toneVoice() },
+    { type: 'control', id: 1, time: 0, controls: { expression: 0.3, operatorLevels: [0.5, 1, 1, 1] } },
+    { type: 'control', id: 1, time: 14 / sampleRate, controls: { pan: 1, ramp: 5 / sampleRate } },
+    { type: 'stop', id: 2, time: 21 / sampleRate },
+    { type: 'note', id: 2, time: 21 / sampleRate, duration: 0.01, note: 72, voice: toneVoice() },
+  ];
+  const full = renderSequence(score, { sampleRate });
+  for (const chunkFrames of [1, 7, 32, 65536]) {
+    const renderer = renderSequenceChunks(score, { sampleRate, chunkFrames });
+    const left = new Float32Array(renderer.capacity.frames);
+    const right = new Float32Array(renderer.capacity.frames);
+    let firstBuffer: ArrayBufferLike | undefined;
+    for (const chunk of renderer) {
+      firstBuffer ??= chunk.left.buffer;
+      assert.equal(chunk.left.buffer, firstBuffer);
+      assert.equal(chunk.diagnostics.renderedFrames, chunk.offset + chunk.frames);
+      left.set(chunk.left, chunk.offset);
+      right.set(chunk.right, chunk.offset);
+    }
+    assert.deepEqual(left, full.left);
+    assert.deepEqual(right, full.right);
+    assert.equal(renderer.diagnostics.processedEvents, prepareLongSequence(score).reservedSlots);
+    assert.equal(renderer.diagnostics.errors, 0);
+    assert.equal(renderer.capacity.pcmBytes, left.byteLength + right.byteLength);
+  }
+});
+
+test('60-second96k and beyond60-second scores use bounded reusable PCM with accurate capacity', () => {
+  for (const duration of [60, 61]) {
+    const score: SequenceEvent[] = [{ type: 'note', id: 1, time: duration - 0.001, duration: 0.001, note: 69, voice: toneVoice(0) }];
+    const options = { sampleRate: 96000, chunkFrames: 65536, mixGain: 0 };
+    const capacity = estimateSequenceCapacity(score, options);
+    assert.equal(capacity.frames, duration * 96000 + 960);
+    assert.equal(capacity.chunkBytes, 65536 * 8);
+    assert.equal(capacity.fullBufferAllowed, false);
+    assert.equal(capacity.singleBatchAllowed, duration === 60);
+    const renderer = renderSequenceChunks(score, options);
+    let consumed = 0;
+    for (const chunk of renderer) {
+      consumed += chunk.frames;
+      assert.ok(chunk.left.byteLength <= 65536 * 4);
+      assert.ok(chunk.left.every(value => value === 0));
+    }
+    assert.equal(consumed, capacity.frames);
+    assert.equal(renderer.diagnostics.renderedFrames, capacity.frames);
+  }
+});
+
+test('cancellation and work limits reject before advancement and hostile input never invokes accessors', () => {
+  const note: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 1, note: 69, voice: toneVoice() };
+  assert.throws(() => renderSequenceChunks([note], { sampleRate, maxFrames: 32 }), /cumulative/);
+  assert.throws(() => prepareLongSequence(Array(MAX_LONG_SEQUENCE_EVENTS + 1).fill(note)), /event budget/);
+  assert.throws(() => prepareLongSequence([{ ...note, time: 86400 }]), /horizon/);
+  let reads = 0;
+  const hostile = { ...note };
+  Object.defineProperty(hostile, 'voice', { get() { reads++; return toneVoice(); } });
+  assert.throws(() => renderSequenceChunks([note, hostile]), /must be data/);
+  assert.equal(reads, 0);
+  const controller = new AbortController();
+  const renderer = renderSequenceChunks([note], { sampleRate, chunkFrames: 16, signal: controller.signal });
+  renderer.next();
+  const before = renderer.diagnostics;
+  controller.abort();
+  assert.throws(() => renderer.next(), { name: 'AbortError' });
+  assert.deepEqual(renderer.diagnostics, before);
+  assert.equal(renderer.next().done, true);
+  const cancelled = renderSequenceChunks([note], { sampleRate, chunkFrames: 16 });
+  cancelled.next();
+  cancelled.cancel();
+  assert.equal(cancelled.next().done, true);
+  assert.equal(cancelled.diagnostics.renderedFrames, 16);
+});
+
+test('capacity includes note-scaled release tails and detached operator controls', () => {
+  const voice = toneVoice(0.1);
+  voice.ops[0].rateKeyScale = 1;
+  for (const op of voice.ops.slice(1)) op.adsr.r = 0;
+  const levels: [number, number, number, number] = [0.2, 0.4, 0.6, 0.8];
+  const score: SequenceEvent[] = [
+    { type: 'note', id: 1, time: 0, duration: 0.01, note: 72, voice },
+    { type: 'control', id: 1, time: 0, controls: { operatorLevels: levels } },
+  ];
+  assert.equal(estimateSequenceCapacity(score, { sampleRate }).frames, 80 + 400 + 80);
+  const snapshot = prepareLongSequence(score);
+  levels[0] = 2;
+  const control = snapshot.events[1];
+  if (control.type !== 'control') throw Error('Expected controls');
+  assert.deepEqual(control.controls.operatorLevels, [0.2, 0.4, 0.6, 0.8]);
+  assert.ok(Object.isFrozen(control.controls.operatorLevels));
+});
+
+test('capacity separates full-buffer, convenience-batch and default-stream window budgets', () => {
+  const note: SequenceNoteEvent = { type: 'note', id: 1, time: 61, duration: 0.001, note: 69, voice: toneVoice(0) };
+  const sparse = estimateSequenceCapacity([note], { sampleRate: 96000 });
+  assert.equal(sparse.fullBufferAllowed, false);
+  assert.equal(sparse.singleBatchAllowed, false);
+  assert.equal(sparse.streamAllowed, true);
+  assert.equal(sparse.peakWindowSlots, 2);
+  const dense = estimateSequenceCapacity(Array.from({ length: 129 }, (_, index) => ({ ...note, id: index + 1 })));
+  assert.equal(dense.streamAllowed, false);
+  assert.equal(dense.peakWindowNotes, 129);
+  assert.equal(dense.peakWindowSlots, 258);
 });

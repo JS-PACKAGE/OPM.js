@@ -1,9 +1,10 @@
 import { brass } from '../voices/brass.js';
 import { prepareVoice } from '../voices/normalize.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
-import { Synth, validateNoteControls } from './synth.js';
+import { Synth, operatorDuration, readSynthOptions, validateNoteControls } from './synth.js';
 import type { NoteControls, SynthOptions } from './synth.js';
 import type { RenderResult } from './index.js';
+import { normalizeTuning } from './tuning.js';
 
 export interface SequenceNoteEvent {
   type: 'note'; id: number; time: number; duration: number;
@@ -31,6 +32,9 @@ export const MAX_SEQUENCE_NOTES = 128;
 export const MAX_SEQUENCE_SLOTS = 256;
 export const MAX_SEQUENCE_SECONDS = 60;
 export const MAX_RENDER_SAMPLES = 4_000_000;
+export const MAX_LONG_SEQUENCE_SECONDS = 24 * 60 * 60;
+export const MAX_LONG_SEQUENCE_EVENTS = 65536;
+export const MAX_SEQUENCE_CHUNK_FRAMES = 65536;
 
 export function sampleRateValue(value: number): number {
   if (!Number.isInteger(value) || value < 8000 || value > 96000) {
@@ -39,7 +43,7 @@ export function sampleRateValue(value: number): number {
   return value;
 }
 
-function ownData(input: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
+export function sequenceOwnData(input: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown> {
   if (input === null || typeof input !== 'object' || Array.isArray(input) ||
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
     throw new TypeError(`${label} must be a plain data object`);
@@ -64,7 +68,18 @@ function finite(value: unknown, min: number, max: number, label: string): number
 
 /** Validate the entire score without invoking accessors, and detach every patch/control. */
 export function prepareSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = {}): SequenceSnapshot {
-  const config = ownData(options, ['voices'], [], 'sequence options');
+  return prepareScore(events, options, false);
+}
+
+/** Long scores have a separate input budget; this does not enlarge worklet queues. */
+export function prepareLongSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = {}): SequenceSnapshot {
+  return prepareScore(events, options, true);
+}
+
+function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'>, long: boolean): SequenceSnapshot {
+  const config = sequenceOwnData(options, ['voices'], [], 'sequence options');
+  const maxSeconds = long ? MAX_LONG_SEQUENCE_SECONDS : MAX_SEQUENCE_SECONDS;
+  const maxEvents = long ? MAX_LONG_SEQUENCE_EVENTS : MAX_SEQUENCE_SLOTS;
   const voices = config.voices;
   // Use the native operation, not an overridable registry.get accessor or method.
   if (voices !== undefined) {
@@ -73,7 +88,7 @@ export function prepareSequence(events: readonly SequenceEvent[], options: Pick<
   }
   if (!Array.isArray(events)) throw new TypeError('events must be an array');
   const length = Object.getOwnPropertyDescriptor(events, 'length')?.value as number;
-  if (!Number.isInteger(length) || length > MAX_SEQUENCE_SLOTS) throw new RangeError('Sequence exceeds event budget');
+  if (!Number.isInteger(length) || length > maxEvents) throw new RangeError('Sequence exceeds event budget');
   for (const key of Reflect.ownKeys(events)) {
     if (key === 'length') continue;
     if (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length) {
@@ -92,18 +107,18 @@ export function prepareSequence(events: readonly SequenceEvent[], options: Pick<
     const allowed = type === 'note' ? ['type', 'id', 'time', 'duration', 'voice', 'note', 'velocity', 'pan']
       : type === 'stop' ? ['type', 'id', 'time'] : type === 'control' ? ['type', 'id', 'time', 'controls'] : null;
     if (!allowed) throw new TypeError('Unknown sequence event type');
-    const data = ownData(input, allowed, type === 'note' ? ['type', 'id', 'time', 'duration', 'note']
+    const data = sequenceOwnData(input, allowed, type === 'note' ? ['type', 'id', 'time', 'duration', 'note']
       : type === 'control' ? ['type', 'id', 'time', 'controls'] : ['type', 'id', 'time'], 'sequence event');
     const id = data.id as number;
     if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('Sequence id must be a positive safe integer');
-    const time = finite(data.time, 0, MAX_SEQUENCE_SECONDS, 'time');
+    const time = finite(data.time, 0, maxSeconds, 'time');
     endTime = Math.max(endTime, time);
     if (type === 'note') {
       if (notes.has(id)) throw new RangeError('Duplicate sequence note id');
       notes.add(id);
       reservedSlots += 2;
-      if (notes.size > MAX_SEQUENCE_NOTES) throw new RangeError('Sequence exceeds note budget');
-      const duration = finite(data.duration, 0, MAX_SEQUENCE_SECONDS, 'duration');
+      if (!long && notes.size > MAX_SEQUENCE_NOTES) throw new RangeError('Sequence exceeds note budget');
+      const duration = finite(data.duration, 0, maxSeconds, 'duration');
       if (duration === 0) throw new RangeError('duration must be greater than zero');
       endTime = Math.max(endTime, time + duration);
       const note = finite(data.note, 0, 127, 'note');
@@ -121,8 +136,8 @@ export function prepareSequence(events: readonly SequenceEvent[], options: Pick<
       snapshot.push(type === 'stop' ? Object.freeze({ type: 'stop', id, time })
         : Object.freeze({ type: 'control', id, time, controls: Object.freeze(validateNoteControls(data.controls as NoteControls)) }));
     }
-    if (reservedSlots > MAX_SEQUENCE_SLOTS) throw new RangeError('Sequence exceeds worklet slot budget');
-    if (endTime > MAX_SEQUENCE_SECONDS) throw new RangeError('Sequence exceeds 60 second horizon');
+    if (!long && reservedSlots > MAX_SEQUENCE_SLOTS) throw new RangeError('Sequence exceeds worklet slot budget');
+    if (endTime > maxSeconds) throw new RangeError(`Sequence exceeds ${maxSeconds} second horizon`);
   }
   for (const event of snapshot) {
     if (event.type !== 'note' && !notes.has(event.id)) throw new RangeError('Unknown sequence note id');
@@ -130,65 +145,215 @@ export function prepareSequence(events: readonly SequenceEvent[], options: Pick<
   return Object.freeze({ events: Object.freeze(snapshot), noteCount: notes.size, reservedSlots, endTime });
 }
 
-type FrameEvent = { frame: number; order: number; event: PreparedSequenceEvent };
+export type SequenceFrameEvent = { frame: number; order: number; event: PreparedSequenceEvent };
 const EVENT_ORDER = { stop: 0, note: 1, control: 2 } as const;
 
-/** Pure score rendering through the same bounded Synth used by the AudioWorklet. */
-export function renderSequence(events: readonly SequenceEvent[], options: SequenceOptions = {}): RenderResult {
-  const config = ownData(options, ['voices', 'sampleRate', 'mixGain', 'tuning', 'stealing'], [], 'render sequence options');
-  const score = prepareSequence(events, { voices: config.voices as SequenceVoices | undefined });
-  const sampleRate = sampleRateValue(config.sampleRate === undefined ? 44100 : config.sampleRate as number);
-  const engine: SynthOptions = {};
-  if (config.mixGain !== undefined) engine.mixGain = config.mixGain as SynthOptions['mixGain'];
-  if (config.tuning !== undefined) engine.tuning = config.tuning as SynthOptions['tuning'];
-  if (config.stealing !== undefined) engine.stealing = config.stealing as SynthOptions['stealing'];
-  const synth = new Synth(sampleRate, 8, engine);
+/** Shared sample-frame ordering, including automatic releases and pending controls. */
+export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin = 0): { queue: SequenceFrameEvent[]; length: number } {
   const onsets = new Map<number, number>();
-  const state = new Map<number, 'pending' | 'started' | 'released'>();
-  const queue: FrameEvent[] = [];
+  const queue: SequenceFrameEvent[] = [];
   let lastFrame = 0;
-  // Admit every note before explicit stops/controls, just as playSequence does.
   for (const event of score.events) {
     if (event.type !== 'note') continue;
-    const frame = Math.round(event.time * sampleRate);
+    const frame = Math.round((origin + event.time) * sampleRate);
     const endFrame = frame + Math.max(1, Math.ceil(event.duration * sampleRate));
     onsets.set(event.id, frame);
-    state.set(event.id, 'pending');
     queue.push({ frame, order: EVENT_ORDER.note, event });
-    queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate } });
+    queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
-    for (const op of event.voice.ops) release = Math.max(release, op.adsr.r);
+    for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, op.rateKeyScale));
     lastFrame = Math.max(lastFrame, endFrame + Math.ceil(release * sampleRate));
   }
   for (const event of score.events) {
     if (event.type === 'note') continue;
-    const frame = event.type === 'control' ? Math.max(Math.round(event.time * sampleRate), onsets.get(event.id)!)
-      : Math.round(event.time * sampleRate);
+    const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets.get(event.id)!)
+      : Math.round((origin + event.time) * sampleRate);
     queue.push({ frame, order: EVENT_ORDER[event.type], event });
     lastFrame = Math.max(lastFrame, frame);
   }
-  const length = lastFrame + Math.ceil(0.01 * sampleRate);
-  if (length > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
-  const left = new Float32Array(length);
-  const right = new Float32Array(length);
   queue.sort((a, b) => a.frame - b.frame || a.order - b.order);
+  return { queue, length: lastFrame + Math.ceil(0.01 * sampleRate) };
+}
+
+/** Peak submissions in any half-open window; includes automatic releases. */
+export function sequenceWindowCapacity(queue: readonly SequenceFrameEvent[], sampleRate: number, horizon: number) {
+  let first = 0;
+  let windowNotes = 0;
+  let peakWindowSlots = 0;
+  let peakWindowNotes = 0;
+  const windowFrames = Math.ceil(horizon * sampleRate);
+  for (let last = 0; last < queue.length; last++) {
+    while (queue[last].frame - queue[first].frame >= windowFrames) {
+      if (queue[first].event.type === 'note') windowNotes--;
+      first++;
+    }
+    if (queue[last].event.type === 'note') windowNotes++;
+    peakWindowSlots = Math.max(peakWindowSlots, last - first + 1);
+    peakWindowNotes = Math.max(peakWindowNotes, windowNotes);
+  }
+  return { peakWindowSlots, peakWindowNotes };
+}
+
+export interface ChunkedSequenceOptions extends SequenceOptions {
+  /** Integer 1..65536; default4096. Two buffers are reused for the entire render. */
+  chunkFrames?: number;
+  /** Optional hard cumulative frame budget, checked before allocation/advancement. */
+  maxFrames?: number;
+  signal?: AbortSignal;
+}
+export interface SequenceCapacity {
+  readonly sampleRate: number;
+  readonly frames: number;
+  readonly pcmBytes: number;
+  readonly chunkFrames: number;
+  readonly chunkBytes: number;
+  readonly eventCount: number;
+  readonly noteCount: number;
+  readonly reservedSlots: number;
+  readonly fullBufferAllowed: boolean;
+  readonly singleBatchAllowed: boolean;
+  /** Default0.2s-window preflight eligibility, not guaranteed live worklet admission. */
+  readonly streamAllowed: boolean;
+  readonly peakWindowSlots: number;
+  readonly peakWindowNotes: number;
+  readonly limits: Readonly<{ fullBufferFrames: number; batchNotes: number; batchSlots: number; longEvents: number; longSeconds: number; chunkFrames: number; streamHorizonSeconds: number; streamSlots: number; streamNotes: number }>;
+}
+export interface SequenceChunk {
+  /** Borrowed arrays, overwritten by the next next(). Copy only if retention is required. */
+  readonly left: Float32Array;
+  readonly right: Float32Array;
+  readonly offset: number;
+  readonly frames: number;
+  readonly sampleRate: number;
+  readonly diagnostics: Readonly<{ errors: number; processedEvents: number; renderedFrames: number }>;
+}
+export interface ChunkedSequenceRender extends IterableIterator<SequenceChunk> {
+  readonly capacity: SequenceCapacity;
+  readonly diagnostics: Readonly<{ errors: number; processedEvents: number; renderedFrames: number }>;
+  /** Idempotent. Subsequent next() returns done without advancing the synth. */
+  cancel(): void;
+}
+
+interface SequenceRenderPlan {
+  score: SequenceSnapshot;
+  engine: SynthOptions;
+  queue: SequenceFrameEvent[];
+  capacity: SequenceCapacity;
+  signal: AbortSignal | undefined;
+}
+
+function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOptions, long: boolean): SequenceRenderPlan {
+  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'mixGain', 'tuning', 'stealing', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
+  const score = prepareScore(events, { voices: config.voices as SequenceVoices | undefined }, long);
+  const sampleRate = sampleRateValue(config.sampleRate === undefined ? 44100 : config.sampleRate as number);
+  const chunkFrames = config.chunkFrames === undefined ? 4096 : config.chunkFrames;
+  if (typeof chunkFrames !== 'number' || !Number.isInteger(chunkFrames) || chunkFrames < 1 || chunkFrames > MAX_SEQUENCE_CHUNK_FRAMES) {
+    throw new RangeError('chunkFrames must be an integer in 1..65536');
+  }
+  const engine: SynthOptions = {};
+  if (config.mixGain !== undefined) engine.mixGain = config.mixGain as SynthOptions['mixGain'];
+  if (config.tuning !== undefined) engine.tuning = config.tuning as SynthOptions['tuning'];
+  if (config.stealing !== undefined) engine.stealing = config.stealing as SynthOptions['stealing'];
+  const settings = readSynthOptions(engine);
+  if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);
+  const { queue, length } = sequenceFrameEvents(score, sampleRate);
+  const absoluteMaxFrames = Math.ceil((MAX_LONG_SEQUENCE_SECONDS + 10.01) * sampleRate);
+  const maxFrames = config.maxFrames === undefined ? absoluteMaxFrames : config.maxFrames;
+  if (typeof maxFrames !== 'number' || !Number.isSafeInteger(maxFrames) || maxFrames < 0 || maxFrames > absoluteMaxFrames) {
+    throw new RangeError('maxFrames must be a safe bounded nonnegative integer');
+  }
+  if (length > maxFrames) throw new RangeError('Render exceeds cumulative frame budget');
+  const signal = config.signal as AbortSignal | undefined;
+  if (signal !== undefined) {
+    // Native brand check; never invoke a user-supplied aborted accessor.
+    const getter = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
+    try { getter.call(signal); } catch { throw new TypeError('signal must be an AbortSignal'); }
+  }
+  const windowCapacity = sequenceWindowCapacity(queue, sampleRate, 0.2);
+  const capacity: SequenceCapacity = Object.freeze({
+    sampleRate, frames: length, pcmBytes: length * 8, chunkFrames, chunkBytes: chunkFrames * 8,
+    eventCount: score.events.length, noteCount: score.noteCount, reservedSlots: score.reservedSlots,
+    fullBufferAllowed: length <= MAX_RENDER_SAMPLES && score.endTime <= MAX_SEQUENCE_SECONDS &&
+      score.noteCount <= MAX_SEQUENCE_NOTES && score.reservedSlots <= MAX_SEQUENCE_SLOTS,
+    singleBatchAllowed: score.endTime <= MAX_SEQUENCE_SECONDS && score.noteCount <= MAX_SEQUENCE_NOTES && score.reservedSlots <= MAX_SEQUENCE_SLOTS,
+    ...windowCapacity,
+    streamAllowed: windowCapacity.peakWindowSlots <= MAX_SEQUENCE_SLOTS && windowCapacity.peakWindowNotes <= MAX_SEQUENCE_NOTES,
+    limits: Object.freeze({ fullBufferFrames: MAX_RENDER_SAMPLES, batchNotes: MAX_SEQUENCE_NOTES, batchSlots: MAX_SEQUENCE_SLOTS,
+      longEvents: MAX_LONG_SEQUENCE_EVENTS, longSeconds: MAX_LONG_SEQUENCE_SECONDS, chunkFrames: MAX_SEQUENCE_CHUNK_FRAMES,
+      streamHorizonSeconds: 0.2, streamSlots: MAX_SEQUENCE_SLOTS, streamNotes: MAX_SEQUENCE_NOTES }),
+  });
+  return { score, engine: settings, queue, capacity, signal };
+}
+
+/** Validate and estimate without allocating any PCM or advancing a synth. */
+export function estimateSequenceCapacity(events: readonly SequenceEvent[], options: ChunkedSequenceOptions = {}): SequenceCapacity {
+  return renderPlan(events, options, true).capacity;
+}
+
+function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; right: Float32Array }): ChunkedSequenceRender {
+  const { score, engine, queue, capacity, signal } = plan;
+  const synth = new Synth(capacity.sampleRate, 8, engine);
+  const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
+  const left = output?.left ?? new Float32Array(capacity.chunkFrames);
+  const right = output?.right ?? new Float32Array(capacity.chunkFrames);
+  const state = new Map<number, 'pending' | 'started' | 'released'>();
+  for (const event of score.events) if (event.type === 'note') state.set(event.id, 'pending');
   synth.onVoiceEnded = id => { state.delete(id); };
   let position = 0;
-  for (const next of queue) {
-    if (next.frame > position) {
-      synth.render(left, right, position, next.frame - position);
-      position = next.frame;
-    }
-    if (!state.has(next.event.id)) continue;
-    const event = next.event;
-    if (event.type === 'note') {
-      synth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan });
-      state.set(event.id, 'started');
-    } else if (event.type === 'stop') {
-      if (state.get(event.id) === 'pending') state.delete(event.id);
-      else if (synth.noteOff(event.id)) state.set(event.id, 'released');
-    } else synth.updateNote(event.id, event.controls);
-  }
-  if (position < length) synth.render(left, right, position, length - position);
-  return { samples: left, left, right, sampleRate, diagnostics: { errors: synth.errorCount } };
+  let cursor = 0;
+  let cancelled = false;
+  const diagnostics = () => Object.freeze({ errors: synth.errorCount, processedEvents: cursor, renderedFrames: position });
+  const renderer: ChunkedSequenceRender = {
+    capacity,
+    get diagnostics() { return diagnostics(); },
+    cancel() { cancelled = true; state.clear(); },
+    return() { renderer.cancel(); return { done: true, value: undefined }; },
+    [Symbol.iterator]() { return this; },
+    next() {
+      if (cancelled || position >= capacity.frames) return { done: true, value: undefined };
+      if (aborted?.call(signal)) { renderer.cancel(); throw new DOMException('Sequence render aborted', 'AbortError'); }
+      const offset = position;
+      const end = output ? capacity.frames : Math.min(offset + capacity.chunkFrames, capacity.frames);
+      while (cursor < queue.length && queue[cursor].frame < end) {
+        const next = queue[cursor];
+        if (next.frame > position) {
+          synth.render(left, right, position - offset, next.frame - position);
+          position = next.frame;
+        }
+        cursor++;
+        if (!state.has(next.event.id)) continue;
+        const event = next.event;
+        if (event.type === 'note') {
+          synth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan });
+          state.set(event.id, 'started');
+        } else if (event.type === 'stop') {
+          if (state.get(event.id) === 'pending') state.delete(event.id);
+          else if (synth.noteOff(event.id)) state.set(event.id, 'released');
+        } else synth.updateNote(event.id, event.controls);
+      }
+      if (position < end) synth.render(left, right, position - offset, end - position);
+      position = end;
+      const frames = end - offset;
+      return { done: false, value: Object.freeze({ left: frames === left.length ? left : left.subarray(0, frames),
+        right: frames === right.length ? right : right.subarray(0, frames), offset, frames, sampleRate: capacity.sampleRate, diagnostics: diagnostics() }) };
+    },
+  };
+  return renderer;
+}
+
+/** Fully validate first; each next() advances at most chunkFrames, never allocates full PCM. */
+export function renderSequenceChunks(events: readonly SequenceEvent[], options: ChunkedSequenceOptions = {}): ChunkedSequenceRender {
+  return chunkRenderer(renderPlan(events, options, true));
+}
+
+/** Convenience full-buffer rendering retains the original score and allocation budgets. */
+export function renderSequence(events: readonly SequenceEvent[], options: SequenceOptions = {}): RenderResult {
+  sequenceOwnData(options, ['voices', 'sampleRate', 'mixGain', 'tuning', 'stealing'], [], 'render sequence options');
+  const plan = renderPlan(events, options, false);
+  if (plan.capacity.frames > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
+  const left = new Float32Array(plan.capacity.frames);
+  const right = new Float32Array(plan.capacity.frames);
+  const renderer = chunkRenderer(plan, { left, right });
+  renderer.next();
+  return { samples: left, left, right, sampleRate: plan.capacity.sampleRate, diagnostics: { errors: renderer.diagnostics.errors } };
 }
