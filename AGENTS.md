@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. Its strict TypeScript implementation ships as plain JavaScript ES modules powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
-- **Status:** 1.3 release. Keep the public API (`playNote()`, voice format) and README in sync when changing behavior.
+- **Status:** 1.5 release, with unreleased work documented in CHANGELOG. Keep the public API (`playNote()`, voice format) and README in sync when changing behavior.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
 - **Usage:** Start with [README: Getting started](./README.md#getting-started); the [English](./doc/usage.en.md) and [繁體中文](./doc/usage.zh-TW.md) guides cover installation, deployment, and executable examples.
 
@@ -36,13 +36,13 @@ OPM (public API)                     processor
 - `src/worklet/` — AudioWorkletProcessor and message protocol.
 - `src/api/` — public facade (`OPM` class), voice loading, scheduling.
 - `src/voices/` — typed voice assets and JSON voice parsing (format below).
-- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes all six browser example scripts. Deploy the complete tree. No hashed chunks are generated.
+- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes all eight browser example scripts. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
 ## Voice format
 
-A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedback + LFO. See README "Voice format" for the canonical example. When changing the format, bump `version` and update README.
+A voice is JSON: four operators × (required ratio, optional fixedHz override, level, detune, ADSR, optional level/rate key scaling) + algorithm + feedback + LFO + optional pitch envelope. See README "Voice format" for the canonical current version and legacy input rules. When changing the format, bump `version` and update README.
 
 ## DSP correctness rules
 

@@ -38,7 +38,7 @@ The acknowledgement target is **72 hours**, on a best-effort basis, not a guaran
 
 ### Website deployment and browser permissions
 
-- Serve the complete, matching `dist/` tree over HTTPS or localhost, preserving worklet and imported-module paths. Do not load examples through `file://`, and retain `LICENSE` when redistributing.
+- Serve the complete, matching `dist/` tree over HTTPS or localhost, preserving worklet and imported-module paths. A configurable worklet URL must stay same-origin, use HTTPS/loopback HTTP, contain no credentials/fragment, and retain CSP/MIME enforcement. Do not load through `file://`, and retain `LICENSE`.
 - The root `index.html`, `examples/` pages, `favicon.ico` and this policy are public website assets. If publishing the linked guides, include `README.md` and `doc/` as well.
 - The Python development server is for local checks, not a hardened public host. A production server should not expose `.git/`, `.dev/`, `node_modules/`, development tooling, credentials or directory listings.
 - Serve JavaScript with a JavaScript MIME type. Use `X-Content-Type-Options: nosniff`; do not return an application's HTML fallback for a missing worklet/module URL.
@@ -56,9 +56,9 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 | Single-voice API | Required fields and exactly four complete operators; finite numeric values and documented ranges; unknown fields and accessors reject |
 | Voice-bank JSON string | At most 262,144 UTF-8 bytes (256 KiB), then JSON parsing and bank validation |
 | Voice-bank array | 1–128 complete versioned voices, unique validated names, and frozen normalized copies |
-| Legacy versions 1/2/3 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, all exclude waveform; normalize to v4 |
-| PreparedVoice | Immutable detached core snapshot; only private identity membership grants trust, never a structural brand/copy |
-| Tuning / score data | Reference A4 20–20000 Hz; exactly 128 finite bounded cents offsets if supplied; score capped at 128 notes, 256 reserved slots and 60 seconds; own-data snapshots before submission |
+| Legacy versions 1/2/3/4 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude new expressive fields; normalize to v5 |
+| PreparedVoice | Immutable detached core snapshot, including nested pitch envelopes; only private identity membership grants trust, never a structural brand/copy |
+| Tuning / score / controls | A4 20–20000 Hz, 128 bounded cents offsets; strict dense four-element operator-level tuples; short scores retain 128-note/256-slot/60-second bounds; long scores have separate event/time/chunk limits and own-data snapshots |
 
 Single-voice APIs reject out-of-range fields. Bank validation clamps finite numeric fields to documented bounds, but still rejects malformed types, non-finite numbers and invalid version/algorithm/feedback values. Clamping is not a substitute for validation.
 
@@ -91,20 +91,22 @@ Core rendering authenticates native Float32Array kind/length instead of overrida
 
 Offline rendering allocates output buffers and executes synchronously. The host should limit duration, sample rate, envelope tails, concurrent requests and export frequency to suit its device and UI. Valid input may still consume significant time and memory; no universal deadline or whole-page memory guarantee is made.
 
+Long-score rendering is an explicit bounded chunk API, not an unlimited WAV/full-buffer export. Its reusable PCM storage must be consumed/copied before the next chunk; cancellation prevents further advancement. Hosts must bound cumulative duration/work, concurrent renders and retained chunks. The 4,000,000-frame WAV and convenience-render limits still apply.
+
 Create download URLs only for successfully encoded bytes. Replace/revoke obsolete Blob URLs and release them when the owning page or component is disposed. Treat filenames and rendered audio as potentially private application data.
 
 ### AudioWorklet, scheduling and context ownership
 
-- Await `start()` in a user interaction and monitor `onEvent`. A returned note ID is not admission; handle rejections, terminal note states and processor errors.
+- Await `start()` in a user interaction and monitor `onEvent` or independent `subscribe()` listeners. A note ID is not admission; handle rejections, terminal states and processor errors. `waitForCommand()` is bounded, timed/cancellable and resolves admission only, not future execution; reset/close/failure invalidate pending waits.
 - The worklet bounds pending events and tracked note IDs to 256 each. Schedule bounded batches rather than flooding the port with distant-future events.
 - Each synth limits logical voices to eight, with up to eight bounded stealing fades. These limits do not constrain an attacker creating many synth instances or abusing unrelated host code.
 - DSP state and terminal notification buffers are preallocated. Ended/error callbacks run after stable frame traversal; callback-admitted replacements start next frame, and recursive rendering rejects rather than extending a frame's work.
 - Named/prepared worklet registrations use 128 content-keyed LRU slots. Replacement revalidates before committing; queued/active notes own immutable old snapshots. Raw objects still validate freshly.
 - Absolute start/stop/control times are safely framed with a 60-second future horizon; stop precedes onset and controls. Command rejection is correlated by commandId; accepted means admission, not guaranteed future execution. Global allNotesOff/panic bypass full scheduled queues. Bound sequences and lookahead rather than flooding messages.
 - Handle rejected diagnostics promises and failed node initialization. Do not hide failure behind mock audio nodes or a fallback engine.
-- A shared AudioContext is borrowed: OPM disconnects its own node but never closes or suspends the host context. The host owns downstream routing, permissions and disposal. Use `destination: null` for explicit routing.
+- A shared AudioContext is borrowed: OPM disconnects its node but never closes/suspends the host context. `close()` is restartable; terminal `dispose()` clears owned helpers/subscriptions without taking ownership of a borrowed context. Hosts own downstream routing and permissions.
 - Clear host gate bookkeeping on global reset; close/failure need not reply with every terminal note. Default cancel removes old gates/automation on suspension/interruption; preserve is opt-in. Both policies stop lookahead and require gesture-driven explicit restart.
-- The recovery harness exports at most 512 local observations, browser metadata and manual scenario flags; it does not upload data or certify physical-phone recovery. Check every iOS/Android scenario on a real device before marking it confirmed.
+- The recovery harness bounds local events/attempts and captures explicit device metadata, observations and manual scenario status. It uploads nothing. Automated desktop checks cannot certify physical phones or listening continuity; support-matrix cells without physical evidence remain unverified.
 - Provide obvious play/stop controls and begin at a comfortable, low host gain, especially with headphones. Finite samples and synthesis headroom do not guarantee safe listening volume.
 
 ### Source maps, privacy and redistribution
@@ -148,14 +150,14 @@ A security review is required before:
 **A. Untrusted data (voice banks, config)**
 - [ ] Voice JSON/key scaling, DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
 - [ ] Explicit allowlisted copying; no spreading/merging untrusted objects into prototypes; no accessor invocation
-- [ ] Numeric bounds cover modulation, level, ratio, ADSR, LFO waveform enum, velocity/pan, key scaling, operator velocity sensitivity, ramps, mix gain, tuning reference and dense 128-note offsets; legacy shapes exclude later fields
+- [ ] Numeric bounds cover ADSR, fixed Hz/rate scaling, pitch envelope, LFO waveform/delay/sync/phase, velocity/pan, level scaling, ramps and four-element operator-level tuples; tuning/short-and-long-score limits remain bounded and legacy shapes exclude later fields
 - [ ] Prepared identity cannot be forged, trusted patches stay deeply immutable, and public map snapshots cannot change stored patches
 - [ ] Application file/URL loaders bound sources, content type, and payload before buffering; engine does not fetch URLs
 - [ ] DX7 rejects invalid length/framing/checksum/seven-bit payload; conversion descriptions remain outside strict voice schema
 
 **B. Worklet boundary**
 - [ ] Every raw message is checked for strict own-data shape before reads, enqueueing, or rendering
-- [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; literal worklet module URLs remain local
+- [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; configurable worklet URLs are restricted to secure same-origin assets and cannot weaken CSP/MIME validation
 - [ ] Duplicate IDs reject before enqueueing; tracked IDs/events remain bounded; ended/stolen/error notes remove obsolete off events
 - [ ] Held-note cancellation/release, bounded allNotesOff/panic, command admission/rejection, context/reset and processor failure propagate safely; teardown does not promise impossible per-note acknowledgements
 - [ ] Registration replacement, controls, tuning, score IDs/times and absolute scheduling validate own-data shape; queued snapshots, ordering and cleanup preserve bounds
@@ -172,7 +174,7 @@ A security review is required before:
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
 - [ ] `package.json` `files` whitelist ships only intended `dist/` assets, usage docs, and legal/project files
 - [ ] Standalone deployment retains the installed LICENSE alongside complete matching worklet/module assets; CSP/MIME/404 failures stay visible
-- [ ] npm publication defaults to dry run and requires protected approval, matching tag/version/commit/release, A/B/C/D review evidence and configured trusted publishing; no credentials are stored in the tree
+- [ ] npm publication defaults to dry run and requires protected approval, matching tag/version/commit/release, A/B/C/D evidence and trusted publishing; post-publication checks compare exact tarball bytes, validate source provenance and cryptographically verify signatures before installed-consumer acceptance
 
 ### 3. Verification gates
 
@@ -203,6 +205,8 @@ FinalInputsReview (A/B) and FinalDspReview (C/D) rechecked the final hardened so
 v1.5 release review: Release15Inputs approved scoped static A/B inspection; Release15DspSupply approved C/D for GitHub distribution of package 1.5.0, with no evidence-backed blockers. Neither reviewer executed runtime gates or certified external npm settings. The integration owner's fresh package, native browser, numerical, audit and report-only benchmark evidence is recorded in CHANGELOG.
 
 v1.5 interruption-repair recheck: Release15Inputs initially found that deferred running notifications could leave deduplication state stale. Both initial and existing-node resume now synchronize successful state observation; repeated fully deferred transitions and pending diagnostics are covered by consumer regressions. Release15Inputs then approved A/B and Release15DspSupply approved C/D without remaining scoped static findings. The original Linux WebKit CI failure blocks publication until repaired-candidate verification; static approval is not a waiver or runtime certification.
+
+Unreleased feature-completion recheck: a further security review found two command-waiter boundary issues (abort-signal state/listener shadowing and receipt-eviction handling around correlated panic resets). Both were fixed with regressions and rechecked natively against a borrowed context. This is an integration-owner runtime record, not a new independent approval; a release still needs fresh A/B/C/D review.
 
 ## Non-goals
 

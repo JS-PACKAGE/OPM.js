@@ -2,6 +2,29 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+The published v1.5 / package 1.5.0 artifact remains unchanged. The source changes below require a separately reviewed version/tag/release before publication.
+
+### Acoustic quality, expression and adoption
+
+- Add original independent nested four-op chain/branched/multicarrier references alongside Bessel/feedback/long-stream coverage; replace the former four-pole decimator with a preallocated eighth-order Butterworth cascade. Passband, folded-product rejection, phase, tail and CPU tradeoffs are explicit; no arbitrary-FM alias-free or perceptual claim.
+- Canonicalize voice format v5 with fixed-Hz operators, rate key scaling, pitch envelopes and delayed/phase-selectable note/global LFO. Retain strict original v1–v4 input shapes. Add independent per-operator level multipliers/ramps and note-scaled offline release tails.
+- Preserve supported fixed-Hz/expressive DX7 source fields using documented musical heuristics and actionable substitution/loss warnings; six-to-four topology and hardware timing remain intentionally lossy.
+- Add bounded long-score preparation, capacity estimation, reusable chunked rendering and mixed note/control/stop streaming without removing short-score/worklet/WAV limits.
+- Add same-origin custom worklet assets, multicast subscriptions, timed/abortable command admission waits and terminal disposal alongside restartable close.
+- Expand original curated preset recipes and provenance/register/velocity metadata, numerical host trims and repeatable phrase/A/B audition without rewriting patches for loudness.
+- Expand physical-device recovery scenarios, bounded local observation/status exports and an explicit unverified iOS/Android support matrix.
+- Add post-publication registry byte/integrity/source-provenance/signature/installed-consumer verification to the manual npm workflow; local artifact validation is available without claiming registry publication.
+- Synchronize project guidance and public usage contracts. Physical-device/listening evidence and authorized first npm publication remain external prerequisites.
+
+### Unreleased verification record
+
+- Node.js 26.7.0: 198 behavioral tests, strict source/development/consumer types, source/generated AST gates, installed-package render/WAV/declarations passed; root full/runtime and Vite tooling audits found zero vulnerabilities, with an empty runtime dependency tree. A stale generated `dist` containing duplicated ` 2`/` 3` suffix files failed the packaged-map gate; it was preserved outside the repository and rebuilt cleanly rather than deleted.
+- Native Chromium 153.0.8010.12 (48 kHz backend, muted) ran the audition UI (A/B measurement, matched-versus-dry reports, PCM16 WAV download, play/stop/dispose and fresh restart), a 60-second/96 kHz bounded render (5,775,360 frames, zero DSP errors) and a 390 px layout check; the event log is now height-limited so long reports do not widen the page. It also ran command-waiter admission, receipt eviction, native abort-signal handling, correlated panic reset, subscription cleanup and terminal disposal against a borrowed context. Worklet stress and the installed Vite subpath/CSP/MIME/404 smoke passed again; the native WebKit 26.6 AudioWorklet smoke passed.
+- Report-only Apple M5 benchmark (48 kHz, 128 frames, 2.667 ms deadline): the order-8 decimator costs more than the former filter. Eight voices with LFO had p99 at 1.575× the deadline and 79 misses; without LFO 1.429× and 45 misses; raw burst 3.323× and prepared burst 2.591×. Worst samples include scheduler/GC pauses (up to 120 ms), so this is a host-dependent tradeoff, not an underrun counter. Measure before enabling dense polyphony on tighter CPU budgets.
+- Not verified: listening quality, physical iOS/Android interruption behavior, locked Playwright 1.56.1, Firefox, Linux WebKit CI and any npm registry operation (`npm whoami` previously returned ENEEDAUTH). Desktop automation does not earn physical-device acceptance.
+
 ## v1.5
 
 Package version 1.5.0. GitHub release distribution and npm registry publication are separate operations; the historical v1.4 artifact remains immutable.
