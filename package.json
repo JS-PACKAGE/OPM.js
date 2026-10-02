@@ -50,6 +50,7 @@
     "test": "npm run compile && node .dev/scripts/test.js",
     "benchmark": "npm run compile && node .dev/scripts/benchmark.js",
     "sound-quality": "npm run compile && node .dev/scripts/sound-quality.js",
+    "voice-quality": "npm run compile && node .dev/scripts/voice-quality.js",
     "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",

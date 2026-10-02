@@ -14,8 +14,9 @@ if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.m
 const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
 const demoEntries = [
   'demo/main.ts', 'demo/song.ts', 'demo/basic.ts', 'demo/modulation.ts',
-  'demo/context.ts', 'demo/wav.ts',
+  'demo/context.ts', 'demo/wav.ts', 'demo/audition.ts',
 ];
+const demoDeclarations = new Set(demoEntries.map(path => path.replace(/\.ts$/, '.d.ts')));
 const program = ts.createProgram(
   [...parsed.fileNames, ...demoEntries.map(path => join(root, path))],
   { ...parsed.options, rootDir: root },
@@ -31,6 +32,8 @@ if (diagnostics.length) {
 const emitted = program.emit(undefined, (path, data) => {
   const parts = relative(outdir, path).split(sep);
   if (parts[0] === 'src') parts.shift();
+  // Bundled demo helpers have no separate runtime module; do not ship orphan declarations.
+  if (parts[0] === 'demo' && !demoDeclarations.has(parts.join('/'))) return;
   files.push({ path: join(outdir, ...parts), data: Buffer.from(data) });
 });
 if (emitted.emitSkipped || emitted.diagnostics.length) throw new Error('TypeScript declaration emit failed');

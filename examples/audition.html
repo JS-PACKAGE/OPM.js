@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — Preset and conversion audition</title>
+  <link rel="icon" href="../favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <a href="../index.html">Back to the example index</a>
+    <h1>Preset and conversion audition</h1>
+    <p>Compare all seven unchanged bundled presets and original, clean-room DX7 conversion recipes. Start with low device volume. Playback and downloaded WAVs use fixed host gain <strong>0.12 (−18.4 dB)</strong>; there is no automatic loudness matching or patch rewriting.</p>
+    <fieldset>
+      <legend>A/B sources and single-note settings</legend>
+      <label for="source-a">Source A</label>
+      <select id="source-a"></select>
+      <label for="source-b">Source B</label>
+      <select id="source-b"></select>
+      <label for="note">Register</label>
+      <select id="note">
+        <option value="48">Low: C3 (MIDI 48)</option>
+        <option value="60" selected>Middle: C4 (MIDI 60)</option>
+        <option value="84">High: C6 (MIDI 84)</option>
+      </select>
+      <label for="velocity">Velocity</label>
+      <select id="velocity">
+        <option value="0.25">Soft: 0.25</option>
+        <option value="0.6" selected>Medium: 0.6</option>
+        <option value="1">Hard: 1</option>
+      </select>
+    </fieldset>
+    <div class="actions">
+      <button id="play-a" type="button" data-audition disabled>Play A</button>
+      <button id="play-b" type="button" data-audition disabled>Play B</button>
+      <button id="compare" type="button" data-audition disabled>Compare A then B across all 9 cells</button>
+      <button id="stop" type="button">Stop / release notes</button>
+      <button id="dispose" type="button">Dispose audio</button>
+    </div>
+    <p class="hint">Every note has a 0.8-second gate followed by its release. The grid plays A then B at each register/velocity; release tails are separated. Stop cancels queued notes and releases active gates. Dispose disconnects and closes the owned AudioContext; Play can start a new session.</p>
+    <div class="actions">
+      <button id="measure" type="button" data-audition disabled>Measure A/B sound report</button>
+      <button id="wav-a" type="button" data-audition disabled>Render WAV A</button>
+      <button id="wav-b" type="button" data-audition disabled>Render WAV B</button>
+      <a id="download" hidden>Download last rendered stereo WAV</a>
+    </div>
+    <p>WAVs are synthesized locally at 48 kHz with the selected register/velocity, including release tails. No recordings or patches are uploaded. Changing a setting invalidates the download.</p>
+    <h2>Sound report</h2>
+    <pre id="report">Choose sources, then measure their low/middle/high register and soft/medium/hard velocity grid.</pre>
+    <p>Report values are raw DSP sample peak, gate RMS, and full-render RMS in dBFS, before playback gain. Unweighted RMS is an objective energy/loudness proxy, <strong>not LUFS</strong> or a perceptual quality verdict. Suggested trims are host-side attenuation only; more simultaneous notes need additional headroom.</p>
+    <h2>Conversion limits</h2>
+    <p>The DX7 examples are original generated parameter recipes, not third-party patch banks. OPM.js is four-operator synthesis, not a DX7 emulator. A/B compares converted recipes and bundled OPM voices; no original six-operator audio reference is rendered. Carrier removal, approximate envelopes/levels/velocity response, fixed-frequency key tracking, feedback placement and LFO differences can be audible.</p>
+    <p id="limits"></p>
+    <output id="status" role="status" aria-live="polite">Loading voices.</output>
+  </main>
+  <script type="module" src="../dist/demo/audition.js"></script>
+</body>
+</html>

@@ -21,12 +21,12 @@
       <article class="card">
         <h2><a href="./examples/song.html">02 · Melody and chord scheduling</a></h2>
         <p>Use Twinkle, Twinkle, Little Star to explore melody, chords, stereo pan, and scheduling or cancelling future notes.</p>
-        <p class="hint">time · duration · stereo pan</p>
+        <p class="hint">absolute at · lookahead · duration · stereo pan</p>
       </article>
       <article class="card">
-        <h2><a href="./examples/modulation.html">03 · Stereo and LFO modulation</a></h2>
-        <p>Compare left/right pan, amplitude modulation, and pitch modulation. Each new note uses the current voice settings.</p>
-        <p class="hint">pan · lfo.rate · amDepth · pmDepth</p>
+        <h2><a href="./examples/modulation.html">03 · Live expression and LFO modulation</a></h2>
+        <p>Bend and glide a held note, adjust expression and pan, and compare amplitude/pitch modulation without retriggering its envelope.</p>
+        <p class="hint">updateNote · pitch · glide · expression · modulation</p>
       </article>
       <article class="card">
         <h2><a href="./examples/context.html">04 · Shared AudioContext and routing</a></h2>
@@ -42,6 +42,11 @@
         <h2><a href="./examples/playground.html">06 · Advanced controls and DX7 import</a></h2>
         <p>Explore key scaling, suspend/resume, diagnostics, and approximate six-to-four-operator DX7 SysEx conversion.</p>
         <p class="hint">keyScale · diagnostics · importDX7</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/audition.html">07 · Preset and DX7 audition</a></h2>
+        <p>Compare presets and clean-room DX7 conversions across registers and velocities, inspect levels, and download rendered WAV.</p>
+        <p class="hint">preset quality · conversion limits · encodeWav</p>
       </article>
     </nav>
     <p class="hint">Examples run the built dist/ ES modules. Their TypeScript helpers live in demo/; every JS has a matching source map and declaration.</p>
