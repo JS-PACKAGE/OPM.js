@@ -2,13 +2,13 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-OPM.js 1.2 provides browser AudioWorklet synthesis through `OPM`, offline stereo PCM through `Synth` and `renderNote`, PCM16 WAV encoding, and approximate DX7 voice import. Public ESM exports include TypeScript declarations. Node.js 18+ is required for Node examples.
+OPM.js 1.2 provides browser AudioWorklet synthesis through `OPM`, offline stereo PCM through `Synth` and `renderNote`, PCM16 WAV encoding, and approximate DX7 voice import. Public ESM exports include TypeScript declarations. Node.js 22+ is required for Node examples.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
 ## Acquire and install
 
-Start with a checkout or archive of the [OPM.js repository](https://github.com/YueyuHoshizora/OPM.js). The public npm registry is **not assumed** to have `opm.js`; use a tarball built from this checkout instead. From the **OPM.js repository root**, with Node.js 18+ and npm installed:
+Start with a checkout or archive of the [OPM.js repository](https://github.com/YueyuHoshizora/OPM.js). The public npm registry is **not assumed** to have `opm.js`; use a tarball built from this checkout instead. From the **OPM.js repository root**, with Node.js 22+ and npm installed:
 
 ```sh
 npm ci
@@ -325,7 +325,7 @@ This is **approximate six-to-four-operator conversion**, not DX7 synthesis/emula
 
 Maintainer commands run in the checkout, after `npm ci`:
 
-All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node 18+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source and bundles browser modules plus `dist/demo/` scripts; `npm run typecheck` checks all authored programs and the public consumer fixture. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
+All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node.js 22+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source and bundles browser modules plus `dist/demo/` scripts; `npm run typecheck` checks all authored programs and the public consumer fixture. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
 
 ```sh
 npm run build
@@ -337,7 +337,7 @@ npm run browser-smoke -- chromium
 npm run benchmark
 ```
 
-Use firefox/webkit instead to install/exercise those browsers. CI configures Node 18/22/24 and all three browser engines; configuration alone does not prove successful runs. Observed versions/results belong in CHANGELOG. Browser acceptance observes real AudioWorklet signal, finite output, lifecycle/release, and deployment paths, not just fake contexts. Roadmap completion requires a tested feature, working demo sound/export, and README coverage.
+Use firefox/webkit instead to install/exercise those browsers. CI configures Node 22/24/26 and all three browser engines; configuration alone does not prove successful runs. Observed versions/results belong in CHANGELOG. Browser acceptance observes real AudioWorklet signal, finite output, lifecycle/release, and deployment paths, not just fake contexts. Roadmap completion requires a tested feature, working demo sound/export, and README coverage.
 
 Headless Linux Firefox also needs a running native audio server; browser library installation alone is insufficient. CI installs `pulseaudio`, runs `pulseaudio --start --exit-idle-time=-1`, loads `pactl load-module module-null-sink sink_name=opm_ci`, selects `pactl set-default-sink opm_ci`, and checks `pactl info` before smoke. A null sink discards speaker output but still runs the native audio clock and real worklet graph. Smoke logs identify the pending stage and context state if initialization/resume stalls.
 

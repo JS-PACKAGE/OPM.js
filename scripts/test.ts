@@ -2,7 +2,7 @@ import { readdir } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// Node 18 does not expand globs; npm's Windows shell does not expand them either.
+// Enumerate compiled tests consistently across shells, including Windows.
 const directory = new URL('../test/', import.meta.url);
 const files = (await readdir(directory)).filter(file => file.endsWith('.test.js')).sort();
 if (files.length === 0) throw new Error('No compiled behavioral tests found');

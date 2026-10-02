@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Node.js 22 minimum
+
+- Align root lockfile metadata and support/development documentation with the upstream package requirement of Node.js `>=22.0.0` and CI matrix of 22/24/26.
+- The maintainer reports Node.js 22 tests passing; this session's local checks ran on Node.js 26.7.0.
+
 ### Complete JavaScript/map/declaration triplets
 
 - Preserve engine source-module paths instead of bundling into hashed chunks, allowing every emitted JS to retain genuine compiler-generated export declarations. Generate declarations for both demos as well; their `export {};` accurately represents modules with no public exports.

@@ -55,7 +55,7 @@ A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedb
 ## Development workflow
 
 - Consumers use committed `dist/` or an installed package without a build toolchain.
-- For development, use Node.js 18+ and run `npm ci` in the repository root; run `npm test` to compile and execute TypeScript behavioral tests. `npm run typecheck` checks source, tools, tests, demos, and generated public contracts. Do not maintain handwritten declarations alongside implementations.
+- For development, use Node.js 22+ and run `npm ci` in the repository root; run `npm test` to compile and execute TypeScript behavioral tests. `npm run typecheck` checks source, tools, tests, demos, and generated public contracts. Do not maintain handwritten declarations alongside implementations.
 - After editing source, run `npm run build` before browser smoke checks: the demos import `dist/`, not `src/`. From the repository root, run `python3 -m http.server 8000` and open `http://localhost:8000/demo/index.html` or `http://localhost:8000/index.html`. `npm pack` rebuilds automatically before packaging.
 - Test the core offline in Node.js (render Float32Array, assert envelope shape / silence / no NaN).
 - Before claiming a milestone in `README.md` Roadmap is done, it must have: a test, a demo sound, and a README mention.
