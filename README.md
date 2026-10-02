@@ -2,7 +2,7 @@
 
 **A 4-operator FM synthesis engine for the browser, inspired by the Yamaha YM2151 (OPM) sound chip.**
 
-OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator synthesis with multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-dependency JavaScript engine powered by the Web Audio API.
+OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator synthesis with multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
 > **Status:** v1.2.0 — browser and offline synthesis, version 2 voices, approximate DX7 import, and PCM16 WAV export.
 
@@ -12,7 +12,7 @@ Choose a workflow: [try the demos](#try-the-checkout) · [install into an npm pr
 
 ## About
 
-The Yamaha YM2151 (OPM) powered a generation of arcade boards and the Sharp X68000, defining the sound of the mid-1980s with its 8-channel, 4-operator FM architecture. OPM.js brings that architecture to the browser as a pure JavaScript synthesis engine.
+The Yamaha YM2151 (OPM) powered a generation of arcade boards and the Sharp X68000, defining the sound of the mid-1980s with its 8-channel, 4-operator FM architecture. OPM.js brings that architecture to the browser with a TypeScript implementation and directly deployable JavaScript.
 
 OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware clone: envelope timing and modulation curves are tuned to sound correct rather than to reproduce silicon behaviour bit-for-bit.
 
@@ -232,6 +232,8 @@ This is an **approximate six-to-four-operator conversion**, not DX7 synthesis or
 ## Optimized distribution
 
 `dist/` contains ready-to-use, tree-shaken ES modules with shared chunks and compact voice JSON. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`.
+
+Engine, AudioWorklet, demos, tests, and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/declaration approach, declarations are generated from implementation rather than maintained separately. OPM.js retains npm and Node 18+ compatibility. `tsconfig.json` checks the environment-independent/browser source and emits declarations; `tsconfig.dev.json` compiles development programs into ignored `.dev/`. ESM source imports retain `.js` specifiers. Use `npm test`, not bare `node --test`, to compile and run the behavioral tests; `npm run typecheck` checks source, tools, tests, demos, and the public consumer fixture. The build also produces `dist/demo/` scripts used by both HTML demos.
 
 In the **repository checkout**, not the installed npm package:
 

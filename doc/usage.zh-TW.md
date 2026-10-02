@@ -330,6 +330,8 @@ checkout 匯入改為 `./dist/core/index.js`、`./dist/voices/brass.js` 與 `./d
 
 在 checkout 執行維護指令，不是在已安裝的套件中：
 
+所有程式皆使用 strict TypeScript，包含 DSP、AudioWorklet、demo、測試與開發工具。`npm run compile` 將開發程式編譯到忽略追蹤的 `.dev/`，保留 Node 18+；npm 指令會先編譯再執行。請使用 `npm test`，不要直接執行 `node --test`：它會選取編譯後的行為測試，不將 fixture 模組計為測試。`npm run build` 從實作產生 `.d.ts`，建置瀏覽器模組與兩個 HTML 頁面所需的 `dist/demo/`；`npm run typecheck` 檢查原始碼、工具、測試、demo 及公開型別使用範例。使用者仍匯入 `.js`，不需要 TypeScript 或建置工具鏈。
+
 ```sh
 npm ci
 npm run build

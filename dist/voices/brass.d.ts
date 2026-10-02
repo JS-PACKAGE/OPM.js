@@ -1,2 +1,2 @@
 import type { Voice } from './schema.js';
-export const brass: Voice;
+export declare const brass: Voice;

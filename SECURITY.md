@@ -79,8 +79,8 @@ A security review is required before:
 Run development commands from a source checkout after `npm ci`; installed npm packages do not contain the development tooling.
 
 - `npm run build` then `npm test` — source/distribution behavior, malformed-input, deterministic rendering, and spectral regression coverage
-- `npm run typecheck` — strict NodeNext consumer against public package declarations
-- `npm run security -- --package-smoke` — AST dynamic-execution gate over source/generated JS, exact development pins, zero runtime dependencies, isolated installed exports/type smoke
+- `npm run typecheck` — strict source, development tools/tests/demos, and NodeNext consumer against generated public declarations
+- `npm run security -- --package-smoke` — TypeScript compiler AST gate over source and Acorn gate over generated JS, exact development pins, zero runtime dependencies, isolated installed exports/type smoke
 - `npm audit` and `npm audit --omit=dev` — record actual tooling/runtime audit results; runtime dependency tree must be empty
 - `npx --no-install playwright install --with-deps chromium` then `npm run browser-smoke -- chromium` — real AudioWorklet smoke; Firefox/WebKit alternatives are configured separately
 - Headless Linux Firefox requires a running native audio server. CI starts PulseAudio and a null sink before real worklet smoke; it does not mock audio or relax browser permission/autoplay controls. Consult the usage guides for setup and stage diagnostics.

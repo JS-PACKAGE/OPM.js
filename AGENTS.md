@@ -4,7 +4,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 ## Project
 
-OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. It is a pure JavaScript synthesis engine powered by the Web Audio API, designed to be embedded in games and creative web apps.
+OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. Its strict TypeScript implementation ships as plain JavaScript ES modules powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
 - **Status:** 1.1 release. Keep the public API (`playNote()`, voice format) and README in sync when changing behavior.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
@@ -55,7 +55,7 @@ A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedb
 ## Development workflow
 
 - Consumers use committed `dist/` or an installed package without a build toolchain.
-- For development, use Node.js 18+ and run `npm ci` in the repository root; run `node --test` for unit tests.
+- For development, use Node.js 18+ and run `npm ci` in the repository root; run `npm test` to compile and execute TypeScript behavioral tests. `npm run typecheck` checks source, tools, tests, demos, and generated public contracts. Do not maintain handwritten declarations alongside implementations.
 - After editing source, run `npm run build` before browser smoke checks: the demos import `dist/`, not `src/`. From the repository root, run `python3 -m http.server 8000` and open `http://localhost:8000/demo/index.html` or `http://localhost:8000/index.html`. `npm pack` rebuilds automatically before packaging.
 - Test the core offline in Node.js (render Float32Array, assert envelope shape / silence / no NaN).
 - Before claiming a milestone in `README.md` Roadmap is done, it must have: a test, a demo sound, and a README mention.

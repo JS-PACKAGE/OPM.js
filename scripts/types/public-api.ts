@@ -1,7 +1,7 @@
 import { OPM, type OPMEvent, type VoiceInput } from 'opm.js';
 import { Synth, renderNote, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice } from 'opm.js/core';
 import { brass } from 'opm.js/voices/brass.js';
-import { parseVoiceBank, validateVoice, bounded, LIMITS, type FrozenVoice } from 'opm.js/voices/schema.js';
+import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
 import { importDX7, describeDX7, type DX7ImportDescription } from 'opm.js/voices/dx7.js';
 
@@ -66,3 +66,13 @@ encodeWav({ left: [0, 1], sampleRate: 44100 });
 // @ts-expect-error DX7 parser consumes binary bytes
 importDX7('not binary');
 void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, browserConsumer, legacyOperator];
+
+// Published classes remain structural contracts, without implementation state.
+declare const opmAdapter: Pick<OPM, 'sampleRate' | 'voices' | 'context' | 'node' |
+  'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'getDiagnostics' | 'close'>;
+const compatibleOPM: OPM = opmAdapter;
+declare const synthAdapter: Pick<Synth, 'sampleRate' | 'maxVoices' | 'currentFrame' | 'errorCount' |
+  'lastStolenId' | 'noteOn' | 'noteOff' | 'render'>;
+const compatibleSynth: Synth = synthAdapter;
+const literalBankLimit: 262144 = MAX_BANK_BYTES;
+void [compatibleOPM, compatibleSynth, literalBankLimit];

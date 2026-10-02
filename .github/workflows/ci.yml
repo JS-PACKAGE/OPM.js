@@ -30,7 +30,7 @@ jobs:
       - run: npm audit
       - run: npm audit --omit=dev
       - name: Runtime-zero-deps, parsed dynamic-code gate and installed package smoke
-        run: node scripts/security-check.js --package-smoke
+        run: npm run security -- --package-smoke
       - name: Check warmed p99 deadline budget and report worst-case stalls
         run: npm run benchmark
         env:
@@ -64,4 +64,4 @@ jobs:
           pactl set-default-sink opm_ci
           pactl info
       - name: Exercise built AudioWorklet, signal, routing, gates and context lifecycle
-        run: node scripts/browser-smoke.js ${{ matrix.browser }}
+        run: npm run browser-smoke -- ${{ matrix.browser }}

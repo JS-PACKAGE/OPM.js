@@ -25,7 +25,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains built JavaScript/JSON, declarations, documentation/legal files, but not source, scripts, demos, or compressed sidecars. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains built JavaScript/JSON, generated declarations, demo scripts, and documentation/legal files, but not TypeScript source, development scripts/tests, HTML pages, or compressed sidecars. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -325,6 +325,8 @@ This is **approximate six-to-four-operator conversion**, not DX7 synthesis/emula
 ## Quality and release acceptance
 
 Maintainer commands run in the checkout, after `npm ci`:
+
+All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node 18+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source and bundles browser modules plus `dist/demo/` scripts; `npm run typecheck` checks all authored programs and the public consumer fixture. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
 
 ```sh
 npm run build

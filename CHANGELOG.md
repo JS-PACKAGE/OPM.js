@@ -2,6 +2,19 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### TypeScript source cutover
+
+- Preserve published structural `OPM`/`Synth` class contracts by stripping implementation-only declaration members; retain the literal bank-size type and optional event callback. Installed consumer checks cover adapters and the literal limit. The test entrypoint enumerates filenames without shell globs and forwards Node runner options for Node 18/Windows compatibility (Windows execution not observed); diagnostics filtering and reporter selection were exercised on Node 18/26.
+- Migrate engine, AudioWorklet, voice parsers, demos, behavioral tests, and development tools to strict TypeScript, following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/generated-declaration approach. Remove obsolete JavaScript source and handwritten declarations; keep public `.js` package/deployment URLs and zero runtime dependencies.
+- Generate declarations from implementation, compile development programs into ignored `.dev/`, and build external `dist/demo/` modules for both HTML demos. Preserve npm and Node 18+ compatibility rather than adopting XYZ.js's newer platform requirement. CI invokes the compiled tooling through npm scripts.
+- Verification by 語喵: build, complete strict typecheck, 73 behavioral tests on Node 26.7.0 and Node 18.20.8, TypeScript-source/JavaScript-dist AST gates, installed ESM/WAV/type smoke, and development/runtime audits (zero vulnerabilities). All original behavioral test titles remain; the former 74 count included automatic discovery of the fixture-only module, now excluded by explicit `*.test.js` selection.
+- Released v1.2 DSP versus compiled TypeScript and rebuilt distribution: 248 cases, 4,504,320 compared channel samples, exact Float32 equality, plus matching WAV bytes. Covers algorithms, stereo pan, sample rates, and burst stealing; this is scoped parity evidence, not hardware fidelity.
+- Apple M5 / Node 26: unchanged 300-warmup/2,000-block benchmark passed all p99 budgets; burst p99 0.868 ms, zero missed deadlines against 2.667 ms. No universal deadline guarantee.
+- Real rebuilt AudioWorklet smoke passed Chromium 153.0.8010.12 and WebKit 26.6 on macOS arm64 using the existing matching Playwright 1.63.0 launcher (not the locked CI browser versions). Both HTML demos were visually checked and exercised for held/released notes, WAV generation action, and song start/stop. Browser download persistence was not verified. Firefox and remote CI were not run for this migration.
+- **Security:** independent **TsSecurityReview** approved static A/B/C/D review with no findings: runtime validation remains beneath erased types, bounded voices/messages/binary input and own-data checks remain, declaration fields do not add runtime initializers, tooling is exactly pinned, and runtime dependencies remain empty. Runtime checks above were executed by 語喵, not the reviewer.
+
 ## v1.2.0
 
 ### CI failure repairs
