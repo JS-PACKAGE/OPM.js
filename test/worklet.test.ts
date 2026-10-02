@@ -450,7 +450,7 @@ test('processor initialization rejects hostile polyphony and synth options witho
     rootAccessor, { processorOptions: accessor }, { processorOptions: qualityAccessor },
     { processorOptions: Object.assign(Object.create({ quality: 'eco' }), { maxVoices: 1 }) },
     { processorOptions: null }, { processorOptions: [] }, { processorOptions: { [Symbol('quality')]: 'eco' } },
-    ...[0, 9, 1.5, NaN, Infinity, '2', true, null, undefined, { valueOf: getter }].map(maxVoices => ({
+    ...[0, 33, 1.5, NaN, Infinity, '2', true, null, undefined, { valueOf: getter }].map(maxVoices => ({
       processorOptions: { maxVoices },
     })),
     { processorOptions: { quality: 'other' } }, { processorOptions: { quality: undefined } },

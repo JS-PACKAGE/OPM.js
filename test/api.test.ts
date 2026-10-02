@@ -694,7 +694,7 @@ test('host quality and polyphony reject hostile options without getter or numeri
   for (const input of [
     quality, maxVoices, Object.assign(Object.create({ quality: 'eco' }), { maxVoices: 1 }),
     { quality: 'other' }, { quality: null }, { quality: { [Symbol.toPrimitive]: getter } },
-    { maxVoices: 0 }, { maxVoices: 9 }, { maxVoices: 1.5 }, { maxVoices: NaN },
+    { maxVoices: 0 }, { maxVoices: 33 }, { maxVoices: 1.5 }, { maxVoices: NaN },
     { maxVoices: Infinity }, { maxVoices: '2' }, { maxVoices: true }, { maxVoices: null },
     { maxVoices: { valueOf: getter } }, { [Symbol('quality')]: 'eco' },
   ]) assert.throws(() => new OPM(input as OPMOptions));

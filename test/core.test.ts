@@ -137,7 +137,7 @@ test('notes own snapshots; finite stereo is deterministic across chunks and rend
 
 test('voice ceiling steals the oldest note and preserves headroom with eight voices', () => {
   assert.throws(() => new Synth(0));
-  assert.throws(() => new Synth(48000, 9));
+  assert.throws(() => new Synth(48000, 33));
   const synth = new Synth(16000, 2);
   synth.noteOn(voice(), 60, 1);
   synth.noteOn(voice(), 64, 2);

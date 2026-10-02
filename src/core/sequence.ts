@@ -1,7 +1,7 @@
 import { brass } from '../voices/brass.js';
 import { prepareVoice } from '../voices/normalize.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
-import { Synth, operatorDuration, readSynthOptions, validateNoteControls } from './synth.js';
+import { Synth, VoiceAdmissionError, operatorDuration, readSynthOptions, validateMaxVoices, validateNoteControls, validateVoicePriority } from './synth.js';
 import type { NoteControls, SynthOptions } from './synth.js';
 import type { RenderResult } from './index.js';
 import { normalizeTuning } from './tuning.js';
@@ -9,15 +9,19 @@ import { normalizeTuning } from './tuning.js';
 export interface SequenceNoteEvent {
   type: 'note'; id: number; time: number; duration: number;
   voice?: string | VoiceInput;
-  note: number; velocity?: number; pan?: number;
+  note: number; velocity?: number; pan?: number; voicePriority?: number;
 }
 export interface SequenceStopEvent { type: 'stop'; id: number; time: number }
 export interface SequenceControlEvent { type: 'control'; id: number; time: number; controls: NoteControls }
 export type SequenceEvent = SequenceNoteEvent | SequenceStopEvent | SequenceControlEvent;
 export type SequenceVoices = ReadonlyMap<string, VoiceInput>;
-export interface SequenceOptions extends SynthOptions { voices?: SequenceVoices; sampleRate?: number }
+export interface SequenceOptions extends SynthOptions {
+  voices?: SequenceVoices; sampleRate?: number;
+  /** Logical polyphony, integer1..32; default8. Stolen fades remain bounded to eight. */
+  maxVoices?: number;
+}
 export type PreparedSequenceEvent =
-  Readonly<Omit<SequenceNoteEvent, 'voice' | 'velocity' | 'pan'> & { voice: PreparedVoice; velocity: number; pan: number }> |
+  Readonly<Omit<SequenceNoteEvent, 'voice' | 'velocity' | 'pan' | 'voicePriority'> & { voice: PreparedVoice; velocity: number; pan: number; voicePriority: number }> |
   Readonly<SequenceStopEvent> |
   Readonly<Omit<SequenceControlEvent, 'controls'> & { controls: Readonly<NoteControls> }>;
 export interface SequenceSnapshot {
@@ -104,7 +108,7 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('events must contain own data events');
     const input: unknown = descriptor.value;
     const type = input !== null && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input, 'type')?.value : undefined;
-    const allowed = type === 'note' ? ['type', 'id', 'time', 'duration', 'voice', 'note', 'velocity', 'pan']
+    const allowed = type === 'note' ? ['type', 'id', 'time', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
       : type === 'stop' ? ['type', 'id', 'time'] : type === 'control' ? ['type', 'id', 'time', 'controls'] : null;
     if (!allowed) throw new TypeError('Unknown sequence event type');
     const data = sequenceOwnData(input, allowed, type === 'note' ? ['type', 'id', 'time', 'duration', 'note']
@@ -124,13 +128,14 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
       const note = finite(data.note, 0, 127, 'note');
       const velocity = finite(data.velocity === undefined ? 1 : data.velocity, 0, 1, 'velocity');
       const pan = finite(data.pan === undefined ? 0 : data.pan, -1, 1, 'pan');
+      const voicePriority = Object.hasOwn(data, 'voicePriority') ? validateVoicePriority(data.voicePriority) : 0;
       let voice: unknown = data.voice === undefined ? 'brass' : data.voice;
       if (typeof voice === 'string') {
         if (!/^[a-zA-Z0-9_-]{1,64}$/.test(voice)) throw new TypeError('Invalid voice name');
         voice = voices === undefined ? (voice === 'brass' ? brass : undefined) : Map.prototype.get.call(voices, voice);
         if (voice === undefined) throw new RangeError('Unknown sequence voice');
       }
-      snapshot.push(Object.freeze({ type: 'note', id, time, duration, note, velocity, pan, voice: prepareVoice(voice as VoiceInput) }));
+      snapshot.push(Object.freeze({ type: 'note', id, time, duration, note, velocity, pan, voicePriority, voice: prepareVoice(voice as VoiceInput) }));
     } else {
       reservedSlots++;
       snapshot.push(type === 'stop' ? Object.freeze({ type: 'stop', id, time })
@@ -250,15 +255,17 @@ export interface ChunkedSequenceRender extends IterableIterator<SequenceChunk> {
 interface SequenceRenderPlan {
   score: SequenceSnapshot;
   engine: SynthOptions;
+  maxVoices: number;
   queue: SequenceFrameEvent[];
   capacity: SequenceCapacity;
   signal: AbortSignal | undefined;
 }
 
 function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOptions, long: boolean): SequenceRenderPlan {
-  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'mixGain', 'tuning', 'stealing', 'quality', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
+  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
   const score = prepareScore(events, { voices: config.voices as SequenceVoices | undefined }, long);
   const sampleRate = sampleRateValue(config.sampleRate === undefined ? 44100 : config.sampleRate as number);
+  const maxVoices = Object.hasOwn(config, 'maxVoices') ? validateMaxVoices(config.maxVoices) : 8;
   const chunkFrames = config.chunkFrames === undefined ? 4096 : config.chunkFrames;
   if (typeof chunkFrames !== 'number' || !Number.isInteger(chunkFrames) || chunkFrames < 1 || chunkFrames > MAX_SEQUENCE_CHUNK_FRAMES) {
     throw new RangeError('chunkFrames must be an integer in 1..65536');
@@ -296,7 +303,7 @@ function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOp
       longEvents: MAX_LONG_SEQUENCE_EVENTS, longSeconds: MAX_LONG_SEQUENCE_SECONDS, chunkFrames: MAX_SEQUENCE_CHUNK_FRAMES,
       streamHorizonSeconds: 0.2, streamSlots: MAX_SEQUENCE_SLOTS, streamNotes: MAX_SEQUENCE_NOTES }),
   });
-  return { score, engine: settings, queue, capacity, signal };
+  return { score, engine: settings, maxVoices, queue, capacity, signal };
 }
 
 /** Validate and estimate without allocating any PCM or advancing a synth. */
@@ -305,8 +312,8 @@ export function estimateSequenceCapacity(events: readonly SequenceEvent[], optio
 }
 
 function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; right: Float32Array }): ChunkedSequenceRender {
-  const { score, engine, queue, capacity, signal } = plan;
-  const synth = new Synth(capacity.sampleRate, 8, engine);
+  const { score, engine, maxVoices, queue, capacity, signal } = plan;
+  const synth = new Synth(capacity.sampleRate, maxVoices, engine);
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   const left = output?.left ?? new Float32Array(capacity.chunkFrames);
   const right = output?.right ?? new Float32Array(capacity.chunkFrames);
@@ -338,8 +345,13 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
         if (!state.has(next.event.id)) continue;
         const event = next.event;
         if (event.type === 'note') {
-          synth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan });
-          state.set(event.id, 'started');
+          try {
+            synth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan, voicePriority: event.voicePriority });
+            state.set(event.id, 'started');
+          } catch (error) {
+            if (!(error instanceof VoiceAdmissionError)) throw error;
+            state.delete(event.id);
+          }
         } else if (event.type === 'stop') {
           if (state.get(event.id) === 'pending') state.delete(event.id);
           else if (synth.noteOff(event.id)) state.set(event.id, 'released');
@@ -362,7 +374,7 @@ export function renderSequenceChunks(events: readonly SequenceEvent[], options: 
 
 /** Convenience full-buffer rendering retains the original score and allocation budgets. */
 export function renderSequence(events: readonly SequenceEvent[], options: SequenceOptions = {}): RenderResult {
-  sequenceOwnData(options, ['voices', 'sampleRate', 'mixGain', 'tuning', 'stealing', 'quality'], [], 'render sequence options');
+  sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality'], [], 'render sequence options');
   const plan = renderPlan(events, options, false);
   if (plan.capacity.frames > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
   const left = new Float32Array(plan.capacity.frames);

@@ -2,6 +2,8 @@ import type { OPM, OPMEvent } from './index.js';
 import { prepareVoice } from '../voices/normalize.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
 import { sequenceOwnData } from '../core/sequence.js';
+import { validateNoteControls } from '../core/synth.js';
+import type { NoteControls } from '../core/synth.js';
 
 export interface PerformanceOptions {
   /** Zero-based part count, 1..16; default 16. */
@@ -19,6 +21,10 @@ export interface PerformancePartOptions extends PerformancePartControls {
   mode: 'poly' | 'mono';
   legato: boolean;
   priority: 'last' | 'high' | 'low';
+  /** Optional owned-voice budget, including audible release tails, 1..32. */
+  voiceLimit?: number;
+  /** Admission importance, 0..127; larger values protect against lower-priority notes. */
+  voicePriority?: number;
 }
 export interface PerformanceNoteOptions { velocity?: number }
 export interface PerformanceKeySnapshot {
@@ -38,12 +44,18 @@ export interface PerformancePartSnapshot {
   readonly pan: number;
   readonly expression: number;
   readonly sustain: boolean;
+  readonly voiceLimit: number | undefined;
+  readonly voicePriority: number;
   readonly selectedKey: number | null;
   readonly keys: readonly PerformanceKeySnapshot[];
 }
 export interface Performance {
   configurePart(part: number, options: Partial<PerformancePartOptions>): void;
   updatePart(part: number, controls: PerformancePartControls): void;
+  /** Update one physical key; inactive mono keys store controls without touching the selected gate. */
+  updateKey(part: number, key: number, controls: NoteControls): boolean;
+  /** Update owned sounding notes and defaults for future notes, including release tails. */
+  updatePartNotes(part: number, controls: NoteControls): void;
   /** Independent key identity, not an OPM admission receipt. OPM must already be started. */
   noteOn(part: number, note: number, options?: PerformanceNoteOptions): number;
   noteOff(part: number, key: number): boolean;
@@ -52,13 +64,14 @@ export interface Performance {
   getPart(part: number): PerformancePartSnapshot;
   dispose(): void;
 }
-interface Key { key: number; note: number; velocity: number; held: boolean; gateId: number | null }
+interface Key { key: number; note: number; velocity: number; held: boolean; gateId: number | null; controls: NoteControls }
 interface Config {
   voice: string | PreparedVoice; mode: 'poly' | 'mono'; legato: boolean;
   priority: 'last' | 'high' | 'low'; glide: number; pan: number; expression: number;
+  voiceLimit: number | undefined; voicePriority: number;
 }
-interface Part { config: Config; keys: Map<number, Key>; sustain: boolean; selected: number | null }
-interface Gate { part: Part; anchor: number; key: number | null; releasing: boolean }
+interface Part { config: Config; keys: Map<number, Key>; sustain: boolean; selected: number | null; controls: NoteControls }
+interface Gate { part: Part; anchor: number; key: number | null; releasing: boolean; offset: number; controls: NoteControls; baseline: NoteControls }
 
 function number(input: unknown, min: number, max: number, label: string, integer = false): number {
   if (typeof input !== 'number' || !Number.isFinite(input) || input < min || input > max || integer && !Number.isInteger(input)) {
@@ -76,8 +89,9 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
   if (raw.onError !== undefined && typeof raw.onError !== 'function') throw new TypeError('onError must be a function');
   const onError = raw.onError as ((error: Error) => void) | undefined;
   const parts: Part[] = Array.from({ length: count }, () => ({
-    config: { voice: 'brass', mode: 'poly', legato: false, priority: 'last', glide: 0, pan: 0, expression: 1 },
-    keys: new Map(), sustain: false, selected: null,
+    config: { voice: 'brass', mode: 'poly', legato: false, priority: 'last', glide: 0, pan: 0, expression: 1,
+      voiceLimit: undefined, voicePriority: 0 },
+    keys: new Map(), sustain: false, selected: null, controls: {},
   }));
   const gates = new Map<number, Gate>();
   let totalKeys = 0;
@@ -117,10 +131,52 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     if (!target) return false;
     const old = current(p);
     if (old?.[1].key === target.key) return false;
-    return !old || !p.config.legato || Math.abs(target.note - old[1].anchor) > 48;
+    return !old || !p.config.legato ||
+      Math.abs(target.note - old[1].anchor + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0)) > 48;
+  }
+  function gateCapacity(p: Part): void {
+    if (gates.size >= 128) throw new RangeError('Performance gate capacity exceeded; wait for release tails');
+    if (p.config.voiceLimit !== undefined) {
+      let used = 0;
+      for (const gate of gates.values()) if (gate.part === p) used++;
+      if (used >= p.config.voiceLimit) throw new RangeError('Part voice limit exceeded; wait for release tails');
+    }
+  }
+  function controlsFor(p: Part, controls: NoteControls, offset: number): NoteControls {
+    const result = { ...p.controls, ...controls };
+    result.pitch = offset + (p.controls.pitch ?? 0) + (controls.pitch ?? 0);
+    return validateNoteControls(result);
+  }
+  function baseline(p: Part): NoteControls {
+    const voice = typeof p.config.voice === 'string' ? opm.voices.get(p.config.voice)! : p.config.voice;
+    return {
+      pitch: 0, glide: 0, expression: p.config.expression, pan: p.config.pan, modulation: 1, ramp: 0,
+      feedback: voice.feedback, lfoRate: voice.lfo.rate, amDepth: voice.lfo.amDepth, pmDepth: voice.lfo.pmDepth,
+      operatorLevels: voice.ops.map(op => op.level) as [number, number, number, number],
+      operatorRatios: voice.ops.map(op => op.ratio) as [number, number, number, number],
+      operatorFrequencies: voice.ops.map(op => op.frequency ?? null) as [number | null, number | null, number | null, number | null],
+      operatorADSR: voice.ops.map(op => op.adsr) as unknown as NoteControls['operatorADSR'],
+    };
+  }
+  function retargetControls(p: Part, gate: Gate, key: Key, offset: number): NoteControls {
+    const result = { ...controlsFor(p, key.controls, offset), glide: p.config.glide };
+    for (const field of Object.keys(gate.controls) as (keyof NoteControls)[]) {
+      if (field !== 'pitch' && field !== 'glide' && !Object.hasOwn(result, field)) {
+        Object.defineProperty(result, field, { value: gate.baseline[field], enumerable: true, configurable: true });
+      }
+    }
+    return validateNoteControls(result);
+  }
+  function updateGate(id: number, gate: Gate, controls: NoteControls): void {
+    try { opm.updateNote(id, controls); }
+    catch (error) {
+      if (gate.key !== null) removeKey(gate.part, gate.key);
+      release(id, gate);
+      throw error;
+    }
   }
   function capacity(p: Part, target: Key | undefined): void {
-    if (needsGate(p, target) && gates.size >= 128) throw new RangeError('Performance gate capacity exceeded; wait for release tails');
+    if (needsGate(p, target)) gateCapacity(p);
   }
   function release(id: number, gate: Gate): void {
     // Mark first: a synchronous processor may emit cancellation during stop().
@@ -132,13 +188,14 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
   }
   function admit(p: Part, key: Key): number | null {
     if (admitting) throw new Error('Performance admission cannot be reentered');
-    if (gates.size >= 128) throw new RangeError('Performance gate capacity exceeded; wait for release tails');
+    gateCapacity(p);
     const generation = epoch;
     admitting = true;
     admissionTerminals.clear();
     admissionOverflow = false;
     let id: number;
-    try { id = opm.playNote({ voice: p.config.voice, note: key.note, velocity: key.velocity, pan: p.config.pan }); }
+    try { id = opm.playNote({ voice: p.config.voice, note: key.note, velocity: key.velocity, pan: p.config.pan,
+      voicePriority: p.config.voicePriority }); }
     finally { admitting = false; }
     const terminal = admissionTerminals.has(id);
     admissionTerminals.clear();
@@ -148,9 +205,11 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       return null;
     }
     if (terminal) { removeKey(p, key.key); return null; }
-    gates.set(id, { part: p, anchor: key.note, key: key.key, releasing: false });
+    gates.set(id, { part: p, anchor: key.note, key: key.key, releasing: false, offset: 0, controls: key.controls, baseline: baseline(p) });
     key.gateId = id;
-    try { opm.updateNote(id, { expression: p.config.expression }); }
+    try {
+      opm.updateNote(id, { expression: p.config.expression, ...controlsFor(p, key.controls, 0) });
+    }
     catch (error) {
       const gate = gates.get(id);
       if (gate) release(id, gate);
@@ -174,13 +233,18 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       if (old) release(...old);
       throw error;
     }
-    if (old && p.config.legato && Math.abs(target.note - old[1].anchor) <= 48) {
+    const offset = old ? target.note - old[1].anchor : 0;
+    const pitch = offset + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0);
+    if (old && p.config.legato && Math.abs(pitch) <= 48) {
       const generation = epoch;
+      const controls = retargetControls(p, old[1], target, offset);
       const previous = old[1].key === null ? undefined : p.keys.get(old[1].key);
       if (previous) previous.gateId = null;
       old[1].key = target.key;
       target.gateId = old[0];
-      try { opm.updateNote(old[0], { pitch: target.note - old[1].anchor, glide: p.config.glide }); }
+      old[1].offset = offset;
+      old[1].controls = target.controls;
+      try { opm.updateNote(old[0], controls); }
       catch (error) { release(...old); removeKey(p, target.key); throw error; }
       if (generation !== epoch || old[1].releasing || !gates.has(old[0])) return;
       p.selected = target.key;
@@ -254,6 +318,8 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       if (input.priority !== 'last' && input.priority !== 'high' && input.priority !== 'low') throw new TypeError('priority must be last, high or low');
       config.priority = input.priority;
     }
+    if (Object.hasOwn(input, 'voiceLimit')) config.voiceLimit = number(input.voiceLimit, 1, 32, 'voiceLimit', true);
+    if (Object.hasOwn(input, 'voicePriority')) config.voicePriority = number(input.voicePriority, 0, 127, 'voicePriority', true);
     for (const name of ['glide', 'pan', 'expression'] as const) if (Object.hasOwn(input, name)) {
       config[name] = number(input[name], name === 'pan' ? -1 : 0, name === 'glide' ? 10 : 1, name);
     }
@@ -271,8 +337,40 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     } catch (error) { p.config = previous; throw error; }
   }
   return {
-    configurePart(index, input) { configure(part(index), sequenceOwnData(input, ['voice', 'mode', 'legato', 'priority', 'glide', 'pan', 'expression'], [], 'part options')); },
+    configurePart(index, input) { configure(part(index), sequenceOwnData(input, ['voice', 'mode', 'legato', 'priority', 'glide', 'pan', 'expression', 'voiceLimit', 'voicePriority'], [], 'part options')); },
     updatePart(index, input) { configure(part(index), sequenceOwnData(input, ['glide', 'pan', 'expression'], [], 'part controls')); },
+    updateKey(index, id, input) {
+      const p = part(index);
+      number(id, 1, Number.MAX_SAFE_INTEGER, 'key', true);
+      const controls = validateNoteControls(input);
+      const key = p.keys.get(id);
+      if (!key) return false;
+      const next = { ...key.controls, ...controls };
+      const gate = key.gateId === null ? undefined : gates.get(key.gateId);
+      const snapshot = controlsFor(p, next, gate?.offset ?? 0);
+      key.controls = next;
+      if (gate) {
+        gate.controls = next;
+        updateGate(key.gateId!, gate, snapshot);
+      }
+      return true;
+    },
+    updatePartNotes(index, input) {
+      const p = part(index);
+      const next = { ...p.controls, ...validateNoteControls(input) };
+      const previous = p.controls;
+      const updates: [number, Gate, NoteControls][] = [];
+      p.controls = next;
+      try {
+        for (const [id, gate] of gates) if (gate.part === p) updates.push([id, gate, controlsFor(p, gate.controls, gate.offset)]);
+        for (const key of p.keys.values()) controlsFor(p, key.controls, 0);
+      } catch (error) { p.controls = previous; throw error; }
+      let failure: unknown;
+      for (const [id, gate, controls] of updates) {
+        if (gates.has(id)) try { updateGate(id, gate, controls); } catch (error) { failure ??= error; }
+      }
+      if (failure !== undefined) throw failure;
+    },
     noteOn(index, note, input = {}) {
       const p = part(index);
       if (admitting) throw new Error('Performance admission cannot be reentered');
@@ -281,9 +379,9 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       const velocity = number(rawNote.velocity === undefined ? 1 : rawNote.velocity, 0, 1, 'velocity');
       if (totalKeys >= maxKeys || p.keys.size >= perPart) throw new RangeError('Performance key capacity exceeded');
       if (!Number.isSafeInteger(nextKey)) throw new RangeError('Performance key ID space exhausted');
-      const key: Key = { key: nextKey, note: pitch, velocity, held: true, gateId: null };
+      const key: Key = { key: nextKey, note: pitch, velocity, held: true, gateId: null, controls: {} };
       if (p.config.mode === 'poly') {
-        if (gates.size >= 128) throw new RangeError('Performance gate capacity exceeded; wait for release tails');
+        gateCapacity(p);
       } else capacity(p, selected(p, key));
       p.keys.set(key.key, key);
       totalKeys++;
@@ -343,7 +441,8 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     getPart(index) {
       const p = part(index);
       return Object.freeze({ ...p.config, sustain: p.sustain, selectedKey: p.selected,
-        keys: Object.freeze(Array.from(p.keys.values(), key => Object.freeze({ ...key }))) });
+        keys: Object.freeze(Array.from(p.keys.values(), key => Object.freeze({
+          key: key.key, note: key.note, velocity: key.velocity, held: key.held, gateId: key.gateId }))) });
     },
     dispose() {
       if (disposed) return;

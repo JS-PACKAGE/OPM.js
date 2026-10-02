@@ -1,5 +1,5 @@
 import './worklet-globals.js';
-import { Synth, validateNoteControls } from '../core/synth.js';
+import { Synth, VoiceAdmissionError, validateMaxVoices, validateNoteControls, validateVoicePriority } from '../core/synth.js';
 import { prepareVoice } from '../voices/schema.js';
 import type { NoteControls, NoteOptions, VoiceEndReason, SynthOptions } from '../core/synth.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
@@ -8,7 +8,7 @@ import type { TuningOptions } from '../core/tuning.js';
 
 type RawMessage =
   | { type: 'prepareVoice'; voiceId: unknown; voice: unknown }
-  | { type: 'noteOn'; id: unknown; voice?: unknown; voiceId?: unknown; note: unknown; at: unknown; duration: unknown; velocity?: unknown; pan?: unknown; late?: unknown }
+  | { type: 'noteOn'; id: unknown; voice?: unknown; voiceId?: unknown; note: unknown; at: unknown; duration: unknown; velocity?: unknown; pan?: unknown; voicePriority?: unknown; late?: unknown }
   | { type: 'noteOff'; id: unknown; at?: unknown; cancelControls?: unknown; commandId?: unknown }
   | { type: 'updateNote'; id: unknown; controls: unknown; at?: unknown; commandId?: unknown }
   | { type: 'allNotesOff'; commandId?: unknown }
@@ -31,7 +31,7 @@ const MAX_REGISTERED_VOICES = 128;
 const MAX_DURATION = 60;
 const MESSAGE_FIELDS: Record<RawMessage['type'], readonly [readonly string[], readonly string[]]> = {
   prepareVoice: [['type', 'voiceId', 'voice'], []],
-  noteOn: [['type', 'id', 'note', 'at', 'duration'], ['voice', 'voiceId', 'velocity', 'pan', 'late']],
+  noteOn: [['type', 'id', 'note', 'at', 'duration'], ['voice', 'voiceId', 'velocity', 'pan', 'voicePriority', 'late']],
   noteOff: [['type', 'id'], ['at', 'cancelControls', 'commandId']],
   updateNote: [['type', 'id', 'controls'], ['at', 'commandId']],
   allNotesOff: [['type'], ['commandId']],
@@ -98,11 +98,7 @@ function processorSettings(options: AudioWorkletNodeOptions): [number, SynthOpti
     const field = Object.getOwnPropertyDescriptor(input, key);
     if (!field || !Object.hasOwn(field, 'value')) throw new TypeError(`processorOptions.${key} must be data`);
     if (key === 'maxVoices') {
-      const value: unknown = field.value;
-      if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 8) {
-        throw new RangeError('maxVoices must be an integer in 1..8');
-      }
-      maxVoices = value;
+      maxVoices = validateMaxVoices(field.value);
     } else synthOptions[key] = field.value;
   }
   return [maxVoices, synthOptions as SynthOptions];
@@ -348,6 +344,9 @@ class OPMProcessor extends AudioWorkletProcessor {
     const velocity = Object.hasOwn(data, 'velocity') ? data.velocity : 1;
     const pan = Object.hasOwn(data, 'pan') ? data.pan : 0;
     const late = Object.hasOwn(data, 'late') ? data.late : 'start';
+    let voicePriority: number;
+    try { voicePriority = Object.hasOwn(data, 'voicePriority') ? validateVoicePriority(data.voicePriority) : 0; }
+    catch { this.reject(data.id, 'invalid-note'); return; }
     if (typeof velocity !== 'number' || !Number.isFinite(velocity) || velocity < 0 || velocity > 1 ||
         typeof pan !== 'number' || !Number.isFinite(pan) || pan < -1 || pan > 1 || late !== 'start' && late !== 'drop') {
       this.reject(data.id, 'invalid-note');
@@ -371,7 +370,7 @@ class OPMProcessor extends AudioWorkletProcessor {
     } catch { this.reject(data.id, 'invalid-voice'); return; }
     this.notes.set(data.id, { state: 'pending', startFrame: frame });
     this.insert({ type: 'noteOn', id: data.id, note: data.note as number, voice, frame,
-      options: { velocity, pan }, late, durationFrames });
+      options: { velocity, pan, voicePriority }, late, durationFrames });
     if (end !== null) this.insert({ type: 'noteOff', id: data.id, frame: end, automatic: true });
     this.noteEvent(data.id, 'accepted');
   }
@@ -410,11 +409,11 @@ class OPMProcessor extends AudioWorkletProcessor {
             this.synth!.noteOn(next.voice, next.note, next.id, next.options);
             note.state = 'started';
             this.noteEvent(next.id, 'started');
-          } catch {
-            this.errorCount++;
+          } catch (error) {
+            if (!(error instanceof VoiceAdmissionError)) this.errorCount++;
             this.notes.delete(next.id);
             this.removeEvents(next.id);
-            this.reject(next.id, 'synthesis-error');
+            this.reject(next.id, error instanceof VoiceAdmissionError ? 'priority' : 'synthesis-error');
           }
         } else if (next.type === 'noteOff') this.release(next.id);
         else this.synth!.updateNote(next.id, next.controls);

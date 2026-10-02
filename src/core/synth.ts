@@ -13,7 +13,7 @@ const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symb
 const typedArrayFill = Float32Array.prototype.fill;
 
 export type VoiceEndReason = 'stolen' | 'ended' | 'error' | 'cancelled';
-export interface NoteOptions { velocity?: number; pan?: number }
+export interface NoteOptions { velocity?: number; pan?: number; voicePriority?: number }
 export interface NoteControls {
   pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number; ramp?: number;
   operatorLevels?: readonly [number, number, number, number];
@@ -28,6 +28,52 @@ export interface SynthOptions {
   tuning?: TuningOptions;
   stealing?: 'oldest' | 'release-first' | 'quietest';
   quality?: QualityProfile;
+}
+
+/** A valid note could not displace any higher-priority logical voice. */
+export class VoiceAdmissionError extends Error {
+  constructor() {
+    super('All active voices have higher voicePriority');
+    this.name = 'VoiceAdmissionError';
+  }
+}
+
+export function validateMaxVoices(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 32) {
+    throw new RangeError('maxVoices must be an integer in 1..32');
+  }
+  return value;
+}
+
+export function validateVoicePriority(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 127) {
+    throw new RangeError('voicePriority must be an integer in 0..127');
+  }
+  return value;
+}
+
+/** Snapshot note admission controls without invoking inherited values/accessors. */
+function readNoteOptions(input: NoteOptions): Required<NoteOptions> {
+  if (!input || typeof input !== 'object' || Array.isArray(input) ||
+      (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
+    throw new TypeError('note options must be a plain data object');
+  }
+  const result = { velocity: 1, pan: 0, voicePriority: 0 };
+  for (const key of Reflect.ownKeys(input)) {
+    if (key !== 'velocity' && key !== 'pan' && key !== 'voicePriority') throw new TypeError('note options has an unknown field');
+    const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
+    if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`note options.${key} must be data`);
+    const value: unknown = descriptor.value;
+    if (key === 'voicePriority') result.voicePriority = validateVoicePriority(value);
+    else {
+      const min = key === 'pan' ? -1 : 0;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > 1) {
+        throw new RangeError(`${key} must be finite and in ${min}..1`);
+      }
+      result[key] = value;
+    }
+  }
+  return result;
 }
 
 const CONTROL_LIMITS = Object.freeze({
@@ -99,7 +145,7 @@ export function validateNoteControls(input: NoteControls): NoteControls {
 }
 
 interface ActiveVoice {
-  id: number; sequence: number; note: number; voice: PreparedVoice; graph: AlgorithmGraph;
+  id: number; sequence: number; note: number; voicePriority: number; voice: PreparedVoice; graph: AlgorithmGraph;
   baseIncrements: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
   attackStep: Float64Array; decayStep: Float64Array; releaseStep: Float64Array; gains: Float64Array;
   attackTimes: Float64Array; decayTimes: Float64Array; releaseTimes: Float64Array;
@@ -137,10 +183,11 @@ import { preparedVoiceValue } from '../voices/normalize.js';
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 
 const HEADROOM = 0.7;
-const MAX_VOICES = 8;
+const DEFAULT_MAX_VOICES = 8;
+const MAX_FADES = 8;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
 const DB_TO_LOG_GAIN = Math.LN10 / 20;
-const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0 });
+const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
 const DEFAULT_TUNING = normalizeTuning({});
 const EXPRESSION_RAMP = 1;
 const PAN_RAMP = 2;
@@ -197,7 +244,7 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
 
 function createVoiceSlot(oversample: number): ActiveVoice {
   return {
-    id: 0, sequence: 0, note: 0, voice: null!, graph: ALGORITHMS[0],
+    id: 0, sequence: 0, note: 0, voicePriority: 0, voice: null!, graph: ALGORITHMS[0],
     baseIncrements: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
     sustainDb: new Float64Array(4), sustainGain: new Float64Array(4),
     attackStep: new Float64Array(4), decayStep: new Float64Array(4), releaseStep: new Float64Array(4),
@@ -451,13 +498,11 @@ export class Synth {
   /** @internal */
   declare stealing: NonNullable<SynthOptions['stealing']>;
 
-  constructor(sampleRate: number, maxVoices = MAX_VOICES, options: SynthOptions = {}) {
+  constructor(sampleRate: number, maxVoices = DEFAULT_MAX_VOICES, options: SynthOptions = {}) {
     if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) {
       throw new RangeError('sampleRate must be finite and in 8000..192000');
     }
-    if (!Number.isInteger(maxVoices) || maxVoices < 1 || maxVoices > MAX_VOICES) {
-      throw new RangeError('maxVoices must be an integer in 1..8');
-    }
+    validateMaxVoices(maxVoices);
     const settings = readSynthOptions(options);
     this.quality = settings.quality ?? 'standard';
     this.oversample = qualityOversample(this.quality);
@@ -468,7 +513,7 @@ export class Synth {
     this.maxVoices = maxVoices;
     this.voices = [];
     this.fades = [];
-    this.freeVoices = Array.from({ length: maxVoices + MAX_VOICES + 1 }, () => createVoiceSlot(this.oversample));
+    this.freeVoices = Array.from({ length: maxVoices + MAX_FADES + 1 }, () => createVoiceSlot(this.oversample));
     this.terminalIds = new Float64Array(maxVoices);
     this.terminalErrors = new Uint8Array(maxVoices);
     this.rendering = false;
@@ -515,42 +560,44 @@ export class Synth {
   }
 
   /** @internal */
-  stealingIndex(): number {
-    let chosen = 0;
-    let quietest = this.stealing === 'quietest' ? voiceAudibility(this.voices[0], this.sampleRate) : 0;
-    for (let index = 1; index < this.voices.length; index++) {
-      const candidate = this.voices[index], current = this.voices[chosen];
-      let preferred = candidate.sequence < current.sequence;
-      if (this.stealing === 'release-first') {
-        const released = candidate.releaseTime >= 0, currentReleased = current.releaseTime >= 0;
-        if (released !== currentReleased) preferred = released;
-      } else if (this.stealing === 'quietest') {
-        const audibility = voiceAudibility(candidate, this.sampleRate);
-        if (audibility !== quietest) preferred = audibility < quietest;
-        if (preferred) quietest = audibility;
+  stealingIndex(voicePriority: number): number {
+    let chosen = -1;
+    let quietest = 0;
+    for (let index = 0; index < this.voices.length; index++) {
+      const candidate = this.voices[index];
+      if (candidate.voicePriority > voicePriority) continue;
+      const current = chosen < 0 ? undefined : this.voices[chosen];
+      let preferred = !current || candidate.voicePriority < current.voicePriority;
+      let audibility = 0;
+      if (this.stealing === 'quietest') audibility = voiceAudibility(candidate, this.sampleRate);
+      if (current && candidate.voicePriority === current.voicePriority) {
+        preferred = candidate.sequence < current.sequence;
+        if (this.stealing === 'release-first') {
+          const released = candidate.releaseTime >= 0, currentReleased = current.releaseTime >= 0;
+          if (released !== currentReleased) preferred = released;
+        } else if (this.stealing === 'quietest' && audibility !== quietest) preferred = audibility < quietest;
       }
-      if (preferred) chosen = index;
+      if (preferred) {
+        chosen = index;
+        quietest = audibility;
+      }
     }
     return chosen;
   }
 
 
-  noteOn(input: VoiceInput | PreparedVoice, note: number, id?: number, { velocity = 1, pan = 0 }: NoteOptions = DEFAULT_NOTE_OPTIONS): number {
+  noteOn(input: VoiceInput | PreparedVoice, note: number, id?: number, options: NoteOptions = DEFAULT_NOTE_OPTIONS): number {
+    const { velocity, pan, voicePriority } = readNoteOptions(options);
     const voice = preparedVoiceValue(input);
     if (typeof note !== 'number' || !Number.isFinite(note) || note < 0 || note > 127) {
       throw new RangeError('note must be finite and in 0..127');
     }
-    if (typeof velocity !== 'number' || !Number.isFinite(velocity) || velocity < 0 || velocity > 1 ||
-        typeof pan !== 'number' || !Number.isFinite(pan) || pan < -1 || pan > 1) {
-      throw new RangeError('velocity must be in 0..1 and pan in -1..1');
-    }
-    if (id === undefined) {
-      if (this.nextId > Number.MAX_SAFE_INTEGER) throw new RangeError('Note ID space exhausted');
-      id = this.nextId++;
-    } else if (!Number.isSafeInteger(id) || id <= 0) {
-      throw new RangeError('id must be a positive safe integer');
-    }
+    if (id === undefined && this.nextId > Number.MAX_SAFE_INTEGER) throw new RangeError('Note ID space exhausted');
+    if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0)) throw new RangeError('id must be a positive safe integer');
     for (const active of this.voices) if (active.id === id) throw new RangeError('id already active');
+    const stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
+    if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
+    if (id === undefined) id = this.nextId++;
     if (id >= this.nextId) this.nextId = id + 1;
     // Initialize the spare before changing admission state. No slot can be reused
     // while it is still active or fading, including during terminal callbacks.
@@ -583,6 +630,7 @@ export class Synth {
       decayStep[i] = decay === 0 ? 1 : 10 ** (sustainDb[i] / (20 * decay * rate));
     }
     active.id = id;
+    active.voicePriority = voicePriority;
     active.note = note;
     active.sequence = this.sequence++;
     active.voice = voice;
@@ -636,11 +684,11 @@ export class Synth {
     active.releaseTime = active.releaseEnd = -1;
     (this as MutableCounters).lastStolenId = null;
     if (this.voices.length >= this.maxVoices) {
-      const stolen = removeAt(this.voices, this.stealingIndex());
+      const stolen = removeAt(this.voices, stolenIndex);
       (this as MutableCounters).lastStolenId = stolen.id;
       // Preserve the old DSP state. Exhausted tails collapse into the existing
       // bounded spill ramp, then recycle before callbacks can admit more notes.
-      if (this.fades.length === MAX_VOICES) {
+      if (this.fades.length === MAX_FADES) {
         const retired = removeAt(this.fades, 0);
         const gain = retired.lastFadeGain!;
         this.spillLeft += retired.lastSample * retired.leftGain * gain;
@@ -702,8 +750,8 @@ export class Synth {
     const active = this.voices.pop()!;
     const id = active.id;
     this.freeVoices.push(active);
-    // At most eight stack-local IDs survive recycling. Unlike shared scratch
-    // storage, they cannot be overwritten by noteOn/panic inside a callback.
+    // At most maxVoices (32) stack-local IDs survive recycling. Unlike shared
+    // scratch storage, they cannot be overwritten by reentrant callbacks.
     this.cancelVoices();
     this.ended(id, 'cancelled');
   }

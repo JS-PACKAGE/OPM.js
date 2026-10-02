@@ -19,6 +19,7 @@ export interface RenderNoteOptions extends SynthOptions {
   duration?: number;
   velocity?: number;
   pan?: number;
+  voicePriority?: number;
   sampleRate?: number;
 }
 
@@ -35,7 +36,7 @@ import { validateVoice, bounded } from '../voices/schema.js';
 import { Synth, operatorDuration } from './synth.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
-export { Synth, normalizeVoice, prepareVoice, validateNoteControls } from './synth.js';
+export { Synth, VoiceAdmissionError, normalizeVoice, prepareVoice, validateMaxVoices, validateNoteControls, validateVoicePriority } from './synth.js';
 export { encodeWav, createWavEncoder } from './wav.js';
 export const HEADROOM = 0.7; // -3.098 dB, with margin for Float32 rounding.
 export const OVERSAMPLE = 4;
@@ -44,7 +45,7 @@ export const OVERSAMPLE = 4;
 // The returned buffer includes the longest release and a short filter tail.
 export function renderNote(options: RenderNoteOptions): RenderResult;
 export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100,
-  mixGain, tuning, stealing, quality }: Partial<RenderNoteOptions> = {}): RenderResult {
+  mixGain, tuning, stealing, quality, voicePriority = 0 }: Partial<RenderNoteOptions> = {}): RenderResult {
   voice = validateVoice(voice);
   sampleRate = sampleRateValue(sampleRate);
   note = bounded(note, 0, 127, 'note');
@@ -64,7 +65,7 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan
   const left = new Float32Array(length);
   const right = new Float32Array(length);
   if (duration > 0) {
-    const id = synth.noteOn(voice, note, undefined, { velocity, pan });
+    const id = synth.noteOn(voice, note, undefined, { velocity, pan, voicePriority });
     // Gate changes occur on output-frame boundaries, exactly as in the worklet.
     const gateFrame = Math.ceil(duration * sampleRate);
     synth.render(left, right, 0, gateFrame);

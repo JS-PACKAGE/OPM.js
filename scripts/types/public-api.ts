@@ -1,4 +1,6 @@
-import { CommandRejectedError, OPM, createLookaheadScheduler, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker } from 'opm.js';
+import { CommandRejectedError, OPM, createLookaheadScheduler, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker, createArrangement, createMidiAdapter, requestMidiAccess, quantizeBeat, swingBeat, swingBeatEvents, VERSION } from 'opm.js';
+import type { Arrangement, ArrangementLayer, MidiAdapter, MidiAccessLike, WorkerRenderPhaseStatus, TempoPoint } from 'opm.js';
+import { copyAssets, checkDeployment } from 'opm.js/tools/assets.js';
 import type { CommandEvent, CommandWaitOptions, NoteControls, OPMEvent, PitchEnvelope, VoiceInput, SequenceEvent, TuningOptions, SequenceStream, MusicalTransport, Performance } from 'opm.js';
 import { Synth, renderNote, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, normalizeTuning, tuningFrequency, lfoValue, encodeWav, createWavEncoder, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice } from 'opm.js/core';
 import type { PreparedVoice, SequenceCapacity, ChunkedSequenceOptions, ChunkedSequenceRender, SequenceChunk, QualityProfile, WavFormat, WavEncoder } from 'opm.js/core';
@@ -214,3 +216,33 @@ const bundledBank: Map<string, FrozenVoice> = parseVoiceBank(examples);
 const schemaVersion: number = voiceSchema.properties.version.const;
 void [bundledBank, schemaVersion];
 void [frequency, lfo, sequenceAudio, pitchEnvelope];
+
+// 1.8 surfaces: voice priority, adaptive arrangement, expressive Performance, optional MIDI and asset tooling.
+const prioritized = new OPM({ maxVoices: 32 }).playNote({ note: 60, voicePriority: 100 });
+const wideSynth = new Synth(48000, 32);
+wideSynth.noteOn(complete, 60, undefined, { voicePriority: 5 });
+const adaptiveLayer: ArrangementLayer = { name: 'pad', length: 16, voicePriority: 10, events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 48, voicePriority: 3 }] };
+declare const adaptiveOPM: OPM;
+const adaptive: Arrangement = createArrangement(adaptiveOPM, { layers: [adaptiveLayer], sections: [{ name: 'explore', layers: ['pad'] }], initialSection: 'explore' });
+const boundary: number = adaptive.switchSection('explore', { quantize: 'bar', preserveNotes: true });
+const rampMap: TempoPoint[] = [{ beat: 0, bpm: 90, curve: 'linear', endBpm: 110 }, { beat: 8, bpm: 120 }];
+const gridded: number = quantizeBeat(1.2, 0.5, 'next') + swingBeat(0.5, 0.5, 0.6) + beatsToSeconds(4, rampMap);
+declare const performanceHost: ReturnType<typeof createPerformance>;
+performanceHost.configurePart(0, { voice: 'brass', voiceLimit: 4, voicePriority: 9 });
+const keyUpdated: boolean = performanceHost.updateKey(0, 1, { feedback: 3, operatorRatios: [1, 2, 3, 4] });
+performanceHost.updatePartNotes(0, { modulation: 1.5 });
+declare const midiAccess: MidiAccessLike;
+const midiAdapter: MidiAdapter = createMidiAdapter(performanceHost, midiAccess, { parts: 2, pitchBendRange: 7 });
+const midiPromise: Promise<MidiAccessLike> = requestMidiAccess();
+const phaseCallback = (status: WorkerRenderPhaseStatus) => status.phase;
+const workerOptions = { sink: { write() {} }, startupTimeoutMs: 5000, phaseDiagnostics: true, onPhase: phaseCallback };
+const assetResult = copyAssets({ destination: 'public/opm-1.8.0' }).then(deployment => deployment.reused);
+const assetCheck = checkDeployment('https://example.test/opm/', { timeoutMs: 5000 }).then(check => check.files);
+void [prioritized, wideSynth, adaptive, boundary, gridded, keyUpdated, midiAdapter, midiPromise, workerOptions, renderSequenceInWorker, assetResult, assetCheck, swingBeatEvents, VERSION];
+// @ts-expect-error voice priority is numeric
+new OPM().playNote({ note: 60, voicePriority: 'high' });
+// @ts-expect-error ramp curves are limited to step and linear
+const badCurve: TempoPoint = { beat: 0, bpm: 90, curve: 'smooth' };
+// @ts-expect-error per-key controls cannot use string values
+performanceHost.updateKey(0, 1, { feedback: 'strong' });
+void badCurve;

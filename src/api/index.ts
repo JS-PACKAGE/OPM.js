@@ -2,7 +2,7 @@ import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import { MAX_BANK_BYTES, MAX_BANK_VOICES, parseVoiceBank, validateVoice } from '../voices/schema.js';
 import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from '../voices/schema.js';
-import { validateNoteControls } from '../core/synth.js';
+import { validateNoteControls, validateMaxVoices, validateVoicePriority } from '../core/synth.js';
 import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import { normalizeTuning } from '../core/tuning.js';
 import type { TuningOptions } from '../core/tuning.js';
@@ -12,12 +12,17 @@ export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';
 export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
-export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
-export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat } from './transport.js';
+export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat, swingBeatEvents } from './transport.js';
+export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat, BeatQuantization } from './transport.js';
+export { createArrangement } from './arrangement.js';
+export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
+export { createMidiAdapter, requestMidiAccess } from './midi.js';
+export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike } from './midi.js';
+export { VERSION } from '../version.js';
 export { createPerformance } from './performance.js';
 export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
 export { renderSequenceInWorker } from './render-worker.js';
-export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult } from './render-worker.js';
+export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult, WorkerRenderPhase, WorkerRenderPhaseStatus, WorkerRenderPhaseDiagnostics } from './render-worker.js';
 
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
@@ -71,7 +76,7 @@ export interface OPMOptions {
   stealing?: SynthOptions['stealing'];
   /** Immutable synthesis profile; standard preserves the default sound. */
   quality?: QualityProfile;
-  /** Logical polyphony, an integer in 1..8; default 8. */
+  /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
   maxVoices?: number;
   /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
   interruption?: 'cancel' | 'preserve';
@@ -86,6 +91,8 @@ interface PlayNoteBase {
   duration?: number | null;
   velocity?: number;
   pan?: number;
+  /** Admission importance, integer 0..127; larger values cannot be stolen by lower-priority notes. Default 0. */
+  voicePriority?: number;
 }
 export type PlayNoteOptions = PlayNoteBase & (
   /** Relative delay in seconds; cannot be combined with at. */
@@ -346,9 +353,7 @@ export class OPM {
     if (onEvent !== undefined && typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
     if (stealing !== undefined && !['oldest', 'release-first', 'quietest'].includes(stealing)) throw new RangeError('Invalid stealing policy');
     if (quality !== undefined && quality !== 'eco' && quality !== 'standard' && quality !== 'high') throw new RangeError('Invalid quality profile');
-    if (maxVoices !== undefined && (typeof maxVoices !== 'number' || !Number.isInteger(maxVoices) || maxVoices < 1 || maxVoices > 8)) {
-      throw new RangeError('maxVoices must be an integer in 1..8');
-    }
+    if (maxVoices !== undefined) validateMaxVoices(maxVoices);
     if (interruption !== undefined && interruption !== 'cancel' && interruption !== 'preserve') throw new RangeError('Invalid interruption policy');
     if (workletUrl !== undefined && typeof workletUrl !== 'string' && !(workletUrl instanceof URL)) {
       throw new TypeError('workletUrl must be a string or URL');
@@ -687,7 +692,7 @@ export class OPM {
 
   playNote(options: PlayNoteOptions): number {
     const node = this._requireNode();
-    const data = ownData(options, ['voice', 'note', 'time', 'at', 'late', 'duration', 'velocity', 'pan'], 'note options');
+    const data = ownData(options, ['voice', 'note', 'time', 'at', 'late', 'duration', 'velocity', 'pan', 'voicePriority'], 'note options');
     const voice = data.voice === undefined ? 'brass' : data.voice;
     const note = data.note;
     const duration = data.duration === undefined ? null : data.duration;
@@ -704,6 +709,7 @@ export class OPM {
     }
     if (typeof velocity !== 'number' || !Number.isFinite(velocity) || velocity < 0 || velocity > 1) throw new RangeError('velocity must be in 0..1');
     if (typeof pan !== 'number' || !Number.isFinite(pan) || pan < -1 || pan > 1) throw new RangeError('pan must be in -1..1');
+    const voicePriority = Object.hasOwn(data, 'voicePriority') ? validateVoicePriority(data.voicePriority) : 0;
     if (late !== 'start' && late !== 'drop') throw new TypeError('late must be start or drop');
     const endFrame = Math.max(Math.round(at * this.context!.sampleRate), Math.round(this.context!.currentTime * this.context!.sampleRate)) +
       (duration === null ? 0 : Math.max(1, Math.ceil(duration * this.context!.sampleRate)));
@@ -740,7 +746,7 @@ export class OPM {
       this._voiceIds.set(key, voiceId);
     }
     const id = this.nextId++;
-    node.port.postMessage({ type: 'noteOn', id, voiceId, note, at, duration, velocity, pan, late });
+    node.port.postMessage({ type: 'noteOn', id, voiceId, note, at, duration, velocity, pan, voicePriority, late });
     return id;
   }
 
@@ -1021,7 +1027,7 @@ export function createLookaheadScheduler(
         for (let index = 0; index < notes.length; index++) {
           const descriptor = Object.getOwnPropertyDescriptor(notes, String(index));
           if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Lookahead notes must be data array entries');
-          const note = ownData(descriptor.value, ['voice', 'note', 'at', 'late', 'duration', 'velocity', 'pan'], 'lookahead note');
+          const note = ownData(descriptor.value, ['voice', 'note', 'at', 'late', 'duration', 'velocity', 'pan', 'voicePriority'], 'lookahead note');
           if (typeof note.at !== 'number' || !Number.isFinite(note.at) || note.at < from || note.at >= to ||
               typeof note.duration !== 'number' || !Number.isFinite(note.duration) || note.duration <= 0 || note.duration > 60) {
             throw new RangeError('Lookahead notes require an at inside the window and duration in (0, 60]');

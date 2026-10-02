@@ -6,7 +6,7 @@ import type { VoiceInput } from '../src/voices/schema.js';
 import type { QualityProfile } from '../src/core/synth.js';
 import type { OPMProcessor } from '../src/worklet/processor.js';
 
-interface Diagnostics { errors: number; activeVoices: number; pendingEvents: number; rejectedNotes: number }
+interface Diagnostics { errors: number; activeVoices: number; pendingEvents: number; rejectedNotes: number; voiceLimit?: number }
 interface BenchmarkRun { (): void; diagnostics(): Diagnostics }
 
 function integerSetting(name: string, fallback: number, min: number, max: number): number {
@@ -31,11 +31,19 @@ const left = new Float32Array(blockSize);
 const right = new Float32Array(blockSize);
 const steady = { ...brass, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } };
 
-function realtime(count: number, patch: VoiceInput = brass, quality: QualityProfile = 'standard'): BenchmarkRun {
-  const synth = new Synth(sampleRate, 8, { quality });
-  for (let i = 0; i < count; i++) synth.noteOn(patch, 48 + i * 3);
+function realtime(count: number, patch: VoiceInput = brass, quality: QualityProfile = 'standard', maxVoices = 8): BenchmarkRun {
+  const synth = new Synth(sampleRate, maxVoices, { quality });
+  for (let i = 0; i < count; i++) synth.noteOn(patch, 48 + i * 3 % 60);
   const run = () => synth.render(left, right);
-  run.diagnostics = () => ({ errors: synth.errorCount, activeVoices: synth.voices.length, pendingEvents: 0, rejectedNotes: 0 });
+  run.diagnostics = () => ({ errors: synth.errorCount, activeVoices: synth.voices.length, pendingEvents: 0, rejectedNotes: 0, voiceLimit: maxVoices });
+  return run;
+}
+/** Independent engines render sequentially, as separate AudioWorklet processors would on one audio thread. */
+function engines(count: number, voices: number): BenchmarkRun {
+  const runs = Array.from({ length: count }, () => realtime(voices));
+  const run = () => { for (const item of runs) item(); };
+  run.diagnostics = () => ({ errors: runs.reduce((sum, item) => sum + item.diagnostics().errors, 0),
+    activeVoices: runs.reduce((sum, item) => sum + item.diagnostics().activeVoices, 0), pendingEvents: 0, rejectedNotes: 0, voiceLimit: count * 8 });
   return run;
 }
 
@@ -104,6 +112,11 @@ const cases: [string, BenchmarkRun, boolean?][] = [
   ['quality comparison: eco, eight voices + LFO', realtime(8, brass, 'eco'), true],
   ['quality comparison: standard, eight voices + LFO', realtime(8, brass, 'standard'), true],
   ['quality comparison: high, eight voices + LFO', realtime(8, brass, 'high'), true],
+  ['opt-in logical polyphony: 16 voices + LFO', realtime(16, brass, 'standard', 16), true],
+  ['opt-in logical polyphony: 32 voices + LFO', realtime(32, brass, 'standard', 32), true],
+  ['opt-in logical polyphony: 32 voices, eco', realtime(32, brass, 'eco', 32), true],
+  ['independent engines: two buses x eight voices', engines(2, 8), true],
+  ['independent engines: four buses x eight voices', engines(4, 8), true],
 ];
 const results = [];
 let failed = false;
@@ -119,7 +132,7 @@ for (const [scenario, run, reportOnly = false] of cases) {
     if (elapsed > deadlineMs) missedDeadlines++;
   }
   const diagnostics = run.diagnostics();
-  if (diagnostics.errors !== 0 || diagnostics.rejectedNotes !== 0 || diagnostics.activeVoices > 8 ||
+  if (diagnostics.errors !== 0 || diagnostics.rejectedNotes !== 0 || diagnostics.activeVoices > (diagnostics.voiceLimit ?? 8) ||
       diagnostics.pendingEvents > 256 || !left.every(Number.isFinite) || !right.every(Number.isFinite)) {
     throw new Error(`${scenario} produced invalid workload diagnostics: ${JSON.stringify(diagnostics)}`);
   }

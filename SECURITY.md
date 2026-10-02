@@ -103,7 +103,7 @@ Create download URLs only for successfully encoded bytes. Replace/revoke obsolet
 
 - Await `start()` in a user interaction and monitor `onEvent` or independent `subscribe()` listeners. A note ID is not admission; handle rejections, terminal states and processor errors. `waitForCommand()` is bounded, timed/cancellable and resolves admission only, not future execution; reset/close/failure invalidate pending waits.
 - The worklet bounds pending events and tracked note IDs to 256 each. Schedule bounded batches rather than flooding the port with distant-future events.
-- Each synth limits logical voices to configured 1–8, with up to eight bounded stealing fades. Immutable eco/standard/high profiles change fixed internal sampling/filter work, not these bounds. These limits do not constrain an attacker creating many instances.
+- Each synth limits logical voices to configured 1–32 (default eight), with up to eight bounded stealing fades. Immutable eco/standard/high profiles change fixed internal sampling/filter work, not these bounds. These limits do not constrain an attacker creating many instances.
 - DSP state and terminal notification buffers are preallocated. Ended/error callbacks run after stable frame traversal; callback-admitted replacements start next frame, and recursive rendering rejects rather than extending a frame's work.
 - Named/prepared worklet registrations use 128 content-keyed LRU slots. Replacement revalidates before committing; queued/active notes own immutable old snapshots. Raw objects still validate freshly.
 - Absolute start/stop/control times are safely framed with a 60-second future horizon; stop precedes onset and controls. Command rejection is correlated by commandId; accepted means admission, not guaranteed future execution. Global allNotesOff/panic bypass full scheduled queues. Bound sequences and lookahead rather than flooding messages.
@@ -171,7 +171,7 @@ A security review is required before:
 
 **C. DSP loop safety**
 - [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (`Synth.errorCount` or `renderNote()`'s `diagnostics.errors`)
-- [ ] Fixed work ceiling: at most eight logical voices/eight fades, deterministic selected stealing policy, authenticated native output lengths and numeric ranges before work
+- [ ] Fixed work ceiling: configured 1–32 logical voices (default eight) and at most eight fades, deterministic priority-aware admission/stealing, authenticated native output lengths and numeric ranges before work
 - [ ] Slot reset/recycling preserves identity and numerical state under callback admissions; terminal callbacks cannot replenish a frame's traversal or recursively render it
 - [ ] Determinism and chunk-independent output preserved; live/offline LFO, timing, filtering, stereo, velocity, and saturation parity
 - [ ] Deadline statistics exclude warmup and expose p95/p99/worst/misses without universal performance promises; spectral acceptance is controlled, not arbitrary FM alias-free proof

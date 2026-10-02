@@ -4,11 +4,11 @@ import type { SequenceEvent, PreparedSequenceEvent } from '../core/sequence.js';
 import type { NoteControls } from '../core/synth.js';
 import {
   MAX_TRANSPORT_BEATS, transportArray, transportNumber, normalizeTempoMap, normalizeTimeSignature,
-  tempoSeconds, tempoBeat, beatToBarBeat,
+  tempoSeconds, tempoBeat, beatToBarBeat, replaceTempoFrom, swingBeat,
 } from '../core/transport.js';
 import type { TempoPoint, TimeSignature, BarBeat } from '../core/transport.js';
-export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from '../core/transport.js';
-export type { TempoPoint, TimeSignature, BarBeat } from '../core/transport.js';
+export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat } from '../core/transport.js';
+export type { TempoPoint, TimeSignature, BarBeat, BeatQuantization } from '../core/transport.js';
 
 export type BeatSequenceEvent = SequenceEvent extends infer E ? E extends SequenceEvent ? Omit<E, 'time'> & { beat: number } : never : never;
 export interface TransportLoop { enabled: boolean; from: number; to: number }
@@ -125,6 +125,40 @@ function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoP
   return result;
 }
 
+/** Internal shared preparation: beat durations remain beats until admitted to the audio clock. */
+export function prepareBeatEvents(opm: OPM, beatEvents: readonly BeatSequenceEvent[]) {
+  const input = transportArray(beatEvents, MAX_LONG_SEQUENCE_EVENTS, 'beat events').map(event => {
+    const type = event !== null && typeof event === 'object' ? Object.getOwnPropertyDescriptor(event, 'type')?.value : undefined;
+    const keys = type === 'note' ? ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
+      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : type === 'stop' ? ['type', 'id', 'beat'] : [];
+    const data = sequenceOwnData(event, keys, ['type', 'id', 'beat'], 'beat event');
+    const beat = transportNumber(data.beat, 0, MAX_TRANSPORT_BEATS, 'event beat');
+    if (data.type === 'note') transportNumber(data.duration, 0, MAX_TRANSPORT_BEATS - beat, 'note duration');
+    const { beat: _beat, ...rest } = data;
+    return { ...rest, time: beat } as unknown as SequenceEvent;
+  });
+  return prepareLongSequence(input, { voices: opm.voices });
+}
+
+/** Swing note starts AND ends, so adjacent gates retain their musical ordering. */
+export function swingBeatEvents(events: readonly BeatSequenceEvent[], subdivision = 0.5, ratio = 2 / 3): BeatSequenceEvent[] {
+  swingBeat(0, subdivision, ratio);
+  return transportArray(events, MAX_LONG_SEQUENCE_EVENTS, 'beat events').map(event => {
+    const type = event !== null && typeof event === 'object' ? Object.getOwnPropertyDescriptor(event, 'type')?.value : undefined;
+    const keys = type === 'note' ? ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
+      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : ['type', 'id', 'beat'];
+    const data = sequenceOwnData(event, keys, ['type', 'id', 'beat'], 'beat event');
+    const beat = transportNumber(data.beat, 0, MAX_TRANSPORT_BEATS, 'event beat');
+    const swung = swingBeat(beat, subdivision, ratio);
+    if (type === 'note') {
+      const duration = transportNumber(data.duration, 0, MAX_TRANSPORT_BEATS - beat, 'note duration');
+      return { ...data, beat: swung, duration: swingBeat(beat + duration, subdivision, ratio) - swung } as unknown as BeatSequenceEvent;
+    }
+    if (type !== 'control' && type !== 'stop') throw new TypeError('invalid beat event type');
+    return { ...data, beat: swung } as unknown as BeatSequenceEvent;
+  });
+}
+
 /** Restartable beat transport. Only owned IDs are ever stopped; the shared engine is not closed. */
 export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent[], options: TransportOptions = {}): MusicalTransport {
   const config = sequenceOwnData(options, ['bpm', 'tempoMap', 'timeSignature', 'loop', 'horizon', 'interval', 'maxSlots', 'onError'], [], 'transport options');
@@ -137,15 +171,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
   if (!Number.isInteger(maxSlots)) throw new RangeError('maxSlots must be an integer');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
   const onError = config.onError as ((error: Error) => void) | undefined;
-  const input = transportArray(beatEvents, MAX_LONG_SEQUENCE_EVENTS, 'beat events').map(event => {
-    const type = event !== null && typeof event === 'object' ? Object.getOwnPropertyDescriptor(event, 'type')?.value : undefined;
-    const keys = type === 'note' ? ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan']
-      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : type === 'stop' ? ['type', 'id', 'beat'] : [];
-    const data = sequenceOwnData(event, keys, ['type', 'id', 'beat'], 'beat event');
-    const { beat, ...rest } = data;
-    return { ...rest, time: beat } as unknown as SequenceEvent;
-  });
-  const score = prepareLongSequence(input, { voices: opm.voices });
+  const score = prepareBeatEvents(opm, beatEvents);
   const tracks = new Map<number, Track>();
   for (const event of score.events) if (event.type === 'note') tracks.set(event.id, { note: event, end: event.time + event.duration, controls: [] });
   for (const event of score.events) {
@@ -328,7 +354,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
             admitting = true;
             let id: number;
             const token = generation;
-            try { id = opm.playNote({ voice: note.voice, note: note.note, velocity: note.velocity, pan: note.pan, duration: null, at, late: 'drop' }); }
+            try { id = opm.playNote({ voice: note.voice, note: note.note, velocity: note.velocity, pan: note.pan, voicePriority: note.voicePriority, duration: null, at, late: 'drop' }); }
             finally { admitting = false; }
             if (terminal === id) throw new Error('Transport onset rejected during admission');
             if (token !== generation || state !== 'running') { opm.stop(id); return; }
@@ -403,9 +429,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
       ensure();
       transportNumber(bpm, 1, 1000, 'bpm');
       const beat = current();
-      const points = map.filter(point => point.beat < beat).map(point => ({ ...point }));
-      points.push({ beat, bpm });
-      edit(normalizeTempoMap(points), loop, beat);
+      edit(replaceTempoFrom(beat, bpm, map), loop, beat);
     },
     setTempoMap(input: readonly TempoPoint[]) { ensure(); edit(normalizeTempoMap(input), loop, current()); },
     setLoop(input: TransportLoop) { ensure(); edit(map, readLoop(input), current()); },

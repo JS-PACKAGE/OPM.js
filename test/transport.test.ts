@@ -2,7 +2,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { OPM } from '../src/api/index.js';
 import type { OPMEvent } from '../src/api/index.js';
-import { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat } from '../src/api/transport.js';
+import { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat } from '../src/api/transport.js';
 import type { BeatSequenceEvent, MusicalTransport } from '../src/api/transport.js';
 import { renderSequence } from '../src/core/index.js';
 import type { VoiceInput } from '../src/voices/schema.js';
@@ -474,4 +474,46 @@ test('eager safety boundaries, detached snapshots, and missed windows are consum
       assert.throws(() => transport.seek(0), /disposed/);
     } finally { transport.dispose(); }
   } finally { await opm.dispose(); }
+});
+
+test('linear tempo ramps integrate analytically, invert exactly and leave step maps unchanged', () => {
+  const ramp = [{ beat: 0, bpm: 60, curve: 'linear' as const }, { beat: 4, bpm: 120 }];
+  // BPM(b) = 60 + 15b, so seconds = 60 * ln(1 + b / 4) / 15.
+  assert.ok(Math.abs(beatsToSeconds(4, ramp) - 4 * Math.LN2) < 1e-12);
+  assert.ok(Math.abs(beatsToSeconds(2, ramp) - 4 * Math.log(1.5)) < 1e-12);
+  for (const beat of [0, 0.25, 1, 3.999, 4, 7]) assert.ok(Math.abs(secondsToBeats(beatsToSeconds(beat, ramp), ramp) - beat) < 1e-9);
+  // Past the final point the last tempo is constant.
+  assert.ok(Math.abs(beatsToSeconds(6, ramp) - (4 * Math.LN2 + 1)) < 1e-12);
+  assert.equal(beatsToSeconds(4, [{ beat: 0, bpm: 120, curve: 'step' }, { beat: 2, bpm: 60 }]), 3);
+  assert.throws(() => normalizeTempoMap([{ beat: 0, bpm: 60, curve: 'linear' }]), /last/);
+  assert.throws(() => normalizeTempoMap([{ beat: 0, bpm: 60, endBpm: 90 }, { beat: 1, bpm: 60 }]), /linear/);
+  assert.throws(() => normalizeTempoMap([{ beat: 0, bpm: 60, curve: 'smooth' as never }, { beat: 1, bpm: 60 }]), /step or linear/);
+  const ended = [{ beat: 0, bpm: 60, curve: 'linear' as const, endBpm: 90 }, { beat: 4, bpm: 30 }];
+  assert.ok(Math.abs(beatsToSeconds(4, ended) - 60 * Math.log(1.5) / 7.5) < 1e-12);
+});
+
+test('unrepresentable linear tempo slopes reject before scheduling', () => {
+  const map = [{ beat: 0, bpm: 60, curve: 'linear' as const }, { beat: Number.MIN_VALUE, bpm: 120 }];
+  assert.throws(() => normalizeTempoMap(map), /slope/);
+  assert.throws(() => beatsToSeconds(1, map), /slope/);
+  assert.equal(beatsToSeconds(1, [{ beat: 0, bpm: 60, curve: 'linear' }, { beat: Number.MIN_VALUE, bpm: 60 }]), 1);
+});
+
+test('quantization and swing keep beat grids monotonic', () => {
+  assert.equal(quantizeBeat(1.2, 1), 2);
+  assert.equal(quantizeBeat(2, 1), 2);
+  assert.equal(quantizeBeat(2, 1, 'next'), 3);
+  assert.equal(quantizeBeat(1.49, 1, 'nearest'), 1);
+  assert.equal(quantizeBeat(1.7, 0.5, 'floor'), 1.5);
+  assert.equal(swingBeat(0.5, 0.5, 0.5), 0.5);
+  assert.ok(Math.abs(swingBeat(0.5, 0.5, 2 / 3) - 2 / 3) < 1e-12);
+  assert.equal(swingBeat(1, 0.5, 2 / 3), 1);
+  let previous = -1;
+  for (let step = 0; step <= 64; step++) {
+    const swung = swingBeat(step / 8, 0.5, 0.7);
+    assert.ok(swung >= previous);
+    previous = swung;
+  }
+  assert.throws(() => quantizeBeat(1, 0), /quantum/);
+  assert.throws(() => swingBeat(1, 0.5, 1), /ratio/);
 });
