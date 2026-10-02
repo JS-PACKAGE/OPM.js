@@ -2,9 +2,9 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-The latest GitHub release is **v1.6 (package 1.6.0)**, including voice-format v5, chunked/streamed scores, host integration and acoustic-quality improvements. GitHub distribution does not imply npm registry publication. Node.js 22+ is required; README is the canonical API reference.
+GitHub release **v1.7 (package 1.7.0)** includes canonical voice v6, live operator controls, immutable quality/polyphony selection, atomic voice-bank management, beat transport, multipart performance policies and incremental/Worker WAV export. GitHub distribution does not imply npm registry publication. Node.js 22+ is required; README is the canonical API reference.
 
-**Unreleased / current checkout:** canonical voice v6, live operator controls, immutable quality/polyphony selection, atomic voice-bank management, beat transport, multipart performance policy, and incremental/Worker WAV export are documented below. These are not a new released version or an npm-publication claim; v1.6's historical canonical format remains v5.
+Voice-format versions are independent of package versions: v1.7 uses canonical voice v6; the immutable v1.6 release used v5. Explicit legacy voice versions 1–5 retain their original input shapes.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
@@ -17,17 +17,17 @@ npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.6.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.7.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.6.0.tgz
+npm install ../OPM.js/opm.js-1.7.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.6.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.7.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -305,7 +305,7 @@ console.log(frames, energy, render.diagnostics.errors);
 
 For browser playback, import `streamSequence` alongside `OPM`, construct `const stream = streamSequence(opm, score, { onError: console.error })`, and call `await stream.start()` in the play button's gesture. `stop()` cancels only that stream's notes; `dispose()` removes its listener and makes it terminal. Controls, explicit stops and automatic releases retain their score IDs across windows. Interruption/reset stops the stream under both policies: resume the context, then explicitly restart if desired. See [defaults, density limits and the complete browser recipe](./streaming-sequences.md).
 
-### Beat transport and performance policy (current checkout)
+### Beat transport and performance policy
 
 Replace the quick-start module script, retaining `#play` and `#status`:
 
@@ -485,7 +485,7 @@ if (process.argv[2]) {
 
 Checkout imports use `./dist/core/index.js`, `./dist/voices/brass.js`, and `./dist/voices/dx7.js`. `encodeWav({left,right?,sampleRate,format?})` returns little-endian RIFF bytes in `'pcm16'` (default), `'pcm24'` or `'float32'` format. Omit right for mono. Float32 arrays must contain finite samples in −1–1; out-of-range amplitudes reject rather than clip, including float32 output. Stereo lengths must match. Rate is integer 8000–192000 Hz; full-buffer budget is 4,000,000 frames. Pass only these own-data fields: a whole renderNote result has extra fields and is rejected. It only encodes; your application saves/downloads bytes.
 
-### Incremental WAV and browser Worker export (current checkout)
+### Incremental WAV and browser Worker export
 
 `createWavEncoder({sampleRate,channels:1|2,format?,totalFrames})` emits `header()` once, accepts 1–65536 frames per `encode({left,right?})`, then requires exact frame accounting in `finalize()` (which emits any RIFF padding). It retains no PCM/output chunks. RIFF32 must remain below 4 GiB, with at most 24 hours plus release budget; there is no full-buffer 4-million-frame limit.
 
@@ -525,7 +525,7 @@ public/opm/
 
 ### DX7 conversion
 
-`importDX7(Uint8Array)` accepts exactly one framed/checksummed **163-byte single voice** or **4104-byte 32-voice bank**, rejecting raw/concatenated/invalid seven-bit messages. Current checkout returns normalized version 6 voices (v1.6 historically returned v5). `describeDX7` returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; original algorithms are 1–32, converted 0–7, with DX7 operator numbering 1–6.
+`importDX7(Uint8Array)` accepts exactly one framed/checksummed **163-byte single voice** or **4104-byte 32-voice bank**, rejecting raw/concatenated/invalid seven-bit messages. v1.7 returns normalized version 6 voices (v1.6 historically returned v5). `describeDX7` returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; original algorithms are 1–32, converted 0–7, with DX7 operator numbering 1–6.
 
 This remains a **lossy musical heuristic for six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained. Velocity/rate scaling, reduced pitch-envelope stages and LFO delay/sync are heuristic; unsupported descending saw/sample-and-hold waveforms produce substitutions and warnings. Reduced routing, oscillator sync, transpose, per-operator AM and envelope details remain lossy. Inspect descriptions and [expressive conversion limits](./expressive-voices.md) before auditioning. Browser hosts register converted patches with `loadVoice`; bound uploaded/downloaded bytes before buffering. See [voice quality](./voice-quality.md) for original recipes and numerical host trims.
 

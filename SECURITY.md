@@ -217,6 +217,8 @@ v1.6 release review: a security review found two command-waiter boundary issues 
 
 Unreleased seven-capability checkout review: SecurityDataReview approved scoped **A**, SecurityProtocolReview **B**, SecurityDSPReview **C**, and SecuritySupplyReview **D** static inspection. Initial findings about release-tail controls, sink-transferred buffer accounting and deferred file-picker/writable teardown were fixed and the affected source rechecked without remaining scoped findings. These reviewers executed no tests, builds, audits or browser commands; their PASS does not certify runtime behavior, deployment permissions, physical devices or registry protections. The integration owner's observed tests, package gates, native browser smoke and report-only CPU measurements are recorded separately in CHANGELOG. This is not a release approval or a new waiver.
 
+v1.7 release review: Release17Data approved scoped static **A**, Release17Protocol **B**, Release17DSP **C**, and Release17Supply **D**, with no evidence-backed blockers in the final seven-capability source and 1.7.0 release metadata. All four reviews were read-only and executed no runtime gates. Fresh isolated package/build/test/type/audit/quality checks and managed native Chromium AudioWorklet observations are recorded in CHANGELOG. Remote CI must pass before the release tag is published; its run URL and outcome belong in the GitHub release record. No waiver or npm authentication/provenance/external-protection certification is asserted.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)

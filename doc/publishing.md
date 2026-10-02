@@ -41,7 +41,7 @@ After an authorized publication, the workflow runs `registry-verify` against the
 From a source checkout, validate a reviewed artifact without contacting npm or claiming registry availability:
 
 ```sh
-npm run registry-verify -- --local /absolute/path/opm.js-1.6.0.tgz 1.6.0
+npm run registry-verify -- --local /absolute/path/opm.js-1.7.0.tgz 1.7.0
 ```
 
 After publication, replace the SHA below with the actual reviewed release commit:
@@ -52,4 +52,4 @@ npm run registry-verify -- /absolute/path/opm.js-VERSION.tgz VERSION FULL_40_CHA
 
 The online command is read-only with respect to the registry: it cannot publish, configure trusted publishers or authenticate an account. Downloads have explicit byte/time budgets and are restricted to HTTPS `registry.npmjs.org`; its isolated installation is removed afterwards. It requires `tar`, npm with provenance verification support, and the published SLSA v1 GitHub provenance from this workflow. Retain its digest, file list and run URL in the public review record.
 
-First-package bootstrap, npm ownership/2FA, trusted-publisher configuration, GitHub environment reviewers/protected tags, publication authorization and actual registry verification remain external requirements. Do not substitute a local PASS, stale release review, or manual unprovenanced bootstrap for a verified provenance-bearing release. The 1.6.0 identity is GitHub-only until those requirements are met.
+First-package bootstrap, npm ownership/2FA, trusted-publisher configuration, GitHub environment reviewers/protected tags, publication authorization and actual registry verification remain external requirements. Do not substitute a local PASS, stale release review, or manual unprovenanced bootstrap for a verified provenance-bearing release. GitHub release distribution of 1.7.0 does not establish npm registry publication.

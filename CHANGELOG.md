@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.7
 
-The checkout still has package version 1.6.0; this section describes changes beyond the immutable v1.6 release, not an authorized release or registry publication.
+Package version 1.7.0. GitHub release distribution and npm registry publication are separate operations; the historical v1.6 tag and artifact remain immutable.
 
 ### Musical scheduling, rendering and expressive control
 
@@ -17,7 +17,7 @@ The checkout still has package version 1.6.0; this section describes changes bey
 - Add atomic bank replacement, lookup removal and detached canonical JSON export. Validation failures leave the bank unchanged; queued/sounding patches retain their snapshots. An explicit empty input array clears the bank.
 - Integrate all seven capabilities into public exports/declarations, bilingual usage guides and the shared-score example. Abort file-export lifetime before awaiting picker/writable acquisition; wait for panic/release admission before allowing the next UI action.
 
-### Checkout verification
+### Pre-release feature verification
 
 - Node.js 26.7.0: 272 behavioral tests, strict source/development/NodeNext-consumer types, generated build, AST/security gates and isolated installed-package render/WAV/types passed. Full tooling and runtime audits found zero vulnerabilities; the runtime dependency tree is empty. The broader offline sound-quality command passed 1,728 matrix cases and its independent spectrum/filter/four-operator/two-minute streaming gates.
 - Actual offline smoke rendered eco PCM16, standard PCM24 and high Float32 WAVs with zero DSP errors. The default profile retained bitwise PCM parity across all eight algorithms against the pre-change distribution. Real Worker-thread regressions cover transferred sink ownership, backpressure and cancellation; Transport regressions exercise actual worklet DSP release-tail controls.
@@ -26,8 +26,15 @@ The checkout still has package version 1.6.0; this section describes changes bey
 - A throwaway same-origin application-world probe substituted native OPFS storage for the OS chooser, retaining the actual registered demo teardown callback and native Worker. Leaving during picker acquisition started no Worker/writable; leaving during writable acquisition started no Worker and aborted exactly once. A normal 60-second / 96-kHz PCM16 export wrote 23,101,484 native file bytes through 1,411 writes, closed once and reported zero DSP errors. Probe files were removed; this does not verify the operating-system chooser UI.
 - Report-only Apple M5 profile benchmark: eight voices/LFO, 48 kHz, 128-frame blocks, 300 excluded warmup and 2,000 measured blocks per profile. Eco/standard/high p99 was 0.280/0.509/0.820 ms, with zero deadline misses and zero DSP errors in each row. See [acoustic evidence](./doc/acoustic-quality.md#coverage-and-evidence) for exact timings and limits.
 - Independent scoped static review: SecurityDataReview **A PASS**, SecurityProtocolReview **B PASS**, SecurityDSPReview **C PASS**, SecuritySupplyReview **D PASS** after correcting release-tail control omission, transferred-buffer byte accounting and deferred file-acquisition teardown. Reviewers ran no runtime gates; integration evidence above is separate. No waiver or release authorization is asserted.
-- Unexpected duplicated generated `dist` assets initially failed the package-map gate. The entire directory was backed up to `/tmp/opm-seven-features.s0GvXY/distribution-with-duplicates`, then regenerated; the neighboring `dist 2/` was left untouched. The regenerated package checks passed.
-- Not certified: listening quality, physical iOS/Android interruption behavior, arbitrary-patch alias freedom, cross-browser CI or npm publication. The operating-system file chooser is not exercised by a headless browser.
+- Unexpected duplicated generated assets failed an early package-map gate; original assets were preserved. v1.7 verification and packaging use a clean tracked-file checkout, excluding duplicate/untracked assets without deleting user files.
+- This feature-development record did not certify cross-browser CI or npm publication. Listening quality, physical iOS/Android interruption behavior, arbitrary-patch alias freedom and the operating-system file chooser remain unverified.
+
+### v1.7 release-candidate verification
+
+- Package/lock version 1.7.0: a fresh isolated checkout passed all 272 behavioral tests, source/development/NodeNext-consumer type checks, generated build, source/built AST security gates and installed-package render/WAV/types. Full tooling and runtime audits reported zero vulnerabilities; runtime dependencies remain empty. Both sound-quality and voice-quality commands passed, followed separately by the report-only benchmark.
+- Managed native Chromium 150 under same-origin CSP and `nosniff` exercised the built shared-score demo and 48-kHz AudioWorklet output in eco/standard/high profiles: each produced finite nonzero PCM and zero DSP errors. This is native runtime observation, not listening or physical-device acceptance.
+- Fresh independent read-only static release review: Release17Data **A PASS**, Release17Protocol **B PASS**, Release17DSP **C PASS**, Release17Supply **D PASS**. Reviewers executed no runtime gates or external publication actions.
+- The GitHub release is gated on observed remote Node 22/24/26 and Chromium/Firefox/WebKit quality/security jobs, including native stress and installed Vite deployment. The release notes record the actual run URL/outcome and verified tarball digest; configured jobs alone are not passing evidence. GitHub distribution does not publish to npm.
 
 ## v1.6
 

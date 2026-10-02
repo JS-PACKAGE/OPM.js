@@ -2,9 +2,9 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-最新 GitHub Release 為 **v1.6（套件 1.6.0）**，包含版本 5 音色、長樂譜分塊／串流、宿主整合與聲學品質改進。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
+GitHub Release **v1.7（套件 1.7.0）**包含版本 6 音色、即時運算子控制、拍點 Transport、多聲部 Performance、品質模式、原子音色銀行管理，以及 PCM16／PCM24／Float32 增量 WAV 與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
 
-**尚未發佈／目前 checkout：** 套件版本仍為 1.6.0；下文新增即時運算子控制、版本 6 LFO 目標、拍點 Transport、多聲部 Performance、品質模式、原子音色銀行管理，以及 PCM24／float32／增量 WAV 與 Worker 匯出。這些不是已發佈 v1.6 或 npm 新版本的聲明。
+音色格式版本與套件版本獨立：v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -23,14 +23,14 @@ npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.6.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
+此 checkout 的套件版本產生 `opm.js-1.7.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.6.0.tgz
+npm install ../OPM.js/opm.js-1.7.0.tgz
 ```
 
 既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、demo scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、開發 scripts 或 HTML 範例頁面；維護指令應在 checkout 執行。
