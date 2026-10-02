@@ -27,11 +27,70 @@ export declare const voiceSchema: {
             minimum: number;
             maximum: number;
         };
+        pitchEnvelope: {
+            type: string;
+            additionalProperties: boolean;
+            required: string[];
+            properties: {
+                a: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                d: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                r: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                initial: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                peak: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                sustain: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                final: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+            };
+        };
         lfo: {
             type: string;
             additionalProperties: boolean;
             required: string[];
             properties: {
+                delay: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                    default: number;
+                };
+                sync: {
+                    type: string;
+                    enum: string[];
+                    default: string;
+                };
+                phase: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                    default: number;
+                };
                 waveform: {
                     type: string;
                     enum: string[];
@@ -62,6 +121,18 @@ export declare const voiceSchema: {
                 additionalProperties: boolean;
                 required: string[];
                 properties: {
+                    frequency: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
+                    rateKeyScale: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
                     velocitySensitivity: {
                         type: string;
                         minimum: number;

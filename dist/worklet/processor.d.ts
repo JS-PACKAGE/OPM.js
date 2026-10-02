@@ -102,7 +102,7 @@ declare class OPMProcessor extends AudioWorkletProcessor {
     noteEvent(id: number, state: NoteState, reason?: string, frame?: number): void;
     reject(id: unknown, reason: string): void;
     commandEvent(data: CommandMessage, state: CommandEvent['state'], reason?: string): void;
-    panic(reason: 'panic' | 'interruption'): void;
+    panic(reason: 'panic' | 'interruption', commandId?: unknown): void;
     insert(event: ScheduledEvent): void;
     removeEvents(id: number, onlyAutomatic?: boolean): void;
     ended(id: number, reason: VoiceEndReason): void;

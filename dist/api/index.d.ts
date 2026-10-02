@@ -1,11 +1,11 @@
 import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import type { NoteControls, SynthOptions } from '../core/synth.js';
 import type { TuningOptions } from '../core/tuning.js';
-export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, LegacyVoiceV3 } from '../voices/schema.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4 } from '../voices/schema.js';
 export type { NoteControls, SynthOptions } from '../core/synth.js';
 export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
-export { playSequence } from './sequence.js';
-export type { PlaySequenceOptions, SequencePlayback } from './sequence.js';
+export { playSequence, streamSequence } from './sequence.js';
+export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
@@ -53,14 +53,28 @@ export interface ResetEvent {
     reason: 'close' | 'failure' | 'panic' | 'interruption';
     frame: number;
     time: number;
+    /** Initiating panic command, when available; independent of receipt-cache eviction. */
+    commandId?: number;
 }
 export type OPMEvent = NoteEvent | DiagnosticsEvent | CommandEvent | ContextEvent | ResetEvent | ErrorEvent;
+export interface CommandWaitOptions {
+    /** Milliseconds, default 5000; an integer in 1..60000. */
+    timeout?: number;
+    signal?: AbortSignal;
+}
+/** Admission rejection, not an audio execution/completion result. */
+export declare class CommandRejectedError extends Error {
+    readonly event: Readonly<CommandEvent>;
+    constructor(event: CommandEvent);
+}
 export interface OPMOptions {
     sampleRate?: number;
     /** Borrowed context: OPM never closes or suspends it. */
     context?: AudioContext;
     /** Omit to connect to context.destination; null disables automatic connection. */
     destination?: AudioNode | null;
+    /** Same-origin HTTPS (or secure loopback HTTP) module; default stays relative to this API module. */
+    workletUrl?: string | URL;
     mixGain?: number;
     tuning?: TuningOptions;
     stealing?: SynthOptions['stealing'];
@@ -103,6 +117,8 @@ export declare class OPM {
     onEvent?: (event: OPMEvent) => void;
     constructor(options?: OPMOptions);
     loadVoice(name: string, voice: VoiceInput): void;
+    /** Independent subscription; close preserves it for restart, dispose removes it permanently. */
+    subscribe(listener: (event: OPMEvent) => void): () => void;
     start(): Promise<void>;
     resume(): Promise<void>;
     connect(destination: AudioNode): this;
@@ -117,8 +133,12 @@ export declare class OPM {
     panic(): number;
     setMixGain(gain: number): number;
     setTuning(tuning: TuningOptions): number;
+    /** Wait for admission only. At most 128 receipts and 64 live waits; live waits prevent eviction. */
+    waitForCommand(commandId: number, options?: CommandWaitOptions): Promise<CommandEvent>;
     getDiagnostics(): Promise<DiagnosticsEvent>;
     close(): Promise<void>;
+    /** Permanently closes OPM and releases host callbacks; never closes a borrowed context. */
+    dispose(): Promise<void>;
 }
 export interface LookaheadWindow {
     /** Half-open absolute AudioContext time window. Missed windows are skipped after a stall. */

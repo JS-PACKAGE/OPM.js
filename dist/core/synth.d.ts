@@ -12,6 +12,7 @@ export interface NoteControls {
     pan?: number;
     modulation?: number;
     ramp?: number;
+    operatorLevels?: readonly [number, number, number, number];
 }
 export interface SynthOptions {
     mixGain?: number;
