@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased — v1.8 candidate
+## v1.8
 
-Package version 1.8.0. No release tag, npm publication or physical-device acceptance is implied.
+Package version 1.8.0. GitHub release distribution and npm registry publication are separate operations; neither implies physical-device acceptance.
 
 ### Engine and integration
 
