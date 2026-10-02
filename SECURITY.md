@@ -56,9 +56,11 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 | Single-voice API | Required fields and exactly four complete operators; finite numeric values and documented ranges; unknown fields and accessors reject |
 | Voice-bank JSON string | At most 262,144 UTF-8 bytes (256 KiB), then JSON parsing and bank validation |
 | Voice-bank array | 1–128 complete versioned voices, unique validated names, and frozen normalized copies |
-| Legacy versions 1/2/3/4 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude new expressive fields; normalize to v5 |
+| Legacy versions 1–5 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude expressive fields, v1–5 exclude per-operator LFO targets; normalize to v6 |
 | PreparedVoice | Immutable detached core snapshot, including nested pitch envelopes; only private identity membership grants trust, never a structural brand/copy |
-| Tuning / score / controls | A4 20–20000 Hz, 128 bounded cents offsets; strict dense four-element operator-level tuples; short scores retain 128-note/256-slot/60-second bounds; long scores have separate event/time/chunk limits and own-data snapshots |
+| Tuning / score / controls | A4 20–20000 Hz, 128 bounded cents offsets; strict dense four-element level/ratio/Hz/ADSR and LFO-target tuples; short scores retain 128-note/256-slot/60-second bounds; long scores have separate event/time/chunk limits and immutable own-data snapshots |
+| Atomic OPM bank replacement | Validate all entries before swapping ≤128 lookups; plain empty array clears, while JSON/standalone empty bank parsing rejects; exports use detached canonical names and ≤256 KiB UTF-8 |
+| Transport / performance | ≤1024 tempo points, quarter-note positions ≤86400; bounded scheduling density and scoped ID ownership; 1–16 parts, ≤128 physical keys/tracked gates with detached snapshots |
 
 Single-voice APIs reject out-of-range fields. Bank validation clamps finite numeric fields to documented bounds, but still rejects malformed types, non-finite numbers and invalid version/algorithm/feedback values. Clamping is not a substitute for validation.
 
@@ -83,7 +85,7 @@ This is approximate six-to-four-operator voice conversion, not a DX7 emulator or
 
 ### PCM, offline rendering and WAV export
 
-`encodeWav()` encodes provided PCM; it does not decode or play an uploaded audio file. It accepts only own-data `left`, optional `right` and `sampleRate` fields. Samples must be finite `Float32Array` values in −1–1; stereo lengths must match, with at most **4,000,000 frames per channel**.
+`encodeWav()` encodes PCM; it does not decode/play uploaded audio. Own-data arguments are `left`, optional `right`, `sampleRate` and optional `format` (`pcm16`, `pcm24`, `float32`). Native Float32 samples must be finite in −1–1; stereo lengths match, with at most **4,000,000 frames per channel** for this full-buffer convenience API.
 
 Project render results onto those fields rather than forwarding diagnostics or other metadata. Reject encoding/rendering errors visibly instead of substituting a fake result.
 
@@ -91,7 +93,9 @@ Core rendering authenticates native Float32Array kind/length instead of overrida
 
 Offline rendering allocates output buffers and executes synchronously. The host should limit duration, sample rate, envelope tails, concurrent requests and export frequency to suit its device and UI. Valid input may still consume significant time and memory; no universal deadline or whole-page memory guarantee is made.
 
-Long-score rendering is an explicit bounded chunk API, not an unlimited WAV/full-buffer export. Its reusable PCM storage must be consumed/copied before the next chunk; cancellation prevents further advancement. Hosts must bound cumulative duration/work, concurrent renders and retained chunks. The 4,000,000-frame WAV and convenience-render limits still apply.
+Long-score rendering and incremental `createWavEncoder()` use bounded reusable PCM/encoded chunks, not unlimited aggregate buffers. Consume borrowed PCM before advancing; declare an exact encoder frame count and finalize only after all frames. Encoder chunks are 1–65536 frames and RIFF32 files remain <4 GiB; convenience rendering/`encodeWav` retain their 4,000,000-frame bound. Hosts must bound cumulative duration/work, retained bytes, concurrent renders and export frequency.
+
+`renderSequenceInWorker()` validates before Worker allocation, transfers at most one unacknowledged encoded chunk and awaits sink writes before advancing. Capture intrinsic byte counts before handing ownership to a sink; storage workers may transfer/detach the buffers. Progress/abort callbacks are untrusted host behavior. Native AbortSignal cancellation terminates/rejects immediately without waiting for hung writes/abort/close. The sink owns invalidation and rollback; cancellation cannot retract persisted bytes. Acquire file sinks from trusted gestures, retain lifetime cancellation across picker/writable awaits, and clean up acquisition failures before starting a Worker. Never replace a long-file sink with unbounded Blob accumulation.
 
 Create download URLs only for successfully encoded bytes. Replace/revoke obsolete Blob URLs and release them when the owning page or component is disposed. Treat filenames and rendered audio as potentially private application data.
 
@@ -99,10 +103,12 @@ Create download URLs only for successfully encoded bytes. Replace/revoke obsolet
 
 - Await `start()` in a user interaction and monitor `onEvent` or independent `subscribe()` listeners. A note ID is not admission; handle rejections, terminal states and processor errors. `waitForCommand()` is bounded, timed/cancellable and resolves admission only, not future execution; reset/close/failure invalidate pending waits.
 - The worklet bounds pending events and tracked note IDs to 256 each. Schedule bounded batches rather than flooding the port with distant-future events.
-- Each synth limits logical voices to eight, with up to eight bounded stealing fades. These limits do not constrain an attacker creating many synth instances or abusing unrelated host code.
+- Each synth limits logical voices to configured 1–8, with up to eight bounded stealing fades. Immutable eco/standard/high profiles change fixed internal sampling/filter work, not these bounds. These limits do not constrain an attacker creating many instances.
 - DSP state and terminal notification buffers are preallocated. Ended/error callbacks run after stable frame traversal; callback-admitted replacements start next frame, and recursive rendering rejects rather than extending a frame's work.
 - Named/prepared worklet registrations use 128 content-keyed LRU slots. Replacement revalidates before committing; queued/active notes own immutable old snapshots. Raw objects still validate freshly.
 - Absolute start/stop/control times are safely framed with a 60-second future horizon; stop precedes onset and controls. Command rejection is correlated by commandId; accepted means admission, not guaranteed future execution. Global allNotesOff/panic bypass full scheduled queues. Bound sequences and lookahead rather than flooding messages.
+- Immediate `stop(id, { cancelControls: true })` removes only that ID's queued automation/onset/off before natural release; it cannot be combined with `at`. Musical Transport retains release-tail controls during ordinary playback but cancels its own future automation on pause/seek/loop rebuilding. Seeking is a musical restart, not an exact DSP snapshot.
+- Performance cleanup is part/helper scoped, not global panic. Repeated equal-pitch keys retain separate identities; stealing/reset cannot resurrect stale held/pedal state.
 - Handle rejected diagnostics promises and failed node initialization. Do not hide failure behind mock audio nodes or a fallback engine.
 - A shared AudioContext is borrowed: OPM disconnects its node but never closes/suspends the host context. `close()` is restartable; terminal `dispose()` clears owned helpers/subscriptions without taking ownership of a borrowed context. Hosts own downstream routing and permissions.
 - Clear host gate bookkeeping on global reset; close/failure need not reply with every terminal note. Default cancel removes old gates/automation on suspension/interruption; preserve is opt-in. Both policies stop lookahead and require gesture-driven explicit restart.
@@ -150,17 +156,18 @@ A security review is required before:
 **A. Untrusted data (voice banks, config)**
 - [ ] Voice JSON/key scaling, DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
 - [ ] Explicit allowlisted copying; no spreading/merging untrusted objects into prototypes; no accessor invocation
-- [ ] Numeric bounds cover ADSR, fixed Hz/rate scaling, pitch envelope, LFO waveform/delay/sync/phase, velocity/pan, level scaling, ramps and four-element operator-level tuples; tuning/short-and-long-score limits remain bounded and legacy shapes exclude later fields
+- [ ] Numeric bounds cover ADSR/live reanchoring, ratio/fixed-Hz controls, rate scaling, pitch envelope, LFO waveform/delay/sync/phase/targets and independent depth/rate, feedback, velocity/pan, levels and ramps; tuning/score/Transport/performance/encoder limits remain bounded and legacy shapes exclude later fields
 - [ ] Prepared identity cannot be forged, trusted patches stay deeply immutable, and public map snapshots cannot change stored patches
 - [ ] Application file/URL loaders bound sources, content type, and payload before buffering; engine does not fetch URLs
 - [ ] DX7 rejects invalid length/framing/checksum/seven-bit payload; conversion descriptions remain outside strict voice schema
 
 **B. Worklet boundary**
 - [ ] Every raw message is checked for strict own-data shape before reads, enqueueing, or rendering
-- [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; configurable worklet URLs are restricted to secure same-origin assets and cannot weaken CSP/MIME validation
+- [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; configurable worklet/Worker URLs require secure same-origin assets and cannot weaken CSP/MIME validation
 - [ ] Duplicate IDs reject before enqueueing; tracked IDs/events remain bounded; ended/stolen/error notes remove obsolete off events
 - [ ] Held-note cancellation/release, bounded allNotesOff/panic, command admission/rejection, context/reset and processor failure propagate safely; teardown does not promise impossible per-note acknowledgements
 - [ ] Registration replacement, controls, tuning, score IDs/times and absolute scheduling validate own-data shape; queued snapshots, ordering and cleanup preserve bounds
+- [ ] Encoded Worker chunks require ordered acknowledgements, intrinsic byte accounting before sink ownership transfer, exact frame/file completion and termination on cancellation/failure; host sinks own rollback
 
 **C. DSP loop safety**
 - [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (`Synth.errorCount` or `renderNote()`'s `diagnostics.errors`)
@@ -207,6 +214,8 @@ v1.5 release review: Release15Inputs approved scoped static A/B inspection; Rele
 v1.5 interruption-repair recheck: Release15Inputs initially found that deferred running notifications could leave deduplication state stale. Both initial and existing-node resume now synchronize successful state observation; repeated fully deferred transitions and pending diagnostics are covered by consumer regressions. Release15Inputs then approved A/B and Release15DspSupply approved C/D without remaining scoped static findings. The original Linux WebKit CI failure blocks publication until repaired-candidate verification; static approval is not a waiver or runtime certification.
 
 v1.6 release review: a security review found two command-waiter boundary issues (abort-signal state/listener shadowing and receipt-eviction handling around correlated panic resets). Both were fixed with regressions and rechecked natively against a borrowed context. No fresh independent A/B/C/D approval was obtained for v1.6; the maintainer explicitly authorized the GitHub release on the integration owner's runtime evidence, recorded as a waiver in CHANGELOG. npm publication still requires the independent review record described in doc/publishing.md.
+
+Unreleased seven-capability checkout review: SecurityDataReview approved scoped **A**, SecurityProtocolReview **B**, SecurityDSPReview **C**, and SecuritySupplyReview **D** static inspection. Initial findings about release-tail controls, sink-transferred buffer accounting and deferred file-picker/writable teardown were fixed and the affected source rechecked without remaining scoped findings. These reviewers executed no tests, builds, audits or browser commands; their PASS does not certify runtime behavior, deployment permissions, physical devices or registry protections. The integration owner's observed tests, package gates, native browser smoke and report-only CPU measurements are recorded separately in CHANGELOG. This is not a release approval or a new waiver.
 
 ## Non-goals
 

@@ -1,6 +1,20 @@
 # Acoustic references and decimation
 
-The core uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once; each voice has eight preallocated state scalars. Each internal sample performs four fixed sections with no allocations. State resets on admission and all state must drain on release; an output zero crossing is not sufficient to retire a ringing IIR.
+The default **standard** profile uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Its coefficients, substep clocks and default sound are unchanged. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once; each voice has eight preallocated filter state scalars. Each internal sample performs four fixed sections with no allocations. State resets on admission and all state must drain on release; an output zero crossing is not sufficient to retire a ringing IIR.
+
+Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` remains bounded to 1–8 regardless of profile.
+
+| Profile | Internal rate | Filter order / sections | Filter state per voice | Tradeoff |
+| --- | ---: | ---: | ---: | --- |
+| eco | 2× | 4 / 2 | 4 scalars | Fewer oscillator/filter substeps, earlier internal Nyquist and weaker upper-band rejection |
+| standard (default) | 4× | 8 / 4 | 8 scalars | Existing sound and acceptance baseline |
+| high | 8× | 8 / 4 | 8 scalars | Higher internal Nyquist, twice standard oscillator/filter substeps; not an arbitrary-patch alias-free guarantee |
+
+All profiles preallocate coefficient/state/gain buffers. For internal factor \(M\) and order \(N\), the independently checkable magnitude is
+\[
+|H(f)| = \left(1+\left[\frac{\tan(\pi f/(M F_s))}{\tan(\pi\,0.30/M)}\right]^{2N}\right)^{-1/2}.
+\]
+Eco is a deliberate reduced-work option, not a universally equivalent substitute for standard. The profile tests compare actual causal standalone filtering with this independently derived transfer at .10/.25/.625 output Fs, check a controlled folded product, and require all state to drain. Existing full-FM reference budgets remain standard-profile acceptance.
 
 ## Response and choice
 
@@ -35,7 +49,7 @@ A sharper filter can ring and overshoot; it is not the former convex cascade. In
 
 ## Coverage and evidence
 
-`npm run sound-quality` reports:
+`npm run sound-quality` reports the standard-profile baseline:
 
 - Controlled synthesized passband/THD/folded aliases across 22.05/44.1/48/96 kHz.
 - Actual standalone decimator magnitude, complex phase and impulse latency versus independent transfer mathematics and the former filter.
@@ -44,3 +58,17 @@ A sharper filter can ring and overshoot; it is not the former convex cascade. In
 - Existing lifecycle/headroom/deterministic-chunk matrix and two-minute streaming scenarios.
 
 The numerical design evaluation above was computed independently. A standalone 48 kHz module smoke observed -0.00559/-11.50867 dB at .20/.35 Fs and -55.61650/-112.87569 dB for .625/1.125 Fs folded products; impulse energy delay was 3.31507 output frames and its maximum difference from independent Fourier inversion was below 8e-16. Full synth/reference/runtime verification remains the integration test and quality-report commands; observed release results belong in the release record. No listening session, perceptual preference, arbitrary-patch alias freedom, chip fidelity, or physical-device CPU/underrun result is asserted here.
+
+`scripts/benchmark.ts` includes report-only eight-voice/LFO comparisons for all three profiles, with the same host, block size and excluded warmup. Their timing rows never become realtime acceptance merely because a separate baseline budget is configured. Run the benchmark on the deployment device to observe median/p95/p99/worst and misses; fewer arithmetic operations do not prove a particular host deadline, perceptual preference or physical-device stability.
+
+Observed checkout measurement: Apple M5, darwin arm64, Node.js 26.7.0, 48 kHz, 128-frame blocks (2.667 ms deadline), 300 excluded warmup blocks and 2,000 measured blocks per row. No explicit acceptance budgets were configured.
+
+| Profile | Median ms | p95 ms | p99 ms | Worst ms | p99 / deadline | Misses |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Eco | 0.212375 | 0.231625 | 0.279708 | 0.453166 | 0.105 | 0 / 2,000 |
+| Standard | 0.380333 | 0.423750 | 0.509292 | 0.607917 | 0.191 | 0 / 2,000 |
+| High | 0.680709 | 0.747333 | 0.819917 | 0.981125 | 0.307 | 0 / 2,000 |
+
+All rows reported zero DSP errors and admission rejections. These are offline host wall-clock measurements, not AudioWorklet underrun counters, allocation measurements, listening judgments or physical-device acceptance. They do not replace the different historical v1.6 host results recorded in CHANGELOG.
+
+Envelope-transition references compare the waveform through the actual voice-ended frame, then require exact retired silence. The implementation deliberately retires finite IIR state below its state floor rather than retaining an infinite mathematical tail. A state floor is not a bound on each future output sample: the independent causal impulse/state-to-output bound accounts for the combined remaining filter states at retirement.

@@ -1,8 +1,8 @@
-# Voice v5 and expressive controls
+# Voice v6 and expressive controls
 
-Voice format version **5** is independent of the npm package version. `normalizeVoice` accepts an omitted version as v5; explicit v1–v4 retain their original field restrictions. Normalized, prepared, imported and bank voices emit v5. Canonical bank entries require `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and exactly four `ops`; the exported JSON schema describes that canonical shape.
+Voice format version **6** is independent of the npm package version. `normalizeVoice` accepts an omitted version as v6; explicit v1–v5 retain their original field restrictions. Normalized, prepared, imported and bank voices emit v6. Canonical bank entries require `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and exactly four `ops`; the exported JSON schema describes that canonical shape, including numeric LFO target tuples.
 
-Inputs must use plain objects and dense own-data operator arrays. Unknown fields, accessors, malformed enums, nonfinite numbers and unsupported versions are rejected without evaluating getters. `normalizeVoice` rejects out-of-range numbers; the bank-oriented `validateVoice`/`parseVoiceBank` clamp finite numeric values to the documented bounds. Integer selectors and MIDI breakpoints must still be integers. `prepareVoice` and bank validation return detached, deeply frozen snapshots, including the optional pitch envelope. A cloned prepared patch must be validated again; a copied shape does not confer trusted identity.
+Inputs must use plain objects and dense own-data operator/target arrays. Unknown fields, accessors, malformed enums, nonfinite numbers and unsupported versions are rejected without evaluating getters. `normalizeVoice` rejects out-of-range numbers; the bank-oriented `validateVoice`/`parseVoiceBank` clamp finite numeric values to the documented bounds. Integer selectors and MIDI breakpoints must still be integers. LFO target tuples are detached and frozen even in normalized voices. `prepareVoice` and bank validation return detached, deeply frozen snapshots, including the optional pitch envelope. A cloned prepared patch must be validated again; a copied shape does not confer trusted identity.
 
 ## Patch fields
 
@@ -20,7 +20,7 @@ Inputs must use plain objects and dense own-data operator arrays. Unknown fields
 | Operator `frequency` | Optional **1–20000 Hz**, replacing tuned note frequency × ratio. Detune, live pitch/glide, pitch envelope and LFO pitch modulation still apply. Changing MIDI note or tuning does not transpose fixed Hz, but optional key/rate scaling still responds to the played note. |
 | Operator `rateKeyScale` | Optional 0–4; default zero. Each ADSR duration becomes `min(10, seconds * 2 ** (-rateKeyScale * (note - 60) / 12))`. Fractional notes interpolate continuously; zero durations stay zero. Durations are prepared at admission and do not follow live pitch bends or tuning changes. |
 
-Explicit v1 rejects key scaling and velocity sensitivity; v2 adds key scaling; v3 adds velocity sensitivity; v4 adds LFO waveform. All explicit v1–v4 reject `frequency`, `rateKeyScale`, `pitchEnvelope`, and LFO `delay`/`sync`/`phase`, rather than silently dropping them.
+Explicit v1 rejects key scaling and velocity sensitivity; v2 adds key scaling; v3 adds velocity sensitivity; v4 adds LFO waveform. All explicit v1–v4 reject `frequency`, `rateKeyScale`, `pitchEnvelope`, and LFO `delay`/`sync`/`phase`, rather than silently dropping them. V5 adds those expressive fields, represented by `LegacyVoiceV5` and `LegacyLFOV5`. All explicit v1–v5 reject LFO `amTargets`/`pmTargets`. V6 adds those per-operator targets; leaving them absent preserves the legacy all-operator modulation behavior without adding default fields to snapshots.
 
 ### Pitch envelope
 
@@ -35,7 +35,7 @@ pitchEnvelope: {
 
 `a`, `d`, `r` are 0–10 seconds. `initial`, `peak`, `sustain`, `final` are −4800–4800 cents. Held notes move linearly in cents **initial → peak → sustain**. A zero attack skips directly to peak; a zero decay skips directly to sustain. Release moves from the **current** cents value to final, even during attack/decay; zero release immediately selects final. Final pitch persists while operator releases remain audible. The pitch envelope does not prolong otherwise silent operators or filter tails.
 
-Pitch cents combine multiplicatively with original operator Hz, detune, live semitone pitch/glide and LFO PM. Pitch-envelope and glide evaluation use deterministic 4× synthesis substeps; splitting `render` into different buffer sizes does not change the timeline. Operator phase increments are limited to 45% of the internal sample rate before/after LFO PM, preserving the engine's existing high-frequency safety cap.
+Pitch cents combine multiplicatively with original operator Hz, detune, live semitone pitch/glide and LFO PM. Pitch-envelope and glide evaluation use deterministic synthesis substeps for the selected quality profile: standard 4× (default), eco 2×, high 8×. Splitting `render` into different buffer sizes does not change the timeline. Operator phase increments are limited to 45% of the internal sample rate before/after LFO PM, preserving the engine's existing high-frequency safety cap.
 
 ### LFO
 
@@ -44,8 +44,9 @@ Pitch cents combine multiplicatively with original operator Hz, detune, live sem
 - `delay`: optional 0–10 seconds, default zero. Gates both AM and PM depth until that note's elapsed time reaches delay; the phase clock **continues** during delay. This is a depth gate, not a gradual fade-in.
 - `sync`: `note` (default) resets the clock at note admission. `global` uses `Synth.currentFrame`, including rendered silence, so separately admitted notes share a deterministic frame clock. Neither uses wall time. Panic does not rewind the global clock.
 - `phase`: optional 0–1 turns, default zero; 1 wraps to 0. At rate zero this can produce static AM/PM offset.
+- `amTargets`, `pmTargets`: optional readonly four-element tuples in operator order, each entry a finite **0–1** depth multiplier or a boolean (`false` → 0, `true` → 1). Normalization stores immutable numeric `LFOTargets`; `LFOInput` accepts `LFOTargetsInput`. Each omitted tuple acts as `[1, 1, 1, 1]`, preserving the old sound. Zero disables that modulation for the selected operator; fractional weights reduce it independently of operator level. Dense own-data elements are required; getters, holes, extra fields and malformed values reject.
 
-LFO values are evaluated once per output frame. Sine and triangle start at zero rising, saw at −1, square at +1. AM multiplies gain by `1 - amDepth * (0.5 + 0.5 * waveformValue)`; PM multiplies pitch by `2 ** (pmDepth * waveformValue / 1200)`.
+LFO values are evaluated once per output frame. Sine and triangle start at zero rising, saw at −1, square at +1. For operator `i`, AM multiplies gain by `1 - amDepth * amTargets[i] * (0.5 + 0.5 * waveformValue)`; PM multiplies pitch by `2 ** (pmDepth * pmTargets[i] * waveformValue / 1200)`. Missing targets use 1 in these formulas. Delay, sync and phase remain shared by all four operators.
 
 ## Live operator levels
 
@@ -57,7 +58,23 @@ LFO values are evaluated once per output frame. Sine and triangle start at zero 
 
 The readonly tuple must contain exactly four finite own-data numbers in **0–2**. Each number multiplies its patch operator level after key/velocity scaling and before FM routing/feedback. All default to 1. A multiplier cannot revive a patch operator whose level is zero. Modulator levels change timbre; carrier levels change that carrier's contribution. Final expression/velocity and equal-power pan remain separate controls.
 
-`ramp` is 0–10 seconds, default zero, and now also permits operator-level targets. The four multipliers ramp linearly and independently from their current values using the same supplied duration. An interrupted ramp starts from its current value, not the old target. Unrelated expression, pan, modulation or pitch updates do not cancel operator ramps. Validation detaches and freezes the tuple and its outer control record before scheduling. Recycled/stealing voice slots preserve current tails and fully reset controls for new admissions; render processing allocates no arrays or objects.
+`ramp` is 0–10 seconds, default zero. The four multipliers ramp linearly and independently from their current values using the same supplied duration. An interrupted ramp starts from its current value, not the old target. Unrelated expression, pan, modulation or pitch updates do not cancel operator ramps. Validation detaches and freezes the tuple and its outer control record before scheduling. Recycled/stealing voice slots preserve current tails and fully reset controls for new admissions; render processing allocates no arrays or objects.
+
+## Live timbre and envelope controls
+
+The same note-control APIs accept these optional fields independently:
+
+| Control | Bounds / meaning |
+| --- | --- |
+| `feedback` | Finite 0–7 continuous feedback selector. Between 0 and 1, gain interpolates from zero to the classic selector-1 gain; 1–7 follows the original exponential gain mapping. Patch feedback remains an integer. |
+| `lfoRate`, `amDepth`, `pmDepth` | 0–20 Hz, 0–1, 0–1200 cents respectively; update the admitted note's LFO independently. |
+| `operatorRatios` | Readonly four-element tuple of finite 0.125–32 ratios. Fixed-Hz operators retain these ratios but ignore them until restored to ratio mode. |
+| `operatorFrequencies` | Readonly four-element tuple, each entry finite 1–20000 Hz or `null` to restore tuned note × ratio. Fixed Hz ignores MIDI/tuning transposition; detune, live pitch, pitch envelope and LFO PM still apply. |
+| `operatorADSR` | Readonly four-element tuple of complete `{a,d,s,r}` objects using the patch ADSR bounds. Parameters are replaced, not interpolated by `ramp`. |
+
+`ramp` gives feedback, LFO and frequency/ratio updates independent linear timelines. It must accompany a rampable scalar or tuple control; `operatorADSR` alone with `ramp` rejects. Interrupted updates start at the current value; omitted controls keep their existing timelines. Live `lfoRate` integrates phase without resetting the current phase, including interrupted rate ramps. Tuples and nested ADSRs are strict own-data snapshots detached and frozen before scheduling.
+
+Updating a held operator's ADSR restarts attack from its current dB level, then decays to the new sustain. With both attack and decay zero, a one-frame bridge preserves continuity. An update during release starts from the current dB level and completes the new key-scaled release, bounded to ten seconds; zero release silences immediately. Envelope durations provide continuity rather than interpolating ADSR parameters with the control ramp.
 
 ## DX7 import: retained data versus approximations
 

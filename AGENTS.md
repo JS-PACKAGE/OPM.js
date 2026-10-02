@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. Its strict TypeScript implementation ships as plain JavaScript ES modules powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
-- **Status:** 1.6 release. Keep the public API (`playNote()`, voice format) and README in sync when changing behavior.
+- **Status:** 1.6 release; current checkout has unreleased voice-format v6/Transport/performance/Worker features. Keep public APIs, voice format and README synchronized without claiming a new publication.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
 - **Usage:** Start with [README: Getting started](./README.md#getting-started); the [English](./doc/usage.en.md) and [繁體中文](./doc/usage.zh-TW.md) guides cover installation, deployment, and executable examples.
 
@@ -32,17 +32,18 @@ OPM (public API)                     processor
                                        LFO (AM / PM) → stereo out
 ```
 
-- `src/core/` — DSP core: operator, envelope, LFO, algorithm graph. **Pure, no Web Audio imports.**
-- `src/worklet/` — AudioWorkletProcessor and message protocol.
-- `src/api/` — public facade (`OPM` class), voice loading, scheduling.
-- `src/voices/` — typed voice assets and JSON voice parsing (format below).
+- `src/core/` — pure DSP, offline sequence rendering, incremental WAV and beat conversion. **No Web Audio imports.**
+- `src/worklet/` — AudioWorkletProcessor and strict bounded message protocol.
+- `src/worker/` — static module Worker for encoded offline chunks with sink acknowledgements.
+- `src/api/` — public facade (`OPM`), atomic voice banks, schedulers, musical Transport, performance policies and Worker host.
+- `src/voices/` — typed voice assets and versioned JSON parsing (format below).
 - `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes all eight browser example scripts. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
 ## Voice format
 
-A voice is JSON: four operators × (required ratio, optional fixedHz override, level, detune, ADSR, optional level/rate key scaling) + algorithm + feedback + LFO + optional pitch envelope. See README "Voice format" for the canonical current version and legacy input rules. When changing the format, bump `version` and update README.
+A voice is JSON: four operators × (required ratio, optional `frequency` override, level, detune, ADSR, optional level/rate key scaling) + algorithm + feedback + LFO with optional per-operator targets + optional pitch envelope. Canonical v6 accepts legacy v1–v5 original shapes. See README "Voice format"; format changes must bump `version` and update README.
 
 ## DSP correctness rules
 

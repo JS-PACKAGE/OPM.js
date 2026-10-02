@@ -2,6 +2,33 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+The checkout still has package version 1.6.0; this section describes changes beyond the immutable v1.6 release, not an authorized release or registry publication.
+
+### Musical scheduling, rendering and expressive control
+
+- Add beat-based `createTransport()` with AudioContext-clock pause/resume, seek, loops, time signatures, BPM and bounded tempo maps. Restarts rebuild owned musical notes/automation, not an exact DSP snapshot; unrelated notes remain untouched. Preserve scheduled controls throughout release tails, including the final non-loop endpoint.
+- Add exact-frame incremental WAV encoding and PCM16/PCM24/Float32 output. Full-buffer encoding retains its existing frame limit; incremental encoding enforces RIFF32/sequence limits without retaining a complete WAV.
+- Add a static same-origin module Worker renderer with progress, cancellation and one acknowledged chunk at a time. Await sink writes for backpressure, preserve accounting when the sink transfers buffers, and invalidate output through the host's abort contract.
+- Add bounded part-scoped performance policies: independent physical key IDs, sustain, polyphonic/mono legato, last/high/low priority and scoped cleanup. This is not a MIDI driver.
+- Add independently ramped feedback, LFO rate/depths, operator ratios/fixed frequencies and live ADSR reanchoring without resetting oscillator phase. Canonical voice format v6 adds per-operator AM/PM targets; strict original v1–v5 inputs remain accepted.
+- Add immutable eco/standard/high quality profiles (2×/4×/8×); standard retains the previous default output. Publish measured CPU tradeoffs without arbitrary-FM alias-free, perceptual or physical-device claims.
+- Add atomic bank replacement, lookup removal and detached canonical JSON export. Validation failures leave the bank unchanged; queued/sounding patches retain their snapshots. An explicit empty input array clears the bank.
+- Integrate all seven capabilities into public exports/declarations, bilingual usage guides and the shared-score example. Abort file-export lifetime before awaiting picker/writable acquisition; wait for panic/release admission before allowing the next UI action.
+
+### Checkout verification
+
+- Node.js 26.7.0: 272 behavioral tests, strict source/development/NodeNext-consumer types, generated build, AST/security gates and isolated installed-package render/WAV/types passed. Full tooling and runtime audits found zero vulnerabilities; the runtime dependency tree is empty. The broader offline sound-quality command passed 1,728 matrix cases and its independent spectrum/filter/four-operator/two-minute streaming gates.
+- Actual offline smoke rendered eco PCM16, standard PCM24 and high Float32 WAVs with zero DSP errors. The default profile retained bitwise PCM parity across all eight algorithms against the pre-change distribution. Real Worker-thread regressions cover transferred sink ownership, backpressure and cancellation; Transport regressions exercise actual worklet DSP release-tail controls.
+- The assistant-managed hidden Chromium 150 browser exercised trusted audio startup, nonzero analyser output in all three live quality profiles, smooth feedback/LFO controls, Transport pause/seek/tempo/resume/stop and an actual loop seam (seek 7.8 beats at 300 BPM, observed wrap to 0.33), mono/high-priority key/pedal controls, bank replace/remove/export and native static-Worker PCM24 preview under same-origin CSP and `nosniff`. The preview contained 43,680 frames / 262,124 bytes with zero DSP errors; an actual full-page screenshot was inspected. Browser observations are not listening or physical-device acceptance.
+- Native browser Worker smoke matched whole-core WAV bytes for eco PCM16, standard PCM24 and high Float32 while transferring every sink buffer; at most one write was active. Cancellation rejected with AbortError despite stalled write/abort promises. Wrong-MIME and missing Worker assets rejected without writing or closing the sink, with one abort each.
+- A throwaway same-origin application-world probe substituted native OPFS storage for the OS chooser, retaining the actual registered demo teardown callback and native Worker. Leaving during picker acquisition started no Worker/writable; leaving during writable acquisition started no Worker and aborted exactly once. A normal 60-second / 96-kHz PCM16 export wrote 23,101,484 native file bytes through 1,411 writes, closed once and reported zero DSP errors. Probe files were removed; this does not verify the operating-system chooser UI.
+- Report-only Apple M5 profile benchmark: eight voices/LFO, 48 kHz, 128-frame blocks, 300 excluded warmup and 2,000 measured blocks per profile. Eco/standard/high p99 was 0.280/0.509/0.820 ms, with zero deadline misses and zero DSP errors in each row. See [acoustic evidence](./doc/acoustic-quality.md#coverage-and-evidence) for exact timings and limits.
+- Independent scoped static review: SecurityDataReview **A PASS**, SecurityProtocolReview **B PASS**, SecurityDSPReview **C PASS**, SecuritySupplyReview **D PASS** after correcting release-tail control omission, transferred-buffer byte accounting and deferred file-acquisition teardown. Reviewers ran no runtime gates; integration evidence above is separate. No waiver or release authorization is asserted.
+- Unexpected duplicated generated `dist` assets initially failed the package-map gate. The entire directory was backed up to `/tmp/opm-seven-features.s0GvXY/distribution-with-duplicates`, then regenerated; the neighboring `dist 2/` was left untouched. The regenerated package checks passed.
+- Not certified: listening quality, physical iOS/Android interruption behavior, arbitrary-patch alias freedom, cross-browser CI or npm publication. The operating-system file chooser is not exercised by a headless browser.
+
 ## v1.6
 
 Package version 1.6.0. GitHub release distribution and npm registry publication are separate operations; the v1.5 artifact remains immutable.

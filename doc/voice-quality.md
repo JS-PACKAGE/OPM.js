@@ -4,7 +4,7 @@
 
 ## Bank, provenance and host trim
 
-The existing seven recipes remain in `examples`; their synthesis parameters are unchanged, with current v5 format labels. Eight additions are authored specifically as four-operator parameter recipes, not converted emulator patches, downloaded SysEx, sampled recordings or claims of acoustic/hardware fidelity:
+The existing seven recipes remain in `examples`; their synthesis parameters are unchanged, with current v6 format labels. All presets leave the optional `amTargets`/`pmTargets` tuples absent, retaining implicit all-operator LFO modulation. Explicit legacy v1–v5 inputs retain their old field restrictions and normalize to v6; they reject these new targets. See the [voice v6 guide](./expressive-voices.md#lfo) for selective modulation and immutable target snapshots. Eight additions are authored specifically as four-operator parameter recipes, not converted emulator patches, downloaded SysEx, sampled recordings or claims of acoustic/hardware fidelity:
 
 | Addition | Intended MIDI register | Timbral design |
 | --- | --- | --- |
@@ -51,6 +51,6 @@ The JSON report compares every source's middle-register seeded phrase against `w
 
 ## Original synthetic DX7 recipes
 
-`demo/audition-fixtures.ts` generates valid-checksum VCED singles and a VMEM bank from original recipes, using Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. The fixtures exercise three paired carriers, six additive carriers, a fixed-frequency carrier, velocity-sensitive modulation and equivalent packed-bank conversion. The fixed carrier now retains its approximately 263 Hz frequency in v5 instead of a MIDI-60 ratio approximation.
+`demo/audition-fixtures.ts` generates valid-checksum VCED singles and a VMEM bank from original recipes, using Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. The fixtures exercise three paired carriers, six additive carriers, a fixed-frequency carrier, velocity-sensitive modulation and equivalent packed-bank conversion. The fixed carrier retains its approximately 263 Hz frequency in canonical v6 instead of a MIDI-60 ratio approximation; imports leave LFO operator targets absent to preserve the established conversion sound.
 
 The page and report include `describeDX7()` routing/loss warnings. Four slots cannot preserve all six-operator topologies; retained/dropped operators and approximate envelopes, levels, feedback, LFO, keyboard scaling and velocity transfer functions still matter. See the converter's current warnings for supported mappings rather than inferring that every source parameter is exact. There is **no original six-operator DX7 reference renderer** here: A/B compares OPM recipes and converted synthetic sources, not lossless conversion or DX7 hardware fidelity.

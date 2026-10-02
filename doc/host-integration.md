@@ -14,6 +14,109 @@ const engine = new OPM({ workletUrl: '/assets/opm/worklet/processor.js' });
 await engine.start();
 ```
 
+## Worker WAV output and bounded sinks
+
+`renderSequenceInWorker(events, { sink, format?, onProgress?, signal?, workerUrl?, ...chunkOptions })`
+renders long scores in a static module Worker. Chunk options are the core
+`renderSequenceChunks` options, including `sampleRate`, `chunkFrames` (1–65536,
+default4096), `maxFrames`, voice registry, mix/tuning/stealing and `quality`.
+`format` is `pcm16` (default), `pcm24`, or IEEE `float32`. Output is stereo RIFF32
+WAV; oversized RIFF files reject before Worker allocation. Score, options and
+patches are validated and detached first; there is no audio device/context.
+
+The default module is `new URL('../worker/render.js', import.meta.url)`.
+Deploy `dist/worker/render.js` **and all its relative imports**, maps and
+declarations from the matching distribution. An explicit `workerUrl` resolves
+against the page and must be same-origin HTTPS or secure loopback HTTP, with
+no credentials/fragment. The default must also remain same-origin.
+Use `worker-src 'self'`; no blob module, eval, dynamic executable source or
+cross-origin loading is used. CSP, MIME and network failures reject normally.
+Importing the browser API on Node/SSR is safe, but calling this helper requires
+a browser with module Workers.
+
+A sink is an own-data object with `write(Uint8Array): void | Promise<void>`,
+optional `close()` and optional `abort(reason)`. The Worker transfers one byte
+chunk and waits until the sink write fulfills before advancing DSP. The sink owns
+the byte buffer and may transfer/detach it (for example, to a storage Worker);
+byte accounting captures its native size before invoking `write`. Neither thread
+accumulates a complete PCM buffer or WAV. The sink must actually drain to bounded
+storage: retaining every chunk defeats the memory bound.
+`onProgress({ frames, totalFrames, bytesWritten, errors })` runs after each
+successful write, including the initial header (`frames:0`); frame counts are
+cumulative. The result contains `capacity`, `format`, `bytesWritten` and
+`diagnostics: { errors, processedEvents, renderedFrames }`. Success means
+all bytes were written and `close()` fulfilled, not that a host file is audible.
+
+Abort, sink/progress exceptions and Worker failures terminate the Worker,
+remove listeners and reject. `abort(reason)` is invoked once, but its promise
+and an outstanding `write`/`close` are **not awaited**: a hung sink cannot hold
+cancellation hostage. Their later rejections are consumed. A sink must
+invalidate in-flight writes and discard/roll back incomplete output; cancellation
+cannot retract bytes already persisted. `abort` must not finalize an incomplete
+file. Use host-side cleanup when abort itself fails.
+
+For an actual file export, request File System Access from a trusted gesture
+where it is supported. Feature-detect it; if unavailable, report that long-file
+export is unsupported rather than aggregating a long WAV into a Blob:
+
+```js
+import { renderSequenceInWorker } from 'opm.js';
+
+// Run this handler directly from a user gesture.
+async function exportScore(events, signal) {
+  signal?.throwIfAborted();
+  if (typeof window.showSaveFilePicker !== 'function') {
+    throw new Error('Streaming file export requires File System Access');
+  }
+  let file, settled = false;
+  const rollback = async reason => {
+    if (!file || settled) return;
+    settled = true;
+    await file.abort(reason);
+  };
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: 'sequence.wav',
+      types: [{ description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }],
+    });
+    signal?.throwIfAborted();
+    file = await handle.createWritable();
+    signal?.throwIfAborted();
+    return await renderSequenceInWorker(events, {
+      sampleRate:48000, chunkFrames:4096, format:'pcm24', signal,
+      workerUrl:'/audio/opm/worker/render.js',
+      sink: {
+        write(bytes) { return file.write(bytes); },
+        async close() { await file.close(); settled = true; },
+        abort: rollback,
+      },
+    });
+  } catch (error) {
+    await rollback(error).catch(cleanup => console.error('File rollback failed', cleanup));
+    throw error;
+  }
+}
+```
+
+The checkout demo's memory-only download is intentionally a **small export**:
+preflight a hard frame/byte budget, retain chunks only within that budget, and
+revoke its old Blob URL on replacement/disposal. It is not a fallback for a long
+file sink. Hosts also own cumulative work, concurrency and export-frequency limits.
+
+Node and browser hosts may use `createWavEncoder({ sampleRate, channels:1|2,
+format?, totalFrames })` from `opm.js/core` directly. Write `header()` exactly
+once, then each `encode({ left, right? })` result to a backpressured sink before
+consuming the next borrowed PCM chunk; finally write `finalize()` (a RIFF
+alignment byte or empty array). Each call accepts1–65536 frames. The declared
+frame count is exact: overrun/underrun reject, and invalid chunks never advance
+`framesEncoded`. No audio/file bytes are retained by the encoder. Its getters
+are `totalFrames`, `framesEncoded`, `byteLength` and `finished`. Zero-frame WAVs
+are supported by this streaming API. The full-buffer `encodeWav({ left,
+right?, sampleRate, format? })` keeps its original1–4,000,000-frame budget.
+All channels must be native Float32Arrays of finite samples in−1–1; encoding
+rejects rather than clipping. PCM24 uses signed little-endian endpoints; float
+WAV uses format3 with a `fact` sample-count chunk.
+
 ## Events, acknowledgements and ownership
 
 `engine.subscribe(listener)` returns an idempotent unsubscribe function. Each subscription is independent, even for the same listener; it coexists with `onEvent` and scheduler subscriptions. Exceptions and attempts to mutate frozen event records cannot disrupt other listeners or cleanup. Removing a listener during dispatch skips its remaining delivery; newly added listeners begin with the next event. Ordinary `close()` preserves subscriptions for a later `start()`.
@@ -144,3 +247,47 @@ await copyFile(resolve(dist, '../LICENSE'), resolve(target, 'LICENSE'));
 Publish that directory at a same-origin URL such as `/audio/opm/`; retain the license and configure `new OPM({ workletUrl: '/audio/opm/worklet/processor.js' })`. The worklet's own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import `/audio/opm/api/index.js` externally. Use a fresh release-specific asset directory or atomic deployment so removed old assets cannot mix with a new package tree.
 
 An SSR module may import types safely, but instantiate/resume OPM only on the client, from a trusted user gesture. Keep module initialization free of `window`, `document` and `AudioContext` access on the server; dynamically import the runtime inside client-only code when required by the host. Dispose it during component teardown using the ownership recipe above.
+
+## Part-scoped performance
+
+`createPerformance()` supplies playing policies, not a MIDI driver. It requires
+a started OPM and never owns its AudioContext. Keep returned **physical key IDs**
+until their matching key-up; repeated equal-pitch keys have separate identities.
+
+```js
+import { createPerformance } from 'opm.js';
+
+// opm is already started from the host's trusted input gesture.
+const performance = createPerformance(opm, {
+  parts: 16, maxKeys: 128, maxKeysPerPart: 16,
+  onError: error => console.error(error),
+});
+performance.configurePart(0, {
+  voice: 'brass', mode: 'mono', legato: true, priority: 'high', glide: 0.02,
+  pan: 0, expression: 0.8,
+});
+const key = performance.noteOn(0, 60, { velocity: 0.7 }); // host key-down
+performance.sustain(0, true);                           // pedal-down
+performance.noteOff(0, key);                            // physical key-up
+// Later, in the pedal-up input handler:
+// performance.sustain(0, false);
+// performance.updatePart(0, { pan: -0.5, expression: 0.6, glide: 0.03 });
+// performance.allNotesOff(0); // only this part; no global panic
+// performance.dispose();     // release all helper-owned gates on unmount
+```
+
+Parts are 0-based, with 1–16 configured parts (default 16), at most 128 keys and
+128 tracked gates system-wide, including pending releases. Per-part limits share
+that system budget; overflow rejects without evicting unrelated parts. A part
+may use `mode: 'poly'` or `'mono'`, `legato`, and `priority: 'last' | 'high' | 'low'`.
+Physically held keys take precedence over pedal-only keys; equal pitches choose
+the newest identity. Mono legato preserves the original onset's envelope,
+velocity and key/rate scaling. Its pitch offset is anchored to that onset:
+within ±48 semitones it reuses the gate, farther moves retrigger at the actual
+pitch instead of clamping. Non-legato switching retriggers the patch.
+
+`getPart(part)` returns a detached frozen snapshot. Stealing prunes the affected
+gate without later automatic readmission; reset clears state. Interruption
+releases helper-owned notes even when direct OPM notes use preserve policy.
+Dispose performance/Transport helpers before disposing their shared engine.
+Their cleanup does not release unrelated host or Transport notes.

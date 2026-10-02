@@ -44,3 +44,42 @@ The optional absolute `at` is current time through60 seconds ahead when starting
 Score→runtime IDs survive across windows; pre-onset controls wait for their target's admission and apply at onset. `ids` is a detached snapshot of live/pending IDs, not a historical admission report. Terminal note events prune IDs and queued bookkeeping. `stop()` cancels only this stream's pending/active IDs, never unrelated notes. Reset and context interruption/suspension terminate the stream, even when the host preserves unrelated direct-note state. Stop/dispose is idempotent and cannot command a replacement node. Start is one-shot; a cancelled score requires a fresh handle. AbortSignal cancels playback, including asynchronous startup. `pump()` can be called explicitly by a host clock; automatic timers remain enabled.
 
 A missed score event after a timer stall terminates via `onError` instead of silently replaying stale notes. Admission failures terminate and cancel owned IDs. No browser timer can guarantee uninterrupted physical-device playback; use the sequence example and physical acceptance scenarios for device evidence.
+
+## Restartable musical transport
+
+`createTransport` from `opm.js` adds a musical cursor without changing the one-shot sequence APIs. `BeatSequenceEvent` uses `beat` instead of `time`; note `duration` is also in **quarter-note beats**. Controls retain their existing second-based `ramp`/`glide` durations. The score is detached and validated eagerly, with at most65,536 events and86,400 beats including gates. IDs are unique positive safe integers, and stops/controls must reference a score note.
+
+```ts
+const transport = createTransport(opm, [
+  { type: 'note', id: 1, beat: 0, duration: 4, note: 60 },
+  { type: 'control', id: 1, beat: 1, controls: { expression: 0.5, ramp: 0.1 } },
+], {
+  tempoMap: [{ beat: 0, bpm: 120 }, { beat: 2, bpm: 90 }],
+  timeSignature: { numerator: 4, denominator: 4 },
+  loop: { enabled: true, from: 0, to: 4 },
+  onError: error => console.error(error),
+});
+await transport.start(); // Start/resume from a user gesture.
+transport.pause();       // Preserve position; cancel owned gates/queued controls.
+transport.seek(2);       // Remain paused; reconstruct when explicitly resumed.
+await transport.resume();
+transport.setTempo(100); // Preserve current beat; replace future tempo points.
+transport.setLoop({ enabled: false, from: 0, to: 4 });
+console.log(transport.position, transport.snapshot.musicalPosition);
+transport.stop();       // Reset cursor to beat zero; handle remains restartable.
+transport.dispose();    // Permanent helper teardown; does not close OPM.
+```
+
+Tempo defaults to120 BPM. BPM is finite in1..1,000; a supplied map contains1..1,024 own-data points, begins at beat zero, and increases strictly. `beatsToSeconds` integrates60/BPM across every boundary; `secondsToBeats` is its inverse. `setTempoMap` replaces the complete map at the current cursor, not at score zero. `setTempo` retains earlier points, inserts a point at the current beat and removes later points. Edits while running cancel/rebuild owned scheduling immediately; edits while paused/stopped stay inactive. Edits during pending startup invalidate that attempt and require explicit `start`/`resume` again.
+
+`beatToBarBeat` and `barBeatToBeat` use one-based bars and fractional one-based beats in a fixed signature. The numerator is1..32 and denominator is1,2,4,8,16 or32; for6/8, one displayed beat equals half a quarter-note beat. `snapshot` contains frozen position/meter/tempo/loop data and state (`stopped`, `starting`, `running`, `paused`, `disposed`). `position` is in quarter-note beats; `running` becomes true only after asynchronous audio startup. `ids` is a detached live/pending score→runtime map; overlapping loop tails may map a score ID to its newest occurrence, not every owned tail.
+
+Seek is bounded by the score end (or the enabled loop end, whichever is later). Loop intervals are finite with0≤`from`<`to`≤86,400 and may contain silence beyond the score. Playback before the interval proceeds until `to`, then wraps to `from`. Starting/seeking at or beyond an enabled loop's `to` normalizes to `from`. Loop seams are scheduled on AudioContext frames, not timer callbacks. Every iteration has distinct runtime IDs; old gates terminate at `to`, and controls outside that iteration are not submitted. Natural release tails can overlap the next iteration.
+
+For notes admitted in the current segment, controls tied to release or later in the release tail are still scheduled, matching sequence/direct-note semantics. This includes expression/timbre/ADSR edits and controls at the final **non-looping** score endpoint; score duration includes control timestamps independently of note gates. Loop control intervals remain half-open at `to`, so an endpoint control does not leak into the next iteration. Natural completion stops admission but retains already scheduled controls and owned release-tail IDs until their terminal events; it does not perform scoped teardown. A seek/resume destination after a note's gate has ended never resurrects that release tail.
+
+**Restart semantics:** seek, resume, tempo/loop edits and loop wraps reconstruct crossing held notes using their remaining musical gate and relevant controls. Linear pitch/expression/pan/modulation/operator-level/feedback/LFO-rate/AM-depth/PM-depth/operator-ratio ramps are evaluated at the destination and continue for their independent remaining seconds. Defaults come from the note's prepared patch. The latest fixed-Hz/null frequency policy is applied immediately at the destination, even if its original frequency ramp was unfinished; null uses the reconstructed live ratio and current engine tuning. This deliberately restarts that timbre transition rather than inventing intermediate Hz for a ratio-dependent endpoint. The latest operator ADSR edit is reanchored at the restarted onset. Phase, envelopes, LFO and pitch-envelope state restart; this is not a sample-exact DSP checkpoint or seamless sustain promise. An early/tied stop cancels its note; pre-onset controls clamp to onset. Pause/seek/edits use ID-scoped `stop(id, { cancelControls: true })`, removing owned future automation without global panic/allNotesOff or touching unrelated clients.
+
+Lookahead bounds match streaming: horizon0.01..10 seconds (default0.2), interval0.001..horizon/2 (default min(0.025,horizon/2)), maxSlots integer1..256 (default256), and at most128 outstanding owned note IDs. Score/loop density is preflighted; runtime commands are additionally capped against the actual queue. Loops shorter than horizon/32 reject; at most32 wraps are generated per pump. Missed events or a pump gap longer than a horizon stop with `onError`, rather than silently retiming. `pump()` is available for host-driven observation; bounded automatic timers remain enabled. Position observes AudioContext time and never integrates timer drift.
+
+Reset, replacement/closed context, suspension and interruption stop this transport even under OPM's preserve policy. Returning the context to running does **not** resume it; explicitly call `start`/`resume` from a user gesture. Pause, stop, reset and dispose invalidate pending startup, so late promises cannot resurrect notes. Stop/dispose are idempotent. Disposed handles reject start/resume and mutation; no operation closes or globally resets the shared engine.
