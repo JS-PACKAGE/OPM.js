@@ -18,6 +18,8 @@
       <select id="interruption"><option value="cancel">Cancel: clear voices and queued events</option><option value="preserve">Preserve: resume direct-note state</option></select>
       <label for="stealing">Voice stealing (apply after Dispose)</label>
       <select id="stealing"><option value="oldest">Oldest</option><option value="release-first">Release first, oldest tie</option><option value="quietest">Quietest carrier envelope, oldest tie</option></select>
+      <label for="quality">DSP quality (apply after Dispose)</label>
+      <select id="quality"><option value="standard">Standard: 4× / eighth order</option><option value="eco">Eco: 2× / fourth order</option><option value="high">High: 8× / eighth order</option></select>
       <label for="waveform">LFO waveform (next patch)</label>
       <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option></select>
       <label for="reference">Reference A4 (Hz)</label>
@@ -33,6 +35,40 @@
       <label for="pan">Pan</label><input id="pan" type="number" min="-1" max="1" step="0.1" value="0.5">
       <label for="modulation">Modulation multiplier</label><input id="modulation" type="number" min="0" max="2" step="0.1" value="0.5">
       <label for="ramp">Ramp (seconds; 0 keeps immediate control)</label><input id="ramp" type="number" min="0" max="10" step="0.005" value="0.02">
+      <label for="feedback">Feedback</label><input id="feedback" type="number" min="0" max="7" step="0.1" value="2">
+      <label for="lfo-rate">Independent LFO rate (Hz)</label><input id="lfo-rate" type="number" min="0" max="20" step="0.5" value="5">
+      <label for="am-depth">AM depth</label><input id="am-depth" type="number" min="0" max="1" step="0.05" value="0.15">
+      <label for="pm-depth">PM depth (cents)</label><input id="pm-depth" type="number" min="0" max="1200" step="5" value="20">
+    </fieldset>
+    <fieldset>
+      <legend>Musical transport and performance</legend>
+      <label for="bpm">Tempo (BPM)</label><input id="bpm" type="number" min="20" max="300" value="120">
+      <label for="seek-beat">Seek position (beats)</label><input id="seek-beat" type="number" min="0" max="16" step="0.25" value="2">
+      <label><input id="loop" type="checkbox">Loop beats 0–8</label>
+      <label for="performance-mode">Performance mode (new performance helper)</label>
+      <select id="performance-mode"><option value="poly">Polyphonic</option><option value="mono">Mono legato</option></select>
+      <label for="note-priority">Mono priority</label><select id="note-priority"><option>last</option><option>high</option><option>low</option></select>
+      <button id="transport-start" data-live type="button" disabled>Start beat score</button>
+      <button id="transport-pause" data-live type="button" disabled>Pause transport</button>
+      <button id="transport-resume" data-live type="button" disabled>Resume transport</button>
+      <button id="transport-seek" data-live type="button" disabled>Seek / apply tempo and loop</button>
+      <button id="transport-stop" data-live type="button" disabled>Stop transport</button>
+      <button id="performance-on" data-live type="button" disabled>Press C / E / G</button>
+      <button id="pedal-on" data-live type="button" disabled>Sustain pedal down</button>
+      <button id="performance-off" data-live type="button" disabled>Release physical keys</button>
+      <button id="pedal-off" data-live type="button" disabled>Sustain pedal up</button>
+      <button id="performance-reset" data-live type="button" disabled>Release performance part only</button>
+    </fieldset>
+    <fieldset>
+      <legend>Voice-bank lifecycle and export</legend>
+      <button id="bank-replace" data-live type="button" disabled>Atomically replace bank</button>
+      <button id="bank-remove" data-live type="button" disabled>Remove lead lookup</button>
+      <button id="bank-export" data-live type="button" disabled>Export bank JSON</button>
+      <label for="wav-format">WAV format</label><select id="wav-format"><option value="pcm16">PCM16</option><option value="pcm24">PCM24</option><option value="float32">Float32</option></select>
+      <button id="worker-preview" type="button">Worker export short score</button>
+      <button id="worker-file" type="button">Worker stream 60 seconds directly to file</button>
+      <button id="cancel-worker" type="button" disabled>Cancel Worker export</button>
+      <p class="hint">Short preview retains a bounded WAV download. Long export requires a browser file-picker sink; it never retains the complete file in memory.</p>
     </fieldset>
     <div class="actions">
       <button id="start" type="button">Start / resume</button>

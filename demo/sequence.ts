@@ -1,6 +1,7 @@
-import { OPM, playSequence, streamSequence } from '../src/api/index.js';
-import type { OPMEvent, SequenceEvent, SequenceStream, TuningOptions } from '../src/api/index.js';
+import { OPM, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker } from '../src/api/index.js';
+import type { OPMEvent, SequenceEvent, SequenceStream, TuningOptions, MusicalTransport, Performance } from '../src/api/index.js';
 import { renderSequence, renderSequenceChunks, estimateSequenceCapacity, encodeWav } from '../src/core/index.js';
+import type { QualityProfile, WavFormat } from '../src/core/index.js';
 import { brass } from '../src/voices/brass.js';
 import type { LFO, Voice } from '../src/voices/schema.js';
 import { installAcceptanceHarness } from './mobile-acceptance.js';
@@ -25,6 +26,17 @@ let leaving = false;
 let timer: ReturnType<typeof setInterval> | undefined;
 let stream: SequenceStream | null = null;
 let cancelRender = false;
+let transport: MusicalTransport | null = null;
+let performance: Performance | null = null;
+const physicalKeys: number[] = [];
+let workerAbort: AbortController | null = null;
+
+const beatScore = [
+  { type: 'note' as const, id: 1, voice: 'lead', note: 60, beat: 0, duration: 3 },
+  { type: 'note' as const, id: 2, voice: 'lead', note: 64, beat: 2, duration: 3 },
+  { type: 'control' as const, id: 1, beat: 1, controls: { expression: 0.5, ramp: 0.04 } },
+  { type: 'note' as const, id: 3, voice: 'lead', note: 67, beat: 4, duration: 3 },
+];
 
 const score: readonly SequenceEvent[] = [
   { type: 'note', id: 1, voice: 'lead', note: 60.5, time: 0, duration: 0.5, pan: -0.5 },
@@ -81,7 +93,7 @@ function receive(event: OPMEvent): void {
   if (event.type === 'note') {
     if (event.state === 'accepted') gates.add(event.id);
     if (['released', 'ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) gates.delete(event.id);
-  } else if (event.type === 'reset') gates.clear();
+  } else if (event.type === 'reset') { gates.clear(); physicalKeys.length = 0; }
   record(event.type === 'error' ? { type: 'error', message: event.error.message } : { ...event });
   update();
 }
@@ -92,6 +104,7 @@ function update(): void {
   document.querySelector<HTMLButtonElement>('#start')!.disabled = busy || leaving;
   select('interruption').disabled = Boolean(opm?.node);
   select('stealing').disabled = Boolean(opm?.node);
+  select('quality').disabled = Boolean(opm?.node);
 }
 async function action(fn: () => void | Promise<void>): Promise<void> {
   if (busy || leaving) return;
@@ -132,7 +145,8 @@ bind('start', async () => {
   const resume = context.resume();
   if (!opm) opm = new OPM({ context, destination: analyser, mixGain: input('mix-gain').valueAsNumber,
     tuning: tuning(), stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest',
-    interruption: select('interruption').value as 'cancel' | 'preserve', onEvent: receive });
+    interruption: select('interruption').value as 'cancel' | 'preserve',
+    quality: select('quality').value as QualityProfile, onEvent: receive });
   await resume;
   await opm.start();
   record({ type: 'audio-ready', sampleRate: context.sampleRate, policy: select('interruption').value });
@@ -142,7 +156,7 @@ bind('start', async () => {
     analyser.getFloatTimeDomainData(pcm);
     let peak = 0;
     for (const value of pcm) peak = Math.max(peak, Math.abs(value));
-    diagnostics.textContent = `Context ${context?.state}; held gates ${gates.size}; stream ${stream?.running ? 'running' : 'stopped'}; recent analyser peak ${peak.toFixed(6)}. Not an underrun counter.`;
+    diagnostics.textContent = `Context ${context?.state}; held gates ${gates.size}; stream ${stream?.running ? 'running' : 'stopped'}; transport ${transport?.state ?? 'none'} at ${transport?.position.toFixed(2) ?? '0'} beats; recent analyser peak ${peak.toFixed(6)}. Not an underrun counter.`;
   }, 250);
 });
 bind('play', () => {
@@ -181,8 +195,10 @@ bind('controls', () => {
   opm!.setMixGain(input('mix-gain').valueAsNumber);
   opm!.setTuning(tuning());
   for (const id of gates) opm!.updateNote(id, { expression: input('expression').valueAsNumber,
-    pan: input('pan').valueAsNumber, modulation: input('modulation').valueAsNumber, ramp: input('ramp').valueAsNumber });
-  status.textContent = 'Controls submitted; ramp affects expression/pan/modulation, not pitch glide.';
+    pan: input('pan').valueAsNumber, modulation: input('modulation').valueAsNumber, ramp: input('ramp').valueAsNumber,
+    feedback: input('feedback').valueAsNumber, lfoRate: input('lfo-rate').valueAsNumber,
+    amDepth: input('am-depth').valueAsNumber, pmDepth: input('pm-depth').valueAsNumber });
+  status.textContent = 'Independent feedback / LFO controls submitted with a smooth ramp; note pitch glide remains separate.';
 });
 bind('chord', () => {
   opm!.loadVoice('lead', patch());
@@ -190,12 +206,23 @@ bind('chord', () => {
     velocity: (index + 1) / 12, duration: index < 4 ? 0.03 : 1 });
   status.textContent = '12-note burst; eight logical voices, selected stealing policy, bounded fading tails.';
 });
-bind('release', () => { stream?.stop(); stream = null; opm!.allNotesOff(); status.textContent = 'All pending events cancelled; active gates released, tails retained.'; });
-bind('panic', () => { stream?.stop(); stream = null; opm!.panic(); status.textContent = 'Panic submitted: immediate silence and reset, patch cache/routing retained.'; });
+function stopOwnedPlayback(): void {
+  stream?.stop(); stream = null;
+  transport?.stop();
+  performance?.allNotesOff();
+  physicalKeys.length = 0;
+}
+bind('release', async () => { stopOwnedPlayback(); await opm!.waitForCommand(opm!.allNotesOff()); status.textContent = 'All pending events cancelled; active gates released, tails retained.'; });
+bind('panic', async () => { stopOwnedPlayback(); await opm!.waitForCommand(opm!.panic()); status.textContent = 'Panic accepted: immediate silence and reset, patch cache/routing retained.'; });
 bind('suspend', async () => { await context!.suspend(); status.textContent = 'Host suspended. Click Start / resume in a user gesture.'; });
 bind('dispose', async () => {
   stream?.dispose();
   stream = null;
+  transport?.dispose();
+  transport = null;
+  performance?.dispose();
+  performance = null;
+  physicalKeys.length = 0;
   await opm!.close();
   opm = null;
   status.textContent = `Synth disposed; borrowed context is still ${context!.state}. Start creates a fresh node.`;
@@ -204,8 +231,10 @@ bind('render', () => {
   revokeWav();
   const audio = renderSequence(score, { voices: new Map([['lead', patch()]]), sampleRate: context?.sampleRate ?? 48000,
     mixGain: input('mix-gain').valueAsNumber, tuning: tuning(),
-    stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest' });
-  const bytes = encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate });
+    stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest',
+    quality: select('quality').value as QualityProfile });
+  const bytes = encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate,
+    format: select('wav-format').value as WavFormat });
   wavURL = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/wav' }));
   download.href = wavURL;
   download.download = 'opm-sequence.wav';
@@ -216,7 +245,8 @@ bind('render-long', async () => {
   cancelRender = false;
   const cancel = document.querySelector<HTMLButtonElement>('#cancel-render')!;
   cancel.disabled = false;
-  const options = { voices: new Map([['lead', patch()]]), sampleRate: 96000, chunkFrames: 4096 };
+  const options = { voices: new Map([['lead', patch()]]), sampleRate: 96000, chunkFrames: 4096,
+    quality: select('quality').value as QualityProfile };
   const capacity = estimateSequenceCapacity(longScore, options);
   record({ type: 'chunk-render-capacity', ...capacity });
   const chunks = renderSequenceChunks(longScore, options);
@@ -236,6 +266,114 @@ bind('render-long', async () => {
     status.textContent = `${cancelRender || leaving ? 'Cancelled' : 'Completed'} 60-second mixed score at 96000 Hz: ${chunks.diagnostics.renderedFrames} frames, ${chunks.diagnostics.errors} DSP errors, peak ${peak.toFixed(6)}. ${capacity.chunkBytes} PCM buffer bytes reused; no aggregate PCM/WAV retained.`;
   } finally { chunks.cancel(); cancel.disabled = true; }
 });
+
+bind('transport-start', async () => {
+  transport?.dispose();
+  opm!.loadVoice('lead', patch());
+  transport = createTransport(opm!, beatScore, { bpm: input('bpm').valueAsNumber,
+    loop: { enabled: input('loop').checked, from: 0, to: 8 },
+    onError: error => { record({ type: 'transport-error', message: error.message }); } });
+  await transport.start();
+  status.textContent = 'Beat transport running; pause/seek/loop restart owned envelopes, not unrelated notes.';
+});
+bind('transport-pause', () => { transport?.pause(); status.textContent = `Transport paused at ${transport?.position.toFixed(3)} beats.`; });
+bind('transport-resume', async () => { if (transport) await transport.resume(); status.textContent = 'Transport resumed from its musical cursor.'; });
+bind('transport-seek', () => {
+  if (!transport) throw new Error('Start the beat transport first');
+  transport.setTempo(input('bpm').valueAsNumber);
+  transport.setLoop({ enabled: input('loop').checked, from: 0, to: 8 });
+  transport.seek(input('seek-beat').valueAsNumber);
+  status.textContent = `Transport moved to ${transport.position.toFixed(3)} beats at ${input('bpm').valueAsNumber} BPM.`;
+});
+bind('transport-stop', () => { transport?.stop(); status.textContent = 'Transport stopped; only its owned notes were released.'; });
+bind('performance-on', () => {
+  if (physicalKeys.length) throw new Error('Release physical keys before pressing another demonstration chord');
+  opm!.loadVoice('lead', patch());
+  performance ??= createPerformance(opm!, { onError: error => record({ type: 'performance-error', message: error.message }) });
+  performance.configurePart(0, { voice: 'lead', mode: select('performance-mode').value as 'poly' | 'mono',
+    legato: true, priority: select('note-priority').value as 'last' | 'high' | 'low', glide: 0.05 });
+  for (const note of [60, 64, 67]) physicalKeys.push(performance.noteOn(0, note, { velocity: 0.7 }));
+  status.textContent = `Three physical keys held; part 0 uses ${select('performance-mode').value} / ${select('note-priority').value}.`;
+});
+bind('performance-off', () => {
+  for (const key of physicalKeys) performance?.noteOff(0, key);
+  physicalKeys.length = 0;
+  status.textContent = 'Physical keys released; pedal-held sound remains until pedal up.';
+});
+bind('pedal-on', () => { performance?.sustain(0, true); status.textContent = 'Part 0 sustain pedal down.'; });
+bind('pedal-off', () => { performance?.sustain(0, false); status.textContent = 'Part 0 sustain pedal up.'; });
+bind('performance-reset', () => { performance?.allNotesOff(0); physicalKeys.length = 0; status.textContent = 'Part 0 released; transport and unrelated notes untouched.'; });
+bind('bank-replace', () => { opm!.replaceVoiceBank([{ ...patch(), name: 'lead' }]); status.textContent = 'Bank atomically replaced; previously queued and sounding patches retain their snapshots.'; });
+bind('bank-remove', () => { status.textContent = `Lead lookup removed: ${opm!.removeVoice('lead')}. Existing notes retain their patch.`; });
+bind('bank-export', () => {
+  revokeWav();
+  const json = opm!.exportVoiceBank();
+  wavURL = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+  download.href = wavURL; download.download = 'opm-voices.json'; download.hidden = false;
+  status.textContent = `Exported ${opm!.voices.size} detached voice-bank entries.`;
+});
+
+interface FileSink {
+  write(bytes: Uint8Array<ArrayBuffer>): Promise<void>;
+  close(): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
+}
+async function workerExport(toFile: boolean): Promise<void> {
+  let file: FileSink | undefined;
+  let fileSettled = false;
+  const abortFile = async (reason?: unknown): Promise<void> => {
+    if (!file || fileSettled) return;
+    fileSettled = true;
+    await file.abort(reason);
+  };
+  const controller = new AbortController();
+  workerAbort = controller;
+  const cancel = document.querySelector<HTMLButtonElement>('#cancel-worker')!;
+  cancel.disabled = false;
+  try {
+    if (toFile) {
+      const picker = (window as Window & { showSaveFilePicker?: (options: {
+        suggestedName: string; types: { description: string; accept: Record<string, string[]> }[];
+      }) => Promise<{ createWritable(): Promise<FileSink> }> }).showSaveFilePicker;
+      if (!picker) throw new Error('This browser has no direct file sink. Use the short preview, or a browser with File System Access.');
+      const handle = await picker.call(window, { suggestedName: 'opm-long.wav',
+        types: [{ description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }] });
+      controller.signal.throwIfAborted();
+      file = await handle.createWritable();
+      controller.signal.throwIfAborted();
+    }
+    revokeWav();
+    const parts: Uint8Array<ArrayBuffer>[] = [];
+    let retained = 0;
+    const result = await renderSequenceInWorker(toFile ? longScore : score, {
+      voices: new Map([['lead', patch()]]), sampleRate: toFile ? 96000 : 48000, chunkFrames: 4096,
+      quality: select('quality').value as QualityProfile, format: select('wav-format').value as WavFormat,
+      signal: controller.signal, maxFrames: toFile ? 8_000_000 : 48000 * 12,
+      sink: file ? { write: bytes => file!.write(bytes as Uint8Array<ArrayBuffer>),
+        close: async () => { await file!.close(); fileSettled = true; }, abort: abortFile } : {
+        write: bytes => {
+          retained += bytes.byteLength;
+          if (retained > 8 * 1024 * 1024) throw new RangeError('Short preview exceeds its 8 MiB memory budget');
+          parts.push(bytes as Uint8Array<ArrayBuffer>);
+        },
+      },
+      onProgress: progress => { status.textContent = `Worker export: ${progress.frames} / ${progress.totalFrames} frames; ${progress.bytesWritten} bytes acknowledged by sink.`; },
+    });
+    controller.signal.throwIfAborted();
+    if (!toFile) {
+      wavURL = URL.createObjectURL(new Blob(parts, { type: 'audio/wav' }));
+      download.href = wavURL; download.download = 'opm-worker.wav'; download.hidden = false;
+    }
+    record({ type: 'worker-export-complete', ...result });
+    status.textContent = `Worker ${result.format} export complete: ${result.bytesWritten} bytes; ${result.diagnostics.errors} DSP errors. ${toFile ? 'Written directly to file with backpressure.' : 'Bounded short preview download ready.'}`;
+  } catch (error) {
+    await abortFile(error).catch(cleanupError => record({ type: 'file-abort-error', message: String(cleanupError) }));
+    throw error;
+  } finally { cancel.disabled = true; if (workerAbort === controller) workerAbort = null; }
+}
+bind('worker-preview', () => workerExport(false));
+bind('worker-file', () => workerExport(true));
+document.querySelector<HTMLButtonElement>('#cancel-worker')!.addEventListener('click', () => workerAbort?.abort());
 document.querySelector<HTMLButtonElement>('#cancel-render')!.addEventListener('click', () => { cancelRender = true; });
 document.addEventListener('visibilitychange', () => record({ type: 'visibility', state: document.visibilityState }));
 window.addEventListener('pagehide', () => {
@@ -243,6 +381,13 @@ window.addEventListener('pagehide', () => {
   cancelRender = true;
   stream?.dispose();
   stream = null;
+  transport?.dispose();
+  transport = null;
+  performance?.dispose();
+  performance = null;
+  physicalKeys.length = 0;
+  workerAbort?.abort();
+  workerAbort = null;
   clearInterval(timer);
   timer = undefined;
   revokeWav();
