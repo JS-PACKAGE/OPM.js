@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.6
 
-The published v1.5 / package 1.5.0 artifact remains unchanged. The source changes below require a separately reviewed version/tag/release before publication.
+Package version 1.6.0. GitHub release distribution and npm registry publication are separate operations; the v1.5 artifact remains immutable.
 
 ### Acoustic quality, expression and adoption
 
@@ -18,12 +18,13 @@ The published v1.5 / package 1.5.0 artifact remains unchanged. The source change
 - Add post-publication registry byte/integrity/source-provenance/signature/installed-consumer verification to the manual npm workflow; local artifact validation is available without claiming registry publication.
 - Synchronize project guidance and public usage contracts. Physical-device/listening evidence and authorized first npm publication remain external prerequisites.
 
-### Unreleased verification record
+### v1.6 verification record
 
 - Node.js 26.7.0: 198 behavioral tests, strict source/development/consumer types, source/generated AST gates, installed-package render/WAV/declarations passed; root full/runtime and Vite tooling audits found zero vulnerabilities, with an empty runtime dependency tree. A stale generated `dist` containing duplicated ` 2`/` 3` suffix files failed the packaged-map gate; it was preserved outside the repository and rebuilt cleanly rather than deleted.
 - Native Chromium 153.0.8010.12 (48 kHz backend, muted) ran the audition UI (A/B measurement, matched-versus-dry reports, PCM16 WAV download, play/stop/dispose and fresh restart), a 60-second/96 kHz bounded render (5,775,360 frames, zero DSP errors) and a 390 px layout check; the event log is now height-limited so long reports do not widen the page. It also ran command-waiter admission, receipt eviction, native abort-signal handling, correlated panic reset, subscription cleanup and terminal disposal against a borrowed context. Worklet stress and the installed Vite subpath/CSP/MIME/404 smoke passed again; the native WebKit 26.6 AudioWorklet smoke passed.
 - Report-only Apple M5 benchmark (48 kHz, 128 frames, 2.667 ms deadline): the order-8 decimator costs more than the former filter. Eight voices with LFO had p99 at 1.575× the deadline and 79 misses; without LFO 1.429× and 45 misses; raw burst 3.323× and prepared burst 2.591×. Worst samples include scheduler/GC pauses (up to 120 ms), so this is a host-dependent tradeoff, not an underrun counter. Measure before enabling dense polyphony on tighter CPU budgets.
 - Not verified: listening quality, physical iOS/Android interruption behavior, locked Playwright 1.56.1, Firefox, Linux WebKit CI and any npm registry operation (`npm whoami` previously returned ENEEDAUTH). Desktop automation does not earn physical-device acceptance.
+- **Waiver:** v1.6 was released on GitHub at the maintainer's explicit request without a fresh independent A/B/C/D review (see SECURITY.md). It is not eligible for npm publication until that review record exists.
 
 ## v1.5
 

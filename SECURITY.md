@@ -206,7 +206,7 @@ v1.5 release review: Release15Inputs approved scoped static A/B inspection; Rele
 
 v1.5 interruption-repair recheck: Release15Inputs initially found that deferred running notifications could leave deduplication state stale. Both initial and existing-node resume now synchronize successful state observation; repeated fully deferred transitions and pending diagnostics are covered by consumer regressions. Release15Inputs then approved A/B and Release15DspSupply approved C/D without remaining scoped static findings. The original Linux WebKit CI failure blocks publication until repaired-candidate verification; static approval is not a waiver or runtime certification.
 
-Unreleased feature-completion recheck: a further security review found two command-waiter boundary issues (abort-signal state/listener shadowing and receipt-eviction handling around correlated panic resets). Both were fixed with regressions and rechecked natively against a borrowed context. This is an integration-owner runtime record, not a new independent approval; a release still needs fresh A/B/C/D review.
+v1.6 release review: a security review found two command-waiter boundary issues (abort-signal state/listener shadowing and receipt-eviction handling around correlated panic resets). Both were fixed with regressions and rechecked natively against a borrowed context. No fresh independent A/B/C/D approval was obtained for v1.6; the maintainer explicitly authorized the GitHub release on the integration owner's runtime evidence, recorded as a waiver in CHANGELOG. npm publication still requires the independent review record described in doc/publishing.md.
 
 ## Non-goals
 
