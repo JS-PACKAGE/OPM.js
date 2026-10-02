@@ -57,6 +57,7 @@
     "voice-quality": "npm run compile && node .dev/scripts/voice-quality.js",
     "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
     "vite-smoke": "npm run compile && node .dev/scripts/vite-smoke.js",
+    "registry-verify": "npm run compile && node .dev/scripts/registry-verify.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",
     "browser-smoke": "npm run compile && node .dev/scripts/browser-smoke.js",

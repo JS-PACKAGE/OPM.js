@@ -34,4 +34,22 @@ Before running the workflow:
 
 The release job reruns tests/build/type checks, dependency audits, sound-quality and voice-quality checks, installed-package security smoke, actual Chromium browser smoke/stress and the standalone Vite smoke against a locally packed current artifact. It then packs a release tarball, dry-runs that exact tarball, records its SHA-256 digest and review URL in the job summary, and publishes that same file with `--ignore-scripts --provenance`. There is no automatic tag, commit, push, release creation or publication on normal CI/push events. If the version already exists, npm must reject publication; do not delete or overwrite releases to bypass that rejection.
 
-After an authorized publication, verify the registry version, integrity, file list and provenance against the reviewed artifact and retain the run URL/digest in the review record. OIDC configuration, actual environment protection, maintainer authorization and registry provenance are external prerequisites/results and must not be claimed as verified by merely adding this workflow.
+After an authorized publication, the workflow runs `registry-verify` against the **same reviewed tarball**, version and full commit SHA. It compares registry SHA-512 integrity and exact downloaded bytes, enforces the package file allowlist and JS/map/declaration companions, checks the SLSA v1 subject digest and GitHub workflow/release-tag/source-commit identity, then installs that exact registry version with scripts disabled. `npm audit signatures` cryptographically verifies the registry signatures and provenance; reading a DSSE payload alone is not verification. The installed package renders a real score and WAV. Failure blocks the workflow's success and is not repaired by overwriting an npm version.
+
+## Local and post-publication commands
+
+From a source checkout, validate a reviewed artifact without contacting npm or claiming registry availability:
+
+```sh
+npm run registry-verify -- --local /absolute/path/opm.js-1.5.0.tgz 1.5.0
+```
+
+After publication, replace the SHA below with the actual reviewed release commit:
+
+```sh
+npm run registry-verify -- /absolute/path/opm.js-VERSION.tgz VERSION FULL_40_CHARACTER_COMMIT_SHA
+```
+
+The online command is read-only with respect to the registry: it cannot publish, configure trusted publishers or authenticate an account. Downloads have explicit byte/time budgets and are restricted to HTTPS `registry.npmjs.org`; its isolated installation is removed afterwards. It requires `tar`, npm with provenance verification support, and the published SLSA v1 GitHub provenance from this workflow. Retain its digest, file list and run URL in the public review record.
+
+First-package bootstrap, npm ownership/2FA, trusted-publisher configuration, GitHub environment reviewers/protected tags, publication authorization and actual registry verification remain external requirements. Do not substitute a local PASS, stale release review, or manual unprovenanced bootstrap for a verified provenance-bearing release. Unreleased source improvements must not be published under the already released 1.5.0 identity; choose/review a new version before a future release.

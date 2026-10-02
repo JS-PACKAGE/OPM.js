@@ -117,3 +117,10 @@ jobs:
       - name: Publish exact verified tarball using trusted npm OIDC and provenance
         if: inputs.publish
         run: npm publish "$RUNNER_TEMP/opm.js-${{ inputs.version }}.tgz" --ignore-scripts --provenance --access public --registry https://registry.npmjs.org
+      - name: Verify registry bytes, source provenance, signatures and installed consumer
+        if: inputs.publish
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          node .dev/scripts/registry-verify.js "$RUNNER_TEMP/opm.js-$RELEASE_VERSION.tgz" "$RELEASE_VERSION" "$GITHUB_SHA" | tee "$RUNNER_TEMP/registry-verification.txt"
+          cat "$RUNNER_TEMP/registry-verification.txt" >> "$GITHUB_STEP_SUMMARY"
