@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — 8 channels of 4-operator synthesis with multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** Unreleased changes after the GitHub v1.4 release: command acknowledgements, safe shutdown, smooth controls, shared scores, tuning, selectable LFO/stealing and voice format v4. Package metadata remains 1.4.0 for local verification; this checkout is not the immutable v1.4 release or a published npm artifact.
+> **Status:** v1.5 release line (package 1.5.0): command acknowledgements, safe shutdown, smooth controls, shared scores, tuning, selectable LFO/stealing and voice format v4. GitHub release distribution and npm registry publication are separate; use the verified release tarball or pack this checkout.
 
 Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.md).
 
@@ -77,14 +77,14 @@ npm ci
 npm pack
 ```
 
-`npm pack` builds automatically and produces `opm.js-1.4.0.tgz`. To create a new application beside the checkout:
+`npm pack` builds automatically and produces `opm.js-1.5.0.tgz`. To create a new application beside the checkout:
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.4.0.tgz
+npm install ../OPM.js/opm.js-1.5.0.tgz
 ```
 
 For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.

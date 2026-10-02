@@ -196,9 +196,11 @@ Each release notes in the CHANGELOG which checklist sections were exercised (A/B
 
 For v1.2, final A/B/C/D independent review and observed integration verification are recorded in CHANGELOG before release. Configured Node 22/24/26 and Chromium/Firefox/WebKit CI jobs are capabilities, not evidence of an external run. Missing browser binaries/host support or unrun CI must be reported, not represented as passing coverage.
 
-Unreleased gap-completion review: InputBoundaryReview covered A/B; DspSupplyReview covered C/D. The integration owner reproduced and fixed null mixGain/tuning acceptance and overridable render-buffer metadata, then also prevented offset coercion before default-length calculation. Runtime evidence and remaining registry/physical-device prerequisites are recorded separately in CHANGELOG; static review is not a claim of runtime coverage.
+v1.5 feature-completion review: InputBoundaryReview covered A/B; DspSupplyReview covered C/D. The integration owner reproduced and fixed null mixGain/tuning acceptance and overridable render-buffer metadata, then also prevented offset coercion before default-length calculation. Runtime evidence and remaining registry/physical-device prerequisites are recorded separately in CHANGELOG; static review is not a claim of runtime coverage.
 
 FinalInputsReview (A/B) and FinalDspReview (C/D) rechecked the final hardened source and release controls, with no new evidence-backed findings. Their PASS applies to scoped static inspection only; they ran no build, payload, tests, audit or browser commands.
+
+v1.5 release review: Release15Inputs approved scoped static A/B inspection; Release15DspSupply approved C/D for GitHub distribution of package 1.5.0, with no evidence-backed blockers. Neither reviewer executed runtime gates or certified external npm settings. The integration owner's fresh package, native browser, numerical, audit and report-only benchmark evidence is recorded in CHANGELOG.
 
 ## Non-goals
 

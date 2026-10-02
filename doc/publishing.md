@@ -1,8 +1,8 @@
 # Publication and package verification
 
-The GitHub **v1.4** release distributes package version **1.4.0**; it does **not** publish that package to the npm registry. Registry package availability and maintainer authentication must be established independently: during feature verification, the integration owner observed a registry package 404 and local `npm whoami --registry=https://registry.npmjs.org` returning `ENEEDAUTH`. Those are prerequisites, not reasons to bypass authentication.
+The GitHub **v1.5** release line distributes package version **1.5.0**; it does **not** publish that package to the npm registry. Registry package availability and maintainer authentication must be established independently: during feature verification, the integration owner observed a registry package 404 and local `npm whoami --registry=https://registry.npmjs.org` returning `ENEEDAUTH`. Those are prerequisites, not reasons to bypass authentication.
 
-The current checkout contains **Unreleased changes after that release**, including voice format 4; package metadata remains 1.4.0 only for local artifact verification. Do not publish this modified tree as the immutable v1.4 artifact. Choose/review the next release version, obtain explicit commit/tag/release authorization and authenticate an authorized maintainer before initial npm publication. Local installed-tarball checks do not prove registry availability, integrity or provenance.
+The maintainer authorized the v1.5 commit, push, tag and GitHub release after feature verification. Keep the historical v1.4 tag and artifact immutable. Authenticate an authorized npm maintainer before initial registry publication; GitHub authentication does not grant npm authentication. Local installed-tarball checks do not prove registry availability, integrity or provenance.
 
 ## Bootstrap and trusted publishing
 

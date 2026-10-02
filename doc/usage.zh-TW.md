@@ -2,7 +2,7 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-此 checkout 包含 GitHub v1.4 之後的 **Unreleased** 改動：版本 4 音色、命令回覆、平滑控制、live／offline 共用樂譜、全域調音與中斷恢復。套件 metadata 暫維持 1.4.0 供本機驗證，不代表 immutable v1.4 release 或 npm 上架。ESM 入口附型別宣告；Node.js 範例需 22+。README 為公開 API 的正式契約。
+**v1.5 發佈系列（套件 1.5.0）**包含版本 4 音色、命令回覆、平滑控制、live／offline 共用樂譜、全域調音與中斷恢復。GitHub Release 的發佈不代表 npm registry 已上架。ESM 入口附型別宣告；Node.js 範例需 22+。README 為公開 API 的正式契約。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -21,14 +21,14 @@ npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.4.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
+此 checkout 的套件版本產生 `opm.js-1.5.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.4.0.tgz
+npm install ../OPM.js/opm.js-1.5.0.tgz
 ```
 
 既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、demo scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、開發 scripts 或 HTML 範例頁面；維護指令應在 checkout 執行。

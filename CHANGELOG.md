@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.5
 
-Changes after the immutable GitHub v1.4 release. Package metadata remains 1.4.0 for local verification only; no npm publication, commit or release tag is implied.
+Package version 1.5.0. GitHub release distribution and npm registry publication are separate operations; the historical v1.4 artifact remains immutable.
 
 ### Complete expressive playback and lifecycle
 
@@ -26,11 +26,19 @@ Changes after the immutable GitHub v1.4 release. Package metadata remains 1.4.0 
 - Node.js 26.7.0: 157 behavioral tests and strict source/development/public-consumer types passed. Full/runtime npm audits found zero vulnerabilities; runtime dependencies remain empty.
 - All 1,728 sound-matrix cases and independent/long-stream gates passed. The conservative filter still reports −11.627 dB at 9.6 kHz/48 kHz; improving arbitrary upper-register brightness/aliasing is not claimed.
 - Owned sandboxed, explicitly muted Chromium 153.0.8010.12/Playwright 1.63.0 exercised real AudioWorklet signal, cancellation/preservation, routing/lifecycle and the feature UI. Actual backend rate was 24 kHz; all four waveform WAVs decoded as 21,840 stereo PCM16 frames/87,404 bytes. Fresh running-state analyser output confirmed preserve across all three stealing policies; no listening or underrun certification.
-- The local device report contained 184 bounded events with every physical-device scenario unconfirmed; nothing was uploaded. No devicectl/adb or real phone was available. npm whoami returned ENEEDAUTH: authenticated first publication, authorized next-release metadata/tag and registry-installed verification remain external prerequisites.
+- The local device report contained 184 bounded events with every physical-device scenario unconfirmed; nothing was uploaded. No devicectl/adb or real phone was available. npm whoami returned ENEEDAUTH during feature verification: authenticated first npm publication and registry-installed verification remain external prerequisites.
 - FinalInputsReview (A/B) and FinalDspReview (C/D) re-reviewed the completed fixes without remaining findings. Native Node installed-tarball runtime and consumer declaration gates passed against the clean 27-module distribution.
 - Executed the actual canonical JSON from README and both usage guides with finite nonzero PCM and zero errors. Both unmodified shared-score guide scripts rendered 13,440 frames at 24 kHz in native Chromium, produced analyser signal and closed their owned contexts.
 - Final native browser smoke passed. Stress exercised 768 dense notes in 32 batches: 769 started including the initial held note, 760 steals and one intentional late rejection; settled active/pending/error counts were zero. Installed-package Vite 8.3.2 production checks passed for non-root base, CSP, normal assets, missing worklet and incorrect MIME handling.
 - Report-only Apple M5/Node 26.7.0 benchmark (48 kHz, 128 frames, 2,000 measured blocks/scenario): eight voices with LFO had p99 2.2315 ms, worst 10.627416 ms and 16 deadline misses; without LFO had 6 misses, raw burst 5, prepared burst 0. No hard budgets were configured; scheduler/GC-sensitive timings are not an underrun counter or realtime guarantee.
+
+### v1.5 release verification
+
+- **Security:** Release15Inputs approved scoped static A/B review; Release15DspSupply approved C/D for this GitHub-only release. No evidence-backed release blockers remained. Reviewers ran no runtime commands; integration checks were performed separately.
+- Fresh package 1.5.0 verification on Node.js 26.7.0: 27 JS/map/declaration triplets, all 157 tests, strict source/development/consumer types, source/generated AST gates, installed render/WAV/types and empty runtime dependency tree passed. Root full/runtime and installed Vite tooling audits found zero vulnerabilities.
+- All 1,728 sound cases, independent PM/feedback bounds, two 120-second streaming scenarios and 108 preset/conversion cells passed again.
+- Owned sandboxed, explicitly muted Chromium 153.0.8010.12/Playwright 1.63.0 passed native smoke/stress and installed-package Vite 8.3.2 production subpath/CSP/MIME/404/license checks again. The actual backend was 24 kHz; stress started 769 notes, stole 760, intentionally rejected one late note and settled with zero active/pending notes and DSP errors. These local runs do not certify locked Playwright 1.56.1, Firefox/WebKit or physical-phone coverage.
+- Fresh Apple M5 report-only benchmark (300 warmup blocks excluded, 2,000 measured 128-frame blocks at 48 kHz): eight voices with LFO p99/worst 0.630/2.520 ms and zero misses; raw burst 2.295/12.621 ms and 10 misses; prepared burst 0.914/1.963 ms and zero misses. No hard budgets were configured; these observations are not a universal realtime or glitch-free guarantee.
 
 ## v1.4
 
