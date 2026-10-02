@@ -71,7 +71,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS/JSON, `.d.ts` declarations, usage documentation, and legal files—not the repository demos, source, build scripts, or precompressed alternatives.
+For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, source, or build scripts.
 
 ### Use in a browser
 
@@ -231,7 +231,7 @@ This is an **approximate six-to-four-operator conversion**, not DX7 synthesis or
 
 ## Optimized distribution
 
-`dist/` contains ready-to-use, tree-shaken ES modules with shared chunks and compact voice JSON. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`.
+`dist/` contains only `.js` ES modules and generated `.d.ts` declarations, including shared chunks and voice assets exported as JavaScript data. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`.
 
 Engine, AudioWorklet, demos, tests, and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/declaration approach, declarations are generated from implementation rather than maintained separately. OPM.js retains npm and Node 18+ compatibility. `tsconfig.json` checks the environment-independent/browser source and emits declarations; `tsconfig.dev.json` compiles development programs into ignored `.dev/`. ESM source imports retain `.js` specifiers. Use `npm test`, not bare `node --test`, to compile and run the behavioral tests; `npm run typecheck` checks source, tools, tests, demos, and the public consumer fixture. The build also produces `dist/demo/` scripts used by both HTML demos.
 
@@ -250,9 +250,7 @@ npm run browser-smoke -- chromium
 
 These install pinned development tools and regenerate `dist/`; the build replaces that generated directory. Consumers need no build tools or runtime dependencies. `npm pack` also runs the build automatically. Terser uses up to ten safe compression passes, without unsafe floating-point transformations or property mangling.
 
-Checkout builds include gzip level 9 (`.gz`) and Brotli quality 11 (`.br`) alternatives. The npm tarball intentionally excludes these duplicates. For npm deployments, use the server's compression or obtain precompressed assets from a checkout build.
-
-Always import normal `.js` URLs, **never `.br` or `.gz` URLs**. A server using sidecars must negotiate `Accept-Encoding`, send the matching `Content-Encoding` and original JavaScript/JSON content type, and set `Vary: Accept-Encoding`. The basic Python server does not negotiate these sidecars; uncompressed minified `.js`/`.json` files still work.
+The build does not produce JSON assets or gzip/Brotli sidecars. If desired, configure compression at the web host while retaining normal `.js` import URLs. Send the matching `Content-Encoding` and `Vary: Accept-Encoding` only for compressed responses, with a JavaScript MIME type. The basic Python server serves the ordinary `.js` modules directly.
 
 Benchmark results depend on the machine and JavaScript engine. [CHANGELOG](./CHANGELOG.md) records observed verification, and [SECURITY](./SECURITY.md) covers safe embedding and review requirements.
 
@@ -304,7 +302,7 @@ Key scaling attenuates operator level by `10 ** (-slope * abs(note - breakpoint)
 
 Import `parseVoiceBank` from `opm.js/voices/schema.js` in Node, or `./opm/voices/schema.js` in the deployed browser example. It accepts a JSON string or array and returns `Map<name, voice>` with frozen copies.
 
-A bank must be an **array** of 1–128 complete versioned voices; wrap individual JSON examples in `[...]`. Every bank entry requires `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and four complete operators; names must be unique. JSON strings are capped at 256 KiB in UTF-8. See the [schema](./dist/voices/voice.schema.json) and [example bank](./dist/voices/examples.json).
+A bank must be an **array** of 1–128 complete versioned voices; wrap individual JSON examples in `[...]`. Every bank entry requires `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and four complete operators; names must be unique. JSON strings are capped at 256 KiB in UTF-8. The [schema module](./dist/voices/voice.schema.js) exports `voiceSchema`; the [example bank module](./dist/voices/examples.js) exports `examples`. Import `examples` from `opm.js/voices/examples.js` (Node) or `./opm/voices/examples.js` (browser) and pass it to `parseVoiceBank(examples)`. External JSON banks remain supported.
 
 Unlike strict single-voice normalization, `validateVoice()`, `parseVoiceBank()`, and `renderNote()` **clamp finite out-of-range numeric fields** to the schema limits. Invalid types, non-finite values, unknown fields, unsupported versions, and invalid algorithm/feedback enums still fail. `validateVoice()` handles one complete voice; `bounded()` clamps a finite number; `LIMITS`, `MAX_BANK_BYTES`, and `MAX_BANK_VOICES` expose the bounds.
 

@@ -1,4 +1,6 @@
-[
+import type { Voice } from './schema.js';
+
+export const examples: readonly Voice[] = [
   {
     "version": 2,
     "name": "bell",
@@ -216,4 +218,4 @@
       { "ratio": 1, "level": 0.8, "detune": 5, "adsr": { "a": 0.3, "d": 0.4, "s": 0.8, "r": 0.6 } }
     ]
   }
-]
+];

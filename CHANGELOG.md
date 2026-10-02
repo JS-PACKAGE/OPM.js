@@ -4,6 +4,15 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### JavaScript-only distribution assets
+
+- Restrict `dist/` to `.js` and generated `.d.ts`; remove JSON assets and gzip/Brotli sidecars from build output. Move canonical bundled data to typed modules: `opm.js/voices/examples.js` exports `examples`, and `opm.js/voices/voice.schema.js` exports `voiceSchema`. Remove the obsolete generic asset export; external JSON voice-bank input remains supported.
+- Update demo loading, package exports, consumer declarations, and both usage guides. The seven presets and schema were compared against their previous JSON data and match exactly.
+- Verification by 語喵: build, 73 behavioral tests, strict source/development/consumer typechecks, source/dist AST gates, and isolated installed-package rendering/WAV/types passed. The package smoke checks every packaged distribution file against the `.js`/`.d.ts` allowlist. Visually exercised electric-piano hold/release and diagnostics in the rebuilt demo; no page errors or DSP errors.
+- Real Chromium 153.0.8010.12 AudioWorklet smoke passed on macOS arm64 using the existing matching Playwright 1.63.0 launcher, covering stereo, pan, lifecycle, routing, resume, and context ownership. This is not remote CI or locked-browser evidence.
+- **Security:** 語喵 reviewed scoped A/B/C/D requirements: bundled assets contain only preserved literal data, bank validation still runs before demo registration, worklet/DSP boundaries and limits are unchanged, and no dependency or dynamic execution was added. This is a scoped author review, not an independent review.
+- Development/runtime audits reported zero vulnerabilities; the runtime dependency tree is empty.
+
 ### TypeScript source cutover
 
 - Preserve published structural `OPM`/`Synth` class contracts by stripping implementation-only declaration members; retain the literal bank-size type and optional event callback. Installed consumer checks cover adapters and the literal limit. The test entrypoint enumerates filenames without shell globs and forwards Node runner options for Node 18/Windows compatibility (Windows execution not observed); diagnostics filtering and reporter selection were exercised on Node 18/26.

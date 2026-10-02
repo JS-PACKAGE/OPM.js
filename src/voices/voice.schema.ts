@@ -1,4 +1,4 @@
-{
+export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "OPM.js canonical voice v2",
   "type": "object",
@@ -136,4 +136,4 @@
       }
     }
   }
-}
+};

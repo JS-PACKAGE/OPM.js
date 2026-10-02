@@ -31,7 +31,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的 JS／JSON、`.d.ts`、文件與法律檔案，不含 `src`、`scripts`、範例頁面或壓縮側檔；維護指令應在 checkout 執行。
+既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的 `.js` 模組、`.d.ts`、demo scripts、文件與法律檔案，不含 `src`、`scripts` 或 HTML 範例頁面；維護指令應在 checkout 執行。
 
 要直接試用儲存庫的範例，請在 **OPM.js 儲存庫根目錄** 啟動伺服器：
 
@@ -236,7 +236,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 ## 音色格式與銀行載入
 
-參考完整的 [voice.schema.json](../dist/voices/voice.schema.json) 與 [examples.json](../dist/voices/examples.json)。下列為**單一音色 JSON 物件**，四個 `ops` 順序是訊號演算法的運算子順序；若要作為銀行，必須用 `[` 和 `]` 包成**陣列**：
+參考 [voice.schema.js](../dist/voices/voice.schema.js) 的 `voiceSchema` 與 [examples.js](../dist/voices/examples.js) 的 `examples` 匯出。下列為**單一音色 JSON 物件**，四個 `ops` 順序是訊號演算法的運算子順序；若要作為銀行，必須用 `[` 和 `]` 包成**陣列**：
 
 ```json
 {
@@ -267,12 +267,13 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 `parseVoiceBank()` 由 `opm.js/voices/schema.js`（瀏覽器靜態樹中為 `./opm/voices/schema.js`）匯出，可接受 JSON 字串或音色陣列，要求 **1–128 筆完整音色**且名稱不重複，回傳 `Map<name, voice>`，其音色為已驗證且凍結的完整物件。字串輸入最多 256 KiB（UTF-8）；陣列輸入也有數量限制。和 `validateVoice()`、`renderNote()` 相同，此路徑將**有限但超界**的數值限制在範圍內，與嚴格的單音色 `normalizeVoice()` 不同；不合法的 `version`／`algorithm`／`feedback`、非有限數值、錯誤型別、未知欄位仍會拒絕。`schema.js` 也提供 `validateVoice(voice)`、有限數值邊界函式 `bounded(value, min, max, label = 'number')`、`LIMITS`、`MAX_BANK_BYTES` 與 `MAX_BANK_VOICES`。
 
-要載入已部署的可信任 `examples.json`，保留先前 **`opm-app/public/index.html`** 的 `#play` 與 `#status`，將其原本 module script **完整替換**為：
+要載入已部署的可信任 `examples.js` 模組，保留先前 **`opm-app/public/index.html`** 的 `#play` 與 `#status`，將其原本 module script **完整替換**為：
 
 ```html
 <script type="module">
   import { OPM } from './opm/api/index.js';
   import { parseVoiceBank } from './opm/voices/schema.js';
+  import { examples } from './opm/voices/examples.js';
 
   const opm = new OPM();
   const play = document.querySelector('#play');
@@ -282,9 +283,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
     play.disabled = true;
     try {
       await opm.start();
-      const response = await fetch('./opm/voices/examples.json');
-      if (!response.ok) throw new Error(`Voice bank HTTP ${response.status}`);
-      const bank = parseVoiceBank(await response.text());
+      const bank = parseVoiceBank(examples);
       for (const [name, voice] of bank) opm.loadVoice(name, voice);
       opm.playNote({ voice: 'brass', note: 60, duration: 0.7 });
       status.textContent = 'Playing bank brass note';
@@ -297,7 +296,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 </script>
 ```
 
-仍在 `opm-app` 根目錄以 `python3 -m http.server 8000 --directory public` 提供頁面。此例只下載套件所附、站內可信任的資產；銀行大小限制在取得回應文字**之後**才生效。若接收不可信任的遠端下載，服務端必須自行限制來源、Content-Type 與下載大小；合成引擎沒有內建網路下載 API。
+仍在 `opm-app` 根目錄以 `python3 -m http.server 8000 --directory public` 提供頁面。此例匯入套件所附的可信任模組；`parseVoiceBank` 仍支援外部 JSON 銀行。若接收不可信任的遠端下載，應由應用程式先限制來源、Content-Type 與下載大小，再讀取回應內容；合成引擎沒有內建網路下載 API。
 
 ## WAV 匯出與 DX7 匯入
 
@@ -351,7 +350,7 @@ Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽
 
 ## 壓縮部署
 
-原始縮小版 `.js`／`.json` 可直接使用。checkout 建置時會產生 Brotli `.br`（品質 11）與 gzip `.gz`（等級 9）側檔，但 npm tarball 不包含這些檔案；選用壓縮可在 checkout 建置，或由網站主機自行壓縮。程式始終匯入 `.js` URL，**不要**匯入 `.br`／`.gz`。只有當伺服器實際送出對應壓縮位元組時才設定正確的 `Content-Encoding` 與 `Vary: Accept-Encoding`，並提供適當 JS／JSON MIME 類型。基本的 Python HTTP 伺服器不會協商側檔。整套 `dist` 與 chunks 須維持同一建置版本；詳見 README 的[最佳化發佈](../README.md#optimized-distribution)。
+`dist/` 僅含 `.js` 模組與 `.d.ts` 宣告；建置不產生 JSON 資產或壓縮側檔。需要壓縮時由網站主機處理，程式仍匯入原本的 `.js` URL。伺服器送出壓縮內容時，須提供對應 `Content-Encoding`、`Vary: Accept-Encoding` 與 JavaScript MIME 類型；未壓縮回應不可標示為已壓縮。基本的 Python HTTP 伺服器可直接提供一般模組。整套 `dist`、worklet 與 chunks 須維持同一建置版本；詳見 README 的[最佳化發佈](../README.md#optimized-distribution)。
 
 ## 疑難排解
 
@@ -367,4 +366,4 @@ Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽
 | Processor 失敗 | 處理 onEvent error 與拒絕的診斷請求，關閉／重啟；不要以不安全 fallback 掩蓋錯誤。 |
 | npm 回報 E404 | 不假設 registry 有此套件；依[安裝步驟](#安裝與範例頁面)打包並安裝 checkout 的本機 tarball。 |
 | 音色銀行格式錯誤 | 必須是完整音色組成的**陣列**，並符合名稱、欄位、數量與大小限制；單一 JSON 物件須包入 `[...]`。 |
-| `.br` 回傳亂碼 | 設定正確的壓縮協商與 `Content-Encoding`，或直接提供原始 `.js`／`.json`。 |
+| 壓縮回應顯示亂碼 | 設定正確的 `Content-Encoding` 與 MIME 類型，或直接提供未壓縮的 `.js` 模組。 |

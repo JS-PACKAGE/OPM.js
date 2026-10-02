@@ -25,7 +25,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains built JavaScript/JSON, generated declarations, demo scripts, and documentation/legal files, but not TypeScript source, development scripts/tests, HTML pages, or compressed sidecars. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains built `.js` modules, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not TypeScript source, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -230,7 +230,7 @@ Other core exports: `normalizeVoice` returns a strict, detached voice copy; `env
 
 ## Voice format and banks
 
-A standalone **`voice.json`** (save in **opm-app** if using it as a local asset) can contain this complete schema voice. See [voice.schema.json](../dist/voices/voice.schema.json) and bundled [examples.json](../dist/voices/examples.json). Four operators appear in signal order:
+A standalone **`voice.json`** (save in **opm-app** if using it as a local asset) can contain this complete schema voice. See the `voiceSchema` export in [voice.schema.js](../dist/voices/voice.schema.js) and the `examples` export in [examples.js](../dist/voices/examples.js). Four operators appear in signal order:
 
 ```json
 {
@@ -262,12 +262,13 @@ Single voices passed to `OPM`, `Synth.noteOn`, or `normalizeVoice` may omit `ver
 
 A complete **bank JSON file** must contain an **array** of 1–128 complete voices with unique names (wrap the standalone object above in `[...]`); it is not a single top-level voice object. `parseVoiceBank(jsonStringOrArray)` from `opm.js/voices/schema.js` for Node, or the served `./opm/voices/schema.js` for browsers, returns a `Map` of names to frozen validated voices. JSON strings are capped at 256 KiB UTF-8; arrays are capped by voice count. Bank parsing and `validateVoice` clamp **finite** out-of-range numeric fields to schema limits, unlike strict single-voice normalization; invalid version/algorithm/feedback values, nonfinite values, wrong types, and unknown fields still fail.
 
-For a working bank loader, **replace the module `<script>` in `opm-app/public/index.html`** from the browser quick start, keeping its `#play` button and `#status` output. The earlier copy command places `examples.json` at `public/opm/voices/examples.json`:
+For a working bank loader, **replace the module `<script>` in `opm-app/public/index.html`** from the browser quick start, keeping its `#play` button and `#status` output. The earlier copy command places the bank module at `public/opm/voices/examples.js`:
 
 ```html
 <script type="module">
   import { OPM } from './opm/api/index.js';
   import { parseVoiceBank } from './opm/voices/schema.js';
+  import { examples } from './opm/voices/examples.js';
 
   const opm = new OPM();
   const play = document.querySelector('#play');
@@ -277,9 +278,7 @@ For a working bank loader, **replace the module `<script>` in `opm-app/public/in
     play.disabled = true;
     try {
       await opm.start();
-      const response = await fetch('./opm/voices/examples.json');
-      if (!response.ok) throw new Error(`Voice bank HTTP ${response.status}`);
-      const bank = parseVoiceBank(await response.text());
+      const bank = parseVoiceBank(examples);
       for (const [name, voice] of bank) opm.loadVoice(name, voice);
       opm.playNote({ voice: 'brass', note: 60, duration: 0.7 });
       status.textContent = 'Playing bank brass note';
@@ -292,7 +291,7 @@ For a working bank loader, **replace the module `<script>` in `opm-app/public/in
 </script>
 ```
 
-Serve `public/` as above and click the button. This example loads a **trusted bundled asset**, not an unrestricted remote downloader: parsing limits apply **after** `response.text()` has fetched the body. For untrusted downloads, your host/application must restrict source, content type, and response size before reading it; the engine does not provide a network download API.
+Serve `public/` as above and click the button. This example imports a **trusted bundled module**. External JSON banks remain supported by `parseVoiceBank`; for untrusted downloads, your host/application must restrict source, content type, and response size before reading the body. The engine does not provide a network download API.
 
 ## WAV export and DX7 import
 
@@ -346,7 +345,7 @@ Benchmark output reports warmed 128-frame block p95/p99/worst and misses of `128
 
 ## Compressed deployment
 
-Ordinary minified `.js` and `.json` assets work directly. The checkout build also produces Brotli `.br` (quality 11) and gzip `.gz` (level 9) sidecars, but the npm tarball excludes them. For installed apps, configure compression at the web host or build sidecars in the checkout. Import `.js` URLs, **never** `.br` or `.gz` URLs. If serving compressed bytes, configure the matching `Content-Encoding` (`br` or `gzip`) and `Vary: Accept-Encoding`, plus correct JavaScript/JSON MIME types; uncompressed bytes must not be marked compressed. Python's basic HTTP server does not negotiate sidecars. Deploy the entire matching `dist/` tree, including worklet and hashed chunks, as one version. See the README's [optimized-distribution notes](../README.md#optimized-distribution).
+`dist/` contains only `.js` modules and `.d.ts` declarations; the build produces no JSON assets or compressed sidecars. Configure compression at the web host if needed, retaining ordinary `.js` import URLs. Compressed responses need the matching `Content-Encoding` (`br` or `gzip`), `Vary: Accept-Encoding`, and a JavaScript MIME type. Uncompressed responses must not be marked compressed. Python's basic HTTP server serves the ordinary modules directly. Deploy the entire matching `dist/` tree, including worklet and hashed chunks, as one version. See the README's [optimized-distribution notes](../README.md#optimized-distribution).
 
 ## Troubleshooting
 
@@ -354,7 +353,7 @@ Ordinary minified `.js` and `.json` assets work directly. The checkout build als
 | --- | --- |
 | `file://`, insecure-origin, or AudioWorklet unavailable | Serve over HTTPS or `http://localhost`, in a browser supporting ES modules and AudioWorklet. |
 | Bare `opm.js` browser import cannot resolve | Import a served `./opm/...` URL after copying assets; a bare specifier needs a separately configured import map or bundler. |
-| Worklet/chunk 404, HTML returned instead of JS, or MIME error | Copy the **whole** `dist/` tree; preserve relative paths and exclude assets from SPA HTML rewrites. Check JavaScript/JSON MIME types. |
+| Worklet/chunk 404, HTML returned instead of JS, or MIME error | Copy the **whole** `dist/` tree; preserve relative paths and exclude assets from SPA HTML rewrites. Check the JavaScript MIME type. |
 | Autoplay blocked or playback before start | Invoke and await `opm.start()` inside a user click before `playNote()`. |
 | Invalid pitch, voice name, duration, or unknown voice | Check the [browser API](#browser-api-and-lifecycle) argument bounds and register custom names before playback. |
 | Scheduled notes disappear | Watch lifecycle rejections/steals and diagnostics; respect eight logical voices and bounded IDs/events. |
@@ -362,4 +361,4 @@ Ordinary minified `.js` and `.json` assets work directly. The checkout build als
 | Processor failure | Handle `onEvent` errors and failed diagnostics; close/restart rather than bypassing validation or substituting a fallback engine. |
 | npm registry `E404` | Pack this checkout and install the [local tarball](#acquire-and-install), not a presumed registry release. |
 | Bank parse fails | Supply an array of complete, uniquely named schema voices within the bank size/count limits. |
-| Compressed bytes look like gibberish | Set the correct encoding and MIME response headers, or simply serve the ordinary `.js`/`.json` files. |
+| Compressed bytes look like gibberish | Set the correct encoding and MIME response headers, or serve the ordinary `.js` modules without compression. |

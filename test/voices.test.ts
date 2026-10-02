@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { examples } from '../src/voices/examples.js';
 import { validateVoice, parseVoiceBank, LIMITS, MAX_BANK_BYTES } from '../src/voices/schema.js';
 import type { Voice } from '../src/voices/schema.js';
-const text = readFileSync(new URL('../../src/voices/examples.json', import.meta.url), 'utf8');
+const text = JSON.stringify(examples);
 const fixture = (): Voice => JSON.parse(text)[0] as Voice;
 
 function atPath(value: unknown, path: readonly (string | number)[]): unknown {

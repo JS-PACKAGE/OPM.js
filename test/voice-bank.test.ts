@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { examples } from '../src/voices/examples.js';
 import { MAX_BANK_BYTES, parseVoiceBank } from '../src/voices/schema.js';
 import type { Voice } from '../src/voices/schema.js';
 
-const example = JSON.parse(readFileSync(new URL('../../src/voices/examples.json', import.meta.url), 'utf8'))[0] as Voice;
+const example: Voice = examples[0];
 const copy = () => structuredClone(example);
 
 test('bank length is measured in UTF-8 bytes, not JavaScript characters', () => {

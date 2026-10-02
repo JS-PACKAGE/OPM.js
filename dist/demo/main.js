@@ -4,6 +4,7 @@ import { renderNote, encodeWav } from "../core/index.js";
 import { brass } from "../voices/brass.js";
 import { importDX7, describeDX7 } from "../voices/dx7.js";
 import { parseVoiceBank } from "../voices/schema.js";
+import { examples } from "../voices/examples.js";
 function element(selector2) {
   const result = document.querySelector(selector2);
   if (!result) throw new Error(`Missing demo element: ${selector2}`);
@@ -54,16 +55,13 @@ function addVoice(voice) {
     selector.append(option);
   }
 }
-fetch("../dist/voices/examples.json").then((response) => {
-  if (!response.ok) throw new Error(`Bundled bank HTTP ${response.status}`);
-  return response.text();
-}).then((text) => {
-  for (const voice of parseVoiceBank(text).values()) {
+try {
+  for (const voice of parseVoiceBank(examples).values()) {
     if (!voices.has(voice.name)) addVoice(voice);
   }
-}).catch((error) => {
-  status.textContent = error.message;
-});
+} catch (error) {
+  status.textContent = error instanceof Error ? error.message : String(error);
+}
 action("play", async () => {
   await opm.start();
   for (const note of [60, 64, 67]) opm.playNote({ ...options(), note, duration: 0.7 });

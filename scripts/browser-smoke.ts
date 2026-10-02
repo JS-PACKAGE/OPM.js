@@ -52,7 +52,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     const data = await readFile(path);
-    response.writeHead(200, { 'Content-Type': path.endsWith('.json') ? 'application/json' : 'text/javascript' });
+    response.writeHead(200, { 'Content-Type': 'text/javascript' });
     response.end(data);
   } catch {
     response.writeHead(404).end();

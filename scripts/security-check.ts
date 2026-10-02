@@ -110,6 +110,9 @@ if (process.argv.includes('--package-smoke')) {
     assert.ok(archive.files.some(file => file.path === 'LICENSE'), 'package must include license');
     for (const file of archive.files) {
       assert.ok(!/^(src|scripts|test|node_modules)\//.test(file.path), `unexpected packaged development file: ${file.path}`);
+      if (file.path.startsWith('dist/')) {
+        assert.ok(file.path.endsWith('.js') || file.path.endsWith('.d.ts'), `unexpected distribution file: ${file.path}`);
+      }
     }
     await writeFile(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
     command(['install', '--ignore-scripts', '--no-audit', '--no-fund', join(directory, archive.filename)], directory);
@@ -120,6 +123,15 @@ if (process.argv.includes('--package-smoke')) {
       import { renderNote, encodeWav } from 'opm.js/core';
       import { brass } from 'opm.js/voices/brass.js';
       import { importDX7 } from 'opm.js/voices/dx7.js';
+      import { examples } from 'opm.js/voices/examples.js';
+      import { voiceSchema } from 'opm.js/voices/voice.schema.js';
+      import { parseVoiceBank } from 'opm.js/voices/schema.js';
+      const bank = parseVoiceBank(examples);
+      assert.equal(voiceSchema.properties.version.const, 2);
+      assert.ok(bank.has('electric_piano'));
+      const preset = renderNote({ voice: bank.get('electric_piano'), note: 60, duration: 0.02, sampleRate: 8000 });
+      assert.equal(preset.diagnostics.errors, 0);
+      assert.ok(preset.left.some(value => Math.abs(value) > 0.0001));
       assert.equal(typeof OPM, 'function');
       assert.equal(typeof importDX7, 'function');
       const result = renderNote({ voice: brass, note: 69, duration: 0.02, sampleRate: 8000 });

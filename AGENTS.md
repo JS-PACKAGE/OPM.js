@@ -35,8 +35,8 @@ OPM (public API)                     processor
 - `src/core/` — DSP core: operator, envelope, LFO, algorithm graph. **Pure, no Web Audio imports.**
 - `src/worklet/` — AudioWorkletProcessor and message protocol.
 - `src/api/` — public facade (`OPM` class), voice loading, scheduling.
-- `src/voices/` — voice bank JSON (format below).
-- `dist/` — generated, minified ESM/JSON used by package exports and both browser demos. Deploy the complete tree.
+- `src/voices/` — typed voice assets and JSON voice parsing (format below).
+- `dist/` — generated `.js` ES modules and `.d.ts` declarations only, used by package exports and both browser demos. Deploy the complete tree.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 

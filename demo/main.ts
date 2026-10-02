@@ -3,6 +3,7 @@ import { renderNote, encodeWav } from '../src/core/index.js';
 import { brass } from '../src/voices/brass.js';
 import { importDX7, describeDX7 } from '../src/voices/dx7.js';
 import { parseVoiceBank } from '../src/voices/schema.js';
+import { examples } from '../src/voices/examples.js';
 import type { FourOperators, FrozenVoice, Operator, Voice } from '../src/voices/schema.js';
 
 function element<T extends HTMLElement>(selector: string): T {
@@ -53,17 +54,13 @@ function addVoice(voice: Voice | FrozenVoice) {
     selector.append(option);
   }
 }
-fetch('../dist/voices/examples.json')
-  .then(response => {
-    if (!response.ok) throw new Error(`Bundled bank HTTP ${response.status}`);
-    return response.text();
-  })
-  .then(text => {
-    for (const voice of parseVoiceBank(text).values()) {
-      if (!voices.has(voice.name)) addVoice(voice);
-    }
-  })
-  .catch(error => { status.textContent = error.message; });
+try {
+  for (const voice of parseVoiceBank(examples).values()) {
+    if (!voices.has(voice.name)) addVoice(voice);
+  }
+} catch (error) {
+  status.textContent = error instanceof Error ? error.message : String(error);
+}
 action('play', async () => {
   await opm.start();
   for (const note of [60, 64, 67]) opm.playNote({ ...options(), note, duration: 0.7 });

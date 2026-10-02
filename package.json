@@ -33,12 +33,10 @@
     "./voices/*.js": {
       "types": "./dist/voices/*.d.ts",
       "import": "./dist/voices/*.js"
-    },
-    "./voices/*": "./dist/voices/*"
+    }
   },
   "files": [
     "dist/**/*.js",
-    "dist/**/*.json",
     "dist/**/*.d.ts",
     "doc/",
     "LICENSE",

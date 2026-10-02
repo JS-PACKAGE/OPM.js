@@ -4,6 +4,8 @@ import { brass } from 'opm.js/voices/brass.js';
 import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
 import { importDX7, describeDX7, type DX7ImportDescription } from 'opm.js/voices/dx7.js';
+import { examples } from 'opm.js/voices/examples.js';
+import { voiceSchema } from 'opm.js/voices/voice.schema.js';
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
@@ -76,3 +78,6 @@ declare const synthAdapter: Pick<Synth, 'sampleRate' | 'maxVoices' | 'currentFra
 const compatibleSynth: Synth = synthAdapter;
 const literalBankLimit: 262144 = MAX_BANK_BYTES;
 void [compatibleOPM, compatibleSynth, literalBankLimit];
+const bundledBank: Map<string, FrozenVoice> = parseVoiceBank(examples);
+const schemaVersion: number = voiceSchema.properties.version.const;
+void [bundledBank, schemaVersion];
