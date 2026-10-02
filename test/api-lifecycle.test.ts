@@ -15,6 +15,7 @@ interface MockContext {
   index: number;
   destination: object;
   currentTime: number;
+  sampleRate: number;
   state: string;
   closed: number;
   resumed: number;
@@ -49,6 +50,7 @@ function mockAudio({ failModuleAt = -1, failResumeAt = -1, moduleGate, closeGate
     index: number;
     destination: object;
     currentTime: number;
+    sampleRate = 44100;
     state: string;
     closed: number;
     resumed: number;

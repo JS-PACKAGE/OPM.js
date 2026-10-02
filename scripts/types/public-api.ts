@@ -1,5 +1,5 @@
-import { OPM, type OPMEvent, type VoiceInput } from 'opm.js';
-import { Synth, renderNote, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice } from 'opm.js/core';
+import { OPM, createLookaheadScheduler, type NoteControls, type OPMEvent, type VoiceInput } from 'opm.js';
+import { Synth, renderNote, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice, type PreparedVoice } from 'opm.js/core';
 import { brass } from 'opm.js/voices/brass.js';
 import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
@@ -21,6 +21,10 @@ synth.onVoiceEnded = (id, reason) => {
   console.log(id, terminal);
 };
 const id: number = synth.noteOn(complete, 60.5, undefined, { velocity: 0.5, pan: -0.5 });
+const prepared: PreparedVoice = prepareVoice(patch);
+const controlledId = synth.noteOn(prepared, 60);
+const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5 };
+const changed: boolean = synth.updateNote(controlledId, controls);
 const left = new Float32Array(128), right = new Float32Array(128);
 synth.render(left, right);
 const released: boolean = synth.noteOff(id);
@@ -38,7 +42,9 @@ bounded(finiteLevel, ...LIMITS.level);
 function observe(event: OPMEvent) {
   if (event.type === 'note') {
     const state: 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected' = event.state;
-    console.log(event.id, state, event.reason);
+    const frame: number = event.frame;
+    const time: number = event.time;
+    console.log(event.id, state, event.reason, frame, time);
   } else if (event.type === 'diagnostics') console.log(event.pendingEvents, event.rejectedNotes);
   else { const error: Error = event.error; console.error(error); }
 }
@@ -48,6 +54,19 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
   await opm.start();
   opm.connect(destination).disconnect(destination).connect(destination);
   const held: number = opm.playNote({ note: 64, velocity: 0.5, pan: -1 });
+  opm.updateNote(held, controls, { at: context.currentTime + 0.1 });
+  opm.stop(held, { at: context.currentTime + 0.2 });
+  const absolute: number = opm.playNote({ note: 60, at: context.currentTime + 0.3, late: 'drop' });
+  opm.stop(absolute);
+  const voices: ReadonlyMap<string, VoiceInput> = opm.voices;
+  const scheduler = createLookaheadScheduler(opm, ({ from, to, maxNotes }) => {
+    console.log(to, maxNotes);
+    return [{ note: 60, at: from, duration: 0.1 }];
+  }, { onError: console.error });
+  await scheduler.start();
+  scheduler.stop();
+  scheduler.dispose();
+  void voices;
   opm.stop(held);
   await opm.resume();
   const diagnostics = await opm.getDiagnostics();
@@ -67,14 +86,24 @@ const legacyOperator: VoiceInput = { version: 1, algorithm: 7, feedback: 0, ops:
 encodeWav({ left: [0, 1], sampleRate: 44100 });
 // @ts-expect-error DX7 parser consumes binary bytes
 importDX7('not binary');
-void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, browserConsumer, legacyOperator];
+// @ts-expect-error prepared identity is opaque
+const forged: PreparedVoice = normalized;
+// @ts-expect-error controls are numeric, not strings
+synth.updateNote(id, { expression: 'loud' });
+// @ts-expect-error unsupported lateness policy
+new OPM().playNote({ note: 60, at: 1, late: 'retry' });
+// @ts-expect-error relative and absolute scheduling are mutually exclusive
+new OPM().playNote({ note: 60, at: 1, time: 0 });
+// @ts-expect-error named voice maps are read-only snapshots
+new OPM().voices.set('bypass', normalized);
+void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, browserConsumer, legacyOperator, changed, forged];
 
 // Published classes remain structural contracts, without implementation state.
 declare const opmAdapter: Pick<OPM, 'sampleRate' | 'voices' | 'context' | 'node' |
-  'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'getDiagnostics' | 'close'>;
+  'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'updateNote' | 'getDiagnostics' | 'close'>;
 const compatibleOPM: OPM = opmAdapter;
 declare const synthAdapter: Pick<Synth, 'sampleRate' | 'maxVoices' | 'currentFrame' | 'errorCount' |
-  'lastStolenId' | 'noteOn' | 'noteOff' | 'render'>;
+  'lastStolenId' | 'noteOn' | 'noteOff' | 'updateNote' | 'render'>;
 const compatibleSynth: Synth = synthAdapter;
 const literalBankLimit: 262144 = MAX_BANK_BYTES;
 void [compatibleOPM, compatibleSynth, literalBankLimit];

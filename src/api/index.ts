@@ -1,10 +1,17 @@
 import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import { validateNoteControls } from '../core/synth.js';
+import type { NoteControls } from '../core/synth.js';
 export type { ADSR, LFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice } from '../voices/schema.js';
+export type { NoteControls } from '../core/synth.js';
 
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
-export interface NoteEvent { type: 'note'; id: number; state: NoteState; reason?: string }
+export interface NoteEvent {
+  type: 'note'; id: number; state: NoteState; reason?: string;
+  /** Actual AudioContext sample frame and seconds at admission, dispatch or completion. */
+  frame: number; time: number;
+}
 export interface DiagnosticsEvent {
   type: 'diagnostics'; requestId: number; activeVoices: number;
   pendingEvents: number; errors: number; rejectedNotes: number;
@@ -19,14 +26,25 @@ export interface OPMOptions {
   destination?: AudioNode | null;
   onEvent?: (event: OPMEvent) => void;
 }
-export interface PlayNoteOptions {
+interface PlayNoteBase {
   voice?: string | VoiceInput;
   note: number;
-  time?: number;
+  /** A late start keeps its full duration; drop rejects even if processing is delayed. */
+  late?: 'start' | 'drop';
   /** null (the default) holds until stop; a number sets a duration before release. */
   duration?: number | null;
   velocity?: number;
   pan?: number;
+}
+export type PlayNoteOptions = PlayNoteBase & (
+  /** Relative delay in seconds; cannot be combined with at. */
+  { time?: number; at?: never } |
+  /** Absolute AudioContext seconds, at most 60 seconds ahead. Past times are allowed. */
+  { at: number; time?: never }
+);
+export interface ScheduledNoteOptions {
+  /** Absolute AudioContext seconds. Stop without at is immediate, including cancellation. */
+  at?: number;
 }
 interface MutableAudioState {
   context: AudioContext | null;
@@ -40,6 +58,48 @@ interface DiagnosticsRequest {
 const MAX_DURATION = 60;
 const MAX_DIAGNOSTICS_REQUESTS = 64;
 const NOTE_STATES = ['accepted', 'started', 'released', 'ended', 'stolen', 'cancelled', 'rejected'];
+const MAX_REGISTERED_VOICES = 128;
+const NOTE_OBSERVERS = new WeakMap<OPM, Set<(event: NoteEvent) => void>>();
+
+function ownData(value: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
+  if (value === null || typeof value !== 'object' || Array.isArray(value) ||
+      (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) {
+    throw new TypeError(`${label} must be a plain data object`);
+  }
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(value)) {
+    if (typeof key !== 'string' || !allowed.includes(key)) throw new TypeError(`${label} has an unknown field`);
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError(`${label}.${key} must be data`);
+    result[key] = descriptor.value;
+  }
+  return result;
+}
+
+function frozenPatch(input: VoiceInput): NormalizedVoice {
+  const patch = normalizeVoice(input);
+  for (const op of patch.ops) {
+    Object.freeze(op.adsr);
+    if (op.keyScale) Object.freeze(op.keyScale);
+    Object.freeze(op);
+  }
+  Object.freeze(patch.ops);
+  Object.freeze(patch.lfo);
+  return Object.freeze(patch);
+}
+
+function absoluteTime(value: unknown, context: AudioContext): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 ||
+      value > context.currentTime + MAX_DURATION ||
+      !Number.isSafeInteger(Math.round(value * context.sampleRate))) {
+    throw new RangeError('at must be finite, nonnegative, safely framed and at most 60 seconds ahead');
+  }
+  return value;
+}
+
+function noteId(id: number): void {
+  if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('Invalid note id');
+}
 
 function replyData(data: unknown): NoteEvent | DiagnosticsEvent | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
@@ -47,7 +107,7 @@ function replyData(data: unknown): NoteEvent | DiagnosticsEvent | null {
   if (prototype !== Object.prototype && prototype !== null) return null;
   const type = Object.getOwnPropertyDescriptor(data, 'type');
   if (!type || !Object.hasOwn(type, 'value')) return null;
-  const required = type.value === 'note' ? ['type', 'id', 'state']
+  const required = type.value === 'note' ? ['type', 'id', 'state', 'frame', 'time']
     : type.value === 'diagnostics' ? ['type', 'requestId', 'activeVoices', 'pendingEvents', 'errors', 'rejectedNotes'] : null;
   if (!required) return null;
   const result: Record<PropertyKey, unknown> = {};
@@ -60,7 +120,9 @@ function replyData(data: unknown): NoteEvent | DiagnosticsEvent | null {
   for (const key of required) if (!Object.hasOwn(result, key)) return null;
   if (result.type === 'note') {
     if (!Number.isSafeInteger(result.id) || (result.id as number) <= 0 || !NOTE_STATES.includes(result.state as string) ||
-        (Object.hasOwn(result, 'reason') && typeof result.reason !== 'string')) return null;
+        (Object.hasOwn(result, 'reason') && typeof result.reason !== 'string') ||
+        !Number.isSafeInteger(result.frame) || (result.frame as number) < 0 ||
+        typeof result.time !== 'number' || !Number.isFinite(result.time) || result.time < 0) return null;
   } else {
     if (!Number.isSafeInteger(result.requestId) || (result.requestId as number) <= 0) return null;
     for (const key of ['activeVoices', 'pendingEvents', 'errors', 'rejectedNotes']) {
@@ -73,7 +135,16 @@ function replyData(data: unknown): NoteEvent | DiagnosticsEvent | null {
 /** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
 export class OPM {
   declare readonly sampleRate: number | undefined;
-  declare readonly voices: Map<string, NormalizedVoice>;
+  /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
+  get voices(): ReadonlyMap<string, NormalizedVoice> { return new Map(this._voices); }
+  /** @internal */
+  declare private _voices: Map<string, NormalizedVoice>;
+  /** @internal */
+  declare private _voiceIds: Map<NormalizedVoice, number>;
+  /** @internal */
+  declare private _rawVoices: Map<string, NormalizedVoice>;
+  /** @internal */
+  declare private _nextVoiceId: number;
   declare readonly context: AudioContext | null;
   declare readonly node: AudioWorkletNode | null;
   /** @internal */
@@ -98,7 +169,9 @@ export class OPM {
     context: AudioContext; node: AudioWorkletNode; listener: () => void;
   } | null | undefined;
 
-  constructor({ sampleRate, context, destination, onEvent }: OPMOptions = {}) {
+  constructor(options: OPMOptions = {}) {
+    const { sampleRate, context, destination, onEvent } = ownData(options,
+      ['sampleRate', 'context', 'destination', 'onEvent'], 'OPM options') as OPMOptions;
     if (sampleRate !== undefined && (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)) {
       throw new RangeError('sampleRate must be an integer in 8000..96000');
     }
@@ -108,7 +181,10 @@ export class OPM {
     }
     if (onEvent !== undefined && typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
     this.sampleRate = sampleRate;
-    this.voices = new Map([['brass', normalizeVoice(brass)]]);
+    this._voices = new Map([['brass', frozenPatch(brass)]]);
+    this._voiceIds = new Map();
+    this._rawVoices = new Map();
+    this._nextVoiceId = 1;
     (this as MutableAudioState).context = context ?? null;
     (this as MutableAudioState).node = null;
     this.nextId = 1;
@@ -124,11 +200,13 @@ export class OPM {
 
   loadVoice(name: string, voice: VoiceInput): void {
     if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new TypeError('Invalid voice name');
-    this.voices.set(name, normalizeVoice(voice));
+    this._voices.set(name, frozenPatch(voice));
   }
 
   /** @internal */
   private _emit(event: OPMEvent): void {
+    const observers = NOTE_OBSERVERS.get(this);
+    if (event.type === 'note' && observers) for (const observe of observers) observe(event);
     try { this.onEvent?.(event); } catch { /* Host callbacks cannot break audio lifecycle handling. */ }
   }
 
@@ -140,6 +218,9 @@ export class OPM {
 
   /** @internal */
   private _disposeNode(node: AudioWorkletNode | null): void {
+    this._voiceIds.clear();
+    this._rawVoices.clear();
+    this._nextVoiceId = 1;
     if (!node) return;
     if (this._contextListener?.node === node) {
       const { context, listener } = this._contextListener;
@@ -273,28 +354,69 @@ export class OPM {
     return this;
   }
 
-  playNote(options: PlayNoteOptions): number;
-  playNote({ voice = 'brass', note, time = 0, duration = null, velocity = 1, pan = 0 }: PlayNoteOptions = {} as PlayNoteOptions): number {
+  playNote(options: PlayNoteOptions): number {
     const node = this._requireNode();
-    const patch = typeof voice === 'string' ? this.voices.get(voice) : normalizeVoice(voice);
-    if (!patch) throw new RangeError('Unknown voice');
-    if (!Number.isInteger(note) || note < 0 || note > 127) throw new RangeError('note must be a MIDI integer in 0..127');
-    if (!Number.isFinite(time) || time < 0 || time > MAX_DURATION) throw new RangeError('time must be a delay in 0..60 seconds');
-    if (duration !== null && (!Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION)) {
+    const data = ownData(options, ['voice', 'note', 'time', 'at', 'late', 'duration', 'velocity', 'pan'], 'note options');
+    const voice = data.voice === undefined ? 'brass' : data.voice;
+    const note = data.note;
+    const duration = data.duration === undefined ? null : data.duration;
+    const velocity = data.velocity === undefined ? 1 : data.velocity;
+    const pan = data.pan === undefined ? 0 : data.pan;
+    const late = data.late === undefined ? 'start' : data.late;
+    if (!Number.isInteger(note) || (note as number) < 0 || (note as number) > 127) throw new RangeError('note must be a MIDI integer in 0..127');
+    if (Object.hasOwn(data, 'at') && Object.hasOwn(data, 'time')) throw new TypeError('at and time are mutually exclusive');
+    const time = data.time === undefined ? 0 : data.time;
+    if (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || time > MAX_DURATION) throw new RangeError('time must be a delay in 0..60 seconds');
+    const at = absoluteTime(Object.hasOwn(data, 'at') ? data.at : this.context!.currentTime + time, this.context!);
+    if (duration !== null && (typeof duration !== 'number' || !Number.isFinite(duration) || duration <= 0 || duration > MAX_DURATION)) {
       throw new RangeError('duration must be null or in (0, 60] seconds');
     }
-    if (!Number.isFinite(velocity) || velocity < 0 || velocity > 1) throw new RangeError('velocity must be in 0..1');
-    if (!Number.isFinite(pan) || pan < -1 || pan > 1) throw new RangeError('pan must be in -1..1');
+    if (typeof velocity !== 'number' || !Number.isFinite(velocity) || velocity < 0 || velocity > 1) throw new RangeError('velocity must be in 0..1');
+    if (typeof pan !== 'number' || !Number.isFinite(pan) || pan < -1 || pan > 1) throw new RangeError('pan must be in -1..1');
+    if (late !== 'start' && late !== 'drop') throw new TypeError('late must be start or drop');
+    const endFrame = Math.max(Math.round(at * this.context!.sampleRate), Math.round(this.context!.currentTime * this.context!.sampleRate)) +
+      (duration === null ? 0 : Math.max(1, Math.ceil(duration * this.context!.sampleRate)));
+    if (!Number.isSafeInteger(endFrame)) throw new RangeError('duration exceeds safe sample frames');
     if (!Number.isSafeInteger(this.nextId) || this.nextId <= 0) throw new RangeError('Note ID space exhausted');
+    let patch: NormalizedVoice | undefined;
+    let rawKey: string | undefined;
+    if (typeof voice === 'string') patch = this._voices.get(voice);
+    else {
+      // Every raw call validates a fresh snapshot; mutations must not bypass validation.
+      patch = frozenPatch(voice as VoiceInput);
+      rawKey = JSON.stringify(patch);
+      patch = this._rawVoices.get(rawKey) ?? patch;
+    }
+    if (!patch) throw new RangeError('Unknown voice');
+    let voiceId = this._voiceIds.get(patch);
+    if (voiceId === undefined && this._voiceIds.size < MAX_REGISTERED_VOICES) {
+      voiceId = this._nextVoiceId++;
+      node.port.postMessage({ type: 'prepareVoice', voiceId, voice: patch });
+      this._voiceIds.set(patch, voiceId);
+      if (rawKey !== undefined) this._rawVoices.set(rawKey, patch);
+    }
     const id = this.nextId++;
-    node.port.postMessage({ type: 'noteOn', id, voice: patch, note, at: this.context!.currentTime + time, duration, velocity, pan });
+    node.port.postMessage({ type: 'noteOn', id, ...(voiceId === undefined ? { voice: patch } : { voiceId }),
+      note, at, duration, velocity, pan, late });
     return id;
   }
 
-  stop(id: number): void {
+  stop(id: number, options: ScheduledNoteOptions = {}): void {
     const node = this._requireNode();
-    if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('Invalid note id');
-    node.port.postMessage({ type: 'noteOff', id });
+    noteId(id);
+    const data = ownData(options, ['at'], 'stop options');
+    const at = Object.hasOwn(data, 'at') ? absoluteTime(data.at, this.context!) : undefined;
+    node.port.postMessage({ type: 'noteOff', id, ...(at === undefined ? {} : { at }) });
+  }
+
+  /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
+  updateNote(id: number, controls: NoteControls, options: ScheduledNoteOptions = {}): void {
+    const node = this._requireNode();
+    noteId(id);
+    const snapshot = validateNoteControls(controls);
+    const data = ownData(options, ['at'], 'update options');
+    const at = Object.hasOwn(data, 'at') ? absoluteTime(data.at, this.context!) : undefined;
+    node.port.postMessage({ type: 'updateNote', id, controls: snapshot, ...(at === undefined ? {} : { at }) });
   }
 
   getDiagnostics(): Promise<DiagnosticsEvent> {
@@ -345,4 +467,152 @@ export class OPM {
     this._disposeNode(node);
     if (context && !this._providedContext && context.state !== 'closed') await context.close();
   }
+}
+
+export interface LookaheadWindow {
+  /** Half-open absolute AudioContext time window. Missed windows are skipped after a stall. */
+  from: number; to: number;
+  /** Maximum notes the callback may return in this batch. */
+  maxNotes: number;
+}
+export type LookaheadNote = PlayNoteOptions & { at: number; duration: number };
+export interface LookaheadOptions {
+  /** Seconds, default 0.2; bounded to 0.02..10 and greater than interval. */
+  horizon?: number;
+  /** Seconds between pumps, default 0.025; bounded to 0.005..1. */
+  interval?: number;
+  /** Maximum batch size, default 32; bounded to 1..128. */
+  maxNotes?: number;
+  /** Timer/callback failures stop scheduling and are delivered here. */
+  onError: (error: Error) => void;
+}
+export interface LookaheadScheduler {
+  readonly running: boolean;
+  /** Call from a user gesture; initializes/resumes OPM, then fills the first window. */
+  start(): Promise<void>;
+  /** Cancels pending notes and releases this scheduler's active gates, not other notes. */
+  stop(): void;
+  /** Stops and permanently prevents restart; does not close OPM. */
+  dispose(): void;
+}
+
+/** Bounded timer-driven admission, not timer-driven note release. Audio frames own all gates. */
+export function createLookaheadScheduler(
+  opm: OPM,
+  schedule: (window: LookaheadWindow) => readonly LookaheadNote[],
+  options: LookaheadOptions,
+): LookaheadScheduler {
+  const data = ownData(options, ['horizon', 'interval', 'maxNotes', 'onError'], 'lookahead options');
+  const rawHorizon = data.horizon === undefined ? 0.2 : data.horizon;
+  const rawInterval = data.interval === undefined ? 0.025 : data.interval;
+  const rawMaxNotes = data.maxNotes === undefined ? 32 : data.maxNotes;
+  const rawOnError = data.onError;
+  if (typeof schedule !== 'function' || typeof rawOnError !== 'function') throw new TypeError('schedule and onError must be functions');
+  if (typeof rawHorizon !== 'number' || !Number.isFinite(rawHorizon) || rawHorizon < 0.02 || rawHorizon > 10 ||
+      typeof rawInterval !== 'number' || !Number.isFinite(rawInterval) || rawInterval < 0.005 || rawInterval > 1 || rawInterval >= rawHorizon) {
+    throw new RangeError('lookahead requires horizon in 0.02..10, interval in 0.005..1, and interval < horizon');
+  }
+  if (typeof rawMaxNotes !== 'number' || !Number.isInteger(rawMaxNotes) || rawMaxNotes < 1 || rawMaxNotes > 128) throw new RangeError('maxNotes must be an integer in 1..128');
+  const horizon: number = rawHorizon;
+  const interval: number = rawInterval;
+  const maxNotes: number = rawMaxNotes;
+  const onError = rawOnError as (error: Error) => void;
+  let running = false;
+  let disposed = false;
+  let generation = 0;
+  let cursor = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let starting: Promise<void> | null = null;
+  const gates = new Set<number>();
+  const observers = NOTE_OBSERVERS.get(opm) ?? new Set<(event: NoteEvent) => void>();
+  NOTE_OBSERVERS.set(opm, observers);
+  let admitting = false;
+  let admissionTerminal: number | null = null;
+  const observe = (event: NoteEvent) => {
+    if (event.state === 'ended' || event.state === 'stolen' || event.state === 'cancelled' || event.state === 'rejected') {
+      gates.delete(event.id);
+      if (admitting) admissionTerminal = event.id;
+    }
+  };
+
+  function stop(reportFailure = true): void {
+    running = false;
+    generation++;
+    clearTimeout(timer);
+    timer = undefined;
+    observers.delete(observe);
+    let failure: unknown;
+    for (const id of gates) {
+      try { opm.stop(id); } catch (error) { failure ??= error; }
+    }
+    gates.clear();
+    if (reportFailure && failure !== undefined) onError(failure instanceof Error ? failure : new Error(String(failure)));
+  }
+
+  function pump(): void {
+    if (!running) return;
+    try {
+      const context = opm.context;
+      if (!context || !opm.node || context.state !== 'running') throw new Error('Lookahead AudioContext is not running');
+      const now = context.currentTime;
+      const from = Math.max(cursor, now);
+      const to = now + horizon;
+      if (from < to) {
+        const notes = schedule({ from, to, maxNotes });
+        if (!Array.isArray(notes) || notes.length > maxNotes || gates.size + notes.length > 128) {
+          throw new RangeError('Lookahead batch or outstanding gates exceed their bounded capacity');
+        }
+        // Snapshot batch data and timing before admission; never invoke array/option accessors.
+        const batch: LookaheadNote[] = [];
+        for (let index = 0; index < notes.length; index++) {
+          const descriptor = Object.getOwnPropertyDescriptor(notes, String(index));
+          if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Lookahead notes must be data array entries');
+          const note = ownData(descriptor.value, ['voice', 'note', 'at', 'late', 'duration', 'velocity', 'pan'], 'lookahead note');
+          if (typeof note.at !== 'number' || !Number.isFinite(note.at) || note.at < from || note.at >= to ||
+              typeof note.duration !== 'number' || !Number.isFinite(note.duration) || note.duration <= 0 || note.duration > 60) {
+            throw new RangeError('Lookahead notes require an at inside the window and duration in (0, 60]');
+          }
+          batch.push(note as unknown as LookaheadNote);
+        }
+        // A callback may stop/dispose its scheduler reentrantly.
+        if (!running) return;
+        cursor = to;
+        for (const note of batch) {
+          admissionTerminal = null;
+          admitting = true;
+          let id: number;
+          try { id = opm.playNote(note); } finally { admitting = false; }
+          if (admissionTerminal !== id) gates.add(id);
+          if (!running) { opm.stop(id); gates.delete(id); return; }
+        }
+      }
+      timer = setTimeout(pump, interval * 1000);
+    } catch (error) {
+      stop(false);
+      onError(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+
+  return {
+    get running() { return running; },
+    start() {
+      if (disposed) return Promise.reject(new Error('Lookahead scheduler is disposed'));
+      if (starting) return starting;
+      if (running) return Promise.resolve();
+      const token = generation;
+      const pending = opm.start().then(() => {
+        if (disposed || token !== generation) return;
+        running = true;
+        observers.add(observe);
+        cursor = opm.context!.currentTime;
+        pump();
+      });
+      starting = pending;
+      const clear = () => { if (starting === pending) starting = null; };
+      pending.then(clear, clear);
+      return pending;
+    },
+    stop,
+    dispose() { disposed = true; stop(); },
+  };
 }

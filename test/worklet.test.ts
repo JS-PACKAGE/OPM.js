@@ -8,6 +8,8 @@ interface ProcessorMessage {
   id?: number;
   state?: string;
   reason?: string;
+  frame?: number;
+  time?: number;
   activeVoices?: number;
   pendingEvents?: number;
   rejectedNotes?: number;
@@ -196,4 +198,109 @@ test('broken ports cannot break rendering, and clean shutdown stops processing i
   processor.receive(note(2));
   assert.equal(processor.events.length, 0);
   assert.equal(processor.notes.size, 0);
+});
+
+test('registered and inline patches snapshot immediately and cannot be replaced by malformed registrations', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  const reference = new Processor();
+  const source = structuredClone(brass);
+  processor.receive({ type: 'prepareVoice', voiceId: 1, voice: source });
+  processor.receive({ type: 'noteOn', id: 1, voiceId: 1, note: 69, at: 32 / sampleRate, duration: null });
+  reference.receive(note(1, 32, null));
+  source.ops.forEach(op => { op.level = 0; });
+  processor.receive({ type: 'prepareVoice', voiceId: 1, voice: source });
+  let reads = 0;
+  const malformed = { ...brass };
+  Object.defineProperty(malformed, 'feedback', { get() { reads++; throw Error('getter ran'); } });
+  processor.receive({ type: 'prepareVoice', voiceId: 2, voice: malformed });
+  assert.equal(reads, 0);
+  assert.equal(processor.messages.filter(message => message.state === 'rejected').length, 0, 'registration failure is not a note admission');
+  assert.deepEqual(block(processor, 0), block(reference, 0));
+  processor.receive({ type: 'noteOn', id: 2, voiceId: 2, note: 69, at: 128 / sampleRate, duration: null });
+  assert.ok(processor.messages.some(message => message.id === 2 && message.state === 'rejected' && message.reason === 'invalid-voice'));
+  const inline = structuredClone(brass);
+  processor.receive({ ...note(3, 160, null), voice: inline });
+  reference.receive(note(3, 160, null));
+  inline.ops.forEach(op => { op.level = 0; });
+  assert.deepEqual(block(processor, 128), block(reference, 128));
+});
+
+test('voice registrations are bounded while valid inline notes remain usable past the cache limit', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  for (let voiceId = 1; voiceId <= 129; voiceId++) processor.receive({ type: 'prepareVoice', voiceId, voice: brass });
+  processor.receive({ type: 'noteOn', id: 1, voiceId: 128, note: 69, at: 0, duration: null });
+  processor.receive({ type: 'noteOn', id: 2, voiceId: 129, note: 69, at: 0, duration: null });
+  processor.receive(note(3, 0, null));
+  assert.ok(block(processor, 0).some(sample => sample !== 0));
+  assert.ok(processor.messages.some(message => message.id === 2 && message.reason === 'invalid-voice'));
+  const report = diagnostics(processor);
+  assert.equal(report.activeVoices, 2);
+  assert.equal(report.errors, 1);
+  assert.equal(report.rejectedNotes, 1);
+});
+
+test('controls and scheduled stops share the event bound and cancellation frees every event', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(1, 1024, null));
+  for (let index = 0; index < 255; index++) processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0.5 }, at: 2048 / sampleRate });
+  processor.receive({ type: 'noteOff', id: 1, at: 512 / sampleRate });
+  const full = diagnostics(processor);
+  assert.equal(full.pendingEvents, 256);
+  assert.equal(full.errors, 1);
+  assert.equal(full.rejectedNotes, 0, 'control/off capacity failures cannot reject an admitted note');
+  processor.receive({ type: 'noteOff', id: 1 });
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.equal(processor.notes.size, 0);
+  assert.ok(block(processor, 1024).every(sample => sample === 0));
+});
+
+test('same-frame stops win onset and ordered onset steals reclaim scheduled tail controls', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(100, 32, null));
+  processor.receive({ type: 'updateNote', id: 100, controls: { expression: 1 }, at: 0 });
+  processor.receive({ type: 'noteOff', id: 100, at: 32 / sampleRate });
+  for (let id = 1; id <= 9; id++) {
+    processor.receive(note(id, 32, null));
+    processor.receive({ type: 'updateNote', id, controls: { expression: 0.5 }, at: 4096 / sampleRate });
+  }
+  block(processor, 0);
+  assert.deepEqual(processor.messages.filter(message => message.id === 100).map(message => [message.state, message.frame]),
+    [['accepted', 0], ['cancelled', 32]]);
+  assert.deepEqual(processor.messages.filter(message => message.state === 'started').map(message => message.id), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(processor.messages.filter(message => message.state === 'stolen').map(message => [message.id, message.frame]), [[1, 32]]);
+  assert.equal(diagnostics(processor).pendingEvents, 8, 'stolen voice must not retain tail controls');
+  for (let id = 2; id <= 9; id++) processor.receive({ type: 'noteOff', id });
+  for (let frame = 128; frame < 8192; frame += 128) block(processor, frame);
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.equal(processor.notes.size, 0);
+});
+
+test('raw controls and scheduling fields use own data and reject malformed records without touching a gate', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(1, 0, null));
+  block(processor, 0);
+  let reads = 0;
+  const controls = {};
+  Object.defineProperty(controls, 'expression', { get() { reads++; throw Error('getter ran'); } });
+  const stop = { type: 'noteOff', id: 1 };
+  Object.defineProperty(stop, 'at', { get() { reads++; return 0; } });
+  for (const message of [
+    { type: 'updateNote', id: 1, controls },
+    { type: 'updateNote', id: 1, controls: { expression: 0, extra: true } },
+    { type: 'updateNote', id: 1, controls: { glide: 1 } },
+    { type: 'updateNote', id: 1, controls: { pan: NaN } },
+    { type: 'updateNote', id: 1, controls: { expression: 0 }, at: undefined },
+    { type: 'noteOff', id: 1, at: 61 },
+    stop,
+  ]) processor.receive(message);
+  assert.equal(reads, 0);
+  assert.ok(block(processor, 128).some(sample => sample !== 0));
+  assert.equal(processor.messages.filter(message => message.state === 'released').length, 0);
+  processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0 }, at: 256 / sampleRate });
+  assert.ok(block(processor, 256).every(sample => sample === 0));
 });

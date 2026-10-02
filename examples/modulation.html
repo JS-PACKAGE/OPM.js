@@ -3,19 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OPM.js — Stereo and per-voice LFO</title>
+  <title>OPM.js — Live controls and absolute scheduling</title>
   <link rel="icon" href="../favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <main>
     <a href="../index.html">Back to the example index</a>
-    <h1>Stereo and per-voice LFO</h1>
-    <p>Play middle C with a copy of the brass voice to compare stereo pan, amplitude modulation (AM), and pitch modulation (PM). Headphones make left and right easier to distinguish.</p>
+    <h1>Live controls and absolute scheduling</h1>
+    <p>Hold middle C, then change the sounding note without retriggering its envelope. Headphones make stereo movement easier to hear.</p>
     <fieldset>
-      <legend>Pan and modulation for new notes</legend>
+      <legend>Live note controls</legend>
       <label for="pan">Pan (-1 left, 0 center, 1 right): <output id="pan-value" for="pan">0</output></label>
       <input id="pan" type="range" min="-1" max="1" step="0.01" value="0">
+      <label for="pitch">Pitch offset: <output id="pitch-value" for="pitch">0</output> semitones</label>
+      <input id="pitch" type="range" min="-24" max="24" step="0.1" value="0">
+      <label for="glide">Pitch glide: <output id="glide-value" for="glide">0.2</output> seconds</label>
+      <input id="glide" type="range" min="0" max="2" step="0.01" value="0.2">
+      <label for="expression">Expression: <output id="expression-value" for="expression">1</output></label>
+      <input id="expression" type="range" min="0" max="1" step="0.01" value="1">
+      <label for="modulation">Modulation multiplier: <output id="modulation-value" for="modulation">1</output></label>
+      <input id="modulation" type="range" min="0" max="2" step="0.01" value="1">
+    </fieldset>
+    <fieldset>
+      <legend>LFO patch settings for the next note</legend>
       <label for="rate">LFO rate (0–20 Hz): <output id="rate-value" for="rate">5</output> Hz</label>
       <input id="rate" type="range" min="0" max="20" step="0.1" value="5">
       <label for="am-depth">AM depth (0–1): <output id="am-depth-value" for="am-depth">0.2</output></label>
@@ -24,10 +35,11 @@
       <input id="pm-depth" type="range" min="0" max="1200" step="1" value="20">
     </fieldset>
     <div class="actions">
-      <button id="play" type="button" disabled>Play / replay a 3-second note</button>
-      <button id="stop" type="button" disabled>Stop note</button>
+      <button id="play" type="button" disabled>Play / replay a held note</button>
+      <button id="sweep" type="button" disabled>Schedule octave glide + release</button>
+      <button id="stop" type="button" disabled>Release now</button>
     </div>
-    <p class="hint">Settings apply to new notes, not notes already playing. LFO belongs to the voice copy; there is no global setLFO. Replay releases the previous note, and stopping leaves its natural release tail.</p>
+    <p class="hint">Play schedules an absolute onset 150 ms ahead. Live controls also work during release. The scheduled glide and stop run on audio sample frames, not JavaScript timers. Stop now cancels a pending onset or releases an active gate; the natural tail remains.</p>
     <output id="status" role="status" aria-live="polite">Loading example…</output>
   </main>
   <script type="module" src="../dist/demo/modulation.js"></script>

@@ -12,7 +12,7 @@
     <a href="../index.html">Back to the example index</a>
     <h1>Melody and chord scheduling</h1>
     <p>Play the complete melody and chords of Twinkle, Twinkle, Little Star (about 24 seconds), with chords panned left and melody panned right.</p>
-    <p class="hint">Schedule notes using playNote() time and duration, and cancel future notes with stop(). Click a button to start audio.</p>
+    <p class="hint">A bounded 200 ms lookahead admits absolute playNote() at times incrementally. Audio-frame durations release notes; stop() cancels pending notes. Delayed timer windows skip missed beats instead of queuing a burst. Click Play to start audio.</p>
     <div class="actions">
       <button id="play" type="button">Play song</button>
       <button id="stop" type="button" disabled>Stop</button>

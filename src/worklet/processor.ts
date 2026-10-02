@@ -1,31 +1,38 @@
 import './worklet-globals.js';
-import { Synth } from '../core/synth.js';
-import { normalizeVoice } from '../voices/normalize.js';
-import type { NoteOptions, VoiceEndReason } from '../core/synth.js';
-import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import { Synth, validateNoteControls } from '../core/synth.js';
+import { prepareVoice } from '../voices/schema.js';
+import type { NoteControls, NoteOptions, VoiceEndReason } from '../core/synth.js';
+import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { DiagnosticsEvent, NoteEvent, NoteState } from '../api/index.js';
 
 type RawMessage =
-  | { type: 'noteOn'; id: unknown; voice: unknown; note: unknown; at: unknown; duration: unknown; velocity?: unknown; pan?: unknown }
-  | { type: 'noteOff'; id: unknown }
+  | { type: 'prepareVoice'; voiceId: unknown; voice: unknown }
+  | { type: 'noteOn'; id: unknown; voice?: unknown; voiceId?: unknown; note: unknown; at: unknown; duration: unknown; velocity?: unknown; pan?: unknown; late?: unknown }
+  | { type: 'noteOff'; id: unknown; at?: unknown }
+  | { type: 'updateNote'; id: unknown; controls: unknown; at?: unknown }
   | { type: 'diagnostics'; requestId: unknown }
   | { type: 'close' };
 type ScheduledEvent =
-  | { type: 'noteOn'; id: number; frame: number; note: number; voice: NormalizedVoice; options: NoteOptions }
-  | { type: 'noteOff'; id: number; frame: number };
-interface TrackedNote { state: 'pending' | 'started' | 'released' }
+  | { type: 'noteOn'; id: number; frame: number; note: number; voice: PreparedVoice; options: NoteOptions; late: 'start' | 'drop'; durationFrames: number | null }
+  | { type: 'noteOff'; id: number; frame: number; automatic: boolean }
+  | { type: 'updateNote'; id: number; frame: number; controls: NoteControls };
+interface TrackedNote { state: 'pending' | 'started' | 'released'; startFrame: number }
 
 export type { OPMProcessor };
 
 const MAX_PENDING_EVENTS = 256;
 const MAX_NOTE_IDS = 256;
+const MAX_REGISTERED_VOICES = 128;
 const MAX_DURATION = 60;
 const MESSAGE_FIELDS: Record<RawMessage['type'], readonly [readonly string[], readonly string[]]> = {
-  noteOn: [['type', 'id', 'voice', 'note', 'at', 'duration'], ['velocity', 'pan']],
-  noteOff: [['type', 'id'], []],
+  prepareVoice: [['type', 'voiceId', 'voice'], []],
+  noteOn: [['type', 'id', 'note', 'at', 'duration'], ['voice', 'voiceId', 'velocity', 'pan', 'late']],
+  noteOff: [['type', 'id'], ['at']],
+  updateNote: [['type', 'id', 'controls'], ['at']],
   diagnostics: [['type', 'requestId'], []],
   close: [['type'], []],
 };
+const EVENT_ORDER: Record<ScheduledEvent['type'], number> = { noteOff: 0, noteOn: 1, updateNote: 2 };
 
 function messageData(data: unknown): RawMessage | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
@@ -36,12 +43,13 @@ function messageData(data: unknown): RawMessage | null {
   const [required, optional] = MESSAGE_FIELDS[type.value as RawMessage['type']];
   const result: Record<PropertyKey, unknown> = Object.create(null);
   for (const key of Reflect.ownKeys(data)) {
-    if (!required.includes(key as string) && !optional.includes(key as string)) return null;
+    if (typeof key !== 'string' || !required.includes(key) && !optional.includes(key)) return null;
     const descriptor = Object.getOwnPropertyDescriptor(data, key);
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) return null;
     result[key] = descriptor.value;
   }
   for (const key of required) if (!Object.hasOwn(result, key)) return null;
+  if (result.type === 'noteOn' && Object.hasOwn(result, 'voice') === Object.hasOwn(result, 'voiceId')) return null;
   return result as RawMessage;
 }
 
@@ -49,36 +57,46 @@ function validId(id: unknown): id is number {
   return Number.isSafeInteger(id) && (id as number) > 0;
 }
 
+function scheduledFrame(at: unknown): number | null {
+  if (typeof at !== 'number' || !Number.isFinite(at) || at < 0 || at > currentFrame / sampleRate + MAX_DURATION) return null;
+  const frame = Math.round(at * sampleRate);
+  return Number.isSafeInteger(frame) && frame <= currentFrame + MAX_DURATION * sampleRate ? frame : null;
+}
+
 class OPMProcessor extends AudioWorkletProcessor {
   declare synth: Synth | null;
   declare events: ScheduledEvent[];
   declare notes: Map<number, TrackedNote>;
+  declare patches: Map<number, PreparedVoice>;
   declare errorCount: number;
   declare rejectedNotes: number;
   declare closed: boolean;
+  declare dispatchFrame: number;
+  declare renderFrameBase: number;
+  declare rendering: boolean;
 
   constructor() {
     super();
     this.synth = new Synth(sampleRate);
     this.events = [];
     this.notes = new Map();
+    this.patches = new Map();
     this.errorCount = 0;
     this.rejectedNotes = 0;
     this.closed = false;
+    this.dispatchFrame = currentFrame;
+    this.renderFrameBase = currentFrame;
+    this.rendering = false;
     this.synth.onVoiceEnded = (id, reason) => this.ended(id, reason);
     this.port.onmessage = (event) => this.receive(event.data);
   }
 
   send(message: NoteEvent | DiagnosticsEvent): void {
-    try {
-      this.port.postMessage(message);
-    } catch {
-      // A closed or broken port must not interrupt the audio callback.
-    }
+    try { this.port.postMessage(message); } catch { /* Broken ports cannot interrupt rendering. */ }
   }
 
-  noteEvent(id: number, state: NoteState, reason?: string): void {
-    const message: NoteEvent = { type: 'note', id, state };
+  noteEvent(id: number, state: NoteState, reason?: string, frame = this.dispatchFrame): void {
+    const message: NoteEvent = { type: 'note', id, state, frame, time: frame / sampleRate };
     if (reason !== undefined) message.reason = reason;
     this.send(message);
   }
@@ -90,15 +108,20 @@ class OPMProcessor extends AudioWorkletProcessor {
 
   insert(event: ScheduledEvent): void {
     let index = this.events.length;
-    while (index > 0 && this.events[index - 1].frame > event.frame) index--;
+    // Stops precede onset, then controls; admission order breaks remaining ties.
+    while (index > 0) {
+      const previous = this.events[index - 1];
+      if (previous.frame < event.frame || previous.frame === event.frame && EVENT_ORDER[previous.type] <= EVENT_ORDER[event.type]) break;
+      index--;
+    }
     this.events.splice(index, 0, event);
   }
 
-  removeEvents(id: number): void {
+  removeEvents(id: number, onlyAutomatic = false): void {
     let kept = 0;
     for (let index = 0; index < this.events.length; index++) {
       const event = this.events[index];
-      if (event.id !== id) this.events[kept++] = event;
+      if (event.id !== id || onlyAutomatic && !(event.type === 'noteOff' && event.automatic)) this.events[kept++] = event;
     }
     this.events.length = kept;
   }
@@ -106,32 +129,47 @@ class OPMProcessor extends AudioWorkletProcessor {
   ended(id: number, reason: VoiceEndReason): void {
     if (!this.notes.delete(id)) return;
     this.removeEvents(id);
-    this.noteEvent(id, reason === 'stolen' ? 'stolen' : 'ended', reason === 'error' ? 'error' : undefined);
+    const frame = this.rendering ? this.renderFrameBase + this.synth!.currentFrame : this.dispatchFrame;
+    this.noteEvent(id, reason === 'stolen' ? 'stolen' : 'ended', reason === 'error' ? 'error' : undefined, frame);
+  }
+
+  release(id: number): void {
+    const note = this.notes.get(id);
+    if (!note) return;
+    if (note.state === 'pending') {
+      this.notes.delete(id);
+      this.removeEvents(id);
+      this.noteEvent(id, 'cancelled');
+    } else {
+      // Keep scheduled controls for the release tail, but no redundant automatic off.
+      this.removeEvents(id, true);
+      if (this.synth!.noteOff(id)) {
+        note.state = 'released';
+        this.noteEvent(id, 'released');
+      }
+    }
   }
 
   receive(raw: unknown): void {
     if (this.closed) return;
-    let data: RawMessage | null;
-    try {
-      data = messageData(raw);
-    } catch {
-      return;
-    }
+    this.dispatchFrame = currentFrame;
+    let data: RawMessage | null = null;
+    try { data = messageData(raw); } catch { /* Revoked proxies are not messages. */ }
     if (!data) {
-      // Inspect descriptors only, even when reporting malformed note admissions.
+      this.errorCount++;
+      // Descriptor-only reporting never executes a malformed message's getters.
       try {
-        const type = Object.getOwnPropertyDescriptor(raw, 'type');
-        const id = Object.getOwnPropertyDescriptor(raw, 'id');
-        if (type?.value === 'noteOn') this.reject(id?.value, 'invalid-message');
-      } catch {
-        // Non-records and revoked proxies are not messages.
-      }
+        if (raw !== null && typeof raw === 'object' && Object.getOwnPropertyDescriptor(raw, 'type')?.value === 'noteOn') {
+          this.reject(Object.getOwnPropertyDescriptor(raw, 'id')?.value, 'invalid-message');
+        }
+      } catch { /* Non-records cannot identify an admission. */ }
       return;
     }
     if (data.type === 'close') {
       this.closed = true;
       this.events.length = 0;
       this.notes.clear();
+      this.patches.clear();
       this.synth!.onVoiceEnded = null;
       this.synth = null;
       this.port.onmessage = null;
@@ -143,64 +181,77 @@ class OPMProcessor extends AudioWorkletProcessor {
         this.send({ type: 'diagnostics', requestId: data.requestId,
           activeVoices: this.synth!.voices.length, pendingEvents: this.events.length,
           errors: this.errorCount + this.synth!.errorCount, rejectedNotes: this.rejectedNotes });
-      }
+      } else this.errorCount++;
       return;
     }
-    if (data.type === 'noteOff') {
-      if (!validId(data.id)) return;
-      const note = this.notes.get(data.id);
-      // Late/repeated stops are idempotent, including notes already stolen or ended.
-      if (!note) return;
-      this.removeEvents(data.id);
-      if (note.state === 'pending') {
-        this.notes.delete(data.id);
-        this.noteEvent(data.id, 'cancelled');
-      } else if (this.synth!.noteOff(data.id)) {
-        note.state = 'released';
-        this.noteEvent(data.id, 'released');
+    if (data.type === 'prepareVoice') {
+      if (!validId(data.voiceId) || this.patches.has(data.voiceId) || this.patches.size >= MAX_REGISTERED_VOICES) {
+        this.errorCount++;
+        return;
       }
+      try { this.patches.set(data.voiceId, prepareVoice(data.voice as VoiceInput)); }
+      catch { this.errorCount++; }
+      return;
+    }
+    if (data.type === 'noteOff' || data.type === 'updateNote') {
+      if (!validId(data.id)) { this.errorCount++; return; }
+      let controls: NoteControls | undefined;
+      if (data.type === 'updateNote') {
+        try { controls = validateNoteControls(data.controls as NoteControls); }
+        catch { this.errorCount++; return; }
+      }
+      const frame = Object.hasOwn(data, 'at') ? scheduledFrame(data.at) : currentFrame;
+      if (frame === null) { this.errorCount++; return; }
+      const note = this.notes.get(data.id);
+      if (!note) return;
+      if (data.type === 'noteOff' && !Object.hasOwn(data, 'at')) {
+        this.release(data.id);
+        return;
+      }
+      if (data.type === 'updateNote' && !Object.hasOwn(data, 'at') && note.state !== 'pending') {
+        this.synth!.updateNote(data.id, controls!);
+        return;
+      }
+      if (this.events.length >= MAX_PENDING_EVENTS) { this.errorCount++; return; }
+      if (data.type === 'noteOff') this.insert({ type: 'noteOff', id: data.id, frame, automatic: false });
+      else this.insert({ type: 'updateNote', id: data.id, frame: note.state === 'pending' ? Math.max(frame, note.startFrame) : frame, controls: controls! });
       return;
     }
 
     if (!validId(data.id) || !Number.isInteger(data.note) || (data.note as number) < 0 || (data.note as number) > 127 ||
-        !Number.isFinite(data.at) || (data.at as number) < 0 ||
-        (data.duration !== null && (!Number.isFinite(data.duration) || (data.duration as number) <= 0 || (data.duration as number) > MAX_DURATION))) {
+        (data.duration !== null && (typeof data.duration !== 'number' || !Number.isFinite(data.duration) || data.duration <= 0 || data.duration > MAX_DURATION))) {
       this.reject(data.id, 'invalid-note');
       return;
     }
     const velocity = Object.hasOwn(data, 'velocity') ? data.velocity : 1;
     const pan = Object.hasOwn(data, 'pan') ? data.pan : 0;
-    if (!Number.isFinite(velocity) || (velocity as number) < 0 || (velocity as number) > 1 ||
-        !Number.isFinite(pan) || (pan as number) < -1 || (pan as number) > 1) {
+    const late = Object.hasOwn(data, 'late') ? data.late : 'start';
+    if (typeof velocity !== 'number' || !Number.isFinite(velocity) || velocity < 0 || velocity > 1 ||
+        typeof pan !== 'number' || !Number.isFinite(pan) || pan < -1 || pan > 1 || late !== 'start' && late !== 'drop') {
       this.reject(data.id, 'invalid-note');
       return;
     }
-    // Reserve an ID only after all validation; duplicates never insert even an off.
-    if (this.notes.has(data.id)) {
-      this.reject(data.id, 'duplicate-id');
-      return;
-    }
-    const needed = data.duration === null ? 1 : 2;
-    if (this.events.length + needed > MAX_PENDING_EVENTS || this.notes.size >= MAX_NOTE_IDS) {
-      this.reject(data.id, 'capacity');
-      return;
-    }
+    if (this.notes.has(data.id)) { this.reject(data.id, 'duplicate-id'); return; }
+    const frame = scheduledFrame(data.at);
+    const durationFrames = data.duration === null ? null : Math.max(1, Math.ceil(data.duration * sampleRate));
+    const end = durationFrames === null ? null : Math.max(frame ?? 0, currentFrame) + durationFrames;
+    if (frame === null || end !== null && !Number.isSafeInteger(end)) { this.reject(data.id, 'invalid-time'); return; }
+    if (late === 'drop' && frame < currentFrame) { this.reject(data.id, 'late'); return; }
+    const needed = durationFrames === null ? 1 : 2;
+    if (this.events.length + needed > MAX_PENDING_EVENTS || this.notes.size >= MAX_NOTE_IDS) { this.reject(data.id, 'capacity'); return; }
+    let voice: PreparedVoice;
     try {
-      const voice = normalizeVoice(data.voice as VoiceInput);
-      const frame = Math.round((data.at as number) * sampleRate);
-      const end = data.duration === null ? null : frame + Math.max(1, Math.ceil((data.duration as number) * sampleRate));
-      if (!Number.isSafeInteger(frame) || (end !== null && !Number.isSafeInteger(end)) ||
-          frame > currentFrame + MAX_DURATION * sampleRate) {
-        this.reject(data.id, 'invalid-time');
-        return;
-      }
-      this.notes.set(data.id, { state: 'pending' });
-      this.insert({ type: 'noteOn', id: data.id, note: data.note as number, voice, frame, options: { velocity: velocity as number, pan: pan as number } });
-      if (end !== null) this.insert({ type: 'noteOff', id: data.id, frame: end });
-      this.noteEvent(data.id, 'accepted');
-    } catch {
-      this.reject(data.id, 'invalid-voice');
-    }
+      if (Object.hasOwn(data, 'voiceId')) {
+        const registered = validId(data.voiceId) ? this.patches.get(data.voiceId) : undefined;
+        if (!registered) throw new TypeError('Unknown voice ID');
+        voice = registered;
+      } else voice = prepareVoice(data.voice as VoiceInput);
+    } catch { this.reject(data.id, 'invalid-voice'); return; }
+    this.notes.set(data.id, { state: 'pending', startFrame: frame });
+    this.insert({ type: 'noteOn', id: data.id, note: data.note as number, voice, frame,
+      options: { velocity, pan }, late, durationFrames });
+    if (end !== null) this.insert({ type: 'noteOff', id: data.id, frame: end, automatic: true });
+    this.noteEvent(data.id, 'accepted');
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -210,16 +261,30 @@ class OPMProcessor extends AudioWorkletProcessor {
     const left = output[0];
     const right = output[1];
     const start = currentFrame;
+    this.renderFrameBase = start - this.synth!.currentFrame;
     let position = 0;
     while (position < left.length) {
+      this.dispatchFrame = start + position;
       const next = this.events[0];
-      if (next && next.frame <= start + position) {
-        // Pop before dispatch: Synth callbacks can reclaim other queued events.
+      if (next && next.frame <= this.dispatchFrame) {
+        // Pop before dispatch: core callbacks may reclaim other queued events.
         this.events.shift();
         const note = this.notes.get(next.id);
         if (!note) continue;
         if (next.type === 'noteOn') {
+          if (next.late === 'drop' && next.frame < this.dispatchFrame) {
+            this.notes.delete(next.id);
+            this.removeEvents(next.id);
+            this.reject(next.id, 'late');
+            continue;
+          }
           try {
+            if (next.durationFrames !== null && next.frame < this.dispatchFrame) {
+              const end = this.dispatchFrame + next.durationFrames;
+              if (!Number.isSafeInteger(end)) throw new RangeError('Unsafe end frame');
+              this.removeEvents(next.id, true);
+              this.insert({ type: 'noteOff', id: next.id, frame: end, automatic: true });
+            }
             this.synth!.noteOn(next.voice, next.note, next.id, next.options);
             note.state = 'started';
             this.noteEvent(next.id, 'started');
@@ -229,14 +294,14 @@ class OPMProcessor extends AudioWorkletProcessor {
             this.removeEvents(next.id);
             this.reject(next.id, 'synthesis-error');
           }
-        } else if (this.synth!.noteOff(next.id)) {
-          note.state = 'released';
-          this.noteEvent(next.id, 'released');
-        }
+        } else if (next.type === 'noteOff') this.release(next.id);
+        else this.synth!.updateNote(next.id, next.controls);
         continue;
       }
       const length = next ? Math.min(left.length - position, next.frame - start - position) : left.length - position;
+      this.rendering = true;
       this.synth!.render(left, right, position, length);
+      this.rendering = false;
       position += length;
     }
     return true;

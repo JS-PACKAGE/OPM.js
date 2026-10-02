@@ -59,9 +59,10 @@ host.registerProcessor = (name, constructor) => {
 };
 // A static import would register the processor before its Node host shell exists.
 await import('../src/worklet/processor.js');
-function burst(): BenchmarkRun {
+function burst(prepared = false): BenchmarkRun {
   if (!Processor) throw new Error('opm-processor was not registered');
   const processor = new Processor();
+  if (prepared) processor.receive({ type: 'prepareVoice', voiceId: 1, voice: brass });
   let rejectedNotes = 0;
   processor.port.postMessage = (message: unknown) => {
     if (message !== null && typeof message === 'object' && 'type' in message && 'state' in message &&
@@ -69,6 +70,7 @@ function burst(): BenchmarkRun {
   };
   const outputs = [[left, right]];
   const inputs: Float32Array[][] = [];
+  const voice = prepared ? { voiceId: 1 } : { voice: brass };
   let frame = 0;
   let id = 1;
   const run = () => {
@@ -76,7 +78,7 @@ function burst(): BenchmarkRun {
     // Four immediate and four sub-block future starts continually replace
     // eight held voices and exercise both event ordering and bounded fades.
     for (let i = 0; i < 8; i++) {
-      processor.receive({ type: 'noteOn', id: id++, voice: brass, note: 48 + i * 3,
+      processor.receive({ type: 'noteOn', id: id++, ...voice, note: 48 + i * 3,
         at: (frame + (i < 4 ? 0 : 64)) / sampleRate, duration: 0.02,
         velocity: 0.8, pan: i % 2 ? 0.5 : -0.5 });
     }
@@ -97,6 +99,7 @@ const cases: [string, BenchmarkRun][] = [
   ['eight voices + LFO', realtime(8)],
   ['eight voices, no LFO', realtime(8, steady)],
   ['burst noteOn + steal + event queue + render', burst()],
+  ['prepared burst noteOn + steal + event queue + render', burst(true)],
 ];
 const results = [];
 let failed = false;
