@@ -56,7 +56,8 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 | Single-voice API | Required fields and exactly four complete operators; finite numeric values and documented ranges; unknown fields and accessors reject |
 | Voice-bank JSON string | At most 262,144 UTF-8 bytes (256 KiB), then JSON parsing and bank validation |
 | Voice-bank array | 1–128 complete versioned voices, unique validated names, and frozen normalized copies |
-| Legacy version 1 | Accepted only within its documented schema; version 2 key-scaling fields are not accepted as legacy extensions |
+| Legacy versions 1/2 | v1 excludes key scaling; both exclude v3 velocity sensitivity; accepted old shapes canonicalize to v3 |
+| PreparedVoice | Immutable detached core snapshot; only private identity membership grants trust, never a structural brand/copy |
 
 Single-voice APIs reject out-of-range fields. Bank validation clamps finite numeric fields to documented bounds, but still rejects malformed types, non-finite numbers and invalid version/algorithm/feedback values. Clamping is not a substitute for validation.
 
@@ -94,6 +95,9 @@ Create download URLs only for successfully encoded bytes. Replace/revoke obsolet
 - Await `start()` in a user interaction and monitor `onEvent`. A returned note ID is not admission; handle rejections, terminal note states and processor errors.
 - The worklet bounds pending events and tracked note IDs to 256 each. Schedule bounded batches rather than flooding the port with distant-future events.
 - Each synth limits logical voices to eight, with up to eight bounded stealing fades. These limits do not constrain an attacker creating many synth instances or abusing unrelated host code.
+- DSP state and terminal notification buffers are preallocated. Ended/error callbacks run after stable frame traversal; callback-admitted replacements start next frame, and recursive rendering rejects rather than extending a frame's work.
+- Named/prepared worklet patches are bounded to 128 registrations per node; invalid registrations cannot replace trusted identities. Raw objects still undergo fresh validation.
+- Absolute start/stop/control times are finite safe frames with a 60-second future horizon. Same-frame stop precedes onset and controls; explicit late-drop rejection must remain visible. The lookahead helper caps batches/gates, skips missed windows and reports errors instead of silently retrying.
 - Handle rejected diagnostics promises and failed node initialization. Do not hide failure behind mock audio nodes or a fallback engine.
 - A shared AudioContext is borrowed: OPM disconnects its own node but never closes or suspends the host context. The host owns downstream routing, permissions and disposal. Use `destination: null` for explicit routing.
 - Provide obvious play/stop controls and begin at a comfortable, low host gain, especially with headphones. Finite samples and synthesis headroom do not guarantee safe listening volume.
@@ -129,7 +133,7 @@ This policy addresses the library and checkout examples. Authentication, authori
 
 A security review is required before:
 
-- [ ] Any release tag (`vX.Y.Z`)
+- [ ] Any release tag (`vX.Y` for zero patch versions, `vX.Y.Z` otherwise)
 - [ ] Merging a PR that touches: `src/worklet/`, `src/core/`, or voice parsing (`src/voices/`, `src/api/` loaders)
 - [ ] Adding any dependency, build plugin, or CI action
 - [ ] Supporting a new voice-bank source (file import, URL, user paste)
@@ -139,7 +143,8 @@ A security review is required before:
 **A. Untrusted data (voice banks, config)**
 - [ ] Voice JSON/key scaling, DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
 - [ ] Explicit allowlisted copying; no spreading/merging untrusted objects into prototypes; no accessor invocation
-- [ ] Numeric bounds cover modulation, level, ratio, detune, ADSR, LFO, velocity/pan, and key scaling; legacy v1 does not accept new v2 fields
+- [ ] Numeric bounds cover modulation, level, ratio, detune, ADSR, LFO, velocity/pan, key scaling and v3 operator velocity sensitivity; legacy inputs exclude later fields
+- [ ] Prepared identity cannot be forged, trusted patches stay deeply immutable, and public map snapshots cannot change stored patches
 - [ ] Application file/URL loaders bound sources, content type, and payload before buffering; engine does not fetch URLs
 - [ ] DX7 rejects invalid length/framing/checksum/seven-bit payload; conversion descriptions remain outside strict voice schema
 
@@ -148,10 +153,12 @@ A security review is required before:
 - [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; literal worklet module URLs remain local
 - [ ] Duplicate IDs reject before enqueueing; tracked IDs/events remain bounded; ended/stolen/error notes remove obsolete off events
 - [ ] Held-note cancellation/release, exactly-once logical terminal events, diagnostics, and processor failure propagate safely
+- [ ] Registration cache, controls, absolute scheduling, late policy and timestamp fields validate own-data shape; tie order and pending control/stop cleanup preserve bounded queues
 
 **C. DSP loop safety**
 - [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (`Synth.errorCount` or `renderNote()`'s `diagnostics.errors`)
 - [ ] Fixed work ceiling: at most eight logical voices and eight bounded short stealing fades; oldest logical note stealing
+- [ ] Slot reset/recycling preserves identity and numerical state under callback admissions; terminal callbacks cannot replenish a frame's traversal or recursively render it
 - [ ] Determinism and chunk-independent output preserved; live/offline LFO, timing, filtering, stereo, velocity, and saturation parity
 - [ ] Deadline statistics exclude warmup and expose p95/p99/worst/misses without universal performance promises; spectral acceptance is controlled, not arbitrary FM alias-free proof
 
@@ -159,6 +166,8 @@ A security review is required before:
 - [ ] Zero runtime dependencies still holds (`npm ls --omit=dev` is empty)
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
 - [ ] `package.json` `files` whitelist ships only intended `dist/` assets, usage docs, and legal/project files
+- [ ] Standalone deployment retains the installed LICENSE alongside complete matching worklet/module assets; CSP/MIME/404 failures stay visible
+- [ ] npm publication defaults to dry run and requires protected approval, matching tag/version/commit/release, A/B/C/D review evidence and configured trusted publishing; no credentials are stored in the tree
 
 ### 3. Verification gates
 
@@ -171,6 +180,10 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 - `npx --no-install playwright install --with-deps chromium` then `npm run browser-smoke -- chromium` — real AudioWorklet smoke; Firefox/WebKit alternatives are configured separately
 - Headless Linux Firefox requires a running native audio server. CI starts PulseAudio and a null sink before real worklet smoke; it does not mock audio or relax browser permission/autoplay controls. Consult the usage guides for setup and stage diagnostics.
 - `npm run benchmark` — host-dependent 128-frame render deadlines, with optional explicit budget environment variables
+- `npm run sound-quality` / `npm run voice-quality` — numerical/register/velocity matrices and controlled spectral reports, not perceptual/hardware-fidelity proof
+- `npm run browser-stress -- chromium` — real bounded worklet contention/lifecycle/queue checks; timer/round-trip data are not CPU, GC or glitch counters
+- `npm run vite-smoke` — installed artifact, non-root production base, license, actual audio, CSP and negative MIME/404 scenarios; audit standalone tooling from `examples/vite` too
+- Follow [publishing prerequisites](./doc/publishing.md) before any authorized npm upload; source review cannot establish external environment protections, registry authentication or provenance
 
 ### 4. Review record
 

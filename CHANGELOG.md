@@ -2,6 +2,45 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+The package version remains 1.3.0; the changes below have not been published to npm or included in a new GitHub release.
+
+### Sound quality and realtime acceptance
+
+- Add a 1,728-case offline matrix across four sample rates, all eight algorithms, feedback extremes, registers, velocities and voice-stealing workloads. Check finite output, headroom, settled release, determinism and render-chunk independence.
+- Report controlled passband loss, harmonics 2–8 THD and two isolated ultrasonic folded aliases. These bounds are not hardware-fidelity, arbitrary-FM alias-free or perceptual-loudness claims.
+- Add native AudioWorklet stress with 768 dense notes, live controls, scheduled releases, stealing and bounded main-thread contention. Establish actual rendered output before testing a past deadline; a running main-thread clock alone is insufficient during processor startup.
+
+### Prepared patches and expressive notes
+
+- Add opaque immutable `prepareVoice()` snapshots and bounded reusable core voice state. Register/cache up to 128 patches per worklet, with validated inline transport beyond the cache; expose defensive read-only voice-bank snapshots.
+- Add `Synth.updateNote()` / `OPM.updateNote()` with relative pitch, linear-in-semitone glide, expression, pan and FM/LFO modulation controls, including scheduled and pending-note updates.
+- Make voice version 3 canonical, adding optional per-operator velocity sensitivity. Continue accepting version 1/2 under their original field rules; omitted sensitivity preserves legacy sound. DX7 velocity conversion is an explicitly approximate heuristic.
+- Bound terminal notifications after each frame's traversal and reject recursive rendering. Callback-admitted notes begin no earlier than the next frame, preventing callbacks from replenishing an unbounded render loop.
+
+### Audio-clock scheduling and deployment
+
+- Add absolute `at`, scheduled stop, explicit late-start/drop policies and actual lifecycle frame/time stamps. At equal frames, stop precedes onset, then controls; late-start retains the full gate.
+- Add bounded `createLookaheadScheduler()` with explicit error handling, restart/disposal and skipped missed windows. Update the finite song and live-control examples.
+- Add an installed-tarball Vite example with complete dist and LICENSE copying, non-root deployment, CSP and real MIME/404 acceptance. Add a manual npm trusted-publishing/provenance workflow gated by matching release metadata, security evidence and environment approval; no runtime dependencies are added.
+
+### Preset and DX7 audition
+
+- Add the seventh example: preset/original-synthetic-DX7 A/B audition, register/velocity grids, raw peak/RMS dBFS reports, bounded attenuation-only host trim and offline WAV download. Cover seven bundled presets plus five generated converter recipes, not copyrighted third-party banks or a six-operator reference renderer.
+- Keep the mobile report horizontally scrollable inside its container. Update README, both executable usage guides, deployment/publishing guidance and the security policy.
+
+### Observed verification
+
+- **Security:** AllFeaturesInputsReview approved scoped static A/B review; AllFeaturesDspSupplyReview approved C/D after the bounded-callback and deployed-LICENSE fixes. Runtime checks were performed separately by 語喵.
+- Node.js 26.7.0: all 108 behavioral tests, strict source/development/consumer types, source/generated AST security gates and installed-package render/WAV/types passed. Build output has 22 JS/map/declaration triplets. Root full/runtime audits and the installed Vite consumer audit found zero vulnerabilities; runtime dependencies remain empty.
+- All 1,728 sound cases and 108 preset/conversion cells passed. Thirty-two legacy stereo PCM cases were bit-identical to shipped tag `v1.3`, covering four rates, eight algorithms, LFO, polyphony, stealing and release. A 256-prepared-note/control/steal render allocated zero additional Float64 state arrays after construction; this is not a whole-JavaScript zero-allocation guarantee.
+- Owned isolated headless Chromium 153.0.8010.12 with Playwright 1.63.0, sandboxing and explicit audio muting passed native smoke and stress: 769 accepted/started notes, 760 steals, one intentional late rejection, peak 0.672, final active/pending counts zero and no DSP errors. This is not locked Playwright 1.56.1, Firefox/WebKit or current remote-CI coverage.
+- The same silent browser exercised both guides' absolute-control and eight-note lookahead recipes, restart/stop/disposal, live controls, a complete 24-second song and audition A/B/restart. The 390-pixel catalog/report stayed within the viewport. A persisted audition WAV decoded as 40,513 stereo PCM16 frames at 48 kHz (162,096 bytes).
+- Vite 8.3.2 production acceptance passed under `/opm-example/`: real signal/lifecycle, blocked inline CSP script, missing-worklet and wrong-MIME failures, and exact deployed LICENSE contents.
+- Apple M5 / Node 26 report-only benchmark excluded 300 warmup blocks and measured 2,000 blocks per scenario. Raw burst p99/worst were 1.038/1.402 ms; prepared burst p99/worst were 1.238/2.470 ms, with no missed 2.667 ms deadlines. Scheduler/GC variance and other hosts prevent a universal realtime guarantee.
+- No npm publication or new feature release was performed. Local npm authentication was unavailable; trusted-publisher/environment setup and release-specific approval/evidence remain prerequisites for the manual publishing workflow.
+
 ## v1.3.0
 
 ### Release verification and security review
