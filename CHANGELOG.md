@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Website favicon
+
+- Add an original 16/32/48-pixel `favicon.ico` and link it from the catalog and all six examples.
+- Browser decoding and visual inspection confirmed the 48-pixel image and all three ICO directory entries.
+
 ### English example catalog
 
 - Turn the root `index.html` into a six-example English catalog. Add basic notes/voices, stereo/per-voice LFO, shared AudioContext routing and offline WAV examples. Move the song to `examples/song.html` and the advanced playground to `examples/playground.html`; remove the old `demo/index.html` route.
