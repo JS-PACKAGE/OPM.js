@@ -22,6 +22,7 @@ type RawMessage = {
     type: 'noteOff';
     id: unknown;
     at?: unknown;
+    cancelControls?: unknown;
     commandId?: unknown;
 } | {
     type: 'updateNote';
@@ -104,9 +105,9 @@ declare class OPMProcessor extends AudioWorkletProcessor {
     commandEvent(data: CommandMessage, state: CommandEvent['state'], reason?: string): void;
     panic(reason: 'panic' | 'interruption', commandId?: unknown): void;
     insert(event: ScheduledEvent): void;
-    removeEvents(id: number, onlyAutomatic?: boolean): void;
+    removeEvents(id: number, mode?: 'all' | 'automatic' | 'controls'): void;
     ended(id: number, reason: VoiceEndReason): void;
-    release(id: number): void;
+    release(id: number, cancelControls?: boolean): void;
     receive(raw: unknown): void;
     process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean;
 }

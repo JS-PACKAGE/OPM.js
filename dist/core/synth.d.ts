@@ -1,5 +1,7 @@
-import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
+import type { ADSR, PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { TuningOptions } from './tuning.js';
+import type { QualityProfile } from './decimator.js';
+export type { QualityProfile } from './decimator.js';
 export type VoiceEndReason = 'stolen' | 'ended' | 'error' | 'cancelled';
 export interface NoteOptions {
     velocity?: number;
@@ -13,11 +15,20 @@ export interface NoteControls {
     modulation?: number;
     ramp?: number;
     operatorLevels?: readonly [number, number, number, number];
+    feedback?: number;
+    lfoRate?: number;
+    amDepth?: number;
+    pmDepth?: number;
+    operatorRatios?: readonly [number, number, number, number];
+    /** A number enables fixed Hz; null restores the operator's live ratio. Pitch still applies. */
+    operatorFrequencies?: readonly [number | null, number | null, number | null, number | null];
+    operatorADSR?: readonly [ADSR, ADSR, ADSR, ADSR];
 }
 export interface SynthOptions {
     mixGain?: number;
     tuning?: TuningOptions;
     stealing?: 'oldest' | 'release-first' | 'quietest';
+    quality?: QualityProfile;
 }
 /** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
 export declare function validateNoteControls(input: NoteControls): NoteControls;
@@ -25,6 +36,7 @@ export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 export declare class Synth {
     readonly sampleRate: number;
     readonly maxVoices: number;
+    readonly quality: QualityProfile;
     readonly currentFrame: number;
     readonly errorCount: number;
     readonly lastStolenId: number | null;

@@ -1,12 +1,18 @@
-import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
-import type { NoteControls, SynthOptions } from '../core/synth.js';
+import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import type { TuningOptions } from '../core/tuning.js';
-export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4 } from '../voices/schema.js';
-export type { NoteControls, SynthOptions } from '../core/synth.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5 } from '../voices/schema.js';
+export type { NoteControls, SynthOptions, QualityProfile } from '../core/synth.js';
 export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';
 export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
+export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
+export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat } from './transport.js';
+export { createPerformance } from './performance.js';
+export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
+export { renderSequenceInWorker } from './render-worker.js';
+export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult } from './render-worker.js';
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
     type: 'note';
@@ -78,6 +84,10 @@ export interface OPMOptions {
     mixGain?: number;
     tuning?: TuningOptions;
     stealing?: SynthOptions['stealing'];
+    /** Immutable synthesis profile; standard preserves the default sound. */
+    quality?: QualityProfile;
+    /** Logical polyphony, an integer in 1..8; default 8. */
+    maxVoices?: number;
     /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
     interruption?: 'cancel' | 'preserve';
     onEvent?: (event: OPMEvent) => void;
@@ -107,9 +117,18 @@ export interface ScheduledNoteOptions {
     /** Absolute AudioContext seconds. Stop without at is immediate, including cancellation. */
     at?: number;
 }
+/** Explicit cancellation is immediate-only; ordinary stops preserve tail automation. */
+export type StopOptions = ScheduledNoteOptions & {
+    cancelControls?: never;
+} | {
+    at?: never;
+    cancelControls?: boolean;
+};
 /** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
 export declare class OPM {
     readonly sampleRate: number | undefined;
+    get quality(): QualityProfile;
+    get maxVoices(): number;
     /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
     get voices(): ReadonlyMap<string, NormalizedVoice>;
     readonly context: AudioContext | null;
@@ -117,6 +136,11 @@ export declare class OPM {
     onEvent?: (event: OPMEvent) => void;
     constructor(options?: OPMOptions);
     loadVoice(name: string, voice: VoiceInput): void;
+    /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
+    replaceVoiceBank(source: string | readonly CompleteVoiceInput[]): void;
+    removeVoice(name: string): boolean;
+    /** Canonical versioned entries, detached from the immutable registry and UTF-8 bounded. */
+    exportVoiceBank(): string;
     /** Independent subscription; close preserves it for restart, dispose removes it permanently. */
     subscribe(listener: (event: OPMEvent) => void): () => void;
     start(): Promise<void>;
@@ -124,7 +148,7 @@ export declare class OPM {
     connect(destination: AudioNode): this;
     disconnect(destination?: AudioNode): this;
     playNote(options: PlayNoteOptions): number;
-    stop(id: number, options?: ScheduledNoteOptions): number;
+    stop(id: number, options?: StopOptions): number;
     /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
     updateNote(id: number, controls: NoteControls, options?: ScheduledNoteOptions): number;
     /** Cancel all pending events and release all active gates, preserving release tails. */

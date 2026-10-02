@@ -91,6 +91,28 @@ export declare const voiceSchema: {
                     maximum: number;
                     default: number;
                 };
+                amTargets: {
+                    type: string;
+                    minItems: number;
+                    maxItems: number;
+                    items: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    description: string;
+                };
+                pmTargets: {
+                    type: string;
+                    minItems: number;
+                    maxItems: number;
+                    items: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    description: string;
+                };
                 waveform: {
                     type: string;
                     enum: string[];

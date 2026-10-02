@@ -5,6 +5,8 @@ export interface ADSR {
     s: number;
     r: number;
 }
+export type LFOTargets = readonly [number, number, number, number];
+export type LFOTargetsInput = readonly [number | boolean, number | boolean, number | boolean, number | boolean];
 export interface LegacyLFO {
     rate: number;
     amDepth: number;
@@ -13,17 +15,25 @@ export interface LegacyLFO {
     delay?: never;
     sync?: never;
     phase?: never;
+    amTargets?: never;
+    pmTargets?: never;
 }
 export interface LegacyLFOV4 extends Omit<LegacyLFO, 'waveform'> {
     waveform: 'sine' | 'triangle' | 'saw' | 'square';
 }
-export interface LFO extends Omit<LegacyLFOV4, 'delay' | 'sync' | 'phase'> {
+export interface LegacyLFOV5 extends Omit<LegacyLFOV4, 'delay' | 'sync' | 'phase'> {
     delay?: number;
     sync?: 'note' | 'global';
     phase?: number;
 }
-export type LFOInput = Omit<LFO, 'waveform'> & {
+export interface LFO extends Omit<LegacyLFOV5, 'amTargets' | 'pmTargets'> {
+    amTargets?: LFOTargets;
+    pmTargets?: LFOTargets;
+}
+export type LFOInput = Omit<LFO, 'waveform' | 'amTargets' | 'pmTargets'> & {
     waveform?: LFO['waveform'];
+    amTargets?: LFOTargetsInput;
+    pmTargets?: LFOTargetsInput;
 };
 export interface PitchEnvelope {
     a: number;
@@ -68,8 +78,15 @@ interface VoiceBase {
 }
 /** Strict single-voice input; omitted version uses the current shape. */
 export type VoiceInput = (VoiceBase & {
-    version?: 5;
+    version?: 6;
     lfo?: LFOInput;
+    pitchEnvelope?: PitchEnvelope;
+    ops: readonly [Operator, Operator, Operator, Operator];
+}) | (VoiceBase & {
+    version: 5;
+    lfo?: Omit<LegacyLFOV5, 'waveform'> & {
+        waveform?: LFO['waveform'];
+    };
     pitchEnvelope?: PitchEnvelope;
     ops: readonly [Operator, Operator, Operator, Operator];
 }) | (VoiceBase & {
@@ -96,7 +113,7 @@ export type VoiceInput = (VoiceBase & {
     ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator];
 });
 export interface Voice {
-    version: 5;
+    version: 6;
     name: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -127,8 +144,12 @@ export interface LegacyVoiceV4 extends Omit<LegacyVoiceV3, 'version' | 'lfo'> {
     version: 4;
     lfo: LegacyLFOV4;
 }
-export interface NormalizedVoice {
+export interface LegacyVoiceV5 extends Omit<Voice, 'version' | 'lfo'> {
     version: 5;
+    lfo: LegacyLFOV5;
+}
+export interface NormalizedVoice {
+    version: 6;
     name?: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -137,7 +158,7 @@ export interface NormalizedVoice {
     pitchEnvelope?: PitchEnvelope;
     ops: FourOperators;
 }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4;
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops' | 'pitchEnvelope'>> & {
     readonly lfo: Readonly<LFO>;
     readonly pitchEnvelope?: Readonly<PitchEnvelope>;
