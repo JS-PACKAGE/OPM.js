@@ -2,6 +2,36 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+Changes after the immutable GitHub v1.4 release. Package metadata remains 1.4.0 for local verification only; no npm publication, commit or release tag is implied.
+
+### Complete expressive playback and lifecycle
+
+- Return correlated command IDs/accepted-or-rejected events for stop, controls, all-notes-off, panic, mix gain and tuning. Queue-full/inactive commands no longer fail silently; acceptance is admission, not a future-execution promise.
+- Add allNotesOff with natural release and queue-bypassing panic with immediate tail removal; add context/reset events and reliable host gate cleanup across close/failure/interruption.
+- Add independent optional 0–10-second expression/pan/modulation ramps, preserving immediate defaults and pitch-glide semantics.
+- Add 0–1 pre-tanh mix gain and phase-preserving global A4/128-note cents tuning; browser notes now accept fractional MIDI like offline notes.
+- Replace saturated patch-cache inline fallback with bounded content-key LRU registration replacement; queued/active voices retain original prepared snapshots.
+- Add bounded prepareSequence/renderSequence/playSequence with shared note/control/stop ordering, frame rounding, tuning and release tails.
+- Canonicalize voice format 4 with sine/triangle/saw/square LFO waveforms; retain versions 1/2/3 under old field rules. Add oldest/release-first/quietest stealing without instantaneous zero-crossing decisions.
+- Default context interruption to cancel; preserve is explicit. Non-running contexts/resets stop lookahead, with error reporting and gesture-driven restart rather than stale replay.
+- Add example 08 with native playback, same-score WAV, gain/tuning/stealing controls, suspend/recovery/disposal, bounded local observation export and manually confirmed physical-device scenarios.
+
+### Independent numerical and security acceptance
+
+- Add index-16 Bessel PM spectral references at 44.1/48/96 kHz with separate brightness and alias bounds, a contractive delayed-feedback reference for feedback 7/level 0.25, and conservative full-level feedback energy bounds. Chaotic full-level feedback does not admit unique alias/harmonic separation; no all-patch or chip-fidelity claim.
+- Add two 120-second streaming scenarios for held AM/PM and repeated interrupted glides; verify continuity, deterministic rechunking and terminal silence.
+- InputBoundaryReview reviewed A/B; DspSupplyReview reviewed C/D. Reproduced/fixed null mixGain/tuning acceptance and shadowed native render metadata; also reject offset coercion before default-length calculation. Permanent regressions protect unchanged sound/frame state on rejected input.
+- Node.js 26.7.0: 157 behavioral tests and strict source/development/public-consumer types passed. Full/runtime npm audits found zero vulnerabilities; runtime dependencies remain empty.
+- All 1,728 sound-matrix cases and independent/long-stream gates passed. The conservative filter still reports −11.627 dB at 9.6 kHz/48 kHz; improving arbitrary upper-register brightness/aliasing is not claimed.
+- Owned sandboxed, explicitly muted Chromium 153.0.8010.12/Playwright 1.63.0 exercised real AudioWorklet signal, cancellation/preservation, routing/lifecycle and the feature UI. Actual backend rate was 24 kHz; all four waveform WAVs decoded as 21,840 stereo PCM16 frames/87,404 bytes. Fresh running-state analyser output confirmed preserve across all three stealing policies; no listening or underrun certification.
+- The local device report contained 184 bounded events with every physical-device scenario unconfirmed; nothing was uploaded. No devicectl/adb or real phone was available. npm whoami returned ENEEDAUTH: authenticated first publication, authorized next-release metadata/tag and registry-installed verification remain external prerequisites.
+- FinalInputsReview (A/B) and FinalDspReview (C/D) re-reviewed the completed fixes without remaining findings. Native Node installed-tarball runtime and consumer declaration gates passed against the clean 27-module distribution.
+- Executed the actual canonical JSON from README and both usage guides with finite nonzero PCM and zero errors. Both unmodified shared-score guide scripts rendered 13,440 frames at 24 kHz in native Chromium, produced analyser signal and closed their owned contexts.
+- Final native browser smoke passed. Stress exercised 768 dense notes in 32 batches: 769 started including the initial held note, 760 steals and one intentional late rejection; settled active/pending/error counts were zero. Installed-package Vite 8.3.2 production checks passed for non-root base, CSP, normal assets, missing worklet and incorrect MIME handling.
+- Report-only Apple M5/Node 26.7.0 benchmark (48 kHz, 128 frames, 2,000 measured blocks/scenario): eight voices with LFO had p99 2.2315 ms, worst 10.627416 ms and 16 deadline misses; without LFO had 6 misses, raw burst 5, prepared burst 0. No hard budgets were configured; scheduler/GC-sensitive timings are not an underrun counter or realtime guarantee.
+
 ## v1.4
 
 Package version 1.4.0. Distributed through the GitHub release tarball; npm registry publication is a separate operation.

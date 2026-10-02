@@ -56,8 +56,9 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 | Single-voice API | Required fields and exactly four complete operators; finite numeric values and documented ranges; unknown fields and accessors reject |
 | Voice-bank JSON string | At most 262,144 UTF-8 bytes (256 KiB), then JSON parsing and bank validation |
 | Voice-bank array | 1–128 complete versioned voices, unique validated names, and frozen normalized copies |
-| Legacy versions 1/2 | v1 excludes key scaling; both exclude v3 velocity sensitivity; accepted old shapes canonicalize to v3 |
+| Legacy versions 1/2/3 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, all exclude waveform; normalize to v4 |
 | PreparedVoice | Immutable detached core snapshot; only private identity membership grants trust, never a structural brand/copy |
+| Tuning / score data | Reference A4 20–20000 Hz; exactly 128 finite bounded cents offsets if supplied; score capped at 128 notes, 256 reserved slots and 60 seconds; own-data snapshots before submission |
 
 Single-voice APIs reject out-of-range fields. Bank validation clamps finite numeric fields to documented bounds, but still rejects malformed types, non-finite numbers and invalid version/algorithm/feedback values. Clamping is not a substitute for validation.
 
@@ -86,6 +87,8 @@ This is approximate six-to-four-operator voice conversion, not a DX7 emulator or
 
 Project render results onto those fields rather than forwarding diagnostics or other metadata. Reject encoding/rendering errors visibly instead of substituting a fake result.
 
+Core rendering authenticates native Float32Array kind/length instead of overridable properties. Validate offset before deriving the default length; numeric coercion, proxies, forged channels and out-of-bounds ranges reject without advancing sound. Idle clearing uses the native fill method. Hosts still own the actual PCM storage and must not mutate it concurrently.
+
 Offline rendering allocates output buffers and executes synchronously. The host should limit duration, sample rate, envelope tails, concurrent requests and export frequency to suit its device and UI. Valid input may still consume significant time and memory; no universal deadline or whole-page memory guarantee is made.
 
 Create download URLs only for successfully encoded bytes. Replace/revoke obsolete Blob URLs and release them when the owning page or component is disposed. Treat filenames and rendered audio as potentially private application data.
@@ -96,10 +99,12 @@ Create download URLs only for successfully encoded bytes. Replace/revoke obsolet
 - The worklet bounds pending events and tracked note IDs to 256 each. Schedule bounded batches rather than flooding the port with distant-future events.
 - Each synth limits logical voices to eight, with up to eight bounded stealing fades. These limits do not constrain an attacker creating many synth instances or abusing unrelated host code.
 - DSP state and terminal notification buffers are preallocated. Ended/error callbacks run after stable frame traversal; callback-admitted replacements start next frame, and recursive rendering rejects rather than extending a frame's work.
-- Named/prepared worklet patches are bounded to 128 registrations per node; invalid registrations cannot replace trusted identities. Raw objects still undergo fresh validation.
-- Absolute start/stop/control times are finite safe frames with a 60-second future horizon. Same-frame stop precedes onset and controls; explicit late-drop rejection must remain visible. The lookahead helper caps batches/gates, skips missed windows and reports errors instead of silently retrying.
+- Named/prepared worklet registrations use 128 content-keyed LRU slots. Replacement revalidates before committing; queued/active notes own immutable old snapshots. Raw objects still validate freshly.
+- Absolute start/stop/control times are safely framed with a 60-second future horizon; stop precedes onset and controls. Command rejection is correlated by commandId; accepted means admission, not guaranteed future execution. Global allNotesOff/panic bypass full scheduled queues. Bound sequences and lookahead rather than flooding messages.
 - Handle rejected diagnostics promises and failed node initialization. Do not hide failure behind mock audio nodes or a fallback engine.
 - A shared AudioContext is borrowed: OPM disconnects its own node but never closes or suspends the host context. The host owns downstream routing, permissions and disposal. Use `destination: null` for explicit routing.
+- Clear host gate bookkeeping on global reset; close/failure need not reply with every terminal note. Default cancel removes old gates/automation on suspension/interruption; preserve is opt-in. Both policies stop lookahead and require gesture-driven explicit restart.
+- The recovery harness exports at most 512 local observations, browser metadata and manual scenario flags; it does not upload data or certify physical-phone recovery. Check every iOS/Android scenario on a real device before marking it confirmed.
 - Provide obvious play/stop controls and begin at a comfortable, low host gain, especially with headphones. Finite samples and synthesis headroom do not guarantee safe listening volume.
 
 ### Source maps, privacy and redistribution
@@ -143,7 +148,7 @@ A security review is required before:
 **A. Untrusted data (voice banks, config)**
 - [ ] Voice JSON/key scaling, DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
 - [ ] Explicit allowlisted copying; no spreading/merging untrusted objects into prototypes; no accessor invocation
-- [ ] Numeric bounds cover modulation, level, ratio, detune, ADSR, LFO, velocity/pan, key scaling and v3 operator velocity sensitivity; legacy inputs exclude later fields
+- [ ] Numeric bounds cover modulation, level, ratio, ADSR, LFO waveform enum, velocity/pan, key scaling, operator velocity sensitivity, ramps, mix gain, tuning reference and dense 128-note offsets; legacy shapes exclude later fields
 - [ ] Prepared identity cannot be forged, trusted patches stay deeply immutable, and public map snapshots cannot change stored patches
 - [ ] Application file/URL loaders bound sources, content type, and payload before buffering; engine does not fetch URLs
 - [ ] DX7 rejects invalid length/framing/checksum/seven-bit payload; conversion descriptions remain outside strict voice schema
@@ -152,12 +157,12 @@ A security review is required before:
 - [ ] Every raw message is checked for strict own-data shape before reads, enqueueing, or rendering
 - [ ] No eval/Function execution or nonliteral dynamic imports in source/generated JS; literal worklet module URLs remain local
 - [ ] Duplicate IDs reject before enqueueing; tracked IDs/events remain bounded; ended/stolen/error notes remove obsolete off events
-- [ ] Held-note cancellation/release, exactly-once logical terminal events, diagnostics, and processor failure propagate safely
-- [ ] Registration cache, controls, absolute scheduling, late policy and timestamp fields validate own-data shape; tie order and pending control/stop cleanup preserve bounded queues
+- [ ] Held-note cancellation/release, bounded allNotesOff/panic, command admission/rejection, context/reset and processor failure propagate safely; teardown does not promise impossible per-note acknowledgements
+- [ ] Registration replacement, controls, tuning, score IDs/times and absolute scheduling validate own-data shape; queued snapshots, ordering and cleanup preserve bounds
 
 **C. DSP loop safety**
 - [ ] Output is finite: any NaN/Infinity in the render loop snaps to silence and increments an error counter (`Synth.errorCount` or `renderNote()`'s `diagnostics.errors`)
-- [ ] Fixed work ceiling: at most eight logical voices and eight bounded short stealing fades; oldest logical note stealing
+- [ ] Fixed work ceiling: at most eight logical voices/eight fades, deterministic selected stealing policy, authenticated native output lengths and numeric ranges before work
 - [ ] Slot reset/recycling preserves identity and numerical state under callback admissions; terminal callbacks cannot replenish a frame's traversal or recursively render it
 - [ ] Determinism and chunk-independent output preserved; live/offline LFO, timing, filtering, stereo, velocity, and saturation parity
 - [ ] Deadline statistics exclude warmup and expose p95/p99/worst/misses without universal performance promises; spectral acceptance is controlled, not arbitrary FM alias-free proof
@@ -190,6 +195,10 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
 For v1.2, final A/B/C/D independent review and observed integration verification are recorded in CHANGELOG before release. Configured Node 22/24/26 and Chromium/Firefox/WebKit CI jobs are capabilities, not evidence of an external run. Missing browser binaries/host support or unrun CI must be reported, not represented as passing coverage.
+
+Unreleased gap-completion review: InputBoundaryReview covered A/B; DspSupplyReview covered C/D. The integration owner reproduced and fixed null mixGain/tuning acceptance and overridable render-buffer metadata, then also prevented offset coercion before default-length calculation. Runtime evidence and remaining registry/physical-device prerequisites are recorded separately in CHANGELOG; static review is not a claim of runtime coverage.
+
+FinalInputsReview (A/B) and FinalDspReview (C/D) rechecked the final hardened source and release controls, with no new evidence-backed findings. Their PASS applies to scoped static inspection only; they ran no build, payload, tests, audit or browser commands.
 
 ## Non-goals
 

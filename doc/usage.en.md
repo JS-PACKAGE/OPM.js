@@ -2,7 +2,7 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-OPM.js 1.4 provides browser AudioWorklet synthesis through `OPM`, offline stereo PCM through `Synth` and `renderNote`, PCM16 WAV encoding, approximate DX7 voice import, prepared patches, live note controls, absolute scheduling, bounded lookahead, and version 3 voices. Public ESM exports include TypeScript declarations. Node.js 22+ is required for Node examples.
+This checkout contains **Unreleased changes after GitHub v1.4**, including voice format 4, command acknowledgements, smooth controls, shared live/offline scores, tuning and interruption recovery. Package metadata remains 1.4.0 for local verification, not registry publication. Public ESM exports include declarations; Node.js 22+ is required for Node examples. README is the canonical API reference.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
@@ -35,7 +35,7 @@ For the existing checkout demos, from the **OPM.js repository root** run:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/index.html` for the English catalog of seven examples: basic notes, bounded-lookahead melody/chords, live stereo/LFO modulation, shared AudioContext routing, offline WAV, the advanced playground, and preset/DX7 audition. The song is at `examples/song.html`, live controls at `examples/modulation.html`, DX7 import at `examples/playground.html`, and A/B audition with peak/RMS dBFS and WAV downloads at `examples/audition.html`. Python 3 is only used as a local static server. Committed `dist/` works without installing/building; if it is missing or source/helpers have changed, run `npm ci` then `npm run build` in the checkout. Use a modern browser supporting ES modules and AudioWorklet, served over HTTPS or localhost, not `file://`.
+Open `http://localhost:8000/index.html` for eight examples: notes, lookahead melody, live modulation, shared context, WAV, playground, audition and [shared scores/interruption recovery](../examples/sequence.html). Python 3 only serves local assets. Committed `dist/` needs no installation/build; after source/helper changes run `npm ci` then `npm run build`. Use HTTPS or localhost with ES modules/AudioWorklet, never `file://`.
 
 To create an app page, from the **opm-app root** created above, copy the entire installed distribution and license into the static public directory (POSIX shell; on other systems copy the same files manually):
 
@@ -90,23 +90,25 @@ For an installed-package Vite app, follow [the standalone Vite guide](../example
 
 | Call | Contract |
 | --- | --- |
-| `new OPM({ sampleRate, context, destination, onEvent } = {})` | Optional integer sample rate 8000–96000 Hz. Borrow a supplied AudioContext; OPM never suspends/closes it. Omitted destination uses `context.destination`; `null` disables automatic connection. |
+| `new OPM({ sampleRate, context, destination, onEvent, mixGain = 1, tuning = {}, stealing = 'oldest', interruption = 'cancel' } = {})` | Optional integer sample rate 8000–96000 Hz. Borrowed contexts are never suspended/closed by OPM. Omitted destination uses `context.destination`; `null` disables automatic connection. See mix/tuning/stealing bounds below. |
 | `await opm.start()` / `await opm.resume()` | Initialize/resume from a user gesture and await before playback. Concurrent starts coalesce; existing suspended contexts resume. |
 | `opm.connect(destination)` / `opm.disconnect(destination?)` | Connect/disconnect the started worklet; return the instance. Destination must belong to its context; omitted disconnect destination removes all connections. |
 | `opm.loadVoice(name, voice)` | Strictly validate/copy a voice under `[a-zA-Z0-9_-]{1,64}`. Works before startup; replacement affects future notes. |
-| `opm.playNote({ voice = 'brass', note, time = 0, duration = null, velocity = 1, pan = 0, late = 'start' })` | MIDI integer 0–127; relative delay 0–60 seconds, or mutually exclusive `at` in absolute AudioContext seconds. Duration `(0,60]` or `null` to hold. Velocity 0–1; pan −1–1. Returns a positive safe-integer ID, not an admission promise. |
-| `opm.stop(id, { at } = {})` | Without `at`, cancel a pending onset or release an active note immediately. With `at`, schedule cancellation/release at that audio-clock boundary. Unknown/ended/stolen/already-released IDs are harmless no-ops. Started instance and positive safe-integer ID required. |
-| `opm.updateNote(id, controls, { at } = {})` | Apply live controls immediately or at an absolute audio-clock boundary; pending updates apply at onset. Unknown/ended/stolen IDs are no-ops; released notes may still be updated until they end. |
+| `opm.playNote({ voice = 'brass', note, time = 0, at, duration = null, velocity = 1, pan = 0, late = 'start' })` | Finite fractional MIDI 0–127; relative delay 0–60 seconds or mutually exclusive absolute `at`. Duration `(0,60]` or `null` to hold; velocity 0–1; pan −1–1. Returns a positive safe-integer note ID, not admission acknowledgement. |
+| `opm.stop(id, { at } = {})` | Return a command ID; cancel a pending onset/release a live note immediately or at `at`. Inactive/already-released targets report command rejection without changing note state. |
+| `opm.updateNote(id, controls, { at } = {})` | Return a command ID; pending controls apply at onset, and releasing notes remain controllable. Inactive/invalid/queue-full commands report rejection. |
+| `opm.allNotesOff()` / `opm.panic()` | Return a command ID; bypass full scheduled queues. Cancel pending events and release active gates / immediately silence all tails and emit reset. Cache and routing survive. |
+| `opm.setMixGain(gain)` / `opm.setTuning(tuning)` | Require startup, return a command ID, and retain settings across node recreation; no phase/envelope restart. |
 | `await opm.getDiagnostics()` | Resolve `{type:'diagnostics',requestId,activeVoices,pendingEvents,errors,rejectedNotes}`. Requires running context, at most 64 outstanding; suspend/close/processor failure rejects pending requests. Resume before retrying. |
 | `await opm.close()` | Serialize disposal against initialization, disconnect the node, close only an owned context. Startup after close recreates owned contexts; borrowed contexts survive. |
 
-`onEvent` receives note states (`accepted`, `started`, `released`, `ended`, `stolen`, `cancelled`, `rejected`) as `{type:'note',id,state,reason?,frame,time}`, diagnostics replies, and `{type:'error',error}` processor failures. `frame` and `time` describe actual admission/dispatch/completion boundaries, not main-thread callback delivery time. Callback exceptions are isolated. Watch rejections rather than assuming an ID means admission. `opm.voices` is a defensive `ReadonlyMap` snapshot of deeply frozen patches; use `loadVoice` to replace a patch.
+`onEvent` receives note lifecycle states, diagnostics, processor errors, command acknowledgements `{type:'command',command,commandId?,id?,state,reason?,frame,time}`, context state changes and global resets. Command state is `accepted` or `rejected`; acceptance means admission/immediate application, not guaranteed future execution. Correlate command IDs and handle rejection. Clear held-note bookkeeping on reset (`close`, `failure`, `panic`, `interruption`); close/failure need not produce every per-note terminal reply. Frame/time are audio boundaries, not callback delivery timestamps. `opm.voices` is a defensive snapshot of frozen patches.
 
 Absolute `at` must be finite, nonnegative, safely representable in sample frames, and at most 60 seconds ahead of `opm.context.currentTime`. Past times are allowed: default `late:'start'` starts at the first available frame with its full gate duration; `late:'drop'` rejects with reason `late`, including worklet delivery delays. At equal frames, stop precedes onset, then controls; a scheduled stop at/before onset cancels rather than briefly sounding the note.
 
-Controls are a nonempty own-data object: `pitch` −48–48 semitones relative to the original note; `glide` 0–10 seconds requires `pitch` and ramps linearly in semitones from the current pitch; `expression` 0–1 multiplies velocity gain; `pan` −1–1; `modulation` 0–2 scales patch FM and LFO depths (AM capped at 1, PM at 1200 cents). Unknown fields, accessors, nonfinite values, and out-of-range values reject. There is no `setLFO()`; edit `voice.lfo` for future notes or use live `modulation`.
+Controls are a nonempty own-data object: pitch −48..48 semitones; glide 0..10 seconds requiring pitch; expression 0..1; pan −1..1; modulation 0..2 (AM capped at 1/PM 1200 cents); ramp 0..10 seconds requiring expression, pan or modulation. Ramp affects only the supplied expression/pan/modulation fields and retargets continuously; zero/omission is immediate. Glide is separate and linear in semitones. Unknown fields/accessors/nonfinite/out-of-range values reject. Set future-note LFO rate/waveform in the patch, not a global `setLFO`.
 
-There are at most eight logical voices plus eight bounded ~5 ms steal fades. The oldest logical voice is stolen when full. Pending events and tracked IDs are each capped at 256, including scheduled stops and controls. Future timed notes use two events, held notes one; duplicates/overflow reject before enqueueing. Terminal notifications remove all obsolete events for that note. Browser patch registration is cached up to 128 patches per worklet; additional patches use validated inline transport.
+Eight logical voices and eight short fades are bounded. Stealing defaults to oldest; release-first chooses oldest released before held, while quietest uses current carrier envelope × velocity × expression with oldest ties, not instantaneous sample amplitude. Events/IDs each cap at 256. Future timed notes reserve two events; controls/stops also consume slots. Terminal states reclaim obsolete events. Prepared patches use 128 content-keyed LRU registrations; validated replacement reuses IDs safely while queued/active notes keep their original snapshot.
 
 For customization and early release, **replace only the module `<script>` in `opm-app/public/index.html` above**, keeping its `#play` button and `#status` output:
 
@@ -186,6 +188,8 @@ Replace the quick-start page's module script with this block, keeping `#play` an
 
 The callback receives half-open absolute windows `[from,to)` and must synchronously return at most `maxNotes` notes, each with `at` inside that window and numeric duration `(0,60]`; held notes and relative `time` are not allowed. Defaults are horizon 0.2 seconds, interval 0.025 seconds, and 32 notes per batch. Configurable bounds are horizon 0.02–10 seconds (greater than interval), interval 0.005–1 second, and maxNotes 1–128. There are at most 128 outstanding scheduler gates; normal worklet queue limits still apply. Missed windows are skipped, not replayed in a burst. Required `onError` receives callback/timer failures, which stop scheduling. `start()` initializes/resumes from a user gesture; `stop()` permits restart, while `dispose()` is permanent. Neither closes OPM or stops unrelated notes. After the finite phrase the callback returns empty batches; stop/dispose the helper when it is no longer needed.
 
+Any non-running context or reset stops the helper and reaches `onError`; restart explicitly from a gesture. Default `interruption:'cancel'` clears old gates/automation on suspension/interruption; `'preserve'` retains direct notes/queued events but never automatically restarts lookahead.
+
 ### Shared context, output routing, and events
 
 For a host-owned context, replace the quick-start page's module script with this block. It holds each note until the Stop button and leaves the host context alive on disposal:
@@ -201,9 +205,15 @@ For a host-owned context, replace the quick-start page's module script with this
   const opm = new OPM({
     context, destination: null,
     onEvent(event) {
-      status.textContent = event.type === 'error'
-        ? event.error.message
-        : event.type === 'note' ? `${event.id}: ${event.state}` : `Voices: ${event.activeVoices}`;
+      if (event.type === 'reset') {
+        id = undefined;
+        if (event.reason === 'close' || event.reason === 'failure') connected = false;
+      }
+      status.textContent = event.type === 'error' ? event.error.message
+        : event.type === 'note' ? `${event.id}: ${event.state}`
+        : event.type === 'diagnostics' ? `Voices: ${event.activeVoices}`
+        : event.type === 'command' ? `${event.command}: ${event.state} ${event.reason ?? ''}`
+        : event.type === 'context' ? `Context: ${event.state}` : `Reset: ${event.reason}`;
     }
   });
   const stop = document.createElement('button');
@@ -233,6 +243,42 @@ For a host-owned context, replace the quick-start page's module script with this
 
 Call `await window.disposeOPM()` when removing this app's audio UI. The host remains responsible for the shared context and downstream nodes. Avoid suspending a shared context merely to stop one synthesizer.
 
+### Shared scores, tuning and safe recovery
+
+`mixGain` (finite 0–1, default 1) scales the mix **before tanh**; host gain controls listening volume, not saturation drive. Tuning replaces the complete configuration: `{referenceHz: 442, offsets}` with reference A4 20–20000 Hz and optional exactly 128 finite cents offsets in −4800..4800 (omission means zero). Fractional notes interpolate offsets, including a safe MIDI-127 endpoint. Active retuning preserves phases/envelopes and original-note key scaling.
+
+Replace the quick-start module script with this shared live/offline score:
+
+```html
+<script type="module">
+  import { OPM, playSequence } from './opm/api/index.js';
+  import { renderSequence } from './opm/core/index.js';
+  import { brass } from './opm/voices/brass.js';
+  const settings = { mixGain: 0.5, tuning: { referenceHz: 442 }, stealing: 'release-first' };
+  const opm = new OPM({ ...settings, interruption: 'cancel' });
+  const score = [
+    { type: 'note', id: 1, time: 0, duration: 0.4, voice: 'lead', note: 60.5 },
+    { type: 'control', id: 1, time: 0.1, controls: { pan: -0.5, expression: 0.7, ramp: 0.03 } },
+  ];
+  let playback;
+  document.querySelector('#play').addEventListener('click', async () => {
+    try {
+      await opm.start();
+      playback?.stop();
+      opm.loadVoice('lead', brass);
+      playback = playSequence(opm, score, { at: opm.context.currentTime + 0.05 });
+      const audio = renderSequence(score, { ...settings, sampleRate: opm.context.sampleRate, voices: opm.voices });
+      document.querySelector('#status').textContent = `Rendered ${audio.left.length} frames; errors ${audio.diagnostics.errors}`;
+    } catch (error) { document.querySelector('#status').textContent = error.message; }
+  });
+  window.disposeOPM = async () => { playback?.stop(); await opm.close(); };
+</script>
+```
+
+Score times are relative seconds. Notes require unique positive IDs and finite durations; stop/control events reference those IDs. Full validation precedes posting. Limits are 128 notes, 256 reserved slots (two/note plus commands), 60 seconds including gates, and 4,000,000 offline frames. `playSequence` returns a defensive score-to-note ID map and idempotent `stop`; it cannot reserve capacity atomically against unrelated callers. `renderSequence` includes tails. Matching PCM requires equal settings/rate/frame origin and no competing notes; encode only its left/right/sampleRate fields for WAV.
+
+On physical iOS/Android over HTTPS, use [example 08](../examples/sequence.html) to test both policies through lock/unlock, app switching, headset/Bluetooth routes, calls/system interruption and dispose/recreate. Resume by tapping Start; cancel must not replay old notes, preserve may continue direct gates. Borrowed contexts remain host-owned; replace a closed context rather than pretending to resume it. Export local observations only after manually testing each scenario; unchecked boxes remain unverified. Desktop Chromium/suspend and analyser peaks do not certify phone recovery, uninterrupted output or listening quality.
+
 ## Offline PCM with Node.js
 
 In the **npm-installed opm-app root**, save the following as **`render.mjs`**:
@@ -256,9 +302,9 @@ console.log(left.some(sample => sample !== 0), synth.errorCount);
 
 Run `node render.mjs` in **opm-app**; expected output is `true 0`. These are in-memory PCM buffers; center pan is dual mono, other positions are stereo. Checkout imports are `./dist/core/index.js` and `./dist/voices/brass.js`. Use `.mjs` or `"type": "module"`; there is no CommonJS entry.
 
-`new Synth(sampleRate, maxVoices = 8)` requires finite 8000–192000 Hz and integer 1–8 voices. `noteOn(voiceOrPrepared, note, id?, {velocity=1,pan=0}={})` strictly normalizes raw voices; `prepareVoice(input)` creates an opaque immutable validated snapshot reusable across notes. Do not forge a prepared identity or mutate it. The core preallocates voice state for logical voices, eight steal fades, and admission scratch; prepared admission reuses this bounded pool. Core notes can be finite fractional MIDI 0–127. Velocity 0–1 and pan −1–1 are strict. IDs are positive safe integers unique among active notes. `updateNote(id, controls)` uses the browser control bounds and returns whether a live/releasing note was found. `noteOff(id)` returns `true` only on first release. `lastStolenId` is null unless the last successful note-on stole a note; optional `onVoiceEnded(id,reason)` reports exactly one logical terminal event (`stolen`, `ended`, `error`). That callback may admit/release notes, but replacements first render on the next frame; recursive `render` is rejected.
+`new Synth(sampleRate, maxVoices = 8, {mixGain, tuning, stealing} = {})` requires finite 8000–192000 Hz and integer 1–8 voices. `noteOn(voiceOrPrepared,note,id?,{velocity=1,pan=0}={})` accepts fractional MIDI 0–127 with strict velocity/pan bounds and unique positive safe IDs. Prepare immutable snapshots once or validate raw voices each call; pooled state is bounded. `updateNote`/`noteOff` return booleans. `allNotesOff` releases naturally; `panic` clears all tails; setters preserve phase/envelopes. `onVoiceEnded(id,reason)` reports exactly one terminal `stolen`, `ended`, `error` or `cancelled`; callback replacements start next frame and recursive render rejects.
 
-`render(left, right, offset = 0, length = left.length - offset)` needs `Float32Array` buffers and nonnegative safe-integer ranges fitting **both** buffers (their total sizes may differ). Rendering advances `currentFrame`; inspect `errorCount` for numerical failures. Split rendering at desired note-on/off frames as above: there are no real-time timers in this API. Render sufficient frames after note-off for the release tail.
+`render(left,right,offset=0,length=nativeLeftLength-offset)` requires native Float32Arrays and nonnegative safe-integer ranges fitting both actual buffers. Shadowed length/fill properties do not enlarge work; proxies/forgeries and numeric coercion reject. Inspect cumulative `currentFrame`/`errorCount`; split rendering at events and retain enough release frames.
 
 For a simpler single-note render, save this standalone script as **`opm-app/render-note.mjs`**:
 
@@ -277,6 +323,8 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 Run `node render-note.mjs` in **opm-app**. For a checkout use `./dist/core/index.js` and `./dist/voices/brass.js`. `renderNote({ voice, note=60, duration=0.5, velocity=1, pan=0, sampleRate=44100 })` returns `{samples,left,right,sampleRate,diagnostics:{errors}}`, where `samples === left`. It requires a complete schema voice. Finite voice numeric fields clamp (invalid versions/algorithm/feedback still reject); finite note/duration/velocity/pan clamp to 0–127/0–30/0–1/−1–1. Sample rate is an integer 8000–96000 Hz.
 
+`renderNote` also accepts strict `mixGain`, `tuning` and `stealing` options; `renderSequence` shares them.
+
 It uses `Synth`'s exact envelope timing, LFO, filter, velocity, pan, and saturation path. Length stays `ceil((duration + longestRelease + 0.01) * sampleRate)` with a 4,000,000-frame cap. Pan gains before saturation are `sqrt(2)*cos/sin((pan+1)*pi/4)`: center preserves old dual-mono gain; hard sides mute one channel and boost the other by `sqrt(2)`. Saturation may change the perceived constant-power balance.
 
 Other core exports: `normalizeVoice` returns a strict, detached voice copy; `envelopeAt(time, gate, adsr)` returns dB-derived amplitude with time/gate in seconds; `ALGORITHMS` is eight immutable routing graphs; `HEADROOM = 0.7`, `OVERSAMPLE = 4`, `MAX_RENDER_SAMPLES = 4000000`; and `sampleRateValue` validates integer 8000–96000 Hz. `dist/voices/schema.js` exports `validateVoice(voice)` (complete, frozen validation), `parseVoiceBank(input)`, finite-number clamping helper `bounded(value, min, max, label = 'number')`, `LIMITS`, `MAX_BANK_BYTES`, and `MAX_BANK_VOICES`.
@@ -287,12 +335,12 @@ A standalone **`voice.json`** (save in **opm-app** if using it as a local asset)
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "name": "simple",
   "algorithm": 7,
   "feedback": 0,
   "modIndex": 4,
-  "lfo": { "rate": 0, "amDepth": 0, "pmDepth": 0 },
+  "lfo": { "rate": 0, "amDepth": 0, "pmDepth": 0, "waveform": "sine" },
   "ops": [
     { "ratio": 1, "level": 0.8, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.6, "r": 0.2 }, "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
     { "ratio": 2, "level": 0.4, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.5, "r": 0.2 } },
@@ -304,15 +352,15 @@ A standalone **`voice.json`** (save in **opm-app** if using it as a local asset)
 
 | Field | Bounds and meaning |
 | --- | --- |
-| `version`, `name` | Canonical complete voices use version `3`; legacy `1` (no key scaling) and `2` (key scaling, no velocity sensitivity) remain accepted under their old field shapes. Names: 1–64 ASCII letters/digits/underscores/hyphens. |
+| `version`, `name` | Canonical version `4`; legacy `1`/`2`/`3` retain old shapes and exclude waveform. v1 excludes key scaling; v1/2 exclude velocity sensitivity. Names: 1–64 ASCII letters/digits/underscores/hyphens. |
 | `algorithm`, `feedback` | Integers 0–7. |
 | `modIndex` | Phase-modulation strength 0–16. |
 | `ops` | Exactly four operators, each with `ratio` 0.125–32, `level` 0–1, `detune` −1200–1200 cents, and complete `adsr`: `a`, `d`, `r` each 0–10 seconds; sustain `s` 0–1. |
-| `lfo` | `rate` 0–20 Hz, amplitude depth `amDepth` 0–1, pitch depth `pmDepth` 0–1200 cents. |
+| `lfo` | `rate` 0–20 Hz, `amDepth` 0–1, `pmDepth` 0–1200 cents; waveform `sine` (default), `triangle`, `saw` or `square`. |
 | `ops[i].keyScale` | Optional: breakpoint is a MIDI integer 0–127; left/right slopes are 0–24 dB/octave. Omission is flat. |
 | `ops[i].velocitySensitivity` | Optional 0–48 dB attenuation at velocity 0; omission is 0. Operator gain is multiplied by `10 ** (-sensitivity * (1 - velocity) / 20)`. Final output still multiplies by velocity. Set sensitivity on modulators to vary brightness as well as volume. |
 
-Single voices passed to `OPM`, `Synth.noteOn`, or `normalizeVoice` may omit `version`, `name`, `modIndex`, and `lfo`; modulation defaults to 4 and LFO off. Omitted version uses the current shape; output canonicalizes to 3. Explicit version 1 rejects key scaling and velocity sensitivity; version 2 rejects velocity sensitivity. All four complete operators remain required. Strict normalization rejects out-of-range/nonfinite numbers; both strict and clamping paths reject unknown fields, wrong types, accessors, and sparse arrays. Copies isolate playing notes from later input mutation. Key scaling attenuates each operator by `10 ** (-slope * abs(note-breakpoint) / 12 / 20)` on the relevant side; pan is a note option, never a voice field.
+Single voices may omit version/name/modIndex/lfo; defaults are current shape, index 4 and off/sine. Output canonicalizes to 4; legacy inputs cannot gain newer fields by claiming an old version. Four complete operators remain required. Strict normalization rejects numeric bounds violations; all paths reject wrong types/accessors/unknown fields/sparse arrays. Detached copies protect playing notes. Key scaling uses original-note distance and velocity sensitivity scales operator gain; pan belongs to the note.
 
 A complete **bank JSON file** must contain an **array** of 1–128 complete voices with unique names (wrap the standalone object above in `[...]`); it is not a single top-level voice object. `parseVoiceBank(jsonStringOrArray)` from `opm.js/voices/schema.js` for Node, or the served `./opm/voices/schema.js` for browsers, returns a `Map` of names to frozen validated voices. JSON strings are capped at 256 KiB UTF-8; arrays are capped by voice count. Bank parsing and `validateVoice` clamp **finite** out-of-range numeric fields to schema limits, unlike strict single-voice normalization; invalid version/algorithm/feedback values, nonfinite values, wrong types, and unknown fields still fail.
 
@@ -371,7 +419,7 @@ if (process.argv[2]) {
 
 Checkout imports use `./dist/core/index.js`, `./dist/voices/brass.js`, and `./dist/voices/dx7.js`. `encodeWav({left,right?,sampleRate})` returns PCM16 little-endian RIFF bytes. Omit right for mono. Float32 arrays must contain finite samples in −1–1; out-of-range amplitudes reject rather than clip. Stereo lengths must match. Rate is integer 8000–192000 Hz; budget is 4,000,000 frames. Pass only these own-data fields: a whole renderNote result has extra fields and is rejected. It only encodes; your application saves/downloads bytes.
 
-`importDX7(Uint8Array)` accepts exactly one standard **163-byte single voice** or **4104-byte 32-voice bank** SysEx message, validating framing, seven-bit payload, length, and checksum. Raw payloads, concatenated messages, and other formats are rejected. It returns complete normalized version 3 voices. `describeDX7` validates the same bytes and returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}` for each voice. Original algorithms are 1–32, converted algorithms 0–7; operator numbers are DX7 1–6, with selected operators in OPM signal order.
+`importDX7(Uint8Array)` accepts exactly one framed/checksummed **163-byte single voice** or **4104-byte 32-voice bank**, rejecting raw/concatenated/invalid seven-bit messages. It returns normalized version 4 voices. `describeDX7` returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; original algorithms are 1–32, converted 0–7, with DX7 operator numbering 1–6.
 
 This is a **lossy musical heuristic for six-to-four-operator conversion**, not faithful DX7 synthesis/emulation or lossless patch interchange. Routing/operators are reduced; envelopes, levels, key scaling, velocity sensitivity, detune, and LFO are approximated. Fixed-frequency operators become ratios referenced to MIDI 60, with ratio clipping. Pitch envelopes, rate scaling, and LFO delay/waveform/sync remain unsupported. Review warnings and audition the result; descriptions are separate from the strict voice schema. In browsers import `./opm/voices/dx7.js`, obtain bytes with `new Uint8Array(await file.arrayBuffer())`, and register converted voices with `opm.loadVoice(voice.name,voice)`. Restrict untrusted file/download size before buffering. See [voice quality and audition tools](./voice-quality.md) for preset coverage, DX7 limitations, host trim, and raw peak/RMS measurements.
 
@@ -379,7 +427,7 @@ This is a **lossy musical heuristic for six-to-four-operator conversion**, not f
 
 Maintainer commands run in the checkout, after `npm ci`:
 
-All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node.js 22+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source, preserves engine-module paths, and builds seven `dist/demo/` scripts for the HTML examples; `npm run typecheck` checks all authored programs and the public consumer fixture. Every distribution JS has matching source-map and declaration files. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
+All authored programs use strict TypeScript. `npm run compile` emits ignored `.dev/`; `npm test` compiles/selects behavioral tests, unlike bare `node --test`. `npm run build` derives declarations, preserves module paths and builds eight demo scripts. `npm run typecheck` covers authored programs/public consumers. Every distribution JS has a matching map/declaration; consumers need neither TypeScript nor build tools.
 
 ```sh
 npm run build
@@ -401,6 +449,8 @@ Headless Linux Firefox also needs a running native audio server; browser library
 Benchmark output reports warmed 128-frame block p95/p99/worst and misses of `128/sampleRate` seconds. `OPM_BENCH_BLOCKS`, `OPM_BENCH_WARMUP`, and `OPM_BENCH_SAMPLE_RATE` control workloads; optional p99/worst budget ratios enforce host-specific thresholds. Local defaults are report-only; CI configures `OPM_BENCH_P99_BUDGET_RATIO=1` at 48 kHz (2.667 ms), worst/GC stalls report-only. This is not a universal real-time guarantee. Spectral acceptance compares a 30 kHz oscillator folded to 18 kHz with an equal-level 1760 Hz control at 48 kHz (at least 30 dB attenuation), not arbitrary band-limited FM proof.
 
 Sound-quality tools cover multiple sample rates, algorithms, feedback, pitches, velocities, and polyphony, with finite/deterministic output and controlled spectral/level measurements. Preset reports expose raw peak/RMS dBFS and recommended bounded host trim, not automatic loudness rewriting. Browser stress observes native messaging, signal, lifecycle, queue drainage, and elapsed main-thread gaps under contention; these are not measurements of AudioWorklet CPU, GC, or guaranteed glitch-free output. Controlled alias attenuation is not a claim that arbitrary FM is alias-free. Consult [voice quality](./voice-quality.md) and [publishing acceptance](./publishing.md) for scope and release prerequisites.
+
+Independent acceptance additionally covers index-16 Bessel PM spectra at 44.1/48/96 kHz, contractive feedback-7/level-0.25 references, full-level feedback energy bounds and two 120-second streamed held-LFO/repeated-glide scenarios. Full-level chaotic feedback has no unique alias/harmonic decomposition; these gates are not all-patch, perceptual, device or hardware-fidelity proof.
 
 ## Compressed deployment
 
