@@ -14,7 +14,7 @@ if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.m
 const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
 const demoEntries = [
   'demo/main.ts', 'demo/song.ts', 'demo/basic.ts', 'demo/modulation.ts',
-  'demo/context.ts', 'demo/wav.ts', 'demo/audition.ts',
+  'demo/context.ts', 'demo/wav.ts', 'demo/audition.ts', 'demo/sequence.ts',
 ];
 const demoDeclarations = new Set(demoEntries.map(path => path.replace(/\.ts$/, '.d.ts')));
 const program = ts.createProgram(
