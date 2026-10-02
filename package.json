@@ -4,6 +4,10 @@
   "description": "A zero-dependency four-operator FM synthesis engine",
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/YueyuHoshizora/OPM.js.git"
+  },
   "types": "./dist/api/index.d.ts",
   "exports": {
     ".": {
@@ -52,6 +56,7 @@
     "sound-quality": "npm run compile && node .dev/scripts/sound-quality.js",
     "voice-quality": "npm run compile && node .dev/scripts/voice-quality.js",
     "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
+    "vite-smoke": "npm run compile && node .dev/scripts/vite-smoke.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",
     "browser-smoke": "npm run compile && node .dev/scripts/browser-smoke.js",

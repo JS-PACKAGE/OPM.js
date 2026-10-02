@@ -27,6 +27,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run typecheck
+      - name: Sound and preset quality matrices
+        run: npm run sound-quality && npm run voice-quality
       - run: npm audit
       - run: npm audit --omit=dev
       - name: Runtime-zero-deps, parsed dynamic-code gate and installed package smoke
@@ -65,3 +67,8 @@ jobs:
           pactl info
       - name: Exercise built AudioWorklet, signal, routing, gates and context lifecycle
         run: npm run browser-smoke -- ${{ matrix.browser }}
+      - name: Native messaging and audio stress
+        run: npm run browser-stress -- ${{ matrix.browser }}
+      - name: Installed-package Vite production deployment and CSP
+        if: matrix.browser == 'chromium'
+        run: npm run vite-smoke -- chromium

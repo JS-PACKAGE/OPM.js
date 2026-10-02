@@ -1,0 +1,13 @@
+{
+  "name": "opm-installed-vite-example",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22.12.0" },
+  "scripts": {
+    "copy-assets": "node copy-assets.mjs",
+    "dev": "npm run copy-assets && vite --host 127.0.0.1",
+    "build": "npm run copy-assets && vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "devDependencies": { "vite": "8.3.2" }
+}
