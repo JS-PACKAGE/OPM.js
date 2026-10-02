@@ -17,7 +17,7 @@ const complete: FrozenVoice = validateVoice(brass);
 const bank: Map<string, FrozenVoice> = parseVoiceBank([brass]);
 const synth = new Synth(48000, 8);
 synth.onVoiceEnded = (id, reason) => {
-  const terminal: 'stolen' | 'ended' | 'error' = reason;
+  const terminal: 'stolen' | 'ended' | 'error' | 'cancelled' = reason;
   console.log(id, terminal);
 };
 const id: number = synth.noteOn(complete, 60.5, undefined, { velocity: 0.5, pan: -0.5 });

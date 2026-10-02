@@ -1,13 +1,25 @@
 import type { ADSR, FrozenOperator, PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { AlgorithmGraph } from './algorithms.js';
+import { normalizeTuning, tuningFrequency } from './tuning.js';
+import type { NormalizedTuning, TuningOptions } from './tuning.js';
 import { lfoValue } from './lfo.js';
 
-export type VoiceEndReason = 'stolen' | 'ended' | 'error';
+const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype);
+const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
+const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
+const typedArrayFill = Float32Array.prototype.fill;
+
+export type VoiceEndReason = 'stolen' | 'ended' | 'error' | 'cancelled';
 export interface NoteOptions { velocity?: number; pan?: number }
-export interface NoteControls { pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number }
+export interface NoteControls { pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number; ramp?: number }
+export interface SynthOptions {
+  mixGain?: number;
+  tuning?: TuningOptions;
+  stealing?: 'oldest' | 'release-first' | 'quietest';
+}
 
 const CONTROL_LIMITS = Object.freeze({
-  pitch: [-48, 48], glide: [0, 10], expression: [0, 1], pan: [-1, 1], modulation: [0, 2],
+  pitch: [-48, 48], glide: [0, 10], expression: [0, 1], pan: [-1, 1], modulation: [0, 2], ramp: [0, 10],
 } as const);
 
 /** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
@@ -32,11 +44,15 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     result[control] = value;
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
+  if (Object.hasOwn(result, 'ramp') && !Object.hasOwn(result, 'expression') &&
+      !Object.hasOwn(result, 'pan') && !Object.hasOwn(result, 'modulation')) {
+    throw new TypeError('ramp requires expression, pan or modulation');
+  }
   return result;
 }
 
 interface ActiveVoice {
-  id: number; sequence: number; voice: PreparedVoice; graph: AlgorithmGraph;
+  id: number; sequence: number; note: number; voice: PreparedVoice; graph: AlgorithmGraph;
   baseIncrements: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
   attackStep: Float64Array; decayStep: Float64Array; releaseStep: Float64Array; gains: Float64Array;
   levels: Float64Array; leftGain: number; rightGain: number; lastSample: number; fadeRemaining: number;
@@ -44,6 +60,10 @@ interface ActiveVoice {
   releaseDb: Float64Array; previous: number; older: number; lfoPhase: number; lfoIncrement: number;
   feedbackScale: number; elapsed: number; releaseTime: number; releaseEnd: number;
   velocity: number; expression: number; pan: number;
+  expressionFrom: number; expressionTarget: number; expressionStart: number; expressionFrames: number;
+  panFrom: number; panTarget: number; panStart: number; panFrames: number;
+  modulation: number; modulationFrom: number; modulationTarget: number; modulationStart: number; modulationFrames: number;
+  controlRamps: number;
   modIndex: number; amDepth: number; pmDepth: number;
   pitchFrom: number; pitchTarget: number; pitchStart: number; pitchFrames: number;
 }
@@ -64,10 +84,45 @@ const MAX_VOICES = 8;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
 const DB_TO_LOG_GAIN = Math.LN10 / 20;
 const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0 });
+const DEFAULT_TUNING = normalizeTuning({});
+const EXPRESSION_RAMP = 1;
+const PAN_RAMP = 2;
+const MODULATION_RAMP = 4;
+
+function validateMixGain(gain: number): void {
+  if (typeof gain !== 'number' || !Number.isFinite(gain) || gain < 0 || gain > 1) {
+    throw new RangeError('mixGain must be finite and in 0..1');
+  }
+}
+
+function readSynthOptions(input: SynthOptions): SynthOptions {
+  if (!input || typeof input !== 'object' || Array.isArray(input) ||
+      (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
+    throw new TypeError('options must be a plain object');
+  }
+  const result: SynthOptions = {};
+  for (const key of Reflect.ownKeys(input)) {
+    if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing') throw new TypeError('options has an unknown field');
+    const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
+    if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`options.${key} must be data`);
+    if (key === 'mixGain') {
+      validateMixGain(descriptor.value);
+      result.mixGain = descriptor.value;
+    } else if (key === 'stealing') {
+      if (descriptor.value !== 'oldest' && descriptor.value !== 'release-first' && descriptor.value !== 'quietest') {
+        throw new TypeError('stealing must be oldest, release-first or quietest');
+      }
+      result.stealing = descriptor.value;
+    } else {
+      result.tuning = descriptor.value;
+    }
+  }
+  return result;
+}
 
 function createVoiceSlot(): ActiveVoice {
   return {
-    id: 0, sequence: 0, voice: null!, graph: ALGORITHMS[0],
+    id: 0, sequence: 0, note: 0, voice: null!, graph: ALGORITHMS[0],
     baseIncrements: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
     sustainDb: new Float64Array(4), sustainGain: new Float64Array(4),
     attackStep: new Float64Array(4), decayStep: new Float64Array(4), releaseStep: new Float64Array(4),
@@ -76,6 +131,10 @@ function createVoiceSlot(): ActiveVoice {
     phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(4), releaseDb: new Float64Array(4),
     previous: 0, older: 0, lfoPhase: 0, lfoIncrement: 0, feedbackScale: 0,
     elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0,
+    expressionFrom: 1, expressionTarget: 1, expressionStart: 0, expressionFrames: 0,
+    panFrom: 0, panTarget: 0, panStart: 0, panFrames: 0,
+    modulation: 1, modulationFrom: 1, modulationTarget: 1, modulationStart: 0, modulationFrames: 0,
+    controlRamps: 0,
     modIndex: 0, amDepth: 0, pmDepth: 0, pitchFrom: 0, pitchTarget: 0, pitchStart: 0, pitchFrames: 0,
   };
 }
@@ -83,6 +142,38 @@ function createVoiceSlot(): ActiveVoice {
 function pitchAt(active: ActiveVoice, frame: number): number {
   if (active.pitchFrames === 0 || frame >= active.pitchStart + active.pitchFrames) return active.pitchTarget;
   return active.pitchFrom + (active.pitchTarget - active.pitchFrom) * (frame - active.pitchStart) / active.pitchFrames;
+}
+function rampAt(from: number, target: number, start: number, frames: number, frame: number): number {
+  if (frames === 0 || frame >= start + frames) return target;
+  return from + (target - from) * (frame - start) / frames;
+}
+
+function updateModulation(active: ActiveVoice): void {
+  active.modIndex = active.voice.modIndex * active.modulation;
+  active.amDepth = Math.min(1, active.voice.lfo.amDepth * active.modulation);
+  active.pmDepth = Math.min(1200, active.voice.lfo.pmDepth * active.modulation);
+  if (active.pmDepth === 0) {
+    for (let op = 0; op < 4; op++) active.steps[op] = active.increments[op];
+  }
+}
+
+function advanceControls(active: ActiveVoice): void {
+  const ramps = active.controlRamps;
+  const frame = active.elapsed;
+  if (ramps & EXPRESSION_RAMP) {
+    active.expression = rampAt(active.expressionFrom, active.expressionTarget, active.expressionStart, active.expressionFrames, frame);
+    if (frame >= active.expressionStart + active.expressionFrames) active.controlRamps &= ~EXPRESSION_RAMP;
+  }
+  if (ramps & PAN_RAMP) {
+    active.pan = rampAt(active.panFrom, active.panTarget, active.panStart, active.panFrames, frame);
+    if (frame >= active.panStart + active.panFrames) active.controlRamps &= ~PAN_RAMP;
+  }
+  if (ramps & (EXPRESSION_RAMP | PAN_RAMP)) updatePan(active);
+  if (ramps & MODULATION_RAMP) {
+    active.modulation = rampAt(active.modulationFrom, active.modulationTarget, active.modulationStart, active.modulationFrames, frame);
+    if (frame >= active.modulationStart + active.modulationFrames) active.controlRamps &= ~MODULATION_RAMP;
+    updateModulation(active);
+  }
 }
 
 function updatePan(active: ActiveVoice): void {
@@ -154,6 +245,21 @@ function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array)
     }
   }
 }
+// Carrier-envelope energy avoids stealing a loud note merely at a zero crossing.
+function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
+  const time = active.elapsed / sampleRate;
+  let gain = 0;
+  for (let index = 0; index < active.graph.carriers.length; index++) {
+    const op = active.graph.carriers[index];
+    gain += active.levels[op] * gainAt(time, active.voice.ops[op], active.sustainDb[op],
+      active.sustainGain[op], active.releaseTime, active.releaseDb[op]);
+  }
+  const expression = active.controlRamps & EXPRESSION_RAMP ?
+    rampAt(active.expressionFrom, active.expressionTarget, active.expressionStart, active.expressionFrames, active.elapsed) :
+    active.expression;
+  return gain * active.carrierGain * active.velocity * expression;
+}
+
 
 export class Synth {
   declare readonly sampleRate: number;
@@ -190,14 +296,24 @@ export class Synth {
   declare terminalErrors: Uint8Array;
   /** @internal */
   declare rendering: boolean;
+  /** @internal */
+  declare mixGain: number;
+  /** @internal */
+  declare tuning: NormalizedTuning;
+  /** @internal */
+  declare stealing: NonNullable<SynthOptions['stealing']>;
 
-  constructor(sampleRate: number, maxVoices = MAX_VOICES) {
+  constructor(sampleRate: number, maxVoices = MAX_VOICES, options: SynthOptions = {}) {
     if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) {
       throw new RangeError('sampleRate must be finite and in 8000..192000');
     }
     if (!Number.isInteger(maxVoices) || maxVoices < 1 || maxVoices > MAX_VOICES) {
       throw new RangeError('maxVoices must be an integer in 1..8');
     }
+    const settings = readSynthOptions(options);
+    this.mixGain = settings.mixGain ?? 1;
+    this.tuning = settings.tuning === undefined ? DEFAULT_TUNING : normalizeTuning(settings.tuning);
+    this.stealing = settings.stealing ?? 'oldest';
     this.sampleRate = sampleRate;
     this.maxVoices = maxVoices;
     this.voices = [];
@@ -221,6 +337,51 @@ export class Synth {
     // products before decimation. The cutoff is 0.2 times the output rate.
     this.filterAlpha = 1 - Math.exp(-TAU * 0.2 / OVERSAMPLE);
   }
+  setMixGain(gain: number): void {
+    validateMixGain(gain);
+    this.mixGain = gain;
+  }
+
+  setTuning(tuning: TuningOptions): void {
+    const normalized = normalizeTuning(tuning);
+    this.tuning = normalized;
+    for (let index = 0; index < this.voices.length; index++) this.retuneVoice(this.voices[index]);
+    for (let index = 0; index < this.fades.length; index++) this.retuneVoice(this.fades[index]);
+  }
+
+  /** @internal */
+  retuneVoice(active: ActiveVoice): void {
+    const frequency = tuningFrequency(active.note, this.tuning);
+    const rate = this.sampleRate * OVERSAMPLE;
+    const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
+    for (let op = 0; op < 4; op++) {
+      const source = active.voice.ops[op];
+      active.baseIncrements[op] = TAU * frequency * source.ratio * 2 ** (source.detune / 1200) / rate;
+      active.increments[op] = Math.min(TAU * 0.45, active.baseIncrements[op] * factor);
+      active.steps[op] = active.increments[op];
+    }
+  }
+
+  /** @internal */
+  stealingIndex(): number {
+    let chosen = 0;
+    let quietest = this.stealing === 'quietest' ? voiceAudibility(this.voices[0], this.sampleRate) : 0;
+    for (let index = 1; index < this.voices.length; index++) {
+      const candidate = this.voices[index], current = this.voices[chosen];
+      let preferred = candidate.sequence < current.sequence;
+      if (this.stealing === 'release-first') {
+        const released = candidate.releaseTime >= 0, currentReleased = current.releaseTime >= 0;
+        if (released !== currentReleased) preferred = released;
+      } else if (this.stealing === 'quietest') {
+        const audibility = voiceAudibility(candidate, this.sampleRate);
+        if (audibility !== quietest) preferred = audibility < quietest;
+        if (preferred) quietest = audibility;
+      }
+      if (preferred) chosen = index;
+    }
+    return chosen;
+  }
+
 
   noteOn(input: VoiceInput | PreparedVoice, note: number, id?: number, { velocity = 1, pan = 0 }: NoteOptions = DEFAULT_NOTE_OPTIONS): number {
     const voice = preparedVoiceValue(input);
@@ -243,7 +404,7 @@ export class Synth {
     // while it is still active or fading, including during terminal callbacks.
     const active = this.freeVoices.pop()!;
     const { baseIncrements, increments, sustainDb, sustainGain, steps, attackStep, decayStep, levels } = active;
-    const frequency = 440 * 2 ** ((note - 69) / 12);
+    const frequency = tuningFrequency(note, this.tuning);
     const rate = this.sampleRate * OVERSAMPLE;
     for (let i = 0; i < 4; i++) {
       const op = voice.ops[i];
@@ -263,12 +424,19 @@ export class Synth {
       decayStep[i] = op.adsr.d === 0 ? 1 : 10 ** (sustainDb[i] / (20 * op.adsr.d * rate));
     }
     active.id = id;
+    active.note = note;
     active.sequence = this.sequence++;
     active.voice = voice;
     active.graph = ALGORITHMS[voice.algorithm];
     active.velocity = velocity;
     active.expression = 1;
     active.pan = pan;
+    active.expressionFrom = active.expressionTarget = 1;
+    active.expressionStart = active.expressionFrames = 0;
+    active.panFrom = active.panTarget = pan;
+    active.panStart = active.panFrames = 0;
+    active.modulation = active.modulationFrom = active.modulationTarget = 1;
+    active.modulationStart = active.modulationFrames = active.controlRamps = 0;
     active.modIndex = voice.modIndex;
     active.amDepth = voice.lfo.amDepth;
     active.pmDepth = voice.lfo.pmDepth;
@@ -289,11 +457,7 @@ export class Synth {
     active.releaseTime = active.releaseEnd = -1;
     (this as MutableCounters).lastStolenId = null;
     if (this.voices.length >= this.maxVoices) {
-      let oldest = 0;
-      for (let i = 1; i < this.voices.length; i++) {
-        if (this.voices[i].sequence < this.voices[oldest].sequence) oldest = i;
-      }
-      const stolen = removeAt(this.voices, oldest);
+      const stolen = removeAt(this.voices, this.stealingIndex());
       (this as MutableCounters).lastStolenId = stolen.id;
       // Preserve the old DSP state. Exhausted tails collapse into the existing
       // bounded spill ramp, then recycle before callbacks can admit more notes.
@@ -319,6 +483,12 @@ export class Synth {
     let active: ActiveVoice | undefined;
     for (const item of this.voices) if (item.id === id) { active = item; break; }
     if (!active || active.releaseTime >= 0) return false;
+    this.releaseVoice(active);
+    return true;
+  }
+
+  /** @internal */
+  releaseVoice(active: ActiveVoice): void {
     active.releaseTime = active.elapsed / this.sampleRate;
     let maxRelease = 0;
     for (let op = 0; op < 4; op++) maxRelease = Math.max(maxRelease, active.voice.ops[op].adsr.r);
@@ -329,27 +499,78 @@ export class Synth {
       active.releaseStep[op] = release === 0 ? 0 :
         10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * OVERSAMPLE));
     }
-    return true;
   }
+  allNotesOff(): void {
+    for (let index = 0; index < this.voices.length; index++) {
+      const active = this.voices[index];
+      if (active.releaseTime < 0) this.releaseVoice(active);
+    }
+  }
+
+  panic(): void {
+    while (this.fades.length > 0) this.freeVoices.push(this.fades.pop()!);
+    this.spillLeft = this.spillRight = this.spillRemaining = 0;
+    (this as MutableCounters).lastStolenId = null;
+    this.cancelVoices();
+  }
+
+  /** @internal */
+  cancelVoices(): void {
+    if (this.voices.length === 0) return;
+    const active = this.voices.pop()!;
+    const id = active.id;
+    this.freeVoices.push(active);
+    // At most eight stack-local IDs survive recycling. Unlike shared scratch
+    // storage, they cannot be overwritten by noteOn/panic inside a callback.
+    this.cancelVoices();
+    this.ended(id, 'cancelled');
+  }
+
 
   updateNote(id: number, input: NoteControls): boolean {
     const controls = validateNoteControls(input);
     let active: ActiveVoice | undefined;
     for (const item of this.voices) if (item.id === id) { active = item; break; }
     if (!active) return false;
+    if (active.controlRamps !== 0) advanceControls(active);
     if (controls.pitch !== undefined) {
       active.pitchFrom = pitchAt(active, active.elapsed);
       active.pitchTarget = controls.pitch;
       active.pitchStart = active.elapsed;
       active.pitchFrames = (controls.glide ?? 0) * this.sampleRate;
     }
-    if (controls.expression !== undefined) active.expression = controls.expression;
-    if (controls.pan !== undefined) active.pan = controls.pan;
+    const frames = (controls.ramp ?? 0) * this.sampleRate;
+    if (controls.expression !== undefined) {
+      active.expressionFrom = active.expression;
+      active.expressionTarget = controls.expression;
+      active.expressionStart = active.elapsed;
+      active.expressionFrames = active.expression === controls.expression ? 0 : frames;
+      if (active.expressionFrames === 0) {
+        active.expression = controls.expression;
+        active.controlRamps &= ~EXPRESSION_RAMP;
+      } else active.controlRamps |= EXPRESSION_RAMP;
+    }
+    if (controls.pan !== undefined) {
+      active.panFrom = active.pan;
+      active.panTarget = controls.pan;
+      active.panStart = active.elapsed;
+      active.panFrames = active.pan === controls.pan ? 0 : frames;
+      if (active.panFrames === 0) {
+        active.pan = controls.pan;
+        active.controlRamps &= ~PAN_RAMP;
+      } else active.controlRamps |= PAN_RAMP;
+    }
     if (controls.expression !== undefined || controls.pan !== undefined) updatePan(active);
     if (controls.modulation !== undefined) {
-      active.modIndex = active.voice.modIndex * controls.modulation;
-      active.amDepth = Math.min(1, active.voice.lfo.amDepth * controls.modulation);
-      active.pmDepth = Math.min(1200, active.voice.lfo.pmDepth * controls.modulation);
+      active.modulationFrom = active.modulation;
+      active.modulationTarget = controls.modulation;
+      active.modulationStart = active.elapsed;
+      active.modulationFrames = active.modulation === controls.modulation ? 0 : frames;
+      if (active.modulationFrames === 0) {
+        active.modulation = controls.modulation;
+        active.controlRamps &= ~MODULATION_RAMP;
+      } else active.controlRamps |= MODULATION_RAMP;
+      updateModulation(active);
     }
     // Reset a former PM/glide step even when modulation becomes zero.
     if (controls.pitch !== undefined || controls.modulation !== undefined) {
@@ -373,6 +594,7 @@ export class Synth {
   /** @internal */
   renderVoice(active: ActiveVoice): number {
     const { graph, phases, values, filters, increments, steps, gains, levels } = active;
+    if (active.controlRamps !== 0) advanceControls(active);
     const time = active.elapsed / this.sampleRate;
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
     let tremolo = 0;
@@ -433,16 +655,23 @@ export class Synth {
     return active.lastSample;
   }
 
-  render(left: Float32Array, right: Float32Array, offset = 0, length = left.length - offset): void {
+  render(left: Float32Array, right: Float32Array, offset = 0, length?: number): void {
     if (this.rendering) throw new Error('render cannot be called reentrantly');
-    if (!(left instanceof Float32Array) || !(right instanceof Float32Array) ||
-        !Number.isSafeInteger(offset) || !Number.isSafeInteger(length) || offset < 0 || length < 0 ||
-        offset + length > left.length || offset + length > right.length) {
-      throw new RangeError('render requires Float32Arrays and an in-bounds offset and length');
+    if (typedArrayKind.call(left) !== 'Float32Array' || typedArrayKind.call(right) !== 'Float32Array') {
+      throw new RangeError('render requires native Float32Arrays');
+    }
+    const leftLength = typedArrayLength.call(left), rightLength = typedArrayLength.call(right);
+    if (!Number.isSafeInteger(offset) || offset < 0) {
+      throw new RangeError('render requires an in-bounds offset and length');
+    }
+    if (length === undefined) length = leftLength - offset;
+    if (!Number.isSafeInteger(length) || length < 0 ||
+        offset + length > leftLength || offset + length > rightLength) {
+      throw new RangeError('render requires an in-bounds offset and length');
     }
     if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0) {
-      left.fill(0, offset, offset + length);
-      if (right !== left) right.fill(0, offset, offset + length);
+      typedArrayFill.call(left, 0, offset, offset + length);
+      if (right !== left) typedArrayFill.call(right, 0, offset, offset + length);
       (this as MutableCounters).currentFrame += length;
       return;
     }
@@ -491,8 +720,8 @@ export class Synth {
           this.spillRight *= next / (next + 1);
         }
         // Saturate each stereo sum independently, preserving center dual mono.
-        left[frame] = Number.isFinite(mixedLeft) ? HEADROOM * Math.tanh(mixedLeft / HEADROOM) : 0;
-        right[frame] = Number.isFinite(mixedRight) ? HEADROOM * Math.tanh(mixedRight / HEADROOM) : 0;
+        left[frame] = Number.isFinite(mixedLeft) ? HEADROOM * Math.tanh(mixedLeft * this.mixGain / HEADROOM) : 0;
+        right[frame] = Number.isFinite(mixedRight) ? HEADROOM * Math.tanh(mixedRight * this.mixGain / HEADROOM) : 0;
         if (!Number.isFinite(mixedLeft) || !Number.isFinite(mixedRight)) (this as MutableCounters).errorCount++;
         // Callbacks may admit/release notes, but replacements first render on the
         // next frame. Live traversal would let a zero-release chain run forever.

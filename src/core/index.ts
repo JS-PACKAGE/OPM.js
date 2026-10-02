@@ -1,10 +1,17 @@
 import type { CompleteVoiceInput, FrozenVoice } from '../voices/schema.js';
+import type { SynthOptions } from './synth.js';
+import { MAX_RENDER_SAMPLES, sampleRateValue } from './sequence.js';
 
-export type { ADSR, LFO, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
-export type { NoteOptions, NoteControls, VoiceEndReason } from './synth.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, LegacyVoiceV3, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
+export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions } from './synth.js';
+export type { TuningOptions, NormalizedTuning } from './tuning.js';
+export { normalizeTuning, tuningFrequency } from './tuning.js';
+export { lfoValue } from './lfo.js';
+export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent, SequenceVoices, SequenceOptions, PreparedSequenceEvent, SequenceSnapshot } from './sequence.js';
+export { prepareSequence, renderSequence, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, MAX_SEQUENCE_SECONDS, MAX_RENDER_SAMPLES, sampleRateValue } from './sequence.js';
 export type { WavOptions } from './wav.js';
 
-export interface RenderNoteOptions {
+export interface RenderNoteOptions extends SynthOptions {
   voice: CompleteVoiceInput | FrozenVoice;
   note?: number;
   duration?: number;
@@ -30,19 +37,12 @@ export { Synth, normalizeVoice, prepareVoice, validateNoteControls } from './syn
 export { encodeWav } from './wav.js';
 export const HEADROOM = 0.7; // -3.098 dB, with margin for Float32 rounding.
 export const OVERSAMPLE = 4;
-export const MAX_RENDER_SAMPLES = 4_000_000;
-
-export function sampleRateValue(value: number): number {
-  if (!Number.isInteger(value) || value < 8000 || value > 96000) {
-    throw new RangeError('sampleRate must be an integer in 8000..96000');
-  }
-  return value;
-}
 
 // Pure offline renderer: no globals, IO, randomness or Web Audio dependencies.
 // The returned buffer includes the longest release and a short filter tail.
 export function renderNote(options: RenderNoteOptions): RenderResult;
-export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100 }: Partial<RenderNoteOptions> = {}): RenderResult {
+export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100,
+  mixGain, tuning, stealing }: Partial<RenderNoteOptions> = {}): RenderResult {
   voice = validateVoice(voice);
   sampleRate = sampleRateValue(sampleRate);
   note = bounded(note, 0, 127, 'note');
@@ -53,9 +53,13 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan
   for (const op of voice.ops) release = Math.max(release, op.adsr.r);
   const length = Math.ceil((duration + release + 0.01) * sampleRate);
   if (length > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
+  const engine: SynthOptions = {};
+  if (mixGain !== undefined) engine.mixGain = mixGain;
+  if (tuning !== undefined) engine.tuning = tuning;
+  if (stealing !== undefined) engine.stealing = stealing;
+  const synth = new Synth(sampleRate, 8, engine);
   const left = new Float32Array(length);
   const right = new Float32Array(length);
-  const synth = new Synth(sampleRate);
   if (duration > 0) {
     const id = synth.noteOn(voice, note, undefined, { velocity, pan });
     // Gate changes occur on output-frame boundaries, exactly as in the worklet.

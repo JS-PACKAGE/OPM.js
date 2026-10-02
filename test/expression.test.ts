@@ -238,13 +238,14 @@ test('controls reject malformed boundaries without evaluating accessors or chang
   const synth = new Synth(16000), reference = new Synth(16000);
   const id = synth.noteOn(tone(), 60);
   reference.noteOn(tone(), 60);
-  const malformed: unknown[] = [null, [], {}, { unknown: 1 }, { glide: 0.1 }, Object.create({ pitch: 1 }), { [Symbol('pitch')]: 1 }];
-  for (const [key, min, max] of [['pitch', -48, 48], ['glide', 0, 10], ['expression', 0, 1], ['pan', -1, 1], ['modulation', 0, 2]] as const) {
+  const malformed: unknown[] = [null, [], {}, { unknown: 1 }, { glide: 0.1 }, { ramp: 0.1 },
+    { pitch: 1, ramp: 1 }, Object.create({ pitch: 1 }), { [Symbol('pitch')]: 1 }];
+  for (const [key, min, max] of [['pitch', -48, 48], ['glide', 0, 10], ['expression', 0, 1], ['pan', -1, 1], ['modulation', 0, 2], ['ramp', 0, 10]] as const) {
     for (const value of [undefined, null, '1', NaN, Infinity, min - 0.01, max + 0.01]) {
-      malformed.push({ ...(key === 'glide' ? { pitch: 1 } : {}), [key]: value });
+      malformed.push({ ...(key === 'glide' ? { pitch: 1 } : key === 'ramp' ? { expression: 1 } : {}), [key]: value });
     }
     for (const value of [min, max]) {
-      const result = validateNoteControls({ ...(key === 'glide' ? { pitch: 1 } : {}), [key]: value });
+      const result = validateNoteControls({ ...(key === 'glide' ? { pitch: 1 } : key === 'ramp' ? { expression: 1 } : {}), [key]: value });
       assert.equal(result[key], value);
     }
   }
