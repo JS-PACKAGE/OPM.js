@@ -221,6 +221,8 @@ v1.7 release review: Release17Data approved scoped static **A**, Release17Protoc
 
 v1.8 review record: InputProtocolReview approved scoped static **A/B** and DspAssetsReview scoped static **C/D** after the bounded arrangement, MIDI own-data, finite tempo-slope and canonical asset-overlap fixes. Their static approval does not certify runtime or external npm settings. The release commit `d793d69056c68a971ede1af988338412687227fd` has an observed successful [Node 22/24/26 and Chromium/Firefox/WebKit CI run](https://github.com/YueyuHoshizora/OPM.js/actions/runs/37061483772); the separate [review record](https://github.com/YueyuHoshizora/OPM.js/issues/1) and [release package record](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8) retain the evidence and tarball digest. This is not registry provenance, physical-device/MIDI or listening acceptance.
 
+v1.8.1 documentation/package patch review: Patch181Inputs approved scoped static **A/B** and Patch181DspSupply scoped static **C/D**, with no evidence-backed blockers. Reviewers were read-only and ran no build, tests or external actions. The integration owner confirmed the source diff against v1.8 changes only `src/version.ts`; runtime validation, protocols and DSP are unchanged. Final regenerated assets, package gates and remote CI are separate release prerequisites, recorded in CHANGELOG and the GitHub release notes. No npm provenance, physical-device/MIDI or listening certification is asserted.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)

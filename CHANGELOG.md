@@ -2,6 +2,29 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## v1.8.1
+
+Package version 1.8.1. Documentation and packaging patch; no runtime API, voice-format, DSP or scheduling behavior changes. The original v1.8 tag and archive remain immutable. GitHub release distribution is not npm registry publication.
+
+### Documentation and packaging
+
+- Ship the synchronized README, bilingual usage guides and topical integration/deployment guides in a separately versioned installable archive.
+- Correct public voice budgets, priority admission, grid-helper import locations, DX7 AM conversion limits, Worker startup/phase contracts and complete static-asset deployment instructions.
+- Replace links to package-excluded HTML/source/tooling with explicit checkout-only repository resources and provide runnable default-voice arrangement recipes.
+- Leave a one-beat count-in in Transport recipes and document cold-start beat-0 `late:'drop'` rejection. This patch does not fix or hide the runtime timing limitation.
+- Align package/lock/source `VERSION`, installation filenames and release-specific deployment paths to 1.8.1; regenerate compiler-owned distribution assets.
+
+### Security and observed release-candidate verification
+
+- Patch181Inputs approved scoped static **A/B** and Patch181DspSupply scoped static **C/D**, with no evidence-backed blockers. Both reviews were read-only and ran no runtime or external gates; no waiver is asserted.
+- An isolated 1.8.1 candidate passed build, all 310 behavioral tests, strict source/development/installed-public-contract type checks, source/generated AST security gates and installed-package rendering/WAV/types/CLI checks. Full and runtime audits reported zero vulnerabilities; runtime dependencies remain empty. Standalone Vite tooling audits also reported zero vulnerabilities.
+- Fresh `sound-quality` passed 2,505 matrix cases and 24 live-control cases with independent spectral/filter/streaming gates; `voice-quality` completed successfully. The benchmark ran with no acceptance budgets and remains report-only, not a host deadline or physical-device certification.
+- Fresh generated output differs from the preceding distribution only in the three `VERSION` JS/map/declaration companions; all other deployed assets are byte-identical. The source diff against v1.8 changes only `src/version.ts`.
+- Sandboxed, muted native Chromium 150 passed the existing compiled browser smoke, 768-note stress and installed-package Vite subpath/CSP/lifecycle/missing-asset/wrong-MIME assertions using a throwaway executable-launch adapter; test assertions and runtime code were unchanged. A fresh pinned Chromium download timed out after receiving the archive, so this is explicit native-executable evidence, not a PASS for that download or the default cached-browser command.
+- The exact installed archive resolved all eleven public import specifiers and rendered finite nonzero PCM with zero errors at 32 voices in eco/standard/high, protected high-priority notes, rejected lower priority and round-tripped a linear tempo map/grid. The actual asset CLI copied/reused 134 files and checked 133 served assets with matching bytes, MIME and `nosniff`.
+- Exact README/English/Chinese browser quick starts reported `VERSION:1.8.1`, finite nonzero PCM and no browser errors or note rejections; screenshots were inspected. Checkout documentation passed relative file/anchor checks and pinned repository-resource validation.
+- Release publication is gated on observed remote Node.js 22/24/26 and Chromium/Firefox/WebKit CI for the exact release commit. Its run URL/outcome and the final archive digest are retained in the GitHub release notes. npm registry/provenance, physical-device/MIDI behavior and human listening remain separate unverified prerequisites.
+
 ## v1.8
 
 Package version 1.8.0. GitHub release distribution and npm registry publication are separate operations; neither implies physical-device acceptance.

@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis with a default eight-voice budget (configurable up to 32), multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** [v1.8 GitHub release](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8) (package 1.8.0), including voice-format v6, musical Transport with tempo curves, quantized adaptive-music arrangements, expressive Performance with an optional Web MIDI adapter, opt-in 32-voice polyphony with voice priority, Worker startup/phase diagnostics and an asset deployment tool.
+> **Status:** [v1.8.1 GitHub release](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8.1) (package 1.8.1), a documentation and packaging patch retaining the v1.8 engine: voice-format v6, musical Transport with tempo curves, quantized adaptive-music arrangements, expressive Performance with an optional Web MIDI adapter, opt-in 32-voice polyphony with voice priority, Worker startup/phase diagnostics and an asset deployment tool.
 >
 > GitHub release distribution and npm registry publication are separate. Use the release tarball or a source checkout; no npm publication is implied. See the [compatibility policy](./doc/compatibility.md).
 
@@ -47,7 +47,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 ### Try the checkout
 
-Obtain the [v1.8 source archive or checkout](https://github.com/YueyuHoshizora/OPM.js/tree/v1.8) to run the twelve examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
+Obtain the [v1.8.1 source archive or checkout](https://github.com/YueyuHoshizora/OPM.js/tree/v1.8.1) to run the twelve examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
 
 The committed `dist/` is ready to use; trying the demos needs no npm installation or build. With Python 3 available, run from that repository root:
 
@@ -78,13 +78,13 @@ If `dist/` is missing or you have changed `src/` or `demo/` TypeScript, regenera
 
 ### Install into an npm project
 
-Download [opm.js-1.8.0.tgz from the v1.8 release](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8/opm.js-1.8.0.tgz), then install it from your application's root:
+Download [opm.js-1.8.1.tgz from the v1.8.1 release](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8.1/opm.js-1.8.1.tgz), then install it from your application's root:
 
 ```sh
-npm install /actual/path/to/opm.js-1.8.0.tgz
+npm install /actual/path/to/opm.js-1.8.1.tgz
 ```
 
-No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The existing release asset retains its original documentation; this synchronized guide describes the same v1.8 APIs.
+No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The v1.8.1 asset includes these synchronized guides; the original v1.8 tag and archive remain unchanged.
 
 To build a local tarball instead, run from the `OPM.js` source checkout with Node.js 22+ and npm:
 
@@ -93,19 +93,19 @@ npm ci
 npm pack
 ```
 
-`npm pack` builds automatically and produces `opm.js-1.8.0.tgz`. To create a new application beside the checkout:
+`npm pack` builds automatically and produces `opm.js-1.8.1.tgz`. To create a new application beside the checkout:
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.8.0.tgz
+npm install ../OPM.js/opm.js-1.8.1.tgz
 ```
 
 For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.
 
-For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/YueyuHoshizora/OPM.js/blob/main/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
+For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
 
 ### Use in a browser
 
