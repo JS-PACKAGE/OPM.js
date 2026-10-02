@@ -253,9 +253,11 @@ test('WAV rejects malformed audio and enforces its frame and rate budgets', () =
   for (const right of [null, [], new Float32Array(2), Float32Array.of(-Infinity)]) {
     assert.throws(() => encodeWav({ left, right, sampleRate: 8000 } as unknown as Parameters<typeof encodeWav>[0]));
   }
+  let getterCalls = 0;
   const input = { left, sampleRate: 8000 };
-  Object.defineProperty(input, 'left', { get() { throw Error('getter invoked'); } });
-  assert.throws(() => encodeWav(input), /audio data fields/);
+  Object.defineProperty(input, 'left', { get() { getterCalls++; return left; } });
+  assert.throws(() => encodeWav(input));
+  assert.equal(getterCalls, 0);
   const maximum = encodeWav({ left: new Float32Array(4_000_000), sampleRate: 192000 });
   assert.equal(maximum.byteLength, 8_000_044);
 });

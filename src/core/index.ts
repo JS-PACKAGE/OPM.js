@@ -9,7 +9,7 @@ export { normalizeTuning, tuningFrequency } from './tuning.js';
 export { lfoValue } from './lfo.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent, SequenceVoices, SequenceOptions, PreparedSequenceEvent, SequenceSnapshot, SequenceCapacity, ChunkedSequenceOptions, SequenceChunk, ChunkedSequenceRender } from './sequence.js';
 export { prepareSequence, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, MAX_SEQUENCE_SECONDS, MAX_RENDER_SAMPLES, MAX_LONG_SEQUENCE_SECONDS, MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_CHUNK_FRAMES, sampleRateValue } from './sequence.js';
-export type { WavOptions } from './wav.js';
+export type { WavOptions, WavFormat, WavEncoderOptions, WavEncoder, WavChunk } from './wav.js';
 
 export interface RenderNoteOptions extends SynthOptions {
   voice: CompleteVoiceInput | FrozenVoice;
@@ -34,7 +34,7 @@ import { Synth, operatorDuration } from './synth.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
 export { Synth, normalizeVoice, prepareVoice, validateNoteControls } from './synth.js';
-export { encodeWav } from './wav.js';
+export { encodeWav, createWavEncoder } from './wav.js';
 export const HEADROOM = 0.7; // -3.098 dB, with margin for Float32 rounding.
 export const OVERSAMPLE = 4;
 
