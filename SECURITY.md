@@ -181,7 +181,7 @@ A security review is required before:
 - [ ] Dev dependencies and CI actions pinned to exact versions/commit SHAs
 - [ ] `package.json` `files` whitelist ships only intended `dist/` assets, usage docs, and legal/project files
 - [ ] Standalone deployment retains the installed LICENSE alongside complete matching worklet/module assets; CSP/MIME/404 failures stay visible
-- [ ] npm publication defaults to dry run and requires protected approval, matching tag/version/commit/release, A/B/C/D evidence and trusted publishing; post-publication checks compare exact tarball bytes, validate source provenance and cryptographically verify signatures before installed-consumer acceptance
+- [ ] Any npm publication requires separate maintainer authorization, protected approval, matching tag/version/commit/release and independent A/B/C/D/package evidence, plus a reviewed provenance-bearing publishing path; post-publication checks compare exact tarball bytes, validate source provenance and cryptographically verify signatures before registry-installed consumer acceptance. This checkout has no npm publishing workflow; local verification is not publication.
 
 ### 3. Verification gates
 
@@ -218,6 +218,8 @@ v1.6 release review: a security review found two command-waiter boundary issues 
 Unreleased seven-capability checkout review: SecurityDataReview approved scoped **A**, SecurityProtocolReview **B**, SecurityDSPReview **C**, and SecuritySupplyReview **D** static inspection. Initial findings about release-tail controls, sink-transferred buffer accounting and deferred file-picker/writable teardown were fixed and the affected source rechecked without remaining scoped findings. These reviewers executed no tests, builds, audits or browser commands; their PASS does not certify runtime behavior, deployment permissions, physical devices or registry protections. The integration owner's observed tests, package gates, native browser smoke and report-only CPU measurements are recorded separately in CHANGELOG. This is not a release approval or a new waiver.
 
 v1.7 release review: Release17Data approved scoped static **A**, Release17Protocol **B**, Release17DSP **C**, and Release17Supply **D**, with no evidence-backed blockers in the final seven-capability source and 1.7.0 release metadata. All four reviews were read-only and executed no runtime gates. Fresh isolated package/build/test/type/audit/quality checks and managed native Chromium AudioWorklet observations are recorded in CHANGELOG. Remote CI must pass before the release tag is published; its run URL and outcome belong in the GitHub release record. No waiver or npm authentication/provenance/external-protection certification is asserted.
+
+v1.8 review record: InputProtocolReview approved scoped static **A/B** and DspAssetsReview scoped static **C/D** after the bounded arrangement, MIDI own-data, finite tempo-slope and canonical asset-overlap fixes. Their static approval does not certify runtime or external npm settings. The release commit `d793d69056c68a971ede1af988338412687227fd` has an observed successful [Node 22/24/26 and Chromium/Firefox/WebKit CI run](https://github.com/YueyuHoshizora/OPM.js/actions/runs/37061483772); the separate [review record](https://github.com/YueyuHoshizora/OPM.js/issues/1) and [release package record](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8) retain the evidence and tarball digest. This is not registry provenance, physical-device/MIDI or listening acceptance.
 
 ## Non-goals
 
