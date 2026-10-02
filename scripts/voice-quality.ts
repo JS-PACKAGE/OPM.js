@@ -1,17 +1,18 @@
 import assert from 'node:assert/strict';
 import { HEADROOM, renderNote } from '../src/core/index.js';
 import { examples } from '../src/voices/examples.js';
+import { presetMetadata } from '../src/voices/preset-metadata.js';
 import { parseVoiceBank } from '../src/voices/schema.js';
 import type { FrozenVoice, Voice } from '../src/voices/schema.js';
 import { importDX7, describeDX7 } from '../src/voices/dx7.js';
 import type { DX7ImportDescription } from '../src/voices/dx7.js';
 import { syntheticDX7Fixtures } from '../demo/audition-fixtures.js';
-import { AUDITION_GATE, AUDITION_NOTES, AUDITION_VELOCITIES, measureSound } from '../demo/audition-metrics.js';
+import { AUDITION_GAIN, AUDITION_GATE, AUDITION_NOTES, AUDITION_SEED, AUDITION_VELOCITIES,
+  auditionSlotSeconds, matchLevels, measureSound, renderAudition, seededPhrase } from '../demo/audition-metrics.js';
 
 const sampleRate = 48000;
 const sources: { id: string; kind: string; voice: Voice | FrozenVoice; conversion?: DX7ImportDescription }[] =
-  [...parseVoiceBank(examples)].map(([id, voice]) => ({ id, kind: 'bundled', voice }));
-assert.equal(sources.length, 7, 'The musical report must cover all seven bundled presets');
+  [...parseVoiceBank(examples)].map(([id, voice]) => ({ id, kind: presetMetadata[id].provenance.kind, voice }));
 const fixtures = syntheticDX7Fixtures();
 const singles = fixtures.find(fixture => fixture.id === 'dx7_pairs')!;
 const packed = fixtures.find(fixture => fixture.id === 'dx7_bank')!;
@@ -26,31 +27,48 @@ for (const fixture of fixtures) {
   const description = describeDX7(fixture.bytes)[0];
   sources.push({ id: fixture.id, kind: 'original synthetic DX7', voice: voices[0], conversion: description });
 }
-
+const baseline = sources.find(source => source.id === 'wood_mallet')!;
+const phrase = seededPhrase(AUDITION_SEED, 60, 0.6);
 const results = sources.map(({ id, kind, voice, conversion }) => {
-  const rows = AUDITION_NOTES.flatMap(note => AUDITION_VELOCITIES.map(velocity => {
+  const metadata = presetMetadata[id];
+  const notes = [...new Set<number>([...AUDITION_NOTES, ...(metadata ? [metadata.intendedMidi[0],
+    Math.round((metadata.intendedMidi[0] + metadata.intendedMidi[1]) / 2), metadata.intendedMidi[1]] : [])])];
+  const rows = notes.flatMap(note => AUDITION_VELOCITIES.map(velocity => {
     const audio = renderNote({ voice, note, velocity, duration: AUDITION_GATE, sampleRate, pan: 0 });
     const sound = measureSound(audio.left, audio.right, Math.ceil(AUDITION_GATE * sampleRate));
     const accepted = sound.finite && audio.diagnostics.errors === 0 &&
       sound.peak <= HEADROOM + 1e-6 && sound.gateRms > 1e-6;
     return { note, velocity, ...sound, errors: audio.diagnostics.errors, accepted };
   }));
+  const slotSeconds = auditionSlotSeconds(baseline.voice, voice);
+  const audioA = renderAudition(baseline.voice, phrase, slotSeconds, sampleRate);
+  const audioB = renderAudition(voice, phrase, slotSeconds, sampleRate);
+  const soundA = measureSound(audioA.left, audioA.right, audioA.left.length);
+  const soundB = measureSound(audioB.left, audioB.right, audioB.left.length);
+  const match = matchLevels(soundA, soundB, presetMetadata[baseline.id].hostTrimDb, metadata?.hostTrimDb ?? -6);
+  const phraseAccepted = soundA.finite && soundB.finite && audioA.diagnostics.errors === 0 && audioB.diagnostics.errors === 0 &&
+    soundA.peak <= HEADROOM + 1e-6 && soundB.peak <= HEADROOM + 1e-6 && soundB.rms > 1e-6;
   return {
     id, kind, name: voice.name, algorithm: voice.algorithm, version: voice.version,
-    conversion,
-    rows,
+    provenance: metadata?.provenance ?? { kind: 'original-recipe', source: 'demo/audition-fixtures.ts', license: 'Apache-2.0', copiedEmulatorPatch: false },
+    curation: metadata, conversion, rows,
     suggestedHostTrimDb: Math.min(...rows.map(row => row.suggestedTrimDb)),
-    accepted: rows.every(row => row.accepted),
+    seededAB: { sourceA: baseline.id, sourceB: id, slotSeconds, rawA: soundA, rawB: soundB,
+      dryPlaybackGains: [AUDITION_GAIN, AUDITION_GAIN], matchedHostTrimDb: match.trimDb,
+      matchedPlaybackGains: match.gains.map(gain => gain * AUDITION_GAIN), targetDbFSBeforeMaster: match.targetDbFS,
+      accepted: phraseAccepted },
+    accepted: rows.every(row => row.accepted) && phraseAccepted,
   };
 });
 console.log(JSON.stringify({
   sampleRate, gateSeconds: AUDITION_GATE, notes: AUDITION_NOTES, velocities: AUDITION_VELOCITIES,
+  phrase: { seed: AUDITION_SEED, baseNote: 60, baseVelocity: 0.6, steps: phrase, noteBounds: [48, 84] },
   channels: 'Stereo, centered; peak = max channel absolute sample, RMS = sqrt(mean channel energy)',
-  loudness: 'Unweighted RMS dBFS (gate and full release-tail windows), NOT LUFS or perceptual equal-loudness',
-  acceptance: 'Every cell must be finite, error-free, peak <= HEADROOM + 1e-6, gate RMS > 1e-6 (audible/non-silent proxy, not artistic quality)',
-  trimPolicy: 'Attenuation-only host suggestion, bounded -24..0 dB, using the loudest cell: target peak <= -12 dBFS and gate RMS <= -24 dBFS. No patch is rewritten; polyphony needs additional headroom.',
-  conversion: 'Original generated recipes only; no third-party SysEx. No six-operator DX7 reference renderer: comparisons are between converted recipes/bundled voices, not claims of hardware fidelity.',
-  results,
-  accepted: results.every(result => result.accepted),
+  loudness: 'Unweighted RMS dBFS, NOT LUFS or perceptual equal-loudness. Phrase A/B uses the same padded whole-phrase window; grid uses gate-only windows.',
+  acceptance: 'Finite, error-free, peak <= HEADROOM + 1e-6 and non-silent. Register boundary/middle cells plus C3/C4/C6 are sampled, not every note or sample rate certified.',
+  trimPolicy: 'Metadata -6 dB is a conservative HOST starting trim, not measured listening evidence. Report safety suggestions are attenuation-only -24..0 dB (peak -12, gate RMS -24 targets). Pair matching further attenuates both to a shared energy target with peak cap; master gain is 0.12. Patches are never rewritten. Polyphony needs extra headroom.',
+  listeningProtocol: 'Select the same seed, sources, register, velocity and phrase on examples/audition.html. Play A then B matched; repeat dry; repeat across nine register/velocity cells. Record attack/body/decay/brightness and manual gain preference separately. No perceptual verdict is produced by this command.',
+  conversion: 'Original generated recipes only; no third-party SysEx or emulator patches. No six-operator reference renderer or hardware fidelity claim.',
+  results, accepted: results.every(result => result.accepted),
 }, null, 2));
 if (results.some(result => !result.accepted)) process.exitCode = 1;

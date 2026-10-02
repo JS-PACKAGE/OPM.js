@@ -86,7 +86,7 @@ export function syntheticDX7Fixtures(): SyntheticDX7Fixture[] {
     { id: 'dx7_carriers', label: 'DX7: six additive carriers (algorithm 32)',
       purpose: 'Six carriers reduce to the four loudest. Compare missing upper partials.', bytes: frame(carriers) },
     { id: 'dx7_fixed', label: 'DX7: fixed-frequency carrier',
-      purpose: 'A fixed 263 Hz source becomes a MIDI-60 ratio: low/high notes track the keyboard, unlike a DX7.', bytes: frame(fixed) },
+      purpose: 'A fixed 263 Hz source remains fixed in Hz across low/high notes; compare with a key-tracking carrier.', bytes: frame(fixed) },
     { id: 'dx7_velocity', label: 'DX7: velocity-sensitive modulator',
       purpose: 'Operator velocity is a dB attenuation heuristic, not Yamaha response curves. Compare soft/hard brightness.', bytes: frame(velocity) },
     { id: 'dx7_bank', label: 'DX7: packed bank of paired-carrier recipe',

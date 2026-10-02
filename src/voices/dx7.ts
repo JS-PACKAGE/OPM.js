@@ -1,6 +1,6 @@
 import { normalizeVoice } from './normalize.js';
 import { ALGORITHMS } from '../core/algorithms.js';
-import type { Algorithm, Operator, Voice } from './schema.js';
+import type { Algorithm, LFO, Operator, Voice } from './schema.js';
 
 export interface DX7ImportDescription {
   name: string;
@@ -15,7 +15,7 @@ export interface DX7ImportDescription {
 
 
 // Clean-room format references (protocol tables, not emulator implementations):
-// https://data.yamaha.com/files/download/other_assets/9/333979/DX7E1.pdf pp. 30–31
+// https://data.yamaha.com/files/download/other_assets/9/333979/DX7E1.pdf pp. 13–17, 30–31
 // https://data.yamaha.com/files/download/other_assets/7/320817/DX7IIE.PDF Add-11 (VMEM)
 // Routing concepts: Yamaha PLG150-DX manual pp. 34–35, compatible DX7 algorithm chart:
 // https://data.yamaha.com/files/download/brochure/6/317206/PLG150DX_catalogue.pdf
@@ -34,7 +34,6 @@ const GLOBAL_MAX = [99, 99, 99, 99, 99, 99, 99, 99, 31, 7, 1, 99, 99, 99, 99, 1,
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
 const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
-const MIDI_60_HZ = 440 * 2 ** ((60 - 69) / 12);
 
 function parse(input: unknown): { data: Uint8Array; name: string }[] {
   // Intrinsic getters reject proxies, wrong element types, and spoofed length properties.
@@ -124,6 +123,10 @@ const clampRatio = (ratio: number): number => Math.max(0.125, Math.min(32, ratio
 const amplitude = (level: number): number => level === 0 ? 0 : 10 ** ((level - 99) * 0.75 / 20);
 // Musical heuristics, not Yamaha's envelope-rate or output-level transfer curves.
 const seconds = (rate: number): number => Math.min(10, 10 * 2 ** (-rate / 10));
+const DX7_LFO_WAVES: readonly LFO['waveform'][] = ['triangle', 'saw', 'saw', 'square', 'sine', 'sine'];
+// The manual specifies levels 0/50/99 as -4/0/+4 octaves; intermediate
+// linear cents and seconds below are explicit musical approximations.
+const pitchCents = (level: number): number => (level - 50) * 4800 / (level < 50 ? 50 : 49);
 
 function selection(data: Uint8Array): { algorithm: Algorithm; selected: number[] } {
   const edges = DX7_EDGES[data[134]];
@@ -182,18 +185,17 @@ function convertOperator(data: Uint8Array, number: number): Operator {
   const at = operatorOffset(number);
   const coarse = data[at + 18];
   const fine = data[at + 19];
-  // Fixed Hz cannot survive key tracking: approximate at MIDI 60, then bound.
-  const ratio = data[at + 17] === 1
-    ? 10 ** ((coarse & 3) + fine / 100) / MIDI_60_HZ
-    : (coarse === 0 ? 0.5 : coarse) * (1 + fine / 100);
+  const fixed = data[at + 17] === 1;
+  const ratio = (coarse === 0 ? 0.5 : coarse) * (1 + fine / 100);
   const peak = Math.max(data[at + 4], data[at + 5], data[at + 6]);
   const peakAmplitude = amplitude(peak);
-  return {
-    ratio: clampRatio(ratio),
+  const operator: Operator = {
+    ratio: fixed ? 1 : clampRatio(ratio),
     level: amplitude(data[at + 16]) * peakAmplitude,
     detune: (data[at + 20] - 7) * 3,
     // Linear dB response is a musical approximation, not Yamaha's transfer curve.
     velocitySensitivity: data[at + 15] / 7 * 48,
+    rateKeyScale: data[at + 13] / 7 * 4,
     adsr: {
       a: seconds(data[at]),
       d: Math.min(10, seconds(data[at + 1]) + seconds(data[at + 2])),
@@ -207,6 +209,8 @@ function convertOperator(data: Uint8Array, number: number): Operator {
       rightDbPerOctave: data[at + 12] < 2 ? data[at + 10] / 99 * 24 : 0,
     },
   };
+  if (fixed) operator.frequency = 10 ** ((coarse & 3) + fine / 100);
+  return operator;
 }
 
 /** Import exactly one standard DX7 single/bank dump as approximate four-op voices. */
@@ -215,16 +219,25 @@ export function importDX7(input: Uint8Array): Voice[] {
     const { algorithm, selected } = selection(data);
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
-    return normalizeVoice({
-      version: 4, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+    const voice: Voice = {
+      version: 5, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
       ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
       lfo: {
         rate: data[137] / 99 * 20,
         amDepth: data[140] / 99 * amSensitivity,
         pmDepth: data[139] / 99 * data[143] / 7 * 1200,
-        waveform: 'sine',
+        waveform: DX7_LFO_WAVES[data[142]],
+        delay: data[138] / 99 * 10,
+        sync: data[141] === 1 ? 'note' : 'global',
       },
-    }) as Voice;
+    };
+    if (data[130] !== 50 || data[131] !== 50 || data[132] !== 50 || data[133] !== 50) {
+      voice.pitchEnvelope = {
+        a: seconds(data[126]), d: Math.min(10, seconds(data[127]) + seconds(data[128])), r: seconds(data[129]),
+        initial: pitchCents(data[133]), peak: pitchCents(data[130]), sustain: pitchCents(data[132]), final: pitchCents(data[133]),
+      };
+    }
+    return normalizeVoice(voice) as Voice;
   });
 }
 
@@ -237,11 +250,13 @@ export function describeDX7(input: Uint8Array): DX7ImportDescription[] {
       'Retain the loudest carriers, then nearest/loudest upstream modulators; choose the closest four-op topology preserving carrier roles. Ties use lowest operator number and deterministic graph order.',
       'Envelope rates/levels, detune, output levels, feedback and LFO use musical heuristics, not hardware transfer curves.',
       'Feedback loop placement is replaced by feedback on the first retained OPM operator.',
+      'Pitch envelope keeps L4→L1→L3→L4, merging R2+R3 and omitting L2; levels use piecewise linear -4800/0/+4800 cents at 0/50/99 and heuristic seconds, not Yamaha transfer curves.',
+      'Keyboard rate scaling maps 0..7 to continuous 0..4 octave duration scaling, capped at ten seconds; LFO delay maps 0..99 to 0..10 seconds with a depth gate, not Yamaha delay shaping.',
+      'LFO sync maps key-sync on to note and off to deterministic global frame phase, not hardware free-running/random phase; oscillator phase carry is not reproduced.',
     ];
     for (let number = 1; number <= 6; number++) {
       const at = operatorOffset(number);
-      if (data[at + 17]) warnings.push(`OP${number} fixed frequency approximated as a MIDI-60 ratio if retained; key tracking changes.`);
-      if (data[at + 13]) warnings.push(`OP${number} keyboard rate scaling ignored.`);
+      if (data[at + 17] && selected.includes(number)) warnings.push(`OP${number} fixed Hz retained independently of playback MIDI note; detune remains approximate.`);
       if (data[at + 15]) warnings.push(`OP${number} per-operator velocity sensitivity approximated as linear 0..48 dB attenuation if retained; not Yamaha response curves.`);
       if (data[at + 7]) warnings.push(`OP${number} nonzero final envelope level ignored; release ends at silence.`);
       if ((data[at + 9] && data[at + 11] >= 2) || (data[at + 10] && data[at + 12] >= 2)) {
@@ -250,16 +265,13 @@ export function describeDX7(input: Uint8Array): DX7ImportDescription[] {
         warnings.push(`OP${number} keyboard scaling approximated as linear 0..24 dB/octave attenuation.`);
       }
       const coarse = data[at + 18];
-      const ratio = data[at + 17]
-        ? 10 ** ((coarse & 3) + data[at + 19] / 100) / MIDI_60_HZ
-        : (coarse || 0.5) * (1 + data[at + 19] / 100);
-      if (ratio !== clampRatio(ratio)) warnings.push(`OP${number} ratio clipped to 0.125..32 if retained.`);
+      const ratio = (coarse || 0.5) * (1 + data[at + 19] / 100);
+      if (!data[at + 17] && ratio !== clampRatio(ratio)) warnings.push(`OP${number} ratio clipped to 0.125..32 if retained.`);
     }
-    if ([130, 131, 132, 133].some(at => data[at] !== 50)) warnings.push('Pitch envelope ignored.');
     if (data[144] !== 24) warnings.push('Transpose ignored; transpose playback MIDI notes explicitly.');
-    if (data[138]) warnings.push('LFO delay ignored.');
-    if (data[139] || data[140]) warnings.push('LFO waveform and per-operator AM replaced by voice-wide sine modulation.');
-    warnings.push('Oscillator/LFO sync semantics are not reproduced.');
+    if (data[142] === 1) warnings.push('Descending saw LFO is replaced by rising saw; modulation direction changes.');
+    if (data[142] === 5) warnings.push('Sample-and-hold LFO is unsupported and replaced by sine.');
+    if (data[140]) warnings.push('Per-operator amplitude modulation sensitivity becomes voice-wide AM using the maximum retained sensitivity.');
     return {
       name, sourceAlgorithm: data[134] + 1, algorithm,
       selectedOperators: selected,

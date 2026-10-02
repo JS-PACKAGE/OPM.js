@@ -71,7 +71,7 @@ test('standard single and packed bank layouts produce equivalent normalized usab
   assert.deepEqual(single, snapshot);
   assert.deepEqual(importDX7(single), [voice]);
   assert.deepEqual(normalizeVoice(voice), voice);
-  assert.equal(voice.version, 4);
+  assert.equal(voice.version, 5);
   assert.equal(voice.lfo.waveform, 'sine');
   assert.equal(voice.ops[0].keyScale!.breakpoint, 60);
   assert.equal(parseVoiceBank(bank).size, 32);
@@ -161,10 +161,10 @@ test('valid-checksum data rejects parameter overflow and reserved packed bits', 
   }
 });
 
-test('fixed frequency clips safely and positive keyboard scaling does not boost', () => {
+test('fixed frequency survives conversion and positive keyboard scaling does not boost', () => {
   const data = singlePayload();
   data[134] = 31;
-  // OP1 is retained: low fixed Hz clips to minimum ratio; highest scaling stays bounded.
+  // OP1 is retained: low fixed Hz remains independent of keyboard tracking.
   const at = 105;
   data[at + 17] = 1;
   data[at + 18] = 0;
@@ -180,7 +180,7 @@ test('fixed frequency clips safely and positive keyboard scaling does not boost'
   const voice = importDX7(bytes)[0];
   const description = describeDX7(bytes)[0];
   const converted = voice.ops[description.selectedOperators.indexOf(1)];
-  assert.equal(converted.ratio, 0.125);
+  assert.equal(converted.frequency, 1);
   assert.equal(converted.keyScale!.leftDbPerOctave, 24);
   assert.equal(converted.keyScale!.rightDbPerOctave, 0);
   assert.deepEqual(normalizeVoice(voice), voice);
@@ -230,4 +230,40 @@ test('frequency bounds and sliced byte views preserve finite independent voices'
   padded.fill(0);
   assert.deepEqual(importDX7(original), imported);
   assert.deepEqual(normalizeVoice(imported[0]), imported[0]);
+});
+
+test('DX7 expressive controls retain verified direction, endpoints and fixed-frequency register independence', () => {
+  const data = singlePayload();
+  data[134] = 31;
+  data[135] = 0;
+  data[137] = data[139] = data[140] = 0;
+  for (let slot = 0; slot < 6; slot++) {
+    data[slot * 21 + 16] = slot === 5 ? 99 : 0;
+    data[slot * 21 + 9] = data[slot * 21 + 10] = data[slot * 21 + 13] = 0;
+  }
+  data[105 + 17] = 1;
+  data[105 + 18] = 2;
+  data[105 + 19] = 50;
+  const fixed = importDX7(message(data))[0];
+  const low = renderNote({ voice: fixed, note: 36, duration: 0.05, sampleRate: 16000 });
+  const high = renderNote({ voice: fixed, note: 96, duration: 0.05, sampleRate: 16000 });
+  assert.deepEqual(low.left, high.left);
+  data[105 + 13] = 7;
+  data[138] = 99;
+  data[141] = 0;
+  data.set([99, 0, 50, 0], 130);
+  const converted = importDX7(message(data))[0];
+  const selected = describeDX7(message(data))[0].selectedOperators.indexOf(1);
+  assert.equal(converted.ops[selected].frequency, 10 ** 2.5);
+  assert.equal(converted.ops[selected].rateKeyScale, 4);
+  assert.equal(converted.pitchEnvelope!.initial, -4800);
+  assert.equal(converted.pitchEnvelope!.peak, 4800);
+  assert.equal(converted.pitchEnvelope!.sustain, 0);
+  assert.equal(converted.pitchEnvelope!.final, -4800);
+  assert.equal(converted.lfo.delay, 10);
+  assert.equal(converted.lfo.sync, 'global');
+  for (const [source, expected] of [[0, 'triangle'], [2, 'saw'], [3, 'square'], [4, 'sine']] as const) {
+    data[142] = source;
+    assert.equal(importDX7(message(data))[0].lfo.waveform, expected);
+  }
 });

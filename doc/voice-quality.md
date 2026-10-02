@@ -1,41 +1,56 @@
 # Preset and conversion acceptance
 
-Run `npm run voice-quality` for a fresh JSON report of all seven bundled voices (`bell`, `brass`, `bass`, `electric_piano`, `organ`, `lead`, `strings`) and five original synthetic DX7 fixtures. Open `examples/audition.html` through the project's HTTP demo server to hear A/B comparisons and download locally rendered WAVs. Audio playback requires a user gesture and AudioWorklet support.
+`npm run voice-quality` produces a fresh JSON report for the fifteen bank voices and five original synthetic DX7 fixtures. Serve `examples/audition.html` through the project's HTTP demo server for seeded A/B playback and local PCM16 WAV downloads. Playback requires a user gesture and AudioWorklet support to start the owned OPM audio session; audition audio itself is an offline dry DSP buffer, not a real-time worklet stress test.
 
-## Measurement contract
+## Bank, provenance and host trim
 
-Each voice is rendered at 48 kHz, centered stereo, with a 0.8-second gate plus its full release/filter tail. The nine musical cells are MIDI 48/60/84 (C3/C4/C6) at velocities 0.25/0.6/1. These deliberately expose low-register body, middle-register balance, high-register attenuation/brightness and velocity-dependent behavior; they are not an exhaustive MIDI-keyboard or sample-rate certification.
+The existing seven recipes remain in `examples`; their synthesis parameters are unchanged, with current v5 format labels. Eight additions are authored specifically as four-operator parameter recipes, not converted emulator patches, downloaded SysEx, sampled recordings or claims of acoustic/hardware fidelity:
 
-The report includes:
+| Addition | Intended MIDI register | Timbral design |
+| --- | --- | --- |
+| `wood_mallet` | 48–84 | Fast high-partial decay; higher keys shorten envelopes. |
+| `glass_pluck` | 48–84 | Velocity-sensitive glassy transient over a decaying body. |
+| `hollow_reed` | 48–76 | Even-ratio modulation of odd-partial carriers; delayed vibrato. |
+| `slow_air_pad` | 48–76 | Slow detuned onset, shallow pitch envelope, global LFO phase. |
+| `bronze_plate` | 48–72 | Noninteger PM ratios and unequal metallic decays. |
+| `membrane_tom` | 36–60 | Short body with a downward pitch-envelope transient. |
+| `fixed_hz_chime` | 48–84 | Additive 317/523/829/1237 Hz partials independent of key pitch. |
+| `wire_kalimba` | 48–84 | Key-tracking plucked body and fixed-Hz transient modulator. |
 
-- Sample peak, the largest absolute sample in either channel, and peak dBFS.
-- Full-render RMS and RMS dBFS, using mean stereo-channel energy, including release/tail.
-- Gate-only RMS and RMS dBFS. This fixed window makes attack/sustain comparisons more useful than comparing different release lengths alone.
-- Crest factor, finite-output status, DSP error count and per-cell acceptance.
-- A per-voice suggested host trim based on the loudest cells, bounded to −24..0 dB. The attenuation-only targets are peak ≤ −12 dBFS and gate RMS ≤ −24 dBFS. These are conservative single-note listening targets, not mastering standards or polyphony guarantees; the bounded trim may not achieve both targets for arbitrary future patches.
+All intended base velocities are 0.25–1. Phrase articulation reaches 0.1625; the numerical safety sweep also includes that soft boundary. Register labels express intended musical use, not a promise that notes outside them are invalid. Fixed-Hz operators ignore MIDI/tuning frequency but still respond to detune, pitch controls/envelope and LFO pitch modulation. Ratios remain present in the strict schema. Rate key scaling changes envelope times; none of these fields implement chip register behavior.
 
-RMS dBFS is an **unweighted objective energy/loudness proxy, not LUFS** and not a perceptual loudness match. An attack-heavy bell and sustained organ can have comparable peaks but different energy and apparent loudness. Check both windows and listen. Silent renders do not pass: every cell must have gate RMS > 0.000001, finite samples, zero DSP errors, and peak ≤ the engine's `HEADROOM` plus Float32 tolerance (0.000001). This is a sound-production acceptance check, not a timbral quality verdict; incidental exact output values are not pinned.
+Machine-readable `presetMetadata` in `src/voices/preset-metadata.ts` records every bank recipe's provenance kind, source, Apache-2.0 license, non-emulator status, family, intended register/velocity, purpose and host trim. `defaultBrassMetadata` covers the separate default `brass.js` recipe, which differs from bank brass. Existing repository recipes are marked `repository-recipe`; additions are `original-recipe`. Metadata is deliberately **outside** strict voice objects: do not merge it into a patch submitted to validation.
 
-The command prints every measured cell and exits unsuccessfully if any cell fails. It also validates the generated Yamaha checksums, parses the full 32-voice packed bank and checks that its first converted recipe matches the equivalent single-voice dump. Actual measured values are produced by the command, not hard-coded into this document.
+Package wildcard exports expose the banks and metadata without additional runtime dependencies:
 
-## Listening and host gain
+```js
+import { examples } from 'opm.js/voices/examples.js';
+import { originalPresets } from 'opm.js/voices/original.js';
+import { presetMetadata } from 'opm.js/voices/preset-metadata.js';
+```
 
-The audition page plays either selected source at the same chosen register/velocity, or A then B across all nine cells. It separates release tails rather than masking one voice with another. Automatic gates, explicit Stop, disposal, note rejection handling, rendering errors and download URL cleanup are included.
+Existing demo selectors import `examples`, so the expanded bank appears through their existing list/load path. Operator levels remain timbral parameters; no output-level compensation was embedded into operators. Metadata recommends **−6 dB additional host attenuation as a conservative starting point**, not a measured perceptual preference. The fresh report computes separate safety trims and pair-specific energy matching. More voices/chords require extra host headroom.
 
-Playback and downloaded PCM16 WAVs apply the same fixed **0.12 host gain (about −18.4 dB)**, not the suggested per-voice trim. Reports describe raw DSP output before that gain. No patch level, velocity sensitivity, envelope, feedback, filter or saturation is silently changed to meet a loudness target. Apply suggested trims in your own output GainNode/mixer if desired; leave additional headroom for chords and multiple voices. Start with low device volume.
+## Numerical measurement contract
+
+Reports render centered stereo at 48 kHz with a 0.8-second gate plus note-scaled release/filter tail. The nine reference cells are MIDI 48/60/84 at velocities 0.25/0.6/1, plus each recipe's intended lower/middle/upper register. Output includes sample peak, whole-render RMS, gate RMS, crest factor, finite status, DSP errors and per-cell acceptance. RMS uses mean stereo-channel energy; it is **unweighted, not LUFS and not perceptual equal loudness**.
+
+Every measured cell must be finite, error-free, peak ≤ `HEADROOM` + 0.000001 and gate RMS > 0.000001. Report safety trims are attenuation-only, bounded −24..0 dB, with single-note targets peak ≤ −12 dBFS and gate RMS ≤ −24 dBFS. A bounded safety suggestion cannot guarantee those targets for arbitrary future patches. The command exits unsuccessfully on rejection and validates synthetic Yamaha checksums and equivalent packed/single conversion.
+
+`test/preset-quality.test.ts` covers finite/headroom/non-silence across every semitone of the eight additions' intended registers at 22.05 kHz and soft/medium/hard velocities. It also checks fixed-Hz partial localization/key invariance and held-gate mallet decay versus pad buildup. These are behavioral numerical regressions, not object snapshots or artistic verdicts. The 48 kHz report samples register cells; neither report nor sweep certifies every velocity, sample rate, polyphonic combination or live control transition.
+
+## Repeatable listening workflow
+
+1. Choose A/B sources, register, base velocity, single/phrase material, host gain mode and seed. Default seed is `20261002`. Record all choices; filenames include seed, material, gain mode, note and velocity. Phrase offsets are `[0, 2, 4, 7, −5, −12]`, clamped to MIDI 48–84. The unsigned 32-bit LCG chooses each velocity multiplier (0.65/0.8/1) and gate (0.35/0.5/0.8 seconds). Changing seed changes articulation, not patch parameters.
+2. Start at low device volume. Measure, then compare A followed by B. Six-note phrases use identical padded slots for both sources, including full isolated tails. This gives equal whole-phrase measurement windows. Single-note matching uses the same 0.8-second gate window. Stop immediately cancels playing and queued buffers; Dispose closes the owned context and cleans URLs/nodes.
+3. In **energy-matched** mode, both sources are attenuated to the quieter of their measured energy levels, the −24 dBFS target, metadata-trim ceilings and the −12 dBFS peak constraints. No source is amplified. Report the applied host trims separately from raw DSP values. The shared **0.12 master gain (−18.4 dB)** follows those trims. WAVs apply these exact same gains.
+4. Repeat with **dry** mode: only the common 0.12 master gain, no source trim. Repeat the nine-cell single-note grid (C3/C4/C6 × soft/medium/hard), and selected phrases at those settings. Comparisons never overlap source tails. For a recipe outside its intended register, treat that cell as a stress comparison, not its intended playing range.
+5. Record attack, held body, brightness, decay, release and any manual gain preference. Repeat after swapping A/B selection if assessing ordering effects. Differences in attack/crest/spectrum can make energy-matched sources sound unequally loud; manual preference is listening evidence only when an actual listener records it. Save matched and dry WAVs with settings for another listener.
+
+The JSON report compares every source's middle-register seeded phrase against `wood_mallet`, recording dry master gains, matched host trims, raw measurements, common slot length and target. This is reproducible numerical preparation for listening, **not a listening result**. No subjective listening acceptance, hardware comparison or fidelity result is claimed here. No audio/patches are uploaded.
 
 ## Original synthetic DX7 recipes
 
-`demo/audition-fixtures.ts` generates valid-checksum VCED single dumps and a VMEM packed bank from original parameter recipes, using the Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. No downloaded SysEx, third-party patch source, recording or emulator implementation is included.
+`demo/audition-fixtures.ts` generates valid-checksum VCED singles and a VMEM bank from original recipes, using Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. The fixtures exercise three paired carriers, six additive carriers, a fixed-frequency carrier, velocity-sensitive modulation and equivalent packed-bank conversion. The fixed carrier now retains its approximately 263 Hz frequency in v5 instead of a MIDI-60 ratio approximation.
 
-| Fixture | What to compare |
-| --- | --- |
-| Three paired carriers, source algorithm 5 | Carrier retention with too few slots for every upstream modulator; missing modulation is a conversion loss. |
-| Six additive carriers, source algorithm 32 | Four loudest retained carriers; two quieter carriers/partials disappear. |
-| Fixed-frequency carrier | A roughly 263 Hz fixed source becomes a ratio anchored at MIDI 60. Converted low/high notes follow key pitch, unlike the source's fixed oscillator. |
-| Velocity-sensitive modulator, source algorithm 16 | Soft/hard brightness changes through approximate per-operator dB sensitivity. Yamaha velocity curves and envelope transfer functions are not reproduced. |
-| Packed bank | 32 instances of the paired-carrier recipe, with unique import names. Compare its first result to the equivalent single dump. |
-
-The page displays `describeDX7()` routing and loss warnings for both selected sources. The report includes source/target algorithms and retained/dropped operator numbers. Conversions preserve neither six-operator topology nor DX7 hardware transfer functions: fixed-frequency oscillators, envelope rates/levels, feedback placement, LFO behavior, keyboard scaling and velocity response remain approximations or omissions as described by the converter.
-
-There is **no original six-operator DX7 reference renderer** here. Audible comparisons are between unchanged bundled OPM voices and the imported synthetic recipes (including equivalent single/bank layouts), not a claim of lossless conversion or hardware fidelity. WAV generation stays in memory on the local device; nothing is uploaded.
+The page and report include `describeDX7()` routing/loss warnings. Four slots cannot preserve all six-operator topologies; retained/dropped operators and approximate envelopes, levels, feedback, LFO, keyboard scaling and velocity transfer functions still matter. See the converter's current warnings for supported mappings rather than inferring that every source parameter is exact. There is **no original six-operator DX7 reference renderer** here: A/B compares OPM recipes and converted synthetic sources, not lossless conversion or DX7 hardware fidelity.

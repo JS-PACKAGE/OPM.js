@@ -11,7 +11,7 @@
   <main>
     <a href="../index.html">Back to the example index</a>
     <h1>Preset and conversion audition</h1>
-    <p>Compare all seven unchanged bundled presets and original, clean-room DX7 conversion recipes. Start with low device volume. Playback and downloaded WAVs use fixed host gain <strong>0.12 (−18.4 dB)</strong>; there is no automatic loudness matching or patch rewriting.</p>
+    <p>Compare the expanded original/repository recipe bank and clean-room DX7 conversion fixtures. Start with low device volume. The master host gain is <strong>0.12 (−18.4 dB)</strong>; energy-matched mode adds separate per-source attenuation, while dry mode omits that trim. No patch is rewritten. Matching RMS is not perceptual proof.</p>
     <fieldset>
       <legend>A/B sources and single-note settings</legend>
       <label for="source-a">Source A</label>
@@ -30,27 +30,40 @@
         <option value="0.6" selected>Medium: 0.6</option>
         <option value="1">Hard: 1</option>
       </select>
+      <label for="mode">Material</label>
+      <select id="mode">
+        <option value="single">Single note</option>
+        <option value="phrase" selected>Seeded six-note phrase</option>
+      </select>
+      <label for="gain-mode">Host comparison</label>
+      <select id="gain-mode">
+        <option value="matched" selected>Energy-matched (attenuation only)</option>
+        <option value="dry">Dry (master gain only)</option>
+      </select>
+      <label for="seed">Phrase seed (unsigned 32-bit integer)</label>
+      <input id="seed" type="number" min="0" max="4294967295" step="1" value="20261002">
     </fieldset>
     <div class="actions">
       <button id="play-a" type="button" data-audition disabled>Play A</button>
       <button id="play-b" type="button" data-audition disabled>Play B</button>
-      <button id="compare" type="button" data-audition disabled>Compare A then B across all 9 cells</button>
-      <button id="stop" type="button">Stop / release notes</button>
+      <button id="compare" type="button" data-audition disabled>Compare A then B: selected material</button>
+      <button id="compare-grid" type="button" data-audition disabled>Compare A then B: nine single-note cells</button>
+      <button id="stop" type="button">Stop audio and queued buffers</button>
       <button id="dispose" type="button">Dispose audio</button>
     </div>
-    <p class="hint">Every note has a 0.8-second gate followed by its release. The grid plays A then B at each register/velocity; release tails are separated. Stop cancels queued notes and releases active gates. Dispose disconnects and closes the owned AudioContext; Play can start a new session.</p>
+    <p class="hint">Single notes use a 0.8-second gate. The seeded phrase repeats six isolated notes with reproducible articulation and velocities; MIDI notes are bounded to 48–84. A/B use common padded slots so release tails never overlap and RMS windows agree. Stop cancels buffers immediately. Dispose closes the owned AudioContext; Play starts a fresh session. This listening surface plays locally rendered dry DSP buffers, not a real-time worklet stress test.</p>
     <div class="actions">
       <button id="measure" type="button" data-audition disabled>Measure A/B sound report</button>
       <button id="wav-a" type="button" data-audition disabled>Render WAV A</button>
       <button id="wav-b" type="button" data-audition disabled>Render WAV B</button>
       <a id="download" hidden>Download last rendered stereo WAV</a>
     </div>
-    <p>WAVs are synthesized locally at 48 kHz with the selected register/velocity, including release tails. No recordings or patches are uploaded. Changing a setting invalidates the download.</p>
+    <p>PCM16 WAVs are synthesized locally at 48 kHz with the exact selected material and playback host gains, including release tails and slot padding. Record the seed, A/B sources, register, velocity, material and gain mode to repeat comparisons. No recordings or patches are uploaded. Changing a setting invalidates the download.</p>
     <h2>Sound report</h2>
     <pre id="report">Choose sources, then measure their low/middle/high register and soft/medium/hard velocity grid.</pre>
-    <p>Report values are raw DSP sample peak, gate RMS, and full-render RMS in dBFS, before playback gain. Unweighted RMS is an objective energy/loudness proxy, <strong>not LUFS</strong> or a perceptual quality verdict. Suggested trims are host-side attenuation only; more simultaneous notes need additional headroom.</p>
+    <p>Reports show raw peak, gate RMS (single notes), common whole-window RMS (phrases), and full-render RMS before playback gain. Applied host trims are shown separately. Unweighted RMS is <strong>not LUFS</strong> or a perceptual quality verdict. Repeat matched and dry comparisons and note attack/body/decay/brightness preferences yourself; no listening results are fabricated. Chords need additional headroom.</p>
     <h2>Conversion limits</h2>
-    <p>The DX7 examples are original generated parameter recipes, not third-party patch banks. OPM.js is four-operator synthesis, not a DX7 emulator. A/B compares converted recipes and bundled OPM voices; no original six-operator audio reference is rendered. Carrier removal, approximate envelopes/levels/velocity response, fixed-frequency key tracking, feedback placement and LFO differences can be audible.</p>
+    <p>The DX7 fixtures are original parameter recipes, not third-party patch banks. OPM.js is four-operator synthesis, not a DX7 emulator. A/B compares converted recipes and OPM voices; no six-operator audio reference is rendered. Carrier removal and approximate envelopes/levels/velocity/feedback/LFO transfer functions can be audible; v5 retains fixed-frequency operators in Hz.</p>
     <p id="limits"></p>
     <output id="status" role="status" aria-live="polite">Loading voices.</output>
   </main>
