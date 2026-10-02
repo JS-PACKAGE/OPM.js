@@ -3,13 +3,13 @@
 import assert from 'node:assert/strict';
 import { HEADROOM, Synth } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
+import type { QualityProfile } from '../src/core/decimator.js';
 import {
-  COEFFICIENT_TOLERANCE, acceptedFilterMagnitude, energyDb, foldedFrequency, fourierBin, unsaturatedWindow,
+  COEFFICIENT_TOLERANCE, acceptedFilterMagnitude, energyDb, foldedFrequency, fourierBin, referenceProfile, unsaturatedWindow,
 } from './fm-reference-fixtures.js';
 
 import { filterImpulseBounds } from './decimator-reference.js';
 
-const FILTER_IMPULSE_BOUND = filterImpulseBounds();
 const FEEDBACK_LEVEL = 0.25;
 const HARMONICS = 96;
 
@@ -22,13 +22,13 @@ function feedbackVoice(frequency: number, level: number): Voice {
   };
 }
 
-function periodicFeedback(frequency: number, sampleRate: number, points: number) {
+function periodicFeedback(frequency: number, sampleRate: number, points: number, factor: number) {
   // Solve y(theta)=a*sin(theta+pi/2*(y(theta-d)+y(theta-2d)))
   // on the entire periodic phase grid by Jacobi iteration, not chronological
-  // engine sampling. Keep the physical delays d=2pi*f/(4Fs) at both grids.
+  // engine sampling. Keep the profile's physical delays at both grids.
   // a*pi<1 gives a unique periodic solution and an a-posteriori error bound.
   const lipschitz = FEEDBACK_LEVEL * Math.PI;
-  const firstDelay = frequency / (4 * sampleRate) * points;
+  const firstDelay = frequency / (factor * sampleRate) * points;
   const secondDelay = firstDelay * 2;
   const firstShift = Math.floor(firstDelay), firstFraction = firstDelay - firstShift;
   const secondShift = Math.floor(secondDelay), secondFraction = secondDelay - secondShift;
@@ -54,11 +54,12 @@ function periodicFeedback(frequency: number, sampleRate: number, points: number)
   return { samples: previous, iterations, errorBound, lipschitz };
 }
 
-function verifyStableFeedback(sampleRate: number) {
+function verifyStableFeedback(sampleRate: number, quality: QualityProfile) {
+  const { factor } = referenceProfile(quality);
   const frequency = Math.round(sampleRate * 0.079) + 1;
-  const coarse = periodicFeedback(frequency, sampleRate, 32768);
-  const fine = periodicFeedback(frequency, sampleRate, 65536);
-  const synth = new Synth(sampleRate);
+  const coarse = periodicFeedback(frequency, sampleRate, 32768, factor);
+  const fine = periodicFeedback(frequency, sampleRate, 65536, factor);
+  const synth = new Synth(sampleRate, 8, { quality });
   synth.noteOn(feedbackVoice(frequency, FEEDBACK_LEVEL), 81);
   const offset = Math.ceil(sampleRate / 4);
   const left = new Float32Array(offset + sampleRate), right = new Float32Array(left.length);
@@ -87,7 +88,7 @@ function verifyStableFeedback(sampleRate: number) {
     const gridDifference = Math.abs(coefficient - coarseCoefficient);
     maximumGridDifference = Math.max(maximumGridDifference, gridDifference);
     assert.ok(gridDifference < COEFFICIENT_TOLERANCE / 4, 'independent phase-grid harmonics converge');
-    const expected = coefficient * acceptedFilterMagnitude(sourceHz, sampleRate);
+    const expected = coefficient * acceptedFilterMagnitude(sourceHz, sampleRate, quality);
     const measured = fourierBin(window, sampleRate, binHz).amplitude / normalization;
     const error = Math.abs(measured - expected);
     maximumEngineError = Math.max(maximumEngineError, error);
@@ -113,8 +114,8 @@ function verifyStableFeedback(sampleRate: number) {
   const resolvedTailEnergy = Math.max(0, sourceEnergy - accountedEnergy);
   assert.ok(resolvedTailEnergy < COEFFICIENT_TOLERANCE ** 2 / 4, 'resolved reference tail cannot hide a material alias');
   return {
-    sampleRate, feedback: 7, operatorLevel: FEEDBACK_LEVEL, frequency,
-    reference: { phaseGridPoints: [32768, 65536], physicalDelaySeconds: [1 / (4 * sampleRate), 2 / (4 * sampleRate)],
+    sampleRate, quality, feedback: 7, operatorLevel: FEEDBACK_LEVEL, frequency,
+    reference: { phaseGridPoints: [32768, 65536], physicalDelaySeconds: [1 / (factor * sampleRate), 2 / (factor * sampleRate)],
       equivalentInternalSampleRates: [frequency * 32768, frequency * 65536],
       iterations: [coarse.iterations, fine.iterations], contractionFactor: fine.lipschitz,
       iterationErrorBound: fine.errorBound, maximumGridDifference, resolvedTailEnergy },
@@ -158,10 +159,12 @@ function fftPower(real: Float64Array) {
   return powers;
 }
 
-function verifyFullFeedbackEnergy(sampleRate: number) {
+function verifyFullFeedbackEnergy(sampleRate: number, quality: QualityProfile) {
+  const { factor } = referenceProfile(quality);
+  const impulseBound = filterImpulseBounds(quality);
   const frames = 32768, offset = Math.ceil(sampleRate / 4);
   const frequency = sampleRate * 0.18;
-  const synth = new Synth(sampleRate);
+  const synth = new Synth(sampleRate, 8, { quality });
   synth.noteOn(feedbackVoice(frequency, 1), 81);
   const left = new Float32Array(offset + frames), right = new Float32Array(left.length);
   synth.render(left, right);
@@ -174,42 +177,41 @@ function verifyFullFeedbackEnergy(sampleRate: number) {
     window[i] *= (0.5 - 0.5 * Math.cos(2 * Math.PI * i / frames)) / carrierGain;
     timeEnergy += window[i] ** 2 / frames;
   }
-  assert.ok(normalizedPeak <= FILTER_IMPULSE_BOUND.l1 + COEFFICIENT_TOLERANCE, 'bounded feedback source obeys the independent filter impulse L1 bound');
+  assert.ok(normalizedPeak <= impulseBound.l1 + COEFFICIENT_TOLERANCE, 'bounded feedback source obeys the independent filter impulse L1 bound');
   const powers = fftPower(window);
   let totalEnergy = 0, highBandEnergy = 0, maximumHighBandTransferPower = 0, maximumAliasTransferPower = 0;
   for (let bin = 0; bin < frames; bin++) {
     totalEnergy += powers[bin];
     const foldedHz = Math.min(bin, frames - bin) * sampleRate / frames;
     if (foldedHz >= sampleRate * 0.25) highBandEnergy += powers[bin];
-    const branches = [foldedHz, foldedHz + sampleRate, foldedHz - sampleRate, foldedHz - 2 * sampleRate];
     let transferPower = 0, aliasTransferPower = 0;
-    for (let branch = 0; branch < branches.length; branch++) {
-      const power = acceptedFilterMagnitude(branches[branch], sampleRate) ** 2;
+    for (let branch = -factor / 2; branch < factor / 2; branch++) {
+      const power = acceptedFilterMagnitude(foldedHz + branch * sampleRate, sampleRate, quality) ** 2;
       transferPower += power;
-      if (branch > 0) aliasTransferPower += power;
+      if (branch !== 0) aliasTransferPower += power;
     }
     if (foldedHz >= sampleRate * 0.25) maximumHighBandTransferPower = Math.max(maximumHighBandTransferPower, transferPower);
     maximumAliasTransferPower = Math.max(maximumAliasTransferPower, aliasTransferPower);
   }
   assert.ok(Math.abs(totalEnergy - timeEnergy) < 1e-10, 'Fourier energy agrees with independent time-domain Parseval energy');
   assert.ok(totalEnergy > 1e-8, 'full feedback fixture produces real, windowed waveform energy');
-  // For any bounded (including chaotic) feedback source, Cauchy-Schwarz across
-  // the four decimation branches bounds band power by max(sum |H|^2)*input
-  // power. Hann mean-square is 3/8. The explicit commutator/boundary allowance
-  // is twice window Lipschitz pi/(4N) times the filter's impulse first moment.
-  const windowBoundaryRmsAllowance = 2 * Math.PI / (4 * frames) * FILTER_IMPULSE_BOUND.absoluteFirstMoment;
+  // Cauchy-Schwarz across M decimation branches bounds band power by
+  // max(sum |H|^2)*input power even for chaotic bounded feedback.
+  // Hann mean-square is 3/8. The commutator/boundary allowance is twice
+  // window Lipschitz pi/(MN) times the independent impulse first moment.
+  const windowBoundaryRmsAllowance = 2 * Math.PI / (factor * frames) * impulseBound.absoluteFirstMoment;
   const sourceWindowRmsBound = Math.sqrt(3 / 8);
   const highBandEnergyBound = (Math.sqrt(maximumHighBandTransferPower) * sourceWindowRmsBound + windowBoundaryRmsAllowance) ** 2;
   const mathematicalAliasEnergyBound = (Math.sqrt(maximumAliasTransferPower) * sourceWindowRmsBound + windowBoundaryRmsAllowance) ** 2;
   assert.ok(highBandEnergy <= highBandEnergyBound,
     `${sampleRate} full feedback7 high-band energy ${highBandEnergy} exceeds independent bound ${highBandEnergyBound}`);
-  return { sampleRate, feedback: 7, operatorLevel: 1, frequency, windowFrames: frames, window: 'periodic Hann',
+  return { sampleRate, quality, feedback: 7, operatorLevel: 1, frequency, windowFrames: frames, window: 'periodic Hann',
     normalizedPeak, totalEnergy, highBandEnergy, highBandEnergyBound,
     highBandRelativeDb: energyDb(highBandEnergy, totalEnergy), mathematicalAliasEnergyBound,
     sourceWindowRmsBound, windowBoundaryRmsAllowance,
     limitation: 'High-band energy combines real upper-passband harmonics and folded aliases. The alias bound is mathematical, not a uniquely measured decomposition or chaotic PCM-convergence claim.' };
 }
 
-export function verifyFeedbackSpectrum(sampleRate: number) {
-  return { stable: verifyStableFeedback(sampleRate), fullLevel: verifyFullFeedbackEnergy(sampleRate) };
+export function verifyFeedbackSpectrum(sampleRate: number, quality: QualityProfile = 'standard') {
+  return { quality, stable: verifyStableFeedback(sampleRate, quality), fullLevel: verifyFullFeedbackEnergy(sampleRate, quality) };
 }

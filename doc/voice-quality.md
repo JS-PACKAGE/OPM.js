@@ -1,6 +1,6 @@
 # Preset and conversion acceptance
 
-`npm run voice-quality` produces a fresh JSON report for the fifteen bank voices and five original synthetic DX7 fixtures. Serve `examples/audition.html` through the project's HTTP demo server for seeded A/B playback and local PCM16 WAV downloads. Playback requires a user gesture and AudioWorklet support to start the owned OPM audio session; audition audio itself is an offline dry DSP buffer, not a real-time worklet stress test.
+`npm run voice-quality` produces a fresh JSON report for the eighteen bank voices and five original synthetic DX7 fixtures, each rendered under the `eco`, `standard` and `high` DSP profiles (69 accepted rows in the 1.8.0 run). Serve `examples/audition.html` through the project's HTTP demo server for seeded A/B playback, profile selection, a held ratio/feedback/ADSR control phrase, local PCM16 WAV downloads and local human finding capture. Playback requires a user gesture and AudioWorklet support to start the owned OPM audio session; audition audio itself is an offline dry DSP buffer, not a real-time worklet stress test.
 
 ## Bank, provenance and host trim
 
@@ -31,6 +31,45 @@ import { presetMetadata } from 'opm.js/voices/preset-metadata.js';
 
 Existing demo selectors import `examples`, so the expanded bank appears through their existing list/load path. Operator levels remain timbral parameters; no output-level compensation was embedded into operators. Metadata recommends **−6 dB additional host attenuation as a conservative starting point**, not a measured perceptual preference. The fresh report computes separate safety trims and pair-specific energy matching. More voices/chords require extra host headroom.
 
+## Selective-LFO recipes and usage table
+
+Three recipes added in 1.8 use the per-operator `amTargets`/`pmTargets` tuples that the 1.7 bank did not exercise. They are original four-operator parameter recipes, not converted patches or recordings:
+
+| Recipe | Selective modulation | Playing notes |
+| --- | --- | --- |
+| `tide_keys` | AM only on the second carrier; PM on the first modulator and, lightly, the second pair's modulator, with no vibrato on either carrier | Short chords at medium velocity. Velocity-sensitive, key-scaled modulators soften hard high notes. Leave release headroom. |
+| `ember_bass` | AM on the two modulators (sideband strength, not the bass floor); PM only on the upper modulator | Monophonic lines at moderate velocity. The unmodulated fundamental/sub pair stays stable. |
+| `orbit_pad` | Shallow AM on the lower carrier, stronger AM on the upper pair; PM on modulators only; globally synchronized LFO | Let the 0.24–0.42 s attacks develop and tails clear before re-chording; use the lowest suggested polyphony the arrangement allows. |
+
+Usage metadata for every bank voice (`presetMetadata`, outside the strict voice schema). Intended register and velocity describe where a recipe is meant to be played, not a validity limit. **Suggested polyphony and trim for the fifteen older recipes are conservative defaults (4 voices, −6 dB), not per-voice tuning**; only the three 1.8 recipes carry specific values. Trims are a *host* starting point, never an operator-level change.
+
+| Voice | Family | MIDI | Velocity | Voices | Trim dB | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| `bell` | bell | 48–84 | 0.25–1 | 4 | −6 | examples.ts |
+| `brass` | brass | 48–76 | 0.25–1 | 4 | −6 | examples.ts |
+| `bass` | bass | 36–60 | 0.25–1 | 4 | −6 | examples.ts |
+| `electric_piano` | keys | 48–84 | 0.25–1 | 4 | −6 | examples.ts |
+| `organ` | organ | 48–84 | 0.25–1 | 4 | −6 | examples.ts |
+| `lead` | lead | 48–84 | 0.25–1 | 4 | −6 | examples.ts |
+| `strings` | strings | 48–84 | 0.25–1 | 4 | −6 | examples.ts |
+| `wood_mallet` | mallet | 48–84 | 0.25–1 | 4 | −6 | original.ts |
+| `glass_pluck` | pluck | 48–84 | 0.25–1 | 4 | −6 | original.ts |
+| `hollow_reed` | reed | 48–76 | 0.25–1 | 4 | −6 | original.ts |
+| `slow_air_pad` | pad | 48–76 | 0.25–1 | 4 | −6 | original.ts |
+| `bronze_plate` | metallic | 48–72 | 0.25–1 | 4 | −6 | original.ts |
+| `membrane_tom` | percussion | 36–60 | 0.25–1 | 4 | −6 | original.ts |
+| `fixed_hz_chime` | inharmonic | 48–84 | 0.25–1 | 4 | −6 | original.ts |
+| `wire_kalimba` | pluck | 48–84 | 0.25–1 | 4 | −6 | original.ts |
+| `tide_keys` | keys | 48–84 | 0.25–0.9 | 4 | −9 | original.ts |
+| `ember_bass` | bass | 36–60 | 0.35–0.9 | 1 | −9 | original.ts |
+| `orbit_pad` | pad | 48–76 | 0.25–0.8 | 3 | −12 | original.ts |
+
+These numbers come from authoring intent plus the numerical sweeps below. Every metadata record has `listeningStatus: 'unverified'`: no listener has endorsed a recipe.
+
+## Profiles and live-control phrases
+
+The report runs every source through all three profiles at 48 kHz, adds the intended-register boundaries and velocity 0.1625 (the softest phrase articulation), and renders a **live-control phrase**: each note is held for 0.8 s while `operatorRatios` ramp at 0.12 s, `feedback` at 0.25 s, `operatorADSR` at 0.4 s and ratios/feedback return at 0.55 s. A row is accepted only if the render is finite, error-free, within `HEADROOM` and non-silent. This proves the control paths stay stable in the offline renderer; it is not a statement about how they sound.
+
 ## Numerical measurement contract
 
 Reports render centered stereo at 48 kHz with a 0.8-second gate plus note-scaled release/filter tail. The nine reference cells are MIDI 48/60/84 at velocities 0.25/0.6/1, plus each recipe's intended lower/middle/upper register. Output includes sample peak, whole-render RMS, gate RMS, crest factor, finite status, DSP errors and per-cell acceptance. RMS uses mean stereo-channel energy; it is **unweighted, not LUFS and not perceptual equal loudness**.
@@ -48,6 +87,12 @@ Every measured cell must be finite, error-free, peak ≤ `HEADROOM` + 0.000001 a
 5. Record attack, held body, brightness, decay, release and any manual gain preference. Repeat after swapping A/B selection if assessing ordering effects. Differences in attack/crest/spectrum can make energy-matched sources sound unequally loud; manual preference is listening evidence only when an actual listener records it. Save matched and dry WAVs with settings for another listener.
 
 The JSON report compares every source's middle-register seeded phrase against `wood_mallet`, recording dry master gains, matched host trims, raw measurements, common slot length and target. This is reproducible numerical preparation for listening, **not a listening result**. No subjective listening acceptance, hardware comparison or fidelity result is claimed here. No audio/patches are uploaded.
+
+### Recording a human finding
+
+The audition page has a **Record a human listening finding** panel. After you have actually listened, enter an anonymous listener label, your device/browser/OS and output route (headphones, speakers, device volume), choose A, B, no-preference or not-assessed for attack, body, brightness, decay, release, control transitions and gain comfort, and optionally add notes. At least one criterion must be assessed. A record stores the package version, the exact A/B source names **and SHA-256 identities of the normalized patches**, the DSP profile, material (single / phrase / control phrase), seed, register, velocity, gain mode and the phrase revision (`isolated-six-v2`, controls `ratio-feedback-adsr-v1`). Records live in page memory (at most 50) until **Export findings JSON** downloads them; nothing is uploaded and no audio is stored. Numerical reports are separate and are never copied into a finding.
+
+This repository ships no recorded findings. Until someone records and reviews them, every recipe's `listeningStatus` stays `unverified`.
 
 ## Original synthetic DX7 recipes
 

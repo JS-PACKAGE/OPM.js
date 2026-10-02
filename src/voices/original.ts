@@ -84,4 +84,37 @@ export const originalPresets: readonly Voice[] = [
       { ratio: 2, level: 0.3, detune: -3, adsr: { a: 0.002, d: 0.4, s: 0, r: 0.15 } },
     ],
   },
+  {
+    version: 6, name: 'tide_keys', algorithm: 4, feedback: 1, modIndex: 1.8,
+    lfo: { rate: 3.2, amDepth: 0.22, pmDepth: 9, waveform: 'sine', delay: 0.12, sync: 'note',
+      amTargets: [0, 0, 0, 1], pmTargets: [1, 0, 0.35, 0] },
+    ops: [
+      { ratio: 2, level: 0.38, detune: 0, velocitySensitivity: 16, rateKeyScale: 0.5, adsr: { a: 0.003, d: 0.25, s: 0.12, r: 0.18 } },
+      { ratio: 1, level: 0.76, detune: 0, adsr: { a: 0.006, d: 1.1, s: 0.18, r: 0.28 } },
+      { ratio: 4, level: 0.19, detune: 0, velocitySensitivity: 20, keyScale: { breakpoint: 60, leftDbPerOctave: 0, rightDbPerOctave: 6 }, adsr: { a: 0.002, d: 0.16, s: 0.06, r: 0.12 } },
+      { ratio: 2, level: 0.3, detune: 2, adsr: { a: 0.009, d: 0.8, s: 0.2, r: 0.3 } },
+    ],
+  },
+  {
+    version: 6, name: 'ember_bass', algorithm: 4, feedback: 2, modIndex: 1.5,
+    lfo: { rate: 1.4, amDepth: 0.16, pmDepth: 14, waveform: 'triangle', delay: 0.08, sync: 'note',
+      amTargets: [0.75, 0, 0.4, 0], pmTargets: [0, 0, 1, 0] },
+    ops: [
+      { ratio: 1, level: 0.34, detune: 0, velocitySensitivity: 14, adsr: { a: 0.004, d: 0.18, s: 0.25, r: 0.09 } },
+      { ratio: 1, level: 0.86, detune: 0, adsr: { a: 0.008, d: 0.25, s: 0.68, r: 0.12 } },
+      { ratio: 3, level: 0.24, detune: 0, velocitySensitivity: 20, adsr: { a: 0.003, d: 0.12, s: 0.15, r: 0.08 } },
+      { ratio: 0.5, level: 0.32, detune: 0, adsr: { a: 0.012, d: 0.3, s: 0.6, r: 0.14 } },
+    ],
+  },
+  {
+    version: 6, name: 'orbit_pad', algorithm: 4, feedback: 0, modIndex: 1.1,
+    lfo: { rate: 0.55, amDepth: 0.35, pmDepth: 12, waveform: 'sine', delay: 0.2, sync: 'global', phase: 0.25,
+      amTargets: [0, 0.15, 1, 0.5], pmTargets: [1, 0, 0.7, 0] },
+    ops: [
+      { ratio: 1, level: 0.28, detune: -3, velocitySensitivity: 8, adsr: { a: 0.24, d: 0.5, s: 0.55, r: 0.6 } },
+      { ratio: 1, level: 0.66, detune: -3, adsr: { a: 0.32, d: 0.6, s: 0.8, r: 0.7 } },
+      { ratio: 3, level: 0.22, detune: 3, velocitySensitivity: 12, keyScale: { breakpoint: 60, leftDbPerOctave: 0, rightDbPerOctave: 6 }, adsr: { a: 0.38, d: 0.6, s: 0.6, r: 0.7 } },
+      { ratio: 1, level: 0.58, detune: 3, adsr: { a: 0.42, d: 0.7, s: 0.75, r: 0.8 } },
+    ],
+  },
 ];

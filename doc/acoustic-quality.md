@@ -2,7 +2,7 @@
 
 The default **standard** profile uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Its coefficients, substep clocks and default sound are unchanged. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once; each voice has eight preallocated filter state scalars. Each internal sample performs four fixed sections with no allocations. State resets on admission and all state must drain on release; an output zero crossing is not sufficient to retire a ringing IIR.
 
-Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` remains bounded to 1–8 regardless of profile.
+Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` is 1–8 by default-compatible policy and may be raised to 32 as an opt-in; the profile tables and the stealing-fade ceiling (eight) are unchanged.
 
 | Profile | Internal rate | Filter order / sections | Filter state per voice | Tradeoff |
 | --- | ---: | ---: | ---: | --- |
@@ -14,7 +14,7 @@ All profiles preallocate coefficient/state/gain buffers. For internal factor \(M
 \[
 |H(f)| = \left(1+\left[\frac{\tan(\pi f/(M F_s))}{\tan(\pi\,0.30/M)}\right]^{2N}\right)^{-1/2}.
 \]
-Eco is a deliberate reduced-work option, not a universally equivalent substitute for standard. The profile tests compare actual causal standalone filtering with this independently derived transfer at .10/.25/.625 output Fs, check a controlled folded product, and require all state to drain. Existing full-FM reference budgets remain standard-profile acceptance.
+Eco is a deliberate reduced-work option, not a universally equivalent substitute for standard. Since 1.8 the same independent mathematics gates **all three profiles**: full PM, delayed feedback, four-operator, long-stream and controlled-tone checks run per profile against this transfer function with the profile's own factor and order. The tolerance constants are shared by every profile (only factor and order change), and no standard threshold was relaxed. The one profile-specific bound is eco's folded-alias limit, which follows the equation instead of the 30 dB floor (below).
 
 ## Response and choice
 
@@ -49,17 +49,19 @@ A sharper filter can ring and overshoot; it is not the former convex cascade. In
 
 ## Coverage and evidence
 
-`npm run sound-quality` reports the standard-profile baseline:
+`npm run sound-quality` (about four minutes on the development laptop) reports, **for each of eco, standard and high**:
 
-- Controlled synthesized passband/THD/folded aliases across 22.05/44.1/48/96 kHz.
-- Actual standalone decimator magnitude, complex phase and impulse latency versus independent transfer mathematics and the former filter.
-- Existing independent high-index Bessel PM and contractive delayed-feedback references, with separate in-band and folded-product budgets.
+- Controlled synthesized passband/THD/folded aliases. Standard keeps the original 22.05/44.1/48/96 kHz grid; eco and high run 44.1/48/96 kHz. Measured passband loss is compared with the independent equation above. In the 1.8.0 run at 48 kHz the measured and predicted losses agreed within 0.006 dB at .20 Fs and within 0.006 dB at .35 Fs for every profile (eco −7.301 vs −7.306 dB, standard −11.504 vs −11.509 dB, high −11.168 vs −11.173 dB). THD of harmonics 2–8 was 0.0208 % for all three.
+- Folded ultrasonic products. Standard (−55.6 dB at .625 Fs, −112.9 dB at 1.125 Fs) and high (−52.1 / −96.3 dB) stay below the 30 dB floor. Eco's fourth-order filter at 2× gives −37.4 dB at .625 Fs, which meets the 30 dB floor by 7 dB, but the gate is the equation's prediction rather than the floor, so a regression of that filter is caught even if it stayed above 30 dB.
+- Independent high-index Bessel PM and contractive delayed-feedback references with separate in-band and folded-product budgets at 44.1/48/96 kHz; the worst Bessel coefficient error was 8.0e-10 (eco), 7.1e-10 (standard) and 9.0e-10 (high).
 - Explicit four-operator nested-chain, branched-leaf and two-carrier equations at 44.1/48/96 kHz. Unequal ratios, indices 1.5/4/8, upper/lower registers and independent ADSR attack/decay/held/interrupted-attack/release boundaries detect incorrect routing, modulation depths and carrier normalization. The reference derives envelopes directly in dB and filters by frequency-domain convolution, not by copying the engine loop.
-- Existing lifecycle/headroom/deterministic-chunk matrix and two-minute streaming scenarios.
+- A lifecycle/headroom/deterministic-chunk matrix: 2,505 cases over algorithms 0–7 × feedback 0/7 × MIDI 24/60/96 × velocity × polyphony 1/8/16, plus opt-in 32-voice boundary rows (32, 33 and 40 simultaneous notes with `maxVoices` 32). Every case renders whole and in 127-frame chunks and must be bit-identical, finite, within headroom, audible (velocity above zero), silent after release and report exactly one terminal event per note.
+- Live-control rows (24): for each profile and algorithm, glide, `operatorRatios` ramp, `feedback` ramp, `operatorADSR`, level/expression/pan ramp and fixed-Hz edits are applied at sample boundaries to a note carrying selective AM/PM LFO targets. Whole and chunked renders are bit-identical, finite, bounded and fully terminal. This proves stability, not smoothness to a listener.
+- Streaming: the standard profile keeps the two 120-second deterministic replays; eco and high render 12-second replays with held LFO, interrupted glides and settled-sine residual checks.
 
-The numerical design evaluation above was computed independently. A standalone 48 kHz module smoke observed -0.00559/-11.50867 dB at .20/.35 Fs and -55.61650/-112.87569 dB for .625/1.125 Fs folded products; impulse energy delay was 3.31507 output frames and its maximum difference from independent Fourier inversion was below 8e-16. Full synth/reference/runtime verification remains the integration test and quality-report commands; observed release results belong in the release record. No listening session, perceptual preference, arbitrary-patch alias freedom, chip fidelity, or physical-device CPU/underrun result is asserted here.
+The standalone decimator comparison (actual filter magnitude, complex phase and impulse latency versus independent transfer mathematics and the former filter) remains standard-profile only. A standalone 48 kHz module smoke for that profile observed -0.00559/-11.50867 dB at .20/.35 Fs and -55.61650/-112.87569 dB for the .625/1.125 Fs folded products; impulse energy delay was 3.31507 output frames and its maximum difference from independent Fourier inversion was below 8e-16. No listening session, perceptual preference, arbitrary-patch alias freedom, chip fidelity, or physical-device CPU/underrun result is asserted here.
 
-`scripts/benchmark.ts` includes report-only eight-voice/LFO comparisons for all three profiles, with the same host, block size and excluded warmup. Their timing rows never become realtime acceptance merely because a separate baseline budget is configured. Run the benchmark on the deployment device to observe median/p95/p99/worst and misses; fewer arithmetic operations do not prove a particular host deadline, perceptual preference or physical-device stability.
+`scripts/benchmark.ts` includes report-only comparisons: eight-voice/LFO for all three profiles, opt-in 16 and 32 voices, and two and four independent engines (see [audio buses](./audio-buses.md)), with the same host, block size and excluded warmup. Their timing rows never become realtime acceptance merely because a separate baseline budget is configured. Run the benchmark on the deployment device to observe median/p95/p99/worst and misses; fewer arithmetic operations do not prove a particular host deadline, perceptual preference or physical-device stability.
 
 Observed checkout measurement: Apple M5, darwin arm64, Node.js 26.7.0, 48 kHz, 128-frame blocks (2.667 ms deadline), 300 excluded warmup blocks and 2,000 measured blocks per row. No explicit acceptance budgets were configured.
 

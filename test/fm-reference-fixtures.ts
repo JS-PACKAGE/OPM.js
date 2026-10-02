@@ -1,6 +1,13 @@
 // Original mathematical fixtures. No chip/emulator tables or DSP implementation
 // helpers are used: the reference is sin(wc*t + beta*sin(wm*t)).
 import type { Voice } from '../src/voices/schema.js';
+import type { QualityProfile } from '../src/core/decimator.js';
+
+// Independent design contract; deliberately not read from production tables.
+export const FM_QUALITY_PROFILES = ['eco', 'standard', 'high'] as const;
+export function referenceProfile(quality: QualityProfile = 'standard') {
+  return quality === 'eco' ? { factor: 2, order: 4 } : { factor: quality === 'high' ? 8 : 4, order: 8 };
+}
 
 export const FM_REFERENCE_RATES = [44100, 48000, 96000] as const;
 export const FM_INDEX = 16;
@@ -70,11 +77,12 @@ export function legacyFilterMagnitude(frequency: number, sampleRate: number): nu
   return (numerator / denominator) ** 2;
 }
 
-// Independent bilinear-transform magnitude of an eighth-order Butterworth.
-// tan prewarping maps fc=.30 Fs at the 4 Fs internal rate to analog cutoff 1.
-export function acceptedFilterMagnitude(frequency: number, sampleRate: number): number {
-  const normalized = Math.tan(Math.PI * frequency / (4 * sampleRate)) / Math.tan(Math.PI * 0.30 / 4);
-  return 1 / Math.sqrt(1 + normalized ** 16);
+// Independent bilinear Butterworth magnitude. The periodic tan also accounts
+// for source products folding at the profile's INTERNAL Nyquist before filtering.
+export function acceptedFilterMagnitude(frequency: number, sampleRate: number, quality: QualityProfile = 'standard'): number {
+  const { factor, order } = referenceProfile(quality);
+  const normalized = Math.tan(Math.PI * frequency / (factor * sampleRate)) / Math.tan(Math.PI * 0.30 / factor);
+  return 1 / Math.sqrt(1 + normalized ** (2 * order));
 }
 
 export function foldedFrequency(frequency: number, sampleRate: number): number {
@@ -86,13 +94,13 @@ export interface Sideband {
   order: number; sourceHz: number; binHz: number; coefficient: number;
   expected: number; alias: boolean;
 }
-export function referenceSidebands(fixture: PMFixture, sampleRate: number): Sideband[] {
+export function referenceSidebands(fixture: PMFixture, sampleRate: number, quality: QualityProfile = 'standard'): Sideband[] {
   const rows: Sideband[] = [];
   for (let order = -FM_ORDER; order <= FM_ORDER; order++) {
     const sourceHz = fixture.carrierHz + order * fixture.modulatorHz;
     const coefficient = besselJ(order, fixture.index);
     rows.push({ order, sourceHz, binHz: foldedFrequency(sourceHz, sampleRate), coefficient,
-      expected: Math.abs(coefficient) * acceptedFilterMagnitude(sourceHz, sampleRate),
+      expected: Math.abs(coefficient) * acceptedFilterMagnitude(sourceHz, sampleRate, quality),
       alias: Math.abs(sourceHz) >= sampleRate / 2 });
   }
   return rows;

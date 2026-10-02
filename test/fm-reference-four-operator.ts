@@ -4,8 +4,9 @@
 import assert from 'node:assert/strict';
 import { HEADROOM, Synth } from '../src/core/index.js';
 import type { ADSR, Voice } from '../src/voices/schema.js';
+import type { QualityProfile } from '../src/core/decimator.js';
 import { filterByFourier } from './decimator-reference.js';
-import { fourierBin, unsaturatedWindow } from './fm-reference-fixtures.js';
+import { fourierBin, referenceProfile, unsaturatedWindow } from './fm-reference-fixtures.js';
 
 function heldDb(time: number, envelope: ADSR): number {
   if (time < envelope.a) return -96 + 96 * time / envelope.a;
@@ -37,7 +38,8 @@ function sourceAt(time: number, voice: Voice, frequency: number, gate: number): 
   return HEADROOM / 2 * (a[1] * Math.sin(p[1] + index * first) + a[3] * Math.sin(p[3] + index * a[2] * Math.sin(p[2])));
 }
 
-export function verifyFourOperator(sampleRate: number) {
+export function verifyFourOperator(sampleRate: number, quality: QualityProfile = 'standard') {
+  const { factor } = referenceProfile(quality);
   const scenarios = [
     { name: 'unequal-ratios-low-index', note: 69, index: 1.5, ratios: [0.75, 1.25, 2.5, 3.75], transition: false },
     { name: 'upper-register-wideband', note: 93, index: 8, ratios: [3.5, 5, 1.5, 1], transition: false },
@@ -57,14 +59,14 @@ export function verifyFourOperator(sampleRate: number) {
       })) as Voice['ops'],
     };
     const frequency = 440 * 2 ** ((scenario.note - 69) / 12);
-    const source = Float64Array.from({ length: frames * 4 }, (_, sub) => sourceAt(sub / (4 * sampleRate), voice, frequency, gate));
-    const independent = filterByFourier(source, sampleRate);
-    const synth = new Synth(sampleRate), id = synth.noteOn(voice, scenario.note);
+    const source = Float64Array.from({ length: frames * factor }, (_, sub) => sourceAt(sub / (factor * sampleRate), voice, frequency, gate));
+    const independent = filterByFourier(source, sampleRate, quality);
+    const synth = new Synth(sampleRate, 8, { quality }), id = synth.noteOn(voice, scenario.note);
     const left = new Float32Array(frames), right = new Float32Array(frames);
     synth.render(left, right, 0, gateFrames); synth.noteOff(id); synth.render(left, right, gateFrames, frames - gateFrames);
     assert.equal(synth.errorCount, 0);
     const actual = unsaturatedWindow(left, HEADROOM);
-    const expected = Float64Array.from({ length: frames }, (_, frame) => independent[4 * frame + 3]);
+    const expected = Float64Array.from({ length: frames }, (_, frame) => independent[factor * frame + factor - 1]);
     let maximumError = 0, errorEnergy = 0, signalEnergy = 0;
     const transitionErrors = { attackDecay: 0, held: 0, release: 0, tail: 0 };
     const releaseEnd = gate + Math.max(...voice.ops.map(op => op.adsr.r));
@@ -86,7 +88,7 @@ export function verifyFourOperator(sampleRate: number) {
       assert.ok(complexError < 3e-7, 'complex spectral projection preserves amplitude and causal phase');
       return { hz, expectedAmplitude: reference.amplitude, measuredAmplitude: measured.amplitude, complexError };
     });
-    return { sampleRate, algorithm, fixture: scenario.name, note: scenario.note, index: scenario.index, ratios: scenario.ratios,
+    return { sampleRate, quality, algorithm, fixture: scenario.name, note: scenario.note, index: scenario.index, ratios: scenario.ratios,
       envelopeTransitions: scenario.transition, gateSeconds: gate, maximumError, relativeRmsError: Math.sqrt(errorEnergy / signalEnergy),
       transitionErrors, spectrum, reference: 'Explicit nested/branched/two-carrier equations at physical substep times, independent dB envelopes and analog-pole Fourier convolution',
       limitation: 'These bounded original fixtures do not prove arbitrary four-op alias freedom or perceived quality.' };

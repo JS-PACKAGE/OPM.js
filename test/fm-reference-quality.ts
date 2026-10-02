@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { HEADROOM, Synth } from '../src/core/index.js';
+import type { QualityProfile } from '../src/core/decimator.js';
 import {
   COEFFICIENT_TOLERANCE, FM_LEVEL, FM_ORDER, besselTailBound, energyDb, fourierBin,
   pmFixtures, pmVoice, referenceSidebands, unsaturatedWindow,
 } from './fm-reference-fixtures.js';
 
-export function verifyPMSpectrum(sampleRate: number) {
+export function verifyPMSpectrum(sampleRate: number, quality: QualityProfile = 'standard') {
   return pmFixtures(sampleRate).map(fixture => {
-    const synth = new Synth(sampleRate);
+    const synth = new Synth(sampleRate, 8, { quality });
     synth.noteOn(pmVoice(fixture), 69); // 440 Hz keeps even the slow modulator above the 0.125 ratio minimum.
     const offset = Math.ceil(sampleRate / 4);
     const samples = new Float32Array(offset + sampleRate);
@@ -17,7 +18,7 @@ export function verifyPMSpectrum(sampleRate: number) {
     assert.ok(samples.every(value => Number.isFinite(value) && Math.abs(value) < HEADROOM));
     const window = unsaturatedWindow(samples, HEADROOM, offset, sampleRate);
     const normalization = HEADROOM * FM_LEVEL;
-    const reference = referenceSidebands(fixture, sampleRate);
+    const reference = referenceSidebands(fixture, sampleRate, quality);
     const bins = new Set(reference.map(row => row.binHz));
     assert.equal(bins.size, reference.length, 'fixture sidebands and folded products must not collide');
     assert.ok(reference.every(row => row.binHz > 0 && row.binHz < sampleRate / 2));
@@ -60,7 +61,7 @@ export function verifyPMSpectrum(sampleRate: number) {
       return { binHz, measured };
     });
     return {
-      sampleRate, fixture: fixture.name, index: fixture.index,
+      sampleRate, quality, fixture: fixture.name, index: fixture.index,
       carrierHz: fixture.carrierHz, modulatorHz: fixture.modulatorHz,
       coherentWindowFrames: sampleRate, settledFramesSkipped: offset,
       coefficientTolerance: COEFFICIENT_TOLERANCE, maximumCoefficientError, omittedTailAmplitudeBound: tailBound,

@@ -1,10 +1,14 @@
 // Reference mathematics only: analog Butterworth poles and Fourier convolution.
 // Neither the production coefficient generator nor its recurrence is imported.
-export function filterResponse(frequency: number, sampleRate: number, cutoff = 0.30) {
-  const warpedFrequency = Math.tan(Math.PI * frequency / (4 * sampleRate)) / Math.tan(Math.PI * cutoff / 4);
+import type { QualityProfile } from '../src/core/decimator.js';
+import { referenceProfile } from './fm-reference-fixtures.js';
+
+export function filterResponse(frequency: number, sampleRate: number, cutoff = 0.30, quality: QualityProfile = 'standard') {
+  const { factor, order } = referenceProfile(quality);
+  const warpedFrequency = Math.tan(Math.PI * frequency / (factor * sampleRate)) / Math.tan(Math.PI * cutoff / factor);
   let real = 1, imaginary = 0;
-  for (let pole = 0; pole < 8; pole++) {
-    const angle = Math.PI * (2 * pole + 9) / 16;
+  for (let pole = 0; pole < order; pole++) {
+    const angle = Math.PI * (2 * pole + order + 1) / (2 * order);
     const poleReal = Math.cos(angle), poleImaginary = Math.sin(angle);
     const denominatorReal = -poleReal, denominatorImaginary = warpedFrequency - poleImaginary;
     const power = denominatorReal ** 2 + denominatorImaginary ** 2;
@@ -48,7 +52,7 @@ export function fft(real: Float64Array, imaginary: Float64Array, inverse = false
   if (inverse) for (let i = 0; i < length; i++) { real[i] /= length; imaginary[i] /= length; }
 }
 
-export function filterByFourier(source: Float64Array, sampleRate: number): Float64Array {
+export function filterByFourier(source: Float64Array, sampleRate: number, quality: QualityProfile = 'standard'): Float64Array {
   // At least 4096 zero input samples remove circular wrap well beyond the
   // slowest pole's settling time, even for envelope/release transitions.
   const length = 2 ** Math.ceil(Math.log2(source.length + 4096));
@@ -56,8 +60,8 @@ export function filterByFourier(source: Float64Array, sampleRate: number): Float
   real.set(source);
   fft(real, imaginary);
   for (let bin = 0; bin < length; bin++) {
-    const frequency = (bin <= length / 2 ? bin : bin - length) * 4 * sampleRate / length;
-    const response = filterResponse(frequency, sampleRate);
+    const frequency = (bin <= length / 2 ? bin : bin - length) * referenceProfile(quality).factor * sampleRate / length;
+    const response = filterResponse(frequency, sampleRate, 0.30, quality);
     const nextReal = real[bin] * response.real - imaginary[bin] * response.imaginary;
     imaginary[bin] = real[bin] * response.imaginary + imaginary[bin] * response.real;
     real[bin] = nextReal;
@@ -66,15 +70,15 @@ export function filterByFourier(source: Float64Array, sampleRate: number): Float
   return real.subarray(0, source.length);
 }
 
-export function filterImpulseBounds() {
+export function filterImpulseBounds(quality: QualityProfile = 'standard') {
   const source = new Float64Array(4096); source[0] = 1;
-  const impulse = filterByFourier(source, 48000);
+  const impulse = filterByFourier(source, 48000, quality);
   let l1 = 0, absoluteFirstMoment = 0, energy = 0, energyFirstMoment = 0;
   for (let i = 0; i < impulse.length; i++) {
     l1 += Math.abs(impulse[i]); absoluteFirstMoment += i * Math.abs(impulse[i]);
     energy += impulse[i] ** 2; energyFirstMoment += i * impulse[i] ** 2;
   }
-  return { impulse, l1, absoluteFirstMoment, energyDelayOutputFrames: energyFirstMoment / energy / 4 };
+  return { impulse, l1, absoluteFirstMoment, energyDelayOutputFrames: energyFirstMoment / energy / referenceProfile(quality).factor };
 }
 
 export function filterGroupDelayFrames(fraction: number): number {
