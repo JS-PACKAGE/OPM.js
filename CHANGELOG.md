@@ -24,6 +24,7 @@ Package version 1.8.0. GitHub release distribution and npm registry publication 
 - Assistant-owned native Chromium exercised FM-designer hold/live feedback/release/export with one active Worklet voice and zero errors; instrument startup/cleanup; independent-bus playback and actual offline stem links; eco audition control-phrase measurement/WAV output; and adaptive boundary switching, tempo acceleration, pause/resume/stop with no browser errors. Screenshots were inspected. The audition rejected an unassessed human finding; no listening results were fabricated.
 - Native static Worker smoke completed PCM24 output through two writes (17,324 bytes), reported zero DSP errors and observed initializing/rendering/writing/closing/completed phases.
 - The repository Playwright Chromium smoke could not launch because its cached Chromium framework was missing. Managed Chromium observations above are separate evidence, not a pass for that command or cross-browser CI. Listening, physical MIDI/device behavior and publication remain unverified.
+- Remove the manual `npm-publish.yml` GitHub Actions workflow. Registry publication remains a separate maintainer action; online `registry-verify` still expects provenance from that historical workflow path.
 - Duplicate generated files with ` 2` suffixes are preserved separately during builds and excluded from commits.
 
 ## v1.7

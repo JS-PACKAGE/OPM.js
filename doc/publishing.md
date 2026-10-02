@@ -4,37 +4,13 @@ The GitHub **v1.5** release line distributes package version **1.5.0**; it does 
 
 The maintainer authorized the v1.5 commit, push, tag and GitHub release after feature verification. Keep the historical v1.4 tag and artifact immutable. Authenticate an authorized npm maintainer before initial registry publication; GitHub authentication does not grant npm authentication. Local installed-tarball checks do not prove registry availability, integrity or provenance.
 
-## Bootstrap and trusted publishing
+## No automated npm publication
 
-If the npm package does not exist, an authorized maintainer must separately approve and perform the initial publish using their authenticated, 2FA-protected npm account. Configure trusted publishing in the package's npm settings only after that package exists. Do not create a token or log credentials as part of these checks.
+This repository does not ship a GitHub Actions workflow that publishes to npm. A GitHub release, tag, or passing CI job is not registry publication. An authorized maintainer must authenticate and publish separately; GitHub authentication does not grant npm authentication. Do not create a token or log credentials as part of local checks.
 
-For subsequent releases configure a GitHub trusted publisher with the exact repository owner/name, workflow filename **`npm-publish.yml`**, and environment **`npm-release`**. Explicitly allow **direct `npm publish`**: newly configured publishers may default to staged publication only. Use GitHub-hosted runners. Enable required reviewers and protected release-tag deployment rules on the `npm-release` GitHub environment; prevent self-approval and protect release tags from replacement. The workflow cannot create or enforce these repository/npm settings itself. Without them the environment name alone is not an approval boundary.
+Trusted publishing, npm ownership/2FA, environment reviewers and protected tags are external npm/GitHub settings. They are not configured by files in this checkout.
 
-The [official trusted-publishing requirements](https://docs.npmjs.com/trusted-publishers/) are npm >=11.5.1 and Node >=22.14.0. This workflow pins Node **24.0.0**, npm **11.6.0** ([registry record](https://registry.npmjs.org/npm/11.6.0)), Ubuntu 24.04 and existing repository action SHA pins. It uses no release dependency cache, long-lived npm secret, `NODE_AUTH_TOKEN`, or generated credential file. OIDC permission is scoped to the environment-gated release job. Publication requests npm provenance explicitly.
-
-## Review record and manual gates
-
-Before running the workflow:
-
-1. Verify the exact commit, tests, generated JS/declarations/maps, zero-runtime-dependency gate, installed tarball behavior and production Vite worklet deployment. Review packed file contents, license, package metadata and secret exposure. Run dependency audits, including development tooling. Do not equate an audit or passing tests with a complete security review.
-2. Record independent A/B/C/D security review findings, resolution of blockers and package verification in the **body** of a public GitHub issue or pull request in the same repository. Include the exact full 40-character commit SHA. The workflow requires these exact affirmative lines (only mark PASS after actual review):
-
-   ```text
-   A: PASS
-   B: PASS
-   C: PASS
-   D: PASS
-   Package verification: PASS
-   ```
-
-   Preserve the supporting findings and commands/results alongside those lines. The workflow checks their presence and commit identity; it cannot judge review quality. The environment approver must inspect the actual record, reviewer independence and any unresolved findings. Do not copy these labels as a substitute for review.
-3. Create the protected version tag at that reviewed commit and a published, non-draft, non-prerelease GitHub release. Zero-patch package versions use short tags (`1.3.0` → `v1.3`); nonzero patches retain all components (`1.3.1` → `v1.3.1`). The existing `v1.0`–`v1.3` tags keep their original release commits. Creating a future tag/release is a maintainer action requiring separate authorization.
-4. Dispatch **Manual npm release** from that exact tag. Supply the matching package version, reviewed commit SHA and review URL. Default `publish=false` runs all verification and a dry-run, without publication.
-5. Only after explicit publication authorization, dispatch with `publish=true` and confirmation **`publish opm.js@VERSION`**, then obtain environment approval. A mismatched version/tag/commit, missing released tag or non-affirmative review fails before installation/publication. Inputs are validated via environment variables, not interpolated into executable JavaScript.
-
-The release job reruns tests/build/type checks, dependency audits, sound-quality and voice-quality checks, installed-package security smoke, actual Chromium browser smoke/stress and the standalone Vite smoke against a locally packed current artifact. It then packs a release tarball, dry-runs that exact tarball, records its SHA-256 digest and review URL in the job summary, and publishes that same file with `--ignore-scripts --provenance`. There is no automatic tag, commit, push, release creation or publication on normal CI/push events. If the version already exists, npm must reject publication; do not delete or overwrite releases to bypass that rejection.
-
-After an authorized publication, the workflow runs `registry-verify` against the **same reviewed tarball**, version and full commit SHA. It compares registry SHA-512 integrity and exact downloaded bytes, enforces the package file allowlist and JS/map/declaration companions, checks the SLSA v1 subject digest and GitHub workflow/release-tag/source-commit identity, then installs that exact registry version with scripts disabled. `npm audit signatures` cryptographically verifies the registry signatures and provenance; reading a DSSE payload alone is not verification. The installed package renders a real score and WAV. Failure blocks the workflow's success and is not repaired by overwriting an npm version.
+`registry-verify`'s online provenance check still expects a published SLSA v1 attestation whose workflow path is `.github/workflows/npm-publish.yml`. That identity matches packages published by the removed workflow. A package published another way will fail that check; do not treat a local PASS as a substitute.
 
 ## Local and post-publication commands
 
@@ -50,6 +26,6 @@ After publication, replace the SHA below with the actual reviewed release commit
 npm run registry-verify -- /absolute/path/opm.js-VERSION.tgz VERSION FULL_40_CHARACTER_COMMIT_SHA
 ```
 
-The online command is read-only with respect to the registry: it cannot publish, configure trusted publishers or authenticate an account. Downloads have explicit byte/time budgets and are restricted to HTTPS `registry.npmjs.org`; its isolated installation is removed afterwards. It requires `tar`, npm with provenance verification support, and the published SLSA v1 GitHub provenance from this workflow. Retain its digest, file list and run URL in the public review record.
+The online command is read-only with respect to the registry: it cannot publish, configure trusted publishers or authenticate an account. Downloads have explicit byte/time budgets and are restricted to HTTPS `registry.npmjs.org`; its isolated installation is removed afterwards. It requires `tar`, npm with provenance verification support, and published SLSA v1 GitHub provenance whose workflow path is `.github/workflows/npm-publish.yml`. Retain its digest, file list and run URL in the public review record.
 
 First-package bootstrap, npm ownership/2FA, trusted-publisher configuration, GitHub environment reviewers/protected tags, publication authorization and actual registry verification remain external requirements. Do not substitute a local PASS, stale release review, or manual unprovenanced bootstrap for a verified provenance-bearing release. GitHub release distribution of 1.7.0 does not establish npm registry publication.

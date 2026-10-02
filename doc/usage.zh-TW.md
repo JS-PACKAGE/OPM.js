@@ -549,7 +549,7 @@ npm run browser-smoke -- chromium
 npm run benchmark
 ```
 
-可改用 firefox／webkit 安裝與測試其他引擎。CI 設定 Node 22／24／26 與三種瀏覽器，但設定本身不代表執行成功；實測版本與結果以 CHANGELOG 為準。瀏覽器驗收觀察真正 AudioWorklet 訊號、有限輸出、生命週期／release 與發佈路徑。發佈前置條件、手動工作流程與 trusted publishing 設定見[發佈指南](./publishing.md)；本文件不表示已設定 registry 授權或已執行 npm publish。
+可改用 firefox／webkit 安裝與測試其他引擎。CI 設定 Node 22／24／26 與三種瀏覽器，但設定本身不代表執行成功；實測版本與結果以 CHANGELOG 為準。瀏覽器驗收觀察真正 AudioWorklet 訊號、有限輸出、生命週期／release 與發佈路徑。發佈前置條件見[發佈指南](./publishing.md)；本儲存庫沒有 npm publish workflow，本文件也不表示已設定 registry 授權或已執行 npm publish。
 
 Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽器函式庫並不足夠。CI 安裝 `pulseaudio`，執行 `pulseaudio --start --exit-idle-time=-1`、`pactl load-module module-null-sink sink_name=opm_ci`、`pactl set-default-sink opm_ci`，並以 `pactl info` 確認就緒後才執行 smoke。Null sink 僅丟棄喇叭輸出，仍保留原生音訊時鐘與真正 worklet graph；若初始化／resume 卡住，log 會列出等待階段及 context 狀態。
 
