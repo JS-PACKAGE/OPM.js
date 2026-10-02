@@ -1,6 +1,6 @@
 # Expressive performance and optional Web MIDI
 
-`createPerformance(opm, options)` gives a host part-scoped key policies (poly/mono, legato, sustain, last/high/low priority). Release 1.8 adds per-key and per-part live controls, per-part voice budgets and priorities, and a separate optional Web MIDI adapter. Try [example 10](../examples/instrument.html).
+`createPerformance(opm, options)` gives a host part-scoped key policies (poly/mono, legato, sustain, last/high/low priority). Release 1.8 adds per-key and per-part live controls, per-part voice budgets and priorities, and a separate optional Web MIDI adapter. Try [example 10 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/instrument.html).
 
 ## Per-key and per-part controls
 
@@ -60,4 +60,4 @@ Lifecycle: the adapter attaches to current and later inputs (optionally restrict
 
 ## Support and verification
 
-Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). `test/midi.test.ts` drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.
+Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). [`test/midi.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/midi.test.ts) drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.

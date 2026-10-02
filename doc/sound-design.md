@@ -1,6 +1,6 @@
 # Sound design workflow
 
-[Example 12](../examples/sound-design.html) is a browser FM designer built only on the public API (`OPM`, `playNote`, `updateNote`). It is a demo helper, not part of the engine. Start it over HTTPS or `localhost`, click **Start**, then hold a note (button or Space) and edit while it sounds. Begin at a low device volume: host gain defaults to 0.15 and is capped at 0.3.
+[Example 12 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sound-design.html) is a browser FM designer built only on the public API (`OPM`, `playNote`, `updateNote`). It is a demo helper, not part of the engine. Start it over HTTPS or `localhost`, click **Start**, then hold a note (button or Space) and edit while it sounds. Begin at a low device volume: host gain defaults to 0.15 and is capped at 0.3.
 
 ## What you can edit
 
@@ -40,7 +40,7 @@ By default the LFO touches every operator. Set `pmTargets` / `amTargets` to conf
 - AM on a carrier is tremolo of that carrier; AM on a modulator moves sideband strength.
 - A weight of 0 leaves an operator untouched; fractional weights scale the depth for that operator.
 
-`tide_keys`, `ember_bass` and `orbit_pad` in the [voice quality guide](./voice-quality.md#selective-lfo-recipes-and-usage-table) are worked examples, and [the audition page](../examples/audition.html) can A/B them against other recipes with a held ratio/feedback/ADSR control phrase.
+`tide_keys`, `ember_bass` and `orbit_pad` in the [voice quality guide](./voice-quality.md#selective-lfo-recipes-and-usage-table) are worked examples, and [the audition page (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/audition.html) can A/B them against other recipes with a held ratio/feedback/ADSR control phrase.
 
 ## Limits
 
