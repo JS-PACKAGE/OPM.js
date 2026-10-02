@@ -1,6 +1,6 @@
 # Adaptive music, tempo curves and the seek contract
 
-This guide covers `createArrangement` (looping layers and sections that switch on musical boundaries), tempo curves and grid helpers shared by `createTransport`, and the exact meaning of pause, seek and resume. Try [example 09](../examples/adaptive.html).
+This guide covers `createArrangement` (looping layers and sections that switch on musical boundaries), tempo curves and grid helpers shared by `createTransport`, and the exact meaning of pause, seek and resume. Try [example 09 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/adaptive.html).
 
 ## Arrangement
 
@@ -13,9 +13,14 @@ const arrangement = createArrangement(opm, {
   initialSection: 'explore',
   layers: [
     { name: 'pad', length: 16, voicePriority: 20,
-      events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 48, voice: 'strings' }] },
-    { name: 'arp', length: 8, events: [ /* BeatSequenceEvent[] inside [0, 8) */ ] },
-    { name: 'lead', length: 8, voicePriority: 100, events: [ /* … */ ] },
+      events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 48, voice: 'brass' }] },
+    { name: 'arp', length: 8, events: [
+      { type: 'note', id: 2, beat: 0, duration: 0.5, note: 60 },
+      { type: 'note', id: 3, beat: 1, duration: 0.5, note: 67 },
+    ] },
+    { name: 'lead', length: 8, voicePriority: 100, events: [
+      { type: 'note', id: 4, beat: 0, duration: 2, note: 72 },
+    ] },
   ],
   sections: [
     { name: 'explore', layers: ['pad', 'arp'] },
@@ -26,6 +31,8 @@ await arrangement.start();               // call from a user gesture
 arrangement.switchSection('combat');     // returns the committed beat
 arrangement.setLayer('arp', true, { quantize: 'beat' });
 ```
+
+In a plain browser, import the served `./opm/api/index.js` URL instead of the bare package name and invoke the startup/switch calls from a button handler after deploying the complete tree as in the [quick start](../README.md#use-in-a-browser). This runnable recipe uses the default `brass` voice; register your own pad/lead patches with `loadVoice` before using their names. On host teardown, call `arrangement.dispose()` and `await opm.dispose()`.
 
 Rules that make switches musical:
 
@@ -52,6 +59,8 @@ Linear maps whose derived slope is not finite are rejected before admission, inc
 
 ## Grid helpers
 
+Import these grid helpers from `opm.js` (or the deployed browser `api/index.js`), not `opm.js/core`. Beat/second conversion helpers are exported by both entry points.
+
 - `quantizeBeat(beat, quantum = 1, mode = 'ceil')` with modes `floor | ceil | nearest | next` (`next` is strictly later even on an exact boundary).
 - `swingBeat(beat, subdivision = 0.5, ratio = 2/3)` warps each pair of subdivisions; a ratio of 0.5 is straight and 2/3 a triplet feel. It is monotonic and maps pair boundaries to themselves.
 - `swingBeatEvents(events, subdivision, ratio)` swings note starts **and** ends, so adjacent gates keep their order.
@@ -71,4 +80,4 @@ An exact snapshot of oscillator phases, envelope state and filters is deliberate
 
 ## Verified behavior
 
-`test/arrangement.test.ts` renders through the real AudioWorklet processor. It checks that a pad shared by two sections is admitted once across a bar switch, that a removed layer is released at the exact boundary beat and that `preserveNotes` lets it finish, that a high-priority melody survives a one-voice engine without failing the arrangement, that a tempo change alters only unadmitted onsets, and that pause schedules nothing. `test/transport.test.ts` checks the logarithmic integral and its inverse to 1e-9 beats.
+[`test/arrangement.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/arrangement.test.ts) renders through the real AudioWorklet processor. It checks that a pad shared by two sections is admitted once across a bar switch, that a removed layer is released at the exact boundary beat and that `preserveNotes` lets it finish, that a high-priority melody survives a one-voice engine without failing the arrangement, that a tempo change alters only unadmitted onsets, and that pause schedules nothing. [`test/transport.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/transport.test.ts) checks the logarithmic integral and its inverse to 1e-9 beats.
