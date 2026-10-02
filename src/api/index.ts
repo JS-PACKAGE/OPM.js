@@ -1,6 +1,7 @@
 import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
-import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import { MAX_BANK_BYTES, MAX_BANK_VOICES, parseVoiceBank, validateVoice } from '../voices/schema.js';
+import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import { validateNoteControls } from '../core/synth.js';
 import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import { normalizeTuning } from '../core/tuning.js';
@@ -158,8 +159,9 @@ function ownData(value: unknown, allowed: readonly string[], label: string): Rec
   return result;
 }
 
-function frozenPatch(input: VoiceInput): NormalizedVoice {
+function frozenPatch(input: VoiceInput, name?: string): NormalizedVoice {
   const patch = normalizeVoice(input);
+  if (name !== undefined) patch.name = name;
   for (const op of patch.ops) {
     Object.freeze(op.adsr);
     if (op.keyScale) Object.freeze(op.keyScale);
@@ -169,6 +171,42 @@ function frozenPatch(input: VoiceInput): NormalizedVoice {
   Object.freeze(patch.lfo);
   if (patch.pitchEnvelope) Object.freeze(patch.pitchEnvelope);
   return Object.freeze(patch);
+}
+
+function voiceName(name: unknown): asserts name is string {
+  if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new TypeError('Invalid voice name');
+}
+
+/** Only validated snapshots reach this copier; null prototypes exclude inherited JSON hooks. */
+function bankJsonData(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) {
+    const result: unknown[] = [];
+    Object.setPrototypeOf(result, null);
+    for (let index = 0; index < value.length; index++) result[index] = bankJsonData(value[index]);
+    return result;
+  }
+  const result: Record<string, unknown> = Object.create(null);
+  for (const key of Object.keys(value)) result[key] = bankJsonData(Object.getOwnPropertyDescriptor(value, key)!.value);
+  return result;
+}
+
+function bankArrayData(value: unknown): CompleteVoiceInput[] {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
+    throw new TypeError('voice bank must be a plain dense array');
+  }
+  const length: unknown = Object.getOwnPropertyDescriptor(value, 'length')?.value;
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < 0 || length > MAX_BANK_VOICES) {
+    throw new RangeError('Voice bank exceeds 128 voices');
+  }
+  if (Reflect.ownKeys(value).length !== length + 1) throw new TypeError('voice bank has unknown fields');
+  const result: CompleteVoiceInput[] = [];
+  for (let index = 0; index < length; index++) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('voice bank must contain data');
+    result.push(descriptor.value);
+  }
+  return result;
 }
 
 function absoluteTime(value: unknown, context: AudioContext): number {
@@ -314,7 +352,7 @@ export class OPM {
     this._maxVoices = maxVoices ?? 8;
     this._interruption = interruption ?? 'cancel';
     this.sampleRate = sampleRate;
-    this._voices = new Map([['brass', frozenPatch(brass)]]);
+    this._voices = new Map([['brass', frozenPatch(brass, 'brass')]]);
     this._voiceIds = new Map();
     this._patchKeys = new WeakMap();
     this._nextVoiceId = 1;
@@ -338,8 +376,45 @@ export class OPM {
 
   loadVoice(name: string, voice: VoiceInput): void {
     if (this._disposed) throw new Error('OPM is disposed');
-    if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new TypeError('Invalid voice name');
-    this._voices.set(name, frozenPatch(voice));
+    voiceName(name);
+    if (!this._voices.has(name) && this._voices.size >= MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
+    const patch = frozenPatch(voice, name);
+    this._voices.set(name, patch);
+  }
+
+  /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
+  replaceVoiceBank(source: string | readonly CompleteVoiceInput[]): void {
+    if (this._disposed) throw new Error('OPM is disposed');
+    if (typeof source !== 'string') {
+      source = bankArrayData(source);
+      if (source.length === 0) {
+        this._voices = new Map();
+        return;
+      }
+    }
+    const parsed = parseVoiceBank(source);
+    const next = new Map<string, NormalizedVoice>();
+    for (const [name, patch] of parsed) next.set(name, patch as unknown as NormalizedVoice);
+    this._voices = next;
+  }
+
+  removeVoice(name: string): boolean {
+    if (this._disposed) throw new Error('OPM is disposed');
+    voiceName(name);
+    return this._voices.delete(name);
+  }
+
+  /** Canonical versioned entries, detached from the immutable registry and UTF-8 bounded. */
+  exportVoiceBank(): string {
+    if (this._disposed) throw new Error('OPM is disposed');
+    if (this._voices.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
+    const entries = [];
+    for (const patch of this._voices.values()) entries.push(validateVoice(patch));
+    const output = JSON.stringify(bankJsonData(entries));
+    if (output.length > MAX_BANK_BYTES || new TextEncoder().encode(output).length > MAX_BANK_BYTES) {
+      throw new RangeError('Voice bank exceeds 256 KiB');
+    }
+    return output;
   }
 
   /** Independent subscription; close preserves it for restart, dispose removes it permanently. */

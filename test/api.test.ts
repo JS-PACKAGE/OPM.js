@@ -4,6 +4,8 @@ import { OPM, createLookaheadScheduler } from '../src/api/index.js';
 import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
 import { Synth } from '../src/core/synth.js';
+import { MAX_BANK_BYTES, parseVoiceBank } from '../src/voices/schema.js';
+import type { CompleteVoiceInput } from '../src/voices/schema.js';
 
 
 interface MockPort {
@@ -697,4 +699,160 @@ test('host quality and polyphony reject hostile options without getter or numeri
     { maxVoices: { valueOf: getter } }, { [Symbol('quality')]: 'eco' },
   ]) assert.throws(() => new OPM(input as OPMOptions));
   assert.equal(reads, 0);
+});
+
+test('bank replacement is atomic, bounded and own-data while single loads keep strict ranges', async () => {
+  const opm = new OPM();
+  const original = opm.exportVoiceBank();
+  const entry = (JSON.parse(original) as CompleteVoiceInput[])[0]!;
+  let reads = 0;
+  const hostile = structuredClone(entry);
+  Object.defineProperty(hostile, 'feedback', { get() { reads++; throw Error('getter ran'); } });
+  const accessor: CompleteVoiceInput[] = [];
+  Object.defineProperty(accessor, '0', { get() { reads++; throw Error('array getter ran'); } });
+  const inherited: CompleteVoiceInput[] = [];
+  Object.setPrototypeOf(inherited, Object.create(Array.prototype));
+  const extra: CompleteVoiceInput[] = [];
+  Object.defineProperty(extra, 'extra', { value: 1 });
+  const inputs: unknown[] = [
+    '[', '[]', '😀'.repeat(MAX_BANK_BYTES / 4 + 1), [hostile],
+    [entry, entry], new Array(1), accessor, inherited, extra,
+    Array.from({ length: 129 }, (_, index) => ({ ...entry, name: `voice_${index}` })),
+    [entry, { ...entry, name: 'bad', feedback: NaN }],
+  ];
+  try {
+    for (const input of inputs) {
+      assert.throws(() => opm.replaceVoiceBank(input as string | readonly CompleteVoiceInput[]));
+      assert.equal(opm.exportVoiceBank(), original);
+    }
+    assert.equal(reads, 0);
+    const clamped = structuredClone(entry);
+    clamped.name = 'clamped';
+    clamped.ops[0].ratio = 100;
+    assert.throws(() => opm.loadVoice('strict', clamped), /ratio/);
+    assert.equal(opm.exportVoiceBank(), original);
+    opm.replaceVoiceBank([clamped]);
+    assert.equal(opm.voices.get('clamped')!.ops[0].ratio, 32);
+    clamped.ops[0].level = 0;
+    assert.notEqual(opm.voices.get('clamped')!.ops[0].level, 0);
+    assert.deepEqual([...parseVoiceBank(opm.exportVoiceBank()).keys()], ['clamped']);
+    opm.replaceVoiceBank([]);
+    assert.equal(opm.exportVoiceBank(), '[]');
+    assert.throws(() => parseVoiceBank([]));
+    assert.throws(() => opm.replaceVoiceBank('[]'));
+  } finally { await opm.dispose(); }
+});
+
+test('bank exports use registry names, frozen detached entries and no inherited serialization hooks', async () => {
+  const opm = new OPM();
+  const originalObjectHook = Object.getOwnPropertyDescriptor(Object.prototype, 'toJSON');
+  const originalArrayHook = Object.getOwnPropertyDescriptor(Array.prototype, 'toJSON');
+  let reads = 0;
+  try {
+    opm.replaceVoiceBank([]);
+    const targets: [number | boolean, number | boolean, number | boolean, number | boolean] = [true, false, 0.5, 1];
+    opm.loadVoice('registered', { ...brass, lfo: { ...brass.lfo, amTargets: targets, pmTargets: targets } });
+    targets.fill(0);
+    const snapshot = opm.voices.get('registered')!;
+    assert.equal(snapshot.name, 'registered');
+    assert.throws(() => { snapshot.ops[0].adsr.a = 10; }, TypeError);
+    assert.deepEqual(snapshot.lfo.amTargets, [1, 0, 0.5, 1]);
+    assert.throws(() => { (snapshot.lfo.amTargets as unknown as number[])[0] = 0; }, TypeError);
+    for (const prototype of [Object.prototype, Array.prototype]) {
+      Object.defineProperty(prototype, 'toJSON', { configurable: true, get() { reads++; throw Error('prototype getter ran'); } });
+    }
+    const output = opm.exportVoiceBank();
+    assert.equal(reads, 0);
+    const exported = JSON.parse(output) as CompleteVoiceInput[];
+    assert.equal(exported[0]!.name, 'registered');
+    assert.ok(new TextEncoder().encode(output).length <= MAX_BANK_BYTES);
+    exported[0]!.ops[0].level = 0;
+    assert.notEqual(snapshot.ops[0].level, 0);
+    assert.deepEqual([...parseVoiceBank(output).keys()], ['registered']);
+  } finally {
+    if (originalObjectHook) Object.defineProperty(Object.prototype, 'toJSON', originalObjectHook);
+    else Reflect.deleteProperty(Object.prototype, 'toJSON');
+    if (originalArrayHook) Object.defineProperty(Array.prototype, 'toJSON', originalArrayHook);
+    else Reflect.deleteProperty(Array.prototype, 'toJSON');
+    await opm.dispose();
+  }
+});
+
+test('registry size is bounded, replacement frees capacity, and disposed bank operations reject', async () => {
+  const opm = new OPM();
+  try {
+    opm.replaceVoiceBank([]);
+    for (let index = 0; index < 128; index++) opm.loadVoice(`voice_${index}`, brass);
+    const full = opm.exportVoiceBank();
+    assert.throws(() => opm.loadVoice('overflow', brass), /128/);
+    assert.equal(opm.exportVoiceBank(), full);
+    opm.loadVoice('voice_0', { ...brass, feedback: 0 });
+    assert.equal(opm.voices.size, 128);
+    assert.equal(opm.removeVoice('missing'), false);
+    assert.equal(opm.removeVoice('voice_1'), true);
+    assert.equal(opm.removeVoice('voice_1'), false);
+    assert.throws(() => opm.removeVoice('../bad'));
+    opm.loadVoice('replacement', brass);
+    assert.equal(opm.voices.size, 128);
+    await opm.dispose();
+    for (const operation of [
+      () => opm.loadVoice('late', brass), () => opm.replaceVoiceBank([]),
+      () => opm.removeVoice('voice_0'), () => opm.exportVoiceBank(),
+    ]) assert.throws(operation, /disposed/);
+  } finally { await opm.dispose(); }
+});
+
+test('valid array banks cannot export beyond the UTF-8 output budget', async () => {
+  const opm = new OPM();
+  const detailed: Voice = {
+    version: 6, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,
+    lfo: { rate: 19.123456789012345, amDepth: 0.12345678901234567, pmDepth: 1199.1234567890123,
+      waveform: 'triangle', delay: 9.123456789012345, sync: 'global', phase: 0.12345678901234567,
+      amTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567],
+      pmTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567] },
+    pitchEnvelope: { a: 9.123456789012345, d: 9.123456789012345, r: 9.123456789012345,
+      initial: -4321.123456789012, peak: 4321.123456789012, sustain: 321.12345678901234, final: -321.12345678901234 },
+    ops: [0, 1, 2, 3].map(() => ({
+      ratio: 31.123456789012345, level: 0.12345678901234567, detune: -1199.1234567890123,
+      adsr: { a: 9.123456789012345, d: 9.123456789012345, s: 0.12345678901234567, r: 9.123456789012345 },
+      frequency: 19999.123456789012, velocitySensitivity: 47.123456789012345, rateKeyScale: 3.1234567890123457,
+      keyScale: { breakpoint: 64, leftDbPerOctave: 23.123456789012345, rightDbPerOctave: 23.123456789012345 },
+    })) as Voice['ops'],
+  };
+  try {
+    opm.replaceVoiceBank(Array.from({ length: 128 }, (_, index) => ({ ...detailed, name: String(index).padStart(64, 'v') })));
+    assert.throws(() => opm.exportVoiceBank(), /256 KiB/);
+    assert.equal(opm.voices.size, 128, 'failed export leaves the registry intact');
+    opm.replaceVoiceBank([detailed]);
+    assert.deepEqual([...parseVoiceBank(opm.exportVoiceBank()).keys()], ['detailed']);
+  } finally { await opm.dispose(); }
+});
+
+test('bank replacement and cache eviction cannot alter active or admitted future patches', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM(), reference = new OPM();
+  await opm.start();
+  await reference.start();
+  try {
+    opm.loadVoice('held', brass);
+    for (const host of [opm, reference]) {
+      host.playNote({ voice: host === opm ? 'held' : brass, note: 69 });
+      host.playNote({ voice: host === opm ? 'held' : brass, note: 72, at: 256 / sampleRate });
+    }
+    assert.deepEqual(render(opm).left, render(reference).left);
+    const silent = (JSON.parse(opm.exportVoiceBank()) as CompleteVoiceInput[]).find(voice => voice.name === 'held')!;
+    silent.ops.forEach(operator => { operator.level = 0; });
+    opm.replaceVoiceBank([silent]);
+    opm.playNote({ voice: 'held', note: 60 });
+    opm.removeVoice('held');
+    for (let index = 0; index < 129; index++) {
+      const id = opm.playNote({ voice: { ...brass, name: `evict_${index}` }, note: 60, time: 1 });
+      opm.stop(id);
+    }
+    assert.throws(() => opm.playNote({ voice: 'held', note: 60 }), /Unknown voice/);
+    for (let block = 0; block < 4; block++) assert.deepEqual(render(opm).left, render(reference).left);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.errors, 0);
+    assert.equal(diagnostics.rejectedNotes, 0);
+  } finally { await opm.dispose(); await reference.dispose(); }
 });
