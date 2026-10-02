@@ -1,6 +1,6 @@
 # Publication and package verification
 
-The implementation does **not** authorize or perform an npm publication. The package remains version **1.3.0**. Registry package availability and maintainer authentication must be established independently: the integration owner observed a registry package 404 and local `npm whoami --registry=https://registry.npmjs.org` returning `ENEEDAUTH`. Those are prerequisites, not reasons to bypass authentication.
+The GitHub **v1.4** release distributes package version **1.4.0**; it does **not** publish that package to the npm registry. Registry package availability and maintainer authentication must be established independently: during feature verification, the integration owner observed a registry package 404 and local `npm whoami --registry=https://registry.npmjs.org` returning `ENEEDAUTH`. Those are prerequisites, not reasons to bypass authentication.
 
 ## Bootstrap and trusted publishing
 

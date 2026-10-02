@@ -2,7 +2,7 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-OPM.js 1.3 provides browser AudioWorklet synthesis through `OPM`, offline stereo PCM through `Synth` and `renderNote`, PCM16 WAV encoding, and approximate DX7 voice import. This checkout also includes unreleased prepared patches, live note controls, absolute scheduling, bounded lookahead, and version 3 voices. Public ESM exports include TypeScript declarations. Node.js 22+ is required for Node examples.
+OPM.js 1.4 provides browser AudioWorklet synthesis through `OPM`, offline stereo PCM through `Synth` and `renderNote`, PCM16 WAV encoding, approximate DX7 voice import, prepared patches, live note controls, absolute scheduling, bounded lookahead, and version 3 voices. Public ESM exports include TypeScript declarations. Node.js 22+ is required for Node examples.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
@@ -15,17 +15,17 @@ npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.3.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.4.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.3.0.tgz
+npm install ../OPM.js/opm.js-1.4.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.3.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.4.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 

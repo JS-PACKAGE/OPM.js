@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.4
 
-The package version remains 1.3.0; the changes below have not been published to npm or included in a new GitHub release.
+Package version 1.4.0. Distributed through the GitHub release tarball; npm registry publication is a separate operation.
 
 ### Sound quality and realtime acceptance
 
@@ -30,7 +30,7 @@ The package version remains 1.3.0; the changes below have not been published to 
 - Add the seventh example: preset/original-synthetic-DX7 A/B audition, register/velocity grids, raw peak/RMS dBFS reports, bounded attenuation-only host trim and offline WAV download. Cover seven bundled presets plus five generated converter recipes, not copyrighted third-party banks or a six-operator reference renderer.
 - Keep the mobile report horizontally scrollable inside its container. Update README, both executable usage guides, deployment/publishing guidance and the security policy.
 
-### Observed verification
+### Feature verification before release
 
 - **Security:** AllFeaturesInputsReview approved scoped static A/B review; AllFeaturesDspSupplyReview approved C/D after the bounded-callback and deployed-LICENSE fixes. Runtime checks were performed separately by 語喵.
 - Node.js 26.7.0: all 108 behavioral tests, strict source/development/consumer types, source/generated AST security gates and installed-package render/WAV/types passed. Build output has 22 JS/map/declaration triplets. Root full/runtime audits and the installed Vite consumer audit found zero vulnerabilities; runtime dependencies remain empty.
@@ -39,7 +39,14 @@ The package version remains 1.3.0; the changes below have not been published to 
 - The same silent browser exercised both guides' absolute-control and eight-note lookahead recipes, restart/stop/disposal, live controls, a complete 24-second song and audition A/B/restart. The 390-pixel catalog/report stayed within the viewport. A persisted audition WAV decoded as 40,513 stereo PCM16 frames at 48 kHz (162,096 bytes).
 - Vite 8.3.2 production acceptance passed under `/opm-example/`: real signal/lifecycle, blocked inline CSP script, missing-worklet and wrong-MIME failures, and exact deployed LICENSE contents.
 - Apple M5 / Node 26 report-only benchmark excluded 300 warmup blocks and measured 2,000 blocks per scenario. Raw burst p99/worst were 1.038/1.402 ms; prepared burst p99/worst were 1.238/2.470 ms, with no missed 2.667 ms deadlines. Scheduler/GC variance and other hosts prevent a universal realtime guarantee.
-- No npm publication or new feature release was performed. Local npm authentication was unavailable; trusted-publisher/environment setup and release-specific approval/evidence remain prerequisites for the manual publishing workflow.
+- npm registry publication is not part of this GitHub release. Local npm authentication was unavailable during feature verification; trusted-publisher/environment setup and release-specific approval/evidence remain prerequisites for the manual publishing workflow.
+
+### v1.4 release verification
+
+- **Security:** Release14Inputs approved static A/B review, including WAV/render and application file boundaries; Release14DspSupply approved static C/D review for this GitHub-only release. Neither reviewer executed runtime checks; no evidence-backed release blockers remained.
+- Fresh package 1.4.0 verification on Node.js 26.7.0: 22 JS/map/declaration triplets, all 108 tests, strict typechecks, source/generated AST gates, installed render/WAV/types, zero runtime dependencies and both root audits passed. All 1,728 sound cases and 108 preset/conversion cells passed again.
+- Owned sandboxed headless Chromium 153.0.8010.12 with Playwright 1.63.0 and explicit audio muting passed native smoke/stress and installed-package Vite production checks again: 769 accepted/started notes, 760 steals, one intentional late rejection, zero DSP errors and no final active/pending notes. Locked-browser and remote-CI results are separate evidence.
+- Fresh Apple M5 report-only benchmark: raw burst p99/worst 1.131/3.303 ms with one missed 2.667 ms deadline; prepared burst p99/worst 0.913/1.133 ms with zero misses. These host-dependent wall-clock observations are not a universal realtime guarantee.
 
 ## v1.3.0
 
