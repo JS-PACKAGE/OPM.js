@@ -37,6 +37,8 @@
     <div class="actions">
       <button id="start" type="button">Start / resume</button>
       <button id="play" data-live type="button" disabled>Play shared score</button>
+      <button id="stream" data-live type="button" disabled>Start 60-second mixed-event stream</button>
+      <button id="stop-stream" data-live type="button" disabled>Stop stream</button>
       <button id="hold" data-live type="button" disabled>Hold + future onset</button>
       <button id="controls" data-live type="button" disabled>Apply controls</button>
       <button id="chord" data-live type="button" disabled>12-note stealing burst</button>
@@ -45,20 +47,39 @@
       <button id="suspend" data-live type="button" disabled>Suspend host</button>
       <button id="dispose" data-live type="button" disabled>Dispose synth</button>
       <button id="render" type="button">Render same score to WAV</button>
+      <button id="render-long" type="button">Render 60 seconds / 96 kHz in bounded chunks</button>
+      <button id="cancel-render" type="button" disabled>Cancel chunk render</button>
       <a id="download" hidden>Download WAV</a>
     </div>
     <output id="status" role="status" aria-live="polite">Loading example…</output>
     <p><output id="diagnostics">No context created.</output></p>
     <fieldset>
-      <legend>Physical-device observations — manually confirm only after testing</legend>
-      <p class="hint">On iOS/Android over HTTPS, test each scenario with both policies. Observe note/reset/context events, then resume by tapping Start. Cancel must not replay old notes; preserve may continue held notes. A desktop suspend test is not a phone interruption test. Lookahead scheduling always stops on interruption and requires an explicit restart.</p>
-      <label><input type="checkbox" data-check="lock-unlock">Lock / unlock: correct cancellation or preservation and gesture recovery</label>
-      <label><input type="checkbox" data-check="switch-app">Switch app / return: no unexpected replay or duplicate gates</label>
-      <label><input type="checkbox" data-check="audio-route">Change headphones / Bluetooth route: recovery observed</label>
-      <label><input type="checkbox" data-check="call-interruption">Call / system interruption: policy and resume observed</label>
-      <label><input type="checkbox" data-check="dispose-recreate">Dispose / recreate: no stuck notes; borrowed context retained</label>
+      <legend>Repeatable physical-device acceptance — manual evidence only</legend>
+      <p class="hint">Use a physical iOS Safari or Android Chrome device over HTTPS. Test every scenario separately with cancel and preserve (Dispose before changing policy). Begin submits a held gate and a future onset; finish silences them. If the OS did not interrupt audio, say so: no policy proof. Desktop automation never earns physical acceptance. <a href="../doc/mobile-acceptance.md">Checklist, support matrix and smoke workflow</a>.</p>
+      <label for="device-environment">Evidence environment</label>
+      <select id="device-environment"><option value="desktop-automation">Desktop / automation (always unverified)</option><option value="physical-ios-safari">Physical iOS / Safari (user declaration)</option><option value="physical-android-chrome">Physical Android / Chrome (user declaration)</option></select>
+      <label for="device-model">Device model</label><input id="device-model" maxlength="120" placeholder="Enter the actual device">
+      <label for="device-os">OS version</label><input id="device-os" maxlength="120" placeholder="Include the actual version">
+      <label for="device-browser">Browser version</label><input id="device-browser" maxlength="120" placeholder="Include the actual version">
+      <label for="scenario">Named scenario</label>
+      <select id="scenario"><option value="lock-unlock">Lock / unlock</option><option value="switch-app">Switch app / return</option><option value="call-interruption">Call / system interruption</option><option value="bluetooth-route">Bluetooth route</option><option value="headset-route">Wired / USB headset route</option><option value="battery-saver">Battery saver</option><option value="long-play">Long play (10+ minutes)</option><option value="main-thread-stall">Main-thread stall</option><option value="dispose-recreate">Dispose / recreate</option></select>
+      <p id="scenario-instructions"></p>
+      <button id="begin-scenario" type="button">Begin scenario capture</button>
+      <button id="stall" type="button" disabled>Stall main thread (2 seconds)</button>
+      <label for="marker-kind">Subjective marker</label>
+      <select id="marker-kind"><option value="dropout">Audible dropout</option><option value="unexpected-replay">Unexpected replay</option><option value="stuck-gate">Stuck / duplicate gate</option><option value="route-change">Route change</option><option value="observation">Other observation</option></select>
+      <label for="marker-note">Marker note (240 characters)</label><input id="marker-note" maxlength="240">
+      <button id="marker" type="button" disabled>Record subjective marker</button>
+      <label for="scenario-notes">Scenario notes (route, battery, interruption, audible recovery; 1200 characters)</label>
+      <textarea id="scenario-notes" maxlength="1200" rows="4"></textarea>
+      <label><input id="listened" type="checkbox">I manually performed this scenario and observed/listened to the result on the declared device</label>
+      <label for="judgment">Manual judgment (not computed from lifecycle events)</label>
+      <select id="judgment"><option value="unverified">Unverified / incomplete</option><option value="pass">Pass against documented criteria</option><option value="fail">Fail against documented criteria</option></select>
+      <button id="finish-scenario" type="button" disabled>Finish capture / silence</button>
       <button id="report" type="button">Export local observations</button>
-      <p class="hint">Export includes this browser's user agent, sample rate, bounded event log and your checkboxes. No data is uploaded. These observations do not certify CPU deadlines, glitches or subjective sound quality.</p>
+      <p><output id="acceptance-status" role="status" aria-live="polite">No physical-device result recorded.</output></p>
+      <pre id="acceptance-runs" aria-label="Captured scenario judgments"></pre>
+      <p class="hint">Local-only JSON: actual context sample rates, declared device/OS/browser, fixed policy, timestamps, bounded observations, subjective markers and separate manual/acceptance statuses. At most 24 captures, 256 observations and 64 markers per capture. No audio recording, persistent storage or upload. Active/absent captures remain unverified. Export before leaving; reloading clears captures.</p>
     </fieldset>
     <pre id="events" aria-label="Recent lifecycle events"></pre>
   </main>

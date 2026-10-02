@@ -39,6 +39,7 @@ output[role=status] { display: block; padding: 14px 16px; border-left: 4px solid
 output:not([role=status]) { font-variant-numeric: tabular-nums; }
 code { font-size: 0.92em; }
 #report { overflow-x: auto; }
+#events, #acceptance-runs { max-height: 24rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (prefers-color-scheme: dark) {
   :root { --surface: #252838; --background: #191c29; --text: #f1f2f8; --muted: #b6bfd2; --border: #515b72; --accent: #ada0ff; }
   button { color: #191c29; }
