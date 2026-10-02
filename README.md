@@ -71,7 +71,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, source, or build scripts.
+For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.
 
 ### Use in a browser
 
@@ -85,14 +85,13 @@ cp node_modules/opm.js/LICENSE public/opm/LICENSE
 
 Without npm, copy the checkout's complete `dist/` contents and its `LICENSE` into your site's `opm/` directory instead. The commands use a POSIX shell; copying those same files manually is equivalent.
 
-Keep this layout; individual worklets and shared chunks must not be moved independently:
+Keep this layout; individual worklets and their imported modules must not be moved independently:
 
 ```text
 public/
   index.html
   opm/
     api/
-    chunks/
     core/
     voices/
     worklet/
@@ -231,7 +230,7 @@ This is an **approximate six-to-four-operator conversion**, not DX7 synthesis or
 
 ## Optimized distribution
 
-`dist/` contains only `.js` ES modules and generated `.d.ts` declarations, including shared chunks and voice assets exported as JavaScript data. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`.
+Every `.js` in `dist/` has a matching `.js.map` and compiler-generated `.d.ts`, including both demo scripts. Engine modules preserve the `src/` layout instead of producing hashed chunks, so declarations describe the actual corresponding exports. Demo modules export no API; their generated declarations accurately contain `export {};`. All JavaScript uses the same safe minification pipeline. Maps compose esbuild and Terser mappings back to the original TypeScript and embed source contents for debugging without a separate source checkout; publishing maps makes those sources readable. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`. The build and package smoke reject missing map/declaration companions.
 
 Engine, AudioWorklet, demos, tests, and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/declaration approach, declarations are generated from implementation rather than maintained separately. OPM.js retains npm and Node 18+ compatibility. `tsconfig.json` checks the environment-independent/browser source and emits declarations; `tsconfig.dev.json` compiles development programs into ignored `.dev/`. ESM source imports retain `.js` specifiers. Use `npm test`, not bare `node --test`, to compile and run the behavioral tests; `npm run typecheck` checks source, tools, tests, demos, and the public consumer fixture. The build also produces `dist/demo/` scripts used by both HTML demos.
 
@@ -315,7 +314,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 | npm returns E404 for `opm.js` | Use the local tarball installation recipe above; do not assume a registry release exists. |
 | `AudioWorklet is not available`, or `file://` fails | Use a supporting browser over HTTPS/localhost. In Node, use `Synth`, not `OPM.start()`. |
 | Bare module specifier cannot be resolved | Use the browser's `./opm/...` URLs and copied assets, not npm names in raw HTML. |
-| Processor/chunk 404 or JavaScript MIME error | Preserve the complete distribution layout; ensure asset URLs serve JS, not a single-page app's HTML fallback. |
+| Processor/module 404 or JavaScript MIME error | Preserve the complete distribution layout; ensure asset URLs serve JS, not a single-page app's HTML fallback. |
 | No sound, or “Call start() before playNote()” | Await `start()` inside a click handler; inspect the displayed error and browser/device audio settings. |
 | Invalid note, duration, or unknown voice | Check MIDI integer range, duration (`null` or `(0,60]`), velocity/pan, and registered voice name. |
 | Notes disappear | Observe `onEvent` rejections/steals and `getDiagnostics()`; respect voice and queue bounds and schedule smaller batches. |

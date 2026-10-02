@@ -25,7 +25,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains built `.js` modules, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not TypeScript source, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.2.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -82,7 +82,7 @@ From the **opm-app root**, serve `public/` and visit `http://localhost:8000/`; c
 python3 -m http.server 8000 --directory public
 ```
 
-Without npm, instead copy the checkout's **complete** `dist/` contents to `site/opm/`, copy its `LICENSE` to `site/opm/LICENSE`, save the same page as `site/index.html`, then from the directory containing `site/` serve it with `python3 -m http.server 8000 --directory site`. Keep `api/`, `core/`, `worklet/`, `voices/`, and `chunks/` together, including hashed chunks; do not relocate the worklet alone. The browser imports the served `./opm/api/index.js` URL, not the bare npm name. Bundlers may fail to copy the worklet module graph automatically; static-copy deployment is the supported straightforward route, without assuming any particular bundler integration.
+Without npm, instead copy the checkout's **complete** `dist/` contents to `site/opm/`, copy its `LICENSE` to `site/opm/LICENSE`, save the same page as `site/index.html`, then from the directory containing `site/` serve it with `python3 -m http.server 8000 --directory site`. Keep `api/`, `core/`, `worklet/`, and `voices/` together; do not relocate the worklet alone. Modules preserve source paths instead of using hashed chunks. The browser imports the served `./opm/api/index.js` URL, not the bare npm name. Bundlers may fail to copy the worklet module graph automatically; static-copy deployment is the supported straightforward route, without assuming any particular bundler integration.
 
 ## Browser API and lifecycle
 
@@ -345,7 +345,7 @@ Benchmark output reports warmed 128-frame block p95/p99/worst and misses of `128
 
 ## Compressed deployment
 
-`dist/` contains only `.js` modules and `.d.ts` declarations; the build produces no JSON assets or compressed sidecars. Configure compression at the web host if needed, retaining ordinary `.js` import URLs. Compressed responses need the matching `Content-Encoding` (`br` or `gzip`), `Vary: Accept-Encoding`, and a JavaScript MIME type. Uncompressed responses must not be marked compressed. Python's basic HTTP server serves the ordinary modules directly. Deploy the entire matching `dist/` tree, including worklet and hashed chunks, as one version. See the README's [optimized-distribution notes](../README.md#optimized-distribution).
+Every `.js` in `dist/` has a corresponding `.js.map` and generated `.d.ts`, including demo scripts. Engine modules preserve source paths; no hashed chunks are generated. Demo declarations contain `export {};` because those modules export no API. The build produces no JSON assets or compressed sidecars. Maps embed original TypeScript; publishing them exposes that source for debugging. Configure compression at the web host if needed, retaining ordinary `.js` import URLs. Compressed responses need the matching `Content-Encoding` (`br` or `gzip`), `Vary: Accept-Encoding`, and a JavaScript MIME type. Uncompressed responses must not be marked compressed. Python's basic HTTP server serves the ordinary modules directly. Deploy the entire matching `dist/` module tree as one version. See the README's [optimized-distribution notes](../README.md#optimized-distribution).
 
 ## Troubleshooting
 
@@ -353,7 +353,7 @@ Benchmark output reports warmed 128-frame block p95/p99/worst and misses of `128
 | --- | --- |
 | `file://`, insecure-origin, or AudioWorklet unavailable | Serve over HTTPS or `http://localhost`, in a browser supporting ES modules and AudioWorklet. |
 | Bare `opm.js` browser import cannot resolve | Import a served `./opm/...` URL after copying assets; a bare specifier needs a separately configured import map or bundler. |
-| Worklet/chunk 404, HTML returned instead of JS, or MIME error | Copy the **whole** `dist/` tree; preserve relative paths and exclude assets from SPA HTML rewrites. Check the JavaScript MIME type. |
+| Worklet/module 404, HTML returned instead of JS, or MIME error | Copy the **whole** `dist/` tree; preserve relative paths and exclude assets from SPA HTML rewrites. Check the JavaScript MIME type. |
 | Autoplay blocked or playback before start | Invoke and await `opm.start()` inside a user click before `playNote()`. |
 | Invalid pitch, voice name, duration, or unknown voice | Check the [browser API](#browser-api-and-lifecycle) argument bounds and register custom names before playback. |
 | Scheduled notes disappear | Watch lifecycle rejections/steals and diagnostics; respect eight logical voices and bounded IDs/events. |

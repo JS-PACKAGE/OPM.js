@@ -4,6 +4,20 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Complete JavaScript/map/declaration triplets
+
+- Preserve engine source-module paths instead of bundling into hashed chunks, allowing every emitted JS to retain genuine compiler-generated export declarations. Generate declarations for both demos as well; their `export {};` accurately represents modules with no public exports.
+- Enforce a matching `.js.map` and `.d.ts` for every JS before replacing `dist/`, and in the isolated package gate. Remove obsolete chunk output and update deployment documentation.
+- Verification by 語喵: 17 JavaScript files, 17 matching source maps, and 17 declarations in both the rebuilt tree and package manifest. Embedded sources match original TypeScript. Build, 73 behavioral tests, strict source/development/consumer typechecks, AST/security checks, and installed-package rendering/WAV/types passed.
+- Real Chromium 153.0.8010.12 AudioWorklet smoke passed with preserved module imports on macOS arm64 using the existing matching Playwright 1.63.0 launcher; stereo, pan, note lifecycle, routing, suspend/resume, and context ownership passed with zero DSP errors. Remote CI and locked-browser runs were not performed.
+
+### Minification and TypeScript source maps
+
+- Minify every distribution JavaScript module, including both demos, through the shared safe Terser pipeline. Emit a matching `.js.map` and relative `sourceMappingURL` for each module; compose esbuild/Terser mappings back to original TypeScript with embedded source contents.
+- Include maps in the package whitelist and distribution allowlists. Keep `.d.ts` declarations and omit JSON assets/compressed sidecars. Publishing source maps exposes the embedded source, as documented in README and both usage guides.
+- Verification by 語喵: build, 73 behavioral tests, strict typechecks, AST/security gates, and isolated installed-package rendering/WAV/types passed. All 16 JS files have corresponding packaged maps; every embedded TypeScript source matches its source file exactly. A real invalid-voice exception under Node `--enable-source-maps` resolves to `src/voices/normalize.ts:9:11`, rather than generated chunk coordinates. Three re-export-only entry modules correctly have empty source mappings.
+- Visually exercised electric-piano hold/release/diagnostics and song start/stop after demo minification, with no page errors. Real Chromium 153.0.8010.12 AudioWorklet smoke passed on macOS arm64 using the existing matching Playwright 1.63.0 launcher, covering stereo, pan, lifecycle, routing, resume, and context ownership. Remote CI and locked-browser runs were not performed.
+
 ### JavaScript-only distribution assets
 
 - Restrict `dist/` to `.js` and generated `.d.ts`; remove JSON assets and gzip/Brotli sidecars from build output. Move canonical bundled data to typed modules: `opm.js/voices/examples.js` exports `examples`, and `opm.js/voices/voice.schema.js` exports `voiceSchema`. Remove the obsolete generic asset export; external JSON voice-bank input remains supported.

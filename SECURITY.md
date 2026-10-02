@@ -17,7 +17,7 @@ Report privately to the repository owner (GitHub Security Advisories preferred).
 
 ## Safe embedding
 
-- Serve the complete, matching `dist/` module tree over HTTPS or localhost. Keep worklet and shared-chunk paths intact; retain `LICENSE` when redistributing.
+- Serve the complete, matching `dist/` module tree over HTTPS or localhost. Keep worklet and imported-module paths intact; retain `LICENSE` when redistributing.
 - Use `loadVoice()` or `parseVoiceBank()` rather than bypassing validation. Single-voice APIs reject out-of-range fields; bank parsing clamps finite numeric fields but still rejects malformed data and invalid version/algorithm/feedback values.
 - The engine has no download API. Usage examples import trusted bundled modules or read explicit local files. Bound untrusted sources, MIME types, and response/file size **before** buffering; JSON parsing's 256 KiB cap applies after download, and DX7 accepts only one 163-byte single or 4104-byte bank. Malformed framing, checksum, or non-seven-bit data rejects.
 - Keep host-page security controls intact. For a CSP that disallows inline scripts, move the examples' module code to an allowed external `.js` file; no `unsafe-eval` is needed.

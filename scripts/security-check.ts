@@ -108,10 +108,15 @@ if (process.argv.includes('--package-smoke')) {
     assert.equal(packed.length, 1);
     const archive = packed[0]!;
     assert.ok(archive.files.some(file => file.path === 'LICENSE'), 'package must include license');
+    const packagedPaths = new Set(archive.files.map(file => file.path));
     for (const file of archive.files) {
       assert.ok(!/^(src|scripts|test|node_modules)\//.test(file.path), `unexpected packaged development file: ${file.path}`);
       if (file.path.startsWith('dist/')) {
-        assert.ok(file.path.endsWith('.js') || file.path.endsWith('.d.ts'), `unexpected distribution file: ${file.path}`);
+        assert.ok(file.path.endsWith('.js') || file.path.endsWith('.d.ts') || file.path.endsWith('.js.map'), `unexpected distribution file: ${file.path}`);
+        if (file.path.endsWith('.js')) {
+          assert.ok(packagedPaths.has(`${file.path}.map`), `missing packaged source map: ${file.path}`);
+          assert.ok(packagedPaths.has(file.path.replace(/\.js$/, '.d.ts')), `missing packaged declaration: ${file.path}`);
+        }
       }
     }
     await writeFile(join(directory, 'package.json'), JSON.stringify({ private: true, type: 'module' }));

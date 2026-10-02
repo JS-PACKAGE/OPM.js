@@ -36,7 +36,7 @@ OPM (public API)                     processor
 - `src/worklet/` — AudioWorkletProcessor and message protocol.
 - `src/api/` — public facade (`OPM` class), voice loading, scheduling.
 - `src/voices/` — typed voice assets and JSON voice parsing (format below).
-- `dist/` — generated `.js` ES modules and `.d.ts` declarations only, used by package exports and both browser demos. Deploy the complete tree.
+- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes both browser demos. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 

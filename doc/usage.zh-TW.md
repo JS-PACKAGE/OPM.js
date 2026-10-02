@@ -31,7 +31,7 @@ npm init -y
 npm install ../OPM.js/opm.js-1.2.0.tgz
 ```
 
-既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的 `.js` 模組、`.d.ts`、demo scripts、文件與法律檔案，不含 `src`、`scripts` 或 HTML 範例頁面；維護指令應在 checkout 執行。
+既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、demo scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、開發 scripts 或 HTML 範例頁面；維護指令應在 checkout 執行。
 
 要直接試用儲存庫的範例，請在 **OPM.js 儲存庫根目錄** 啟動伺服器：
 
@@ -88,7 +88,7 @@ cp node_modules/opm.js/LICENSE public/opm/LICENSE
 python3 -m http.server 8000 --directory public
 ```
 
-開啟 `http://localhost:8000/`，點擊按鈕播放。上述複製指令適用 POSIX shell；其他系統可手動複製相同檔案。若完全不使用 npm，亦可將 checkout 的完整 `dist/` **內容**複製到網站根目錄的 `site/opm/`，將 checkout 的 `LICENSE` 複製為 `site/opm/LICENSE`，把同一 HTML 存成 `site/index.html`，並以網站根目錄 `site/` 提供服務。務必連同 `api/`、`core/`、`worklet/`、`voices/`、`chunks/` 一起保留，不能單獨重新命名或移動 worklet、帶雜湊的 chunk。純 HTML 無 import map 時不能直接解析 `import 'opm.js'`；即便使用 bundler，也不能假定它會複製 worklet URL 的模組相依樹。上述靜態複製與站內相對 URL 不依賴 bundler。
+開啟 `http://localhost:8000/`，點擊按鈕播放。上述複製指令適用 POSIX shell；其他系統可手動複製相同檔案。若完全不使用 npm，亦可將 checkout 的完整 `dist/` **內容**複製到網站根目錄的 `site/opm/`，將 checkout 的 `LICENSE` 複製為 `site/opm/LICENSE`，把同一 HTML 存成 `site/index.html`，並以網站根目錄 `site/` 提供服務。務必連同 `api/`、`core/`、`worklet/`、`voices/` 一起保留，不能單獨重新命名或移動 worklet 及其相依模組。引擎保留來源模組路徑，不再產生 hashed chunks。純 HTML 無 import map 時不能直接解析 `import 'opm.js'`；即便使用 bundler，也不能假定它會複製 worklet URL 的模組相依樹。上述靜態複製與站內相對 URL 不依賴 bundler。
 
 ## 瀏覽器 API 與自訂音色
 
@@ -350,7 +350,7 @@ Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽
 
 ## 壓縮部署
 
-`dist/` 僅含 `.js` 模組與 `.d.ts` 宣告；建置不產生 JSON 資產或壓縮側檔。需要壓縮時由網站主機處理，程式仍匯入原本的 `.js` URL。伺服器送出壓縮內容時，須提供對應 `Content-Encoding`、`Vary: Accept-Encoding` 與 JavaScript MIME 類型；未壓縮回應不可標示為已壓縮。基本的 Python HTTP 伺服器可直接提供一般模組。整套 `dist`、worklet 與 chunks 須維持同一建置版本；詳見 README 的[最佳化發佈](../README.md#optimized-distribution)。
+`dist/` 每個最小化 `.js` 都有對應 `.js.map` 與 TypeScript 自動產生的 `.d.ts`，包含 demo scripts。引擎保留來源模組路徑，不產生 hashed chunks；demo 無公開匯出，其宣告如實為 `export {};`。建置不產生 JSON 資產或壓縮側檔。Source maps 映射回並內嵌原始 TypeScript；發佈 maps 即公開這些原始碼供除錯。需要壓縮時由網站主機處理，程式仍匯入原本的 `.js` URL。伺服器送出壓縮內容時，須提供對應 `Content-Encoding`、`Vary: Accept-Encoding` 與 JavaScript MIME 類型；未壓縮回應不可標示為已壓縮。基本的 Python HTTP 伺服器可直接提供一般模組。整套 `dist` 須維持同一建置版本；詳見 README 的[最佳化發佈](../README.md#optimized-distribution)。
 
 ## 疑難排解
 
@@ -358,7 +358,7 @@ Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽
 | --- | --- |
 | `file://`、非安全來源或 AudioWorklet 不可用 | 使用支援 AudioWorklet 的現代瀏覽器，由 HTTPS 或 localhost 提供整個頁面與檔案。 |
 | 瀏覽器無法解析 `opm.js` 裸套件名稱 | 使用複製的 `./opm/api/index.js` 相對 URL；如自行設定 import map，也要確保 worklet 的完整模組樹可讀取。 |
-| worklet／chunk 404，或拿到 HTML、MIME 類型錯誤 | 重新複製完整 `dist` 目錄並確認站點路徑；不要讓 SPA rewrite 將資產請求改送 `index.html`。 |
+| worklet／模組 404，或拿到 HTML、MIME 類型錯誤 | 重新複製完整 `dist` 目錄並確認站點路徑；不要讓 SPA rewrite 將資產請求改送 `index.html`。 |
 | 尚未啟動就播放、瀏覽器自動播放被擋 | 在點擊事件內 `await opm.start()` 後才呼叫 `playNote()`。 |
 | 音高、名稱、延遲、時長或未知音色出錯 | 依[瀏覽器 API](#瀏覽器-api-與自訂音色)檢查範圍，先註冊自訂音色。 |
 | 多音符遺失 | 檢查事件的 rejected／stolen 與診斷；注意八個邏輯聲部及有界事件／ID，分批排程。 |
