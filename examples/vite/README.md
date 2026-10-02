@@ -4,15 +4,14 @@ This standalone TypeScript host uses a real installed OPM package, not repositor
 
 ## Run the current local package
 
-From the repository root:
+This is a **checkout-only** example: its HTML, manifest and Vite tooling are not shipped in the engine `.tgz`. From the current repository root, build package 1.8.0:
 
 ```sh
 npm ci
-npm run build
-npm pack --ignore-scripts
+npm pack
 cd examples/vite
 npm ci
-npm install --no-save --package-lock=false ../../opm.js-1.7.0.tgz
+npm install --no-save --package-lock=false ../../opm.js-1.8.0.tgz
 npm run dev
 ```
 
@@ -20,7 +19,7 @@ Open the printed localhost address. Turn output volume down, then press **Play b
 
 The host selects `BASE_URL + 'opm/worklet/processor.js'` through the same-origin `workletUrl` option. It uses an independent `subscribe()` listener and awaits the stop command's **admission**, not release-tail completion. Hover the status after onset for an output-time estimate derived from `getOutputTimestamp()` when available. Page teardown unsubscribes, aborts outstanding waits, permanently disposes the engine, disconnects its host gain and closes the host-owned context. See the [host integration recipe](../../doc/host-integration.md) for clock conversion and reusable component cleanup.
 
-The example manifest and lockfile contain only development tooling, not a guessed registry OPM release or a machine-specific tarball path. `npm ci` installs locked Vite tooling; install the engine tarball separately with `--no-save --package-lock=false`. Running `npm ci` again removes that unsaved engine, so reinstall the tarball afterward. For an npm-published package, install the desired exact version with these same flags instead of the local tarball. The current package version is 1.7.0; registry availability is a separate publication prerequisite. The GitHub release does not publish it to npm.
+The example manifest and lockfile contain only development tooling, not a guessed registry OPM release or a machine-specific tarball path. `npm ci` installs locked Vite tooling; install the engine tarball separately with `--no-save --package-lock=false`. Running `npm ci` again removes that unsaved engine, so reinstall the tarball afterward. You can instead download the [v1.8 release tarball](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8/opm.js-1.8.0.tgz) and install its actual path with the same flags. The current package version is 1.8.0; GitHub distribution does not publish it to npm. Only use an exact registry version after separately verifying its availability and publication evidence.
 
 ```sh
 npm run build

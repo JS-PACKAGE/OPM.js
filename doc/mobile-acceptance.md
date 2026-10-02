@@ -1,6 +1,6 @@
 # Physical-device audio recovery acceptance
 
-[Example 08](../examples/sequence.html) is a repeatable **manual capture runner**, not a phone certification tool. Lifecycle events and analyser peaks cannot measure audible dropouts or prove AudioWorklet CPU deadlines. Desktop Chromium automation, emulated mobile user agents and host `suspend()` are not physical iOS/Android acceptance.
+[Example 08 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html) is a repeatable **manual capture runner**, not a phone certification tool. Lifecycle events and analyser peaks cannot measure audible dropouts or prove AudioWorklet CPU deadlines. Desktop Chromium automation, emulated mobile user agents and host `suspend()` are not physical iOS/Android acceptance. The demo and maintenance workflows below require a repository checkout; they are absent from installed tarballs.
 
 ## Evidence-backed support matrix
 
@@ -62,7 +62,7 @@ The command (Node 22+, no network) re-derives every status from the declared run
 
 Input is validated strictly: format `opm-local-device-acceptance` version 1, at most 2 MiB, 24 runs, 256 observations and 64 markers per run, 1,200 note characters, unique run IDs, known scenarios and policies, plausible sample rates. Anything else is rejected rather than interpreted. One export holds at most 24 captures, so review the first device's file before capturing a second device (a full device needs 18). Pass several files to review them side by side; the matrix is evaluated per file, not merged.
 
-What this does **not** do: authenticate hardware (a desktop browser can spoof its user agent and the form fields are self-declared), measure underruns, or replace reading the markers and notes. A green matrix means "complete declared captures with passing manual judgments", never a certification. `test/device-evidence.test.ts` checks the derivation rules with synthetic shapes that are not evidence for the support matrix.
+What this does **not** do: authenticate hardware (a desktop browser can spoof its user agent and the form fields are self-declared), measure underruns, or replace reading the markers and notes. A green matrix means "complete declared captures with passing manual judgments", never a certification. [`test/device-evidence.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/device-evidence.test.ts) checks the derivation rules with synthetic shapes that are not evidence for the support matrix.
 
 ## Desktop smoke workflow (not physical acceptance)
 

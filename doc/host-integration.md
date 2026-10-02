@@ -4,7 +4,7 @@
 
 `new OPM({ workletUrl?: string | URL })` accepts an optional module path. Relative paths resolve against the page URL; a `URL` is copied when constructed. The default remains `new URL('../worklet/processor.js', import.meta.url)`. A custom module must be same-origin HTTP(S), with no credentials or fragment. HTTPS and secure loopback HTTP are supported; insecure contexts are rejected before audio resources are allocated. `start()` rejects and emits an `error` event when initialization fails, including normal CSP, network and MIME failures. Validation does not bypass browser policy.
 
-Deploy the processor **and its relative imports**, not only one JavaScript file. Keep their installed layout; serve JavaScript as JavaScript and asset misses as 404, not SPA HTML. See the [installed-package Vite example](../examples/vite/README.md) for a non-root deployment with `script-src 'self'`, `worker-src 'self'` and no blob/eval allowances.
+Deploy the processor **and its relative imports**, not only one JavaScript file. Keep their installed layout; serve JavaScript as JavaScript and asset misses as 404, not SPA HTML. See the [installed-package Vite example (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/main/examples/vite/README.md) for a non-root deployment with `script-src 'self'`, `worker-src 'self'` and no blob/eval allowances.
 
 ```ts
 import { OPM } from 'opm.js';
@@ -229,16 +229,16 @@ For a shared context owned elsewhere, omit its final `context.close()`; disconne
 
 Webpack, Rollup, Parcel and static hosts use the same explicit static-asset contract without relying on unverified worklet-plugin APIs: deploy the installed package's **entire `dist/` tree plus the package-root `LICENSE`** at a same-origin URL, preserving relative paths. This is a packaging recipe, not a claim that those other bundlers were exercised. Only the existing Vite production smoke provides bundler-specific runtime verification.
 
-The package ships a dependency-free helper that does this safely:
+The package ships a dependency-free helper that does this safely: Run it from a project with OPM.js installed; `--no-install` prevents an accidental registry fetch.
 
 ```sh
-npx opm-assets copy public/audio/opm-1.8.0     # atomic copy into a NEW directory
-npx opm-assets check https://example.test/audio/opm-1.8.0/   # byte-for-byte check of what is served
+npx --no-install opm-assets copy public/audio/opm-1.8.0     # atomic copy into a NEW directory
+npx --no-install opm-assets check https://example.test/audio/opm-1.8.0/   # byte-for-byte check of what is served
 ```
 
 `copy` (also `import { copyAssets } from 'opm.js/tools/assets.js'`, Node only) inspects the installed release first: only `.js`, `.js.map` and `.d.ts` files under `dist/`, no symlinks, every `.js` with its map and declaration, the entry modules `api/index.js`, `core/index.js`, `worklet/processor.js` and `worker/render.js`, and a bounded size (4,096 files, 16 MiB). It stages a temporary directory beside the destination, copies and re-hashes every file, writes `opm-assets.json` (SHA-256 and size per file, plus `LICENSE`) and renames the staging directory into place. It **never overwrites**: a destination that already holds exactly this release is reported as `reused: true`; anything else is an error and left untouched. Use a fresh release-specific directory (or an atomic deployment switch) so removed old assets cannot mix with a new tree.
 
-`check` (or `checkDeployment(url)`) downloads each listed file from an HTTPS or loopback-HTTP base URL and compares status, a JavaScript MIME type, `X-Content-Type-Options: nosniff` (disable with `requireNosniff: false`) and the SHA-256 against the installed release. Redirects are errors, so an SPA fallback that returns HTML with status 200 fails on MIME or bytes. It cannot see your page's Content-Security-Policy and does not start an AudioWorklet or Worker: run the browser smoke or the [Vite example](../examples/vite/README.md) for that.
+`check` (or `checkDeployment(url)`) downloads each listed file from an HTTPS or loopback-HTTP base URL and compares status, a JavaScript MIME type, `X-Content-Type-Options: nosniff` (disable with `requireNosniff: false`) and the SHA-256 against the installed release. Redirects are errors, so an SPA fallback that returns HTML with status 200 fails on MIME or bytes. It cannot see your page's Content-Security-Policy and does not start an AudioWorklet or Worker: run the browser smoke or the [Vite example (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/main/examples/vite/README.md) for that.
 
 Configure `new OPM({ workletUrl: '/audio/opm-1.8.0/worklet/processor.js' })` and, for Worker export, `workerUrl: '/audio/opm-1.8.0/worker/render.js'`. The worklet's own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import `/audio/opm-1.8.0/api/index.js` externally.
 

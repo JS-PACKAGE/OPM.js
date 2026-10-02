@@ -56,10 +56,10 @@ Acquire the handle from a trusted gesture, keep the cancellation signal alive ac
 
 ## Diagnosing a stalled start
 
-1. `TimeoutError` from `startupTimeoutMs`: fetch `workerUrl` directly. It must be same-origin, served as JavaScript with `nosniff` and a 200 status, next to the rest of the matching `dist/` tree (`npx opm-assets check <base-url>` verifies bytes, status and MIME).
+1. `TimeoutError` from `startupTimeoutMs`: fetch `workerUrl` directly. It must be same-origin, served as JavaScript with `nosniff` and a 200 status, next to the rest of the matching `dist/` tree (`npx --no-install opm-assets check <base-url>` run from a project with OPM.js installed, verifies bytes, status and MIME without fetching a registry CLI).
 2. A Worker that reaches `ready` but never delivers a chunk: look at `status.phase` in `onPhase`. A long `rendering` phase with `frames` not advancing points at the score; a long `writing` phase points at the sink.
 3. Repeated, order-dependent startup failures in an automation harness are not evidence about the package. During the 1.7 verification a managed browser closed targets or missed Worker start deadlines when many Workers started back to back, while the same path passed in isolation. The cause was not established, which is why this release adds measurement (`ready`, phases) rather than an automatic retry.
 
 ## Verified behavior
 
-`test/render-worker.test.ts` runs the real Worker module in a thread. It checks the phase sequence, that diagnostics do not change the bytes, that `startupTimeoutMs` rejects a Worker that never answers (no score is sent and the sink is aborted once) while a 30 ms-per-write sink succeeds under a 1 s watchdog, rejection of invalid or premature `ready` messages, and that a throwing observer fails the render once.
+[`test/render-worker.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/render-worker.test.ts) runs the real Worker module in a thread. It checks the phase sequence, that diagnostics do not change the bytes, that `startupTimeoutMs` rejects a Worker that never answers (no score is sent and the sink is aborted once) while a 30 ms-per-write sink succeeds under a 1 s watchdog, rejection of invalid or premature `ready` messages, and that a throwing observer fails the render once.
