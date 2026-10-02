@@ -16,6 +16,7 @@ export interface RenderNoteOptions extends SynthOptions {
     duration?: number;
     velocity?: number;
     pan?: number;
+    voicePriority?: number;
     sampleRate?: number;
 }
 export interface RenderResult {
@@ -30,7 +31,7 @@ export interface RenderResult {
 }
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
-export { Synth, normalizeVoice, prepareVoice, validateNoteControls } from './synth.js';
+export { Synth, VoiceAdmissionError, normalizeVoice, prepareVoice, validateMaxVoices, validateNoteControls, validateVoicePriority } from './synth.js';
 export { encodeWav, createWavEncoder } from './wav.js';
 export declare const HEADROOM = 0.7;
 export declare const OVERSAMPLE = 4;

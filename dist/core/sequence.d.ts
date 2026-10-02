@@ -10,6 +10,7 @@ export interface SequenceNoteEvent {
     note: number;
     velocity?: number;
     pan?: number;
+    voicePriority?: number;
 }
 export interface SequenceStopEvent {
     type: 'stop';
@@ -27,11 +28,14 @@ export type SequenceVoices = ReadonlyMap<string, VoiceInput>;
 export interface SequenceOptions extends SynthOptions {
     voices?: SequenceVoices;
     sampleRate?: number;
+    /** Logical polyphony, integer1..32; default8. Stolen fades remain bounded to eight. */
+    maxVoices?: number;
 }
-export type PreparedSequenceEvent = Readonly<Omit<SequenceNoteEvent, 'voice' | 'velocity' | 'pan'> & {
+export type PreparedSequenceEvent = Readonly<Omit<SequenceNoteEvent, 'voice' | 'velocity' | 'pan' | 'voicePriority'> & {
     voice: PreparedVoice;
     velocity: number;
     pan: number;
+    voicePriority: number;
 }> | Readonly<SequenceStopEvent> | Readonly<Omit<SequenceControlEvent, 'controls'> & {
     controls: Readonly<NoteControls>;
 }>;

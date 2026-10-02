@@ -17,6 +17,7 @@ type RawMessage = {
     duration: unknown;
     velocity?: unknown;
     pan?: unknown;
+    voicePriority?: unknown;
     late?: unknown;
 } | {
     type: 'noteOff';

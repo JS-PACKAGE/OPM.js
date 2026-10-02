@@ -11,6 +11,10 @@ export interface PresetMetadata {
     /** Extra attenuation before the common audition gain; never an operator-level compensation. */
     readonly hostTrimDb: number;
     readonly purpose: string;
+    readonly suggestedPolyphony: number;
+    readonly designRationale: string;
+    /** Authoring intent and numerical checks are not a listener verdict. */
+    readonly listeningStatus: 'unverified';
 }
 export declare const presetMetadata: Readonly<Record<string, PresetMetadata>>;
 /** The separate default brass export is not the bank brass recipe. */

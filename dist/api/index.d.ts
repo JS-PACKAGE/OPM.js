@@ -7,12 +7,17 @@ export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';
 export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
-export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
-export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat } from './transport.js';
+export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat, swingBeatEvents } from './transport.js';
+export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat, BeatQuantization } from './transport.js';
+export { createArrangement } from './arrangement.js';
+export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
+export { createMidiAdapter, requestMidiAccess } from './midi.js';
+export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike } from './midi.js';
+export { VERSION } from '../version.js';
 export { createPerformance } from './performance.js';
 export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
 export { renderSequenceInWorker } from './render-worker.js';
-export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult } from './render-worker.js';
+export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult, WorkerRenderPhase, WorkerRenderPhaseStatus, WorkerRenderPhaseDiagnostics } from './render-worker.js';
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
     type: 'note';
@@ -86,7 +91,7 @@ export interface OPMOptions {
     stealing?: SynthOptions['stealing'];
     /** Immutable synthesis profile; standard preserves the default sound. */
     quality?: QualityProfile;
-    /** Logical polyphony, an integer in 1..8; default 8. */
+    /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
     maxVoices?: number;
     /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
     interruption?: 'cancel' | 'preserve';
@@ -101,6 +106,8 @@ interface PlayNoteBase {
     duration?: number | null;
     velocity?: number;
     pan?: number;
+    /** Admission importance, integer 0..127; larger values cannot be stolen by lower-priority notes. Default 0. */
+    voicePriority?: number;
 }
 export type PlayNoteOptions = PlayNoteBase & (
 /** Relative delay in seconds; cannot be combined with at. */

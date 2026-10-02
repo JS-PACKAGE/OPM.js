@@ -1,5 +1,6 @@
 import type { OPM } from './index.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
+import type { NoteControls } from '../core/synth.js';
 export interface PerformanceOptions {
     /** Zero-based part count, 1..16; default 16. */
     parts?: number;
@@ -20,6 +21,10 @@ export interface PerformancePartOptions extends PerformancePartControls {
     mode: 'poly' | 'mono';
     legato: boolean;
     priority: 'last' | 'high' | 'low';
+    /** Optional owned-voice budget, including audible release tails, 1..32. */
+    voiceLimit?: number;
+    /** Admission importance, 0..127; larger values protect against lower-priority notes. */
+    voicePriority?: number;
 }
 export interface PerformanceNoteOptions {
     velocity?: number;
@@ -41,12 +46,18 @@ export interface PerformancePartSnapshot {
     readonly pan: number;
     readonly expression: number;
     readonly sustain: boolean;
+    readonly voiceLimit: number | undefined;
+    readonly voicePriority: number;
     readonly selectedKey: number | null;
     readonly keys: readonly PerformanceKeySnapshot[];
 }
 export interface Performance {
     configurePart(part: number, options: Partial<PerformancePartOptions>): void;
     updatePart(part: number, controls: PerformancePartControls): void;
+    /** Update one physical key; inactive mono keys store controls without touching the selected gate. */
+    updateKey(part: number, key: number, controls: NoteControls): boolean;
+    /** Update owned sounding notes and defaults for future notes, including release tails. */
+    updatePartNotes(part: number, controls: NoteControls): void;
     /** Independent key identity, not an OPM admission receipt. OPM must already be started. */
     noteOn(part: number, note: number, options?: PerformanceNoteOptions): number;
     noteOff(part: number, key: number): boolean;

@@ -1,0 +1,1 @@
+{"version":3,"file":"version.js","names":["VERSION"],"sources":["../src/version.ts"],"sourcesContent":["/** Package version; scripts/security-check.ts fails if it differs from package.json. */\nexport const VERSION = '1.8.0';\n"],"mappings":"AACO,MAAMA,EAAU,e","ignoreList":[]}

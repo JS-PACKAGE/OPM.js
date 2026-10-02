@@ -2,6 +2,30 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased — v1.8 candidate
+
+Package version 1.8.0. No release tag, npm publication or physical-device acceptance is implied.
+
+### Engine and integration
+
+- Add priority-aware voice admission and opt-in 1–32 logical voices, retaining the default eight-voice engine and at most eight stealing fades.
+- Add beat-linear tempo ramps, quantization/swing helpers and adaptive looping layers with boundary-quantized section changes and scoped cleanup.
+- Add per-key/per-part expressive controls, per-part voice budgets and an optional, explicitly requested non-SysEx Web MIDI adapter.
+- Add Worker readiness, optional startup timeout and host-local phase diagnostics without weakening chunk acknowledgements or cancellation.
+- Add the dependency-free `opm-assets` deployment/check CLI, canonical filesystem overlap protection, and a bounded physical-device evidence review command.
+- Expand all-profile acoustic references, selective-LFO original presets, audition controls and local human-finding exports. Add adaptive, instrument, independent-bus/stem and FM-designer examples.
+
+### Security and observed verification
+
+- InputProtocolReview approved scoped static **A/B** and DspAssetsReview scoped static **C/D** after correcting arrangement expansion/terminal cleanup, MIDI allowlist own-data handling, nonfinite linear slopes and symlinked deployment overlap. Both reviews were read-only and ran no runtime gates; this is not release approval.
+- The slope and filesystem regressions were observed failing before correction. All 41 targeted arrangement, MIDI, Transport and asset-tool tests passed after correction.
+- Final hardened candidate verification passed 310 behavioral tests, build, strict source/development/public-contract types and source/generated security gates. Isolated installed-package rendering, declarations and the actual installed asset CLI passed. Full/runtime audits found zero vulnerabilities; runtime dependencies remain empty. The device-evidence CLI classified an empty synthetic capture as 36 unverified cells, without creating physical evidence.
+- Fresh `sound-quality` passed 2,505 matrix cases and 24 live-control cases across eco/standard/high, including its independent spectral/filter/streaming gates; `voice-quality` completed with `accepted: true`. These numerical results are not listening or hardware-fidelity verdicts.
+- Assistant-owned native Chromium exercised FM-designer hold/live feedback/release/export with one active Worklet voice and zero errors; instrument startup/cleanup; independent-bus playback and actual offline stem links; eco audition control-phrase measurement/WAV output; and adaptive boundary switching, tempo acceleration, pause/resume/stop with no browser errors. Screenshots were inspected. The audition rejected an unassessed human finding; no listening results were fabricated.
+- Native static Worker smoke completed PCM24 output through two writes (17,324 bytes), reported zero DSP errors and observed initializing/rendering/writing/closing/completed phases.
+- The repository Playwright Chromium smoke could not launch because its cached Chromium framework was missing. Managed Chromium observations above are separate evidence, not a pass for that command or cross-browser CI. Listening, physical MIDI/device behavior and publication remain unverified.
+- Duplicate generated files with ` 2` suffixes are preserved separately during builds and excluded from commits.
+
 ## v1.7
 
 Package version 1.7.0. GitHub release distribution and npm registry publication are separate operations; the historical v1.6 tag and artifact remain immutable.
