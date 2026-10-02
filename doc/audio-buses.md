@@ -1,13 +1,13 @@
 # Polyphony budgets, voice priority and independent buses
 
-OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11](../examples/buses.html) demonstrates independent buses.
+OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/buses.html) demonstrates independent buses.
 
 ## One engine, more voices
 
 `new OPM({ maxVoices })` (and `Synth`, `renderSequence`, the Worker renderer) accepts **1–32** logical voices. The default stays 8. Everything else is unchanged:
 
 - Released notes still occupy a voice until their tail ends, so 32 voices means 32 sounding *or releasing* notes.
-- The stealing fade is still at most eight ~5 ms fades. All state is preallocated for `maxVoices + 9` slots, so a note admission never allocates.
+- The stealing fade is still at most eight ~5 ms fades. DSP voice state is preallocated for `maxVoices + 9` slots. Trusted prepared-patch admission reuses that state; raw patches require validation and snapshot allocation. This is not a global zero-allocation promise for host APIs or command dispatch.
 - One output `tanh` stage and one `mixGain` apply to the sum of all voices.
 
 ### Voice priority
@@ -24,7 +24,7 @@ Use it for protected melodies, bass lines and stingers; do not use it to hide an
 
 ### What it costs
 
-`npm run benchmark` renders 128-frame blocks of the real DSP. The 1.8.0 run below was taken on an Apple M5 (Node 26.7.0, 48 kHz, 2.667 ms block deadline) on a laptop whose load average was about 24 from unrelated processes, so **absolute p99 values are not meaningful and the CI budget gate was not applied**. The median cost relative to the eight-voice standard case is the useful number: cost grows roughly linearly with the number of sounding voices.
+The checkout-only maintenance command `npm run benchmark` renders 128-frame blocks of the real DSP. The 1.8.0 run below was taken on an Apple M5 (Node 26.7.0, 48 kHz, 2.667 ms block deadline) on a laptop whose load average was about 24 from unrelated processes, so **absolute p99 values are not meaningful and the CI budget gate was not applied**. The median cost relative to the eight-voice standard case is the useful number: cost grows roughly linearly with the number of sounding voices.
 
 | Scenario (median block time ÷ deadline) | Median | Relative to 8 voices |
 | --- | --- | --- |

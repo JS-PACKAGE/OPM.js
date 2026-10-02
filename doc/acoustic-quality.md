@@ -2,7 +2,7 @@
 
 The default **standard** profile uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Its coefficients, substep clocks and default sound are unchanged. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once; each voice has eight preallocated filter state scalars. Each internal sample performs four fixed sections with no allocations. State resets on admission and all state must drain on release; an output zero crossing is not sufficient to retire a ringing IIR.
 
-Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` is 1–8 by default-compatible policy and may be raised to 32 as an opt-in; the profile tables and the stealing-fade ceiling (eight) are unchanged.
+Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` accepts 1–32, with default 8; larger budgets are opt-in; the profile tables and the stealing-fade ceiling (eight) are unchanged.
 
 | Profile | Internal rate | Filter order / sections | Filter state per voice | Tradeoff |
 | --- | ---: | ---: | ---: | --- |
@@ -49,7 +49,7 @@ A sharper filter can ring and overshoot; it is not the former convex cascade. In
 
 ## Coverage and evidence
 
-`npm run sound-quality` (about four minutes on the development laptop) reports, **for each of eco, standard and high**:
+The checkout-only maintenance command `npm run sound-quality` (about four minutes on the development laptop) reports, **for each of eco, standard and high**:
 
 - Controlled synthesized passband/THD/folded aliases. Standard keeps the original 22.05/44.1/48/96 kHz grid; eco and high run 44.1/48/96 kHz. Measured passband loss is compared with the independent equation above. In the 1.8.0 run at 48 kHz the measured and predicted losses agreed within 0.006 dB at .20 Fs and within 0.006 dB at .35 Fs for every profile (eco −7.301 vs −7.306 dB, standard −11.504 vs −11.509 dB, high −11.168 vs −11.173 dB). THD of harmonics 2–8 was 0.0208 % for all three.
 - Folded ultrasonic products. Standard (−55.6 dB at .625 Fs, −112.9 dB at 1.125 Fs) and high (−52.1 / −96.3 dB) stay below the 30 dB floor. Eco's fourth-order filter at 2× gives −37.4 dB at .625 Fs, which meets the 30 dB floor by 7 dB, but the gate is the equation's prediction rather than the floor, so a regression of that filter is caught even if it stayed above 30 dB.
@@ -61,7 +61,7 @@ A sharper filter can ring and overshoot; it is not the former convex cascade. In
 
 The standalone decimator comparison (actual filter magnitude, complex phase and impulse latency versus independent transfer mathematics and the former filter) remains standard-profile only. A standalone 48 kHz module smoke for that profile observed -0.00559/-11.50867 dB at .20/.35 Fs and -55.61650/-112.87569 dB for the .625/1.125 Fs folded products; impulse energy delay was 3.31507 output frames and its maximum difference from independent Fourier inversion was below 8e-16. No listening session, perceptual preference, arbitrary-patch alias freedom, chip fidelity, or physical-device CPU/underrun result is asserted here.
 
-`scripts/benchmark.ts` includes report-only comparisons: eight-voice/LFO for all three profiles, opt-in 16 and 32 voices, and two and four independent engines (see [audio buses](./audio-buses.md)), with the same host, block size and excluded warmup. Their timing rows never become realtime acceptance merely because a separate baseline budget is configured. Run the benchmark on the deployment device to observe median/p95/p99/worst and misses; fewer arithmetic operations do not prove a particular host deadline, perceptual preference or physical-device stability.
+[`scripts/benchmark.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/scripts/benchmark.ts) includes report-only comparisons: eight-voice/LFO for all three profiles, opt-in 16 and 32 voices, and two and four independent engines (see [audio buses](./audio-buses.md)), with the same host, block size and excluded warmup. Their timing rows never become realtime acceptance merely because a separate baseline budget is configured. Run the benchmark on the deployment device to observe median/p95/p99/worst and misses; fewer arithmetic operations do not prove a particular host deadline, perceptual preference or physical-device stability.
 
 Observed checkout measurement: Apple M5, darwin arm64, Node.js 26.7.0, 48 kHz, 128-frame blocks (2.667 ms deadline), 300 excluded warmup blocks and 2,000 measured blocks per row. No explicit acceptance budgets were configured.
 
