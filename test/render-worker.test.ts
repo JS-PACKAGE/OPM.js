@@ -112,9 +112,10 @@ test('static render pipeline, real worker backpressure and cancellation boundari
       await ready;
       const worker = ThreadWorker.instances.at(-1)!;
       await delay(40);
-      assert.equal(worker.received.length, 1);
-      assert.equal(worker.received[0].type, 'chunk');
-      assert.equal(worker.received[0].type === 'chunk' && worker.received[0].frames, 0);
+      const chunks = worker.received.filter(message => message.type !== 'ready');
+      assert.equal(chunks.length, 1);
+      assert.equal(chunks[0].type, 'chunk');
+      assert.equal(chunks[0].type === 'chunk' && chunks[0].frames, 0);
       assert.equal(worker.sent.length, 1);
       release();
       await completion;
@@ -183,6 +184,62 @@ test('static render pipeline, real worker backpressure and cancellation boundari
       await assert.rejects(renderSequenceInWorker(score, { ...config, signal: controller.signal, sink: { write() {}, abort() { aborts++; } }, onProgress() { controller.abort(); } }), { name: 'AbortError' });
       assert.equal(ThreadWorker.instances.at(-1)!.sent.length, 1);
       assert.equal(aborts, 1);
+    });
+    await t.test('phase diagnostics follow real startup, rendering, writing and closing without changing PCM', async () => {
+      const phases: string[] = [];
+      const parts: Uint8Array[] = [];
+      const result = await renderSequenceInWorker(score, { ...config, phaseDiagnostics: true, onPhase: status => phases.push(status.phase),
+        sink: { write(bytes) { parts.push(bytes); } } });
+      assert.equal(phases[0], 'initializing');
+      assert.deepEqual([...new Set(phases)], ['initializing', 'rendering', 'writing', 'closing', 'completed']);
+      const diagnostics = result.diagnostics.phases!;
+      assert.equal(diagnostics.status, 'completed');
+      for (const value of [diagnostics.initializingMs, diagnostics.renderingMs, diagnostics.writingMs, diagnostics.closingMs, diagnostics.totalMs]) assert.ok(Number.isFinite(value) && value >= 0);
+      assert.ok(diagnostics.totalMs + 1 >= diagnostics.initializingMs + diagnostics.renderingMs + diagnostics.writingMs + diagnostics.closingMs);
+      const plain = await renderSequenceInWorker(score, { ...config, sink: { write() {} } });
+      assert.equal(plain.diagnostics.phases, undefined);
+      assert.equal(result.bytesWritten, plain.bytesWritten);
+    });
+    await t.test('startup deadline rejects a worker that never becomes ready, but not slow legitimate writes', async () => {
+      const slow = await renderSequenceInWorker(score, { ...config, startupTimeoutMs: 1000, sink: { async write() { await delay(30); } } });
+      assert.ok(slow.bytesWritten > 0, 'the startup watchdog ends at ready and never times the sink');
+      class Stalled extends EventTarget {
+        static last: Stalled | undefined;
+        terminated = false;
+        posted = 0;
+        constructor() { super(); Stalled.last = this; }
+        postMessage() { this.posted++; }
+        terminate() { this.terminated = true; }
+      }
+      const real = Object.getOwnPropertyDescriptor(globalThis, 'Worker')!;
+      Object.defineProperty(globalThis, 'Worker', { configurable: true, value: Stalled });
+      try {
+        let aborts = 0;
+        await assert.rejects(renderSequenceInWorker(score, { ...config, startupTimeoutMs: 20, sink: { write() { assert.fail('no chunk exists'); }, abort() { aborts++; } } }), { name: 'TimeoutError' });
+        assert.equal(aborts, 1);
+        assert.equal(Stalled.last!.terminated, true);
+        assert.equal(Stalled.last!.posted, 0, 'no score is sent before a valid ready');
+        for (const bad of [2, undefined]) {
+          let sinkAborts = 0;
+          const pending = renderSequenceInWorker(score, { ...config, sink: { write() {}, abort() { sinkAborts++; } } });
+          Stalled.last!.dispatchEvent(new MessageEvent('message', { data: { type: 'ready', protocol: bad } }));
+          await assert.rejects(pending, /ready|Invalid|unknown|missing/i);
+          assert.equal(sinkAborts, 1);
+          assert.equal(Stalled.last!.posted, 0);
+        }
+        let early = 0;
+        const eager = renderSequenceInWorker(score, { ...config, sink: { write() { early++; } } });
+        Stalled.last!.dispatchEvent(new MessageEvent('message', { data: { type: 'chunk', index: 0, bytes: new Uint8Array(44), frames: 0, errors: 0, processedEvents: 0 } }));
+        await assert.rejects(eager, /readiness|backpressure/);
+        assert.equal(early, 0);
+        for (const value of [0, 1.5, 2147483648, '5']) await assert.rejects(renderSequenceInWorker(score, { ...config, startupTimeoutMs: value as number, sink: { write() {} } }), RangeError);
+      } finally { Object.defineProperty(globalThis, 'Worker', real); }
+    });
+    await t.test('a throwing phase observer fails once, aborts the sink and terminates the worker', async () => {
+      let aborts = 0;
+      await assert.rejects(renderSequenceInWorker(score, { ...config, onPhase(status) { if (status.phase === 'writing') throw new Error('observer failed'); }, sink: { write() {}, abort() { aborts++; } } }), /observer failed/);
+      assert.equal(aborts, 1);
+      assert.ok(ThreadWorker.instances.at(-1)!.terminated);
     });
   } finally {
     for (const worker of ThreadWorker.instances) if (!worker.terminated) worker.terminate();
