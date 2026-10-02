@@ -1,4 +1,5 @@
-import { renderNote } from '../src/core/index.js';
+import { renderNote, renderSequence, sampleRateValue } from '../src/core/index.js';
+import type { QualityProfile, SequenceEvent } from '../src/core/index.js';
 import type { FrozenVoice, Voice } from '../src/voices/schema.js';
 
 export const AUDITION_NOTES = [48, 60, 84] as const;
@@ -6,6 +7,9 @@ export const AUDITION_VELOCITIES = [0.25, 0.6, 1] as const;
 export const AUDITION_GATE = 0.8;
 export const AUDITION_GAIN = 0.12;
 export const AUDITION_SEED = 20261002;
+export const AUDITION_PROFILES = ['eco', 'standard', 'high'] as const;
+export const AUDITION_PHRASE_REVISION = 'isolated-six-v2';
+export const AUDITION_CONTROL_REVISION = 'ratio-feedback-adsr-v1';
 
 export interface AuditionStep { note: number; velocity: number; duration: number }
 export interface AuditionAudio {
@@ -18,6 +22,9 @@ export interface LevelMatch {
 /** Six isolated notes; shared unsigned seed makes A/B articulation reproducible. */
 export function seededPhrase(seed: number, note: number, velocity: number): readonly AuditionStep[] {
   if (!Number.isInteger(seed) || seed < 0 || seed > 0xffffffff) throw new RangeError('Seed must be uint32');
+  if (!Number.isFinite(note) || note < 0 || note > 127 || !Number.isFinite(velocity) || velocity <= 0 || velocity > 1) {
+    throw new RangeError('Invalid phrase register or velocity');
+  }
   let state = seed;
   const random = () => {
     state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
@@ -37,19 +44,42 @@ export function auditionSlotSeconds(a: Voice | FrozenVoice, b: Voice | FrozenVoi
     Math.min(10, op.adsr.r * 2 ** (-(op.rateKeyScale ?? 0) * (48 - 60) / 12))));
   return AUDITION_GATE + Math.max(release(a), release(b)) + 0.05;
 }
+/** Scheduled controls act on held notes, not on copied replacement patches. */
+export function auditionControlEvents(voice: Voice | FrozenVoice, step: AuditionStep, id = 1): SequenceEvent[] {
+  const ratios = voice.ops.map(op => op.ratio) as [number, number, number, number];
+  const changed = [...ratios] as typeof ratios;
+  changed[0] = Math.min(32, ratios[0] * 1.5);
+  const adsr = voice.ops.map(op => ({ ...op.adsr, s: op.adsr.s * 0.6, r: Math.min(op.adsr.r, 0.4) })) as
+    [typeof voice.ops[0]['adsr'], typeof voice.ops[0]['adsr'], typeof voice.ops[0]['adsr'], typeof voice.ops[0]['adsr']];
+  return [
+    { type: 'note', id, time: 0, duration: AUDITION_GATE, note: step.note, velocity: step.velocity, voice },
+    { type: 'control', id, time: 0.12, controls: { operatorRatios: changed, ramp: 0.06 } },
+    { type: 'control', id, time: 0.25, controls: { feedback: Math.min(7, voice.feedback + 2), ramp: 0.08 } },
+    { type: 'control', id, time: 0.4, controls: { operatorADSR: adsr } },
+    { type: 'control', id, time: 0.55, controls: { operatorRatios: ratios, feedback: voice.feedback, ramp: 0.08 } },
+  ];
+}
 
 /** Bounded six-note dry phrase; equal slot windows prevent release length bias between sources. */
-export function renderAudition(voice: Voice | FrozenVoice, steps: readonly AuditionStep[], slotSeconds: number, sampleRate = 48000): AuditionAudio {
+export function renderAudition(voice: Voice | FrozenVoice, steps: readonly AuditionStep[], slotSeconds: number,
+  sampleRate = 48000, quality: QualityProfile = 'standard', controls = false): AuditionAudio {
   if (steps.length < 1 || steps.length > 6 || !Number.isFinite(slotSeconds) || slotSeconds <= 0 || slotSeconds > 12) {
     throw new RangeError('Invalid audition phrase bounds');
   }
+  sampleRateValue(sampleRate);
+  if (sampleRate > 48000 || !AUDITION_PROFILES.includes(quality)) throw new RangeError('Invalid audition rendering profile');
   const slotFrames = Math.ceil(slotSeconds * sampleRate);
   const left = new Float32Array(slotFrames * steps.length);
   const right = new Float32Array(left.length);
   let errors = 0;
   for (let index = 0; index < steps.length; index++) {
     const step = steps[index];
-    const audio = renderNote({ voice, note: step.note, velocity: step.velocity, duration: step.duration, sampleRate, pan: 0 });
+    if (!Number.isFinite(step.note) || step.note < 0 || step.note > 127 || !Number.isFinite(step.velocity) ||
+        step.velocity <= 0 || step.velocity > 1 || !Number.isFinite(step.duration) || step.duration <= 0 ||
+        step.duration > AUDITION_GATE) throw new RangeError('Invalid audition step');
+    const audio = controls
+      ? renderSequence(auditionControlEvents(voice, step), { sampleRate, quality })
+      : renderNote({ voice, note: step.note, velocity: step.velocity, duration: step.duration, sampleRate, pan: 0, quality });
     if (audio.left.length > slotFrames) throw new RangeError('Audition slot would truncate release');
     errors += audio.diagnostics.errors;
     left.set(audio.left, index * slotFrames);

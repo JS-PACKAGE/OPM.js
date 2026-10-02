@@ -1,4 +1,5 @@
-import { OPM } from '../src/api/index.js';
+import { OPM, VERSION } from '../src/api/index.js';
+import type { QualityProfile } from '../src/api/index.js';
 import { encodeWav, renderNote } from '../src/core/index.js';
 import { examples } from '../src/voices/examples.js';
 import { presetMetadata } from '../src/voices/preset-metadata.js';
@@ -6,14 +7,16 @@ import { parseVoiceBank } from '../src/voices/schema.js';
 import type { FrozenVoice, Voice } from '../src/voices/schema.js';
 import { describeDX7, importDX7 } from '../src/voices/dx7.js';
 import { syntheticDX7Fixtures } from './audition-fixtures.js';
-import { AUDITION_GAIN, AUDITION_GATE, AUDITION_NOTES, AUDITION_VELOCITIES, auditionSlotSeconds,
-  matchLevels, measureSound, renderAudition, seededPhrase } from './audition-metrics.js';
+import { AUDITION_CONTROL_REVISION, AUDITION_GAIN, AUDITION_GATE, AUDITION_NOTES, AUDITION_PHRASE_REVISION, AUDITION_PROFILES,
+  AUDITION_VELOCITIES, auditionSlotSeconds, matchLevels, measureSound, renderAudition, seededPhrase } from './audition-metrics.js';
 import type { AuditionAudio, AuditionStep, LevelMatch, SoundMetrics } from './audition-metrics.js';
+import { LISTENING_CRITERIA, listeningInput, patchIdentity } from './audition-listening.js';
+import type { ListeningVerdict } from './audition-listening.js';
 
 interface AuditionSource { voice: Voice | FrozenVoice; label: string; description: string; hostTrimDb: number }
 interface AuditionSettings {
   a: AuditionSource; b: AuditionSource; note: number; velocity: number; seed: number;
-  phrase: readonly AuditionStep[]; matched: boolean; phraseMode: boolean;
+  phrase: readonly AuditionStep[]; matched: boolean; phraseMode: boolean; controls: boolean; quality: QualityProfile;
 }
 interface AuditionPair {
   audio: AuditionAudio[]; metrics: SoundMetrics[]; gains: number[]; matched: LevelMatch; steps: readonly AuditionStep[];
@@ -32,6 +35,7 @@ const noteSelector = element<HTMLSelectElement>('note');
 const velocitySelector = element<HTMLSelectElement>('velocity');
 const modeSelector = element<HTMLSelectElement>('mode');
 const gainSelector = element<HTMLSelectElement>('gain-mode');
+const qualitySelector = element<HTMLSelectElement>('quality');
 const seedInput = element<HTMLInputElement>('seed');
 const download = element<HTMLAnchorElement>('download');
 const limits = element<HTMLParagraphElement>('limits');
@@ -66,7 +70,9 @@ function settings(): AuditionSettings {
     throw new RangeError('Choose a listed register and velocity.');
   }
   const phrase = seededPhrase(seed, note, velocity);
-  return { a, b, note, velocity, seed, phrase, matched: gainSelector.value === 'matched', phraseMode: modeSelector.value === 'phrase' };
+  const quality = AUDITION_PROFILES.find(profile => profile === qualitySelector.value);
+  if (!quality) throw new RangeError('Choose a listed DSP quality profile.');
+  return { a, b, note, velocity, seed, phrase, matched: gainSelector.value === 'matched', phraseMode: modeSelector.value !== 'single', controls: modeSelector.value === 'controls', quality };
 }
 function stopNotes(): void {
   generation++;
@@ -95,7 +101,7 @@ function action(id: string, run: () => void | Promise<void>): void {
 function renderPair(options: AuditionSettings, note = options.note, velocity = options.velocity, phraseMode = options.phraseMode): AuditionPair {
   const slot = auditionSlotSeconds(options.a.voice, options.b.voice);
   const steps = phraseMode ? seededPhrase(options.seed, note, velocity) : [{ note, velocity, duration: AUDITION_GATE }];
-  const audio = [options.a, options.b].map(source => renderAudition(source.voice, steps, slot));
+  const audio = [options.a, options.b].map(source => renderAudition(source.voice, steps, slot, 48000, options.quality, options.controls));
   const metrics = audio.map(item => measureSound(item.left, item.right,
     phraseMode ? item.left.length : Math.ceil(AUDITION_GATE * item.sampleRate)));
   if (audio.some(item => item.diagnostics.errors) || metrics.some(item => !item.finite)) throw new Error('Invalid offline DSP output');
@@ -120,7 +126,7 @@ function playBuffer(audio: AuditionAudio, sourceGain: number, when: number): voi
 }
 function describePair(pair: AuditionPair, options: AuditionSettings): string[] {
   return [
-    `Seed ${options.seed}; ${options.phraseMode ? 'six-note phrase' : 'single note'}; ${options.matched ? 'energy-matched' : 'dry'}; master gain ${AUDITION_GAIN}.`,
+    `Seed ${options.seed}; ${options.controls ? 'six-note phrase with held ratio/feedback/ADSR controls' : options.phraseMode ? 'six-note phrase' : 'single note'}; ${options.quality} profile; ${options.matched ? 'energy-matched' : 'dry'}; master gain ${AUDITION_GAIN}.`,
     `Phrase/steps: ${JSON.stringify(pair.steps)}`,
     ...pair.metrics.map((sound, index) => `${index === 0 ? 'A' : 'B'} raw peak ${sound.peakDbFS.toFixed(2)} / measurement RMS ${sound.gateRmsDbFS.toFixed(2)} / full RMS ${sound.rmsDbFS.toFixed(2)} dBFS; applied HOST trim ${(20 * Math.log10(pair.gains[index])).toFixed(2)} dB.`),
     `Matched target ${pair.matched.targetDbFS.toFixed(2)} dBFS before master gain; ${options.phraseMode ? 'whole common phrase window including isolated tails' : '0.8s gate window'}. Unweighted RMS, not perceptual equal loudness.`,
@@ -154,7 +160,7 @@ try {
 } catch (error) {
   status.textContent = `Voice loading failed: ${error instanceof Error ? error.message : String(error)}`;
 }
-for (const input of [sourceA, sourceB, noteSelector, velocitySelector, modeSelector, gainSelector, seedInput]) input.addEventListener('change', () => {
+for (const input of [sourceA, sourceB, noteSelector, velocitySelector, modeSelector, gainSelector, qualitySelector, seedInput]) input.addEventListener('change', () => {
   stopNotes();
   clearDownload();
   report.textContent = 'Settings changed. Measure A/B again.';
@@ -225,7 +231,7 @@ action('measure', async () => {
     let trim = 0;
     for (const note of AUDITION_NOTES) for (const velocity of AUDITION_VELOCITIES) {
       if (token !== generation) return;
-      const audio = renderNote({ voice: source.voice, note, velocity, duration: AUDITION_GATE, sampleRate: 48000 });
+      const audio = renderNote({ voice: source.voice, note, velocity, duration: AUDITION_GATE, sampleRate: 48000, quality: options.quality });
       const sound = measureSound(audio.left, audio.right, AUDITION_GATE * audio.sampleRate);
       if (!sound.finite || audio.diagnostics.errors) throw new Error('Invalid DSP output');
       trim = Math.min(trim, sound.suggestedTrimDb);
@@ -252,3 +258,43 @@ element<HTMLButtonElement>('dispose').addEventListener('click', () => {
   });
 });
 window.addEventListener('pagehide', () => { void dispose().catch(() => { /* Leaving page: nodes are already disconnected. */ }); });
+
+// Human listening capture: local memory only, never audio or network upload.
+const findings: object[] = [];
+const MAX_FINDINGS = 50;
+const listenCount = element<HTMLOutputElement>('listen-count');
+function field(id: string): HTMLInputElement | HTMLTextAreaElement { return element<HTMLInputElement | HTMLTextAreaElement>(id); }
+action('listen-record', async () => {
+  if (findings.length >= MAX_FINDINGS) throw new RangeError(`Export or clear findings first; at most ${MAX_FINDINGS} are retained in memory.`);
+  const options = settings();
+  const criteria = {} as Record<typeof LISTENING_CRITERIA[number], ListeningVerdict>;
+  for (const criterion of LISTENING_CRITERIA) criteria[criterion] = element<HTMLSelectElement>(`criterion-${criterion}`).value as ListeningVerdict;
+  const checked = listeningInput({ listener: field('listen-listener').value, device: field('listen-device').value,
+    output: field('listen-output').value, notes: field('listen-notes').value, criteria });
+  const [identityA, identityB] = await Promise.all([patchIdentity(options.a.voice), patchIdentity(options.b.voice)]);
+  findings.push({
+    schema: 'opm-listening-finding-1', packageVersion: VERSION, recordedAt: new Date().toISOString(),
+    selection: { sourceA: sourceA.value, sourceB: sourceB.value, patchA: identityA.id, patchB: identityB.id, quality: options.quality,
+      material: modeSelector.value, phraseRevision: AUDITION_PHRASE_REVISION, controlRevision: AUDITION_CONTROL_REVISION,
+      seed: options.seed, note: options.note, velocity: options.velocity, gainMode: options.matched ? 'energy-matched' : 'dry' },
+    listener: checked.listener, device: checked.device, output: checked.output, notes: checked.notes, criteria: checked.criteria,
+    evidence: 'Human subjective entries only. Numerical reports are separate and are not listening findings.',
+  });
+  listenCount.textContent = `${findings.length} local finding${findings.length === 1 ? '' : 's'} in memory.`;
+  status.textContent = 'Finding recorded locally; nothing was uploaded.';
+});
+action('listen-export', () => {
+  if (findings.length === 0) throw new RangeError('Record at least one human finding first.');
+  const url = URL.createObjectURL(new Blob([JSON.stringify({ schema: 'opm-listening-findings-1', findings }, null, 2)], { type: 'application/json' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `opm-listening-findings-${VERSION}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  status.textContent = 'Findings exported as local JSON. Review identifiers before sharing.';
+});
+action('listen-clear', () => {
+  findings.length = 0;
+  listenCount.textContent = '0 local findings in memory.';
+  status.textContent = 'Local findings cleared.';
+});

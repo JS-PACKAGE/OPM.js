@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — FM sound designer</title>
+  <link rel="stylesheet" href="./styles.css">
+  <style>svg{width:100%;max-width:680px;background:#fff;color:#222;border:1px solid #888} .operators{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:1rem} label{display:block} input[type=number]{width:7em} textarea{width:100%;min-height:12em} .controls{display:flex;flex-wrap:wrap;gap:1rem} #recipe-info{white-space:pre-wrap}</style>
+</head>
+<body><main>
+  <a href="../index.html">Back to examples</a>
+  <h1>FM sound designer</h1>
+  <p>Original four-operator patches. Start from a recipe, hold C4 or Space, and edit. Begin with low device volume. Host gain defaults to 0.15, capped at 0.3. No listening endorsement or physical-device certification.</p>
+  <label>Recipe <select id="recipe"></select></label><pre id="recipe-info"></pre>
+  <div class="controls">
+    <label>Patch name <input id="patch-name" value="user_patch" maxlength="64"></label>
+    <label>Algorithm (0–7) <select id="algorithm"></select></label>
+    <label>Feedback (operator 1) <input id="feedback" type="number" min="0" max="7" step="1"></label>
+    <label>Modulation index <input id="mod-index" type="number" min="0" max="16" step="0.1"></label>
+    <label>Quality <select id="quality"><option>eco</option><option selected>standard</option><option>high</option></select></label>
+    <label>MIDI note <input id="note" type="number" min="0" max="127" step="1" value="60"></label>
+    <label>Velocity <input id="velocity" type="number" min="0" max="1" step="0.05" value="0.65"></label>
+    <label>Host gain <input id="host-gain" type="range" min="0" max="0.3" step="0.01" value="0.15"><output id="host-gain-value">0.15</output></label>
+  </div>
+  <div class="actions"><button id="start" type="button">Start / resume audio</button><button id="hold" type="button" disabled>Hold note</button><button id="release" type="button" disabled>Release</button><button id="panic" type="button" disabled>Panic</button><button id="dispose" type="button" disabled>Dispose audio</button><button id="diagnostics" type="button" disabled>Read Worklet diagnostics</button></div>
+  <output id="status" role="status" aria-live="polite">No audio created. Click Start.</output>
+  <h2>Signal graph</h2><svg id="graph" viewBox="0 0 640 200" role="img" aria-label="Selected operator signal graph"></svg>
+  <p>Arrows point from phase modulator to recipient; carrier arrows reach output. Feedback is the two-sample averaged operator-1 loop. Topology, selective targets, level, detune, waveform and modulation-index changes retrigger a held gate; ratio, feedback, ADSR and LFO depth/rate use native live controls.</p>
+  <div id="operators" class="operators"></div>
+  <fieldset><legend>LFO</legend><div class="controls">
+    <label>Rate Hz <input id="lfo-rate" type="number" min="0" max="20" step="0.1"></label>
+    <label>AM depth <input id="am-depth" type="number" min="0" max="1" step="0.01"></label>
+    <label>PM cents <input id="pm-depth" type="number" min="0" max="1200" step="1"></label>
+    <label>Waveform <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option></select></label>
+    <label>Delay seconds <input id="lfo-delay" type="number" min="0" max="10" step="0.01"></label>
+    <label>Sync <select id="lfo-sync"><option>note</option><option>global</option></select></label>
+    <label>Phase cycles <input id="lfo-phase" type="number" min="0" max="1" step="0.01"></label>
+  </div></fieldset>
+  <h2>Envelope in dB / seconds</h2>
+  <label>Preview gate seconds <input id="preview-gate" type="number" min="0.01" max="20" step="0.1" value="2"></label>
+  <svg id="envelopes" viewBox="0 0 640 260" role="img" aria-label="Four operator fresh-note envelopes"></svg>
+  <p id="envelope-info">ADSR times are seconds, sustain is linear amplitude; straight segments in dB imply exponential amplitude. −96 dB is the engine floor; start/release end become exact zero. Preview is a fresh note, not an oscilloscope: live ADSR edits re-anchor from current dB; key-rate scaling, pitch envelopes, velocity and LFO may alter the actual note.</p>
+  <h2>Canonical patch JSON</h2><p>Single patch, maximum 16 KiB. Strict validation rejects unknown fields, invalid numbers and non-data objects; legacy input is normalized to version 6. Export can be passed directly to <code>opm.playNote({ voice: patch, note: 60 })</code>.</p>
+  <textarea id="patch-json" aria-label="Patch JSON" maxlength="16384" spellcheck="false"></textarea>
+  <div class="actions"><button id="import-patch" type="button">Import JSON</button><button id="export-patch" type="button">Export canonical JSON</button><input id="patch-file" type="file" accept="application/json,.json" aria-label="Import patch file"></div>
+</main><script type="module" src="../dist/demo/sound-design.js"></script></body></html>

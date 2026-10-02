@@ -53,6 +53,26 @@
         <p>Pause, seek and loop a beat score, try sustain/mono priority, smooth timbre controls, DSP quality and atomic voice banks, or export multi-format WAV through a bounded Worker sink.</p>
         <p class="hint">Transport · performance · PCM16/24/Float32 · Worker backpressure · recovery</p>
       </article>
+      <article class="card">
+        <h2><a href="./examples/adaptive.html">09 · Adaptive game music</a></h2>
+        <p>Switch exploration and combat on beat or bar boundaries, toggle layers while a shared pad keeps sounding, ramp tempo and swing patterns.</p>
+        <p class="hint">createArrangement · quantized sections · linear tempo ramps · voice priority</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/instrument.html">10 · Playable instrument and Web MIDI</a></h2>
+        <p>Play a protected mono lead and a limited poly pad from keyboard, pointer or an optional user-granted MIDI input, with live per-part controls.</p>
+        <p class="hint">Performance · per-key controls · voice limits · optional Web MIDI</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/buses.html">11 · Independent buses and stems</a></h2>
+        <p>Run three OPM instances on one AudioContext with separate gain, filter/echo routing and offline stems.</p>
+        <p class="hint">shared AudioContext · per-bus saturation · stems</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/sound-design.html">12 · FM sound designer</a></h2>
+        <p>Edit four operators, algorithms, envelopes and selective LFO targets with a live signal graph, then export canonical patch JSON.</p>
+        <p class="hint">algorithm graph · dB envelopes · live controls · patch JSON</p>
+      </article>
     </nav>
     <p class="hint">Examples run the built dist/ ES modules. Their TypeScript helpers live in demo/; every JS has a matching source map and declaration.</p>
     <p><a href="./README.md">README and API</a> · <a href="./doc/usage.en.md">English guide</a> · <a href="./doc/usage.zh-TW.md">Traditional Chinese guide</a> · <a href="./SECURITY.md">Security policy</a></p>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — Independent buses and stems</title>
+  <link rel="icon" href="../favicon.ico" type="image/x-icon" sizes="16x16 32x32 48x48">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <a href="../index.html">Back to the example index</a>
+    <h1>Independent buses, effects and stems</h1>
+    <p>Three OPM instances share one AudioContext. Each owns its voice budget and output saturation; the host routes them through separate gain nodes and applies a filter and echo only to the accompaniment. Begin with a low device volume.</p>
+    <div class="actions">
+      <button id="start" type="button">Start / restart audio</button>
+      <button id="stop" type="button" disabled>Stop and close this page's context</button>
+      <button id="render" type="button">Render stems offline</button>
+    </div>
+    <fieldset>
+      <legend>Mixer</legend>
+      <label for="master">Master</label><input id="master" type="range" min="0" max="0.5" step="0.01" value="0.25">
+      <label for="gain-melody">Melody bus (priority 100)</label><input id="gain-melody" type="range" min="0" max="1" step="0.01" value="0.8">
+      <label for="gain-accompaniment">Accompaniment bus (filter + echo)</label><input id="gain-accompaniment" type="range" min="0" max="1" step="0.01" value="0.7">
+      <label for="gain-percussion">Percussion bus</label><input id="gain-percussion" type="range" min="0" max="1" step="0.01" value="0.7">
+      <label for="cutoff">Accompaniment lowpass Hz</label><input id="cutoff" type="range" min="300" max="8000" step="10" value="2400">
+      <label for="echo">Echo feedback</label><input id="echo" type="range" min="0" max="0.7" step="0.01" value="0.35">
+    </fieldset>
+    <h2>Offline stems</h2>
+    <ul id="stems"></ul>
+    <p class="hint">Web Audio sums bus outputs linearly after each engine's own headroom saturation. A monolithic single-engine render shares one saturation stage and one voice pool, so a stem sum is a different, valid mix rather than a bitwise equal render. More buses mean more AudioWorklet processors: measure CPU on target devices before adding them.</p>
+    <output id="status" role="status" aria-live="polite">Loading example…</output>
+  </main>
+  <script type="module" src="../dist/demo/buses.js"></script>
+</body>
+</html>
