@@ -14,6 +14,8 @@ export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, Sequ
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
 export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
 export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat } from './transport.js';
+export { createPerformance } from './performance.js';
+export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
 export { renderSequenceInWorker } from './render-worker.js';
 export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult } from './render-worker.js';
 
