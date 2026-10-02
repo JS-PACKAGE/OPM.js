@@ -2,32 +2,43 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-GitHub release **v1.7 (package 1.7.0)** includes canonical voice v6, live operator controls, immutable quality/polyphony selection, atomic voice-bank management, beat transport, multipart performance policies and incremental/Worker WAV export. GitHub distribution does not imply npm registry publication. Node.js 22+ is required; README is the canonical API reference.
+GitHub release **v1.8 (package 1.8.0)** includes canonical voice v6, live operator controls, immutable quality/polyphony selection, priority-aware admission, atomic voice-bank management, tempo ramps/grids, layered arrangement, expressive multipart performance and optional non-SysEx MIDI, incremental/Worker WAV export with startup/phase diagnostics, and the `opm-assets` deployment CLI. GitHub distribution does not imply npm registry publication. Node.js 22+ is required; README is the canonical API reference.
 
-Voice-format versions are independent of package versions: v1.7 uses canonical voice v6; the immutable v1.6 release used v5. Explicit legacy voice versions 1–5 retain their original input shapes.
+Voice-format versions are independent of package versions: v1.8 uses canonical voice v6; the immutable v1.6 release used v5. Explicit legacy voice versions 1–5 retain their original input shapes.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
 ## Acquire and install
 
-Start with a checkout or archive of the [OPM.js repository](https://github.com/YueyuHoshizora/OPM.js). The public npm registry is **not assumed** to have `opm.js`; use a tarball built from this checkout instead. From the **OPM.js repository root**, with Node.js 22+ and npm installed:
+No source checkout or consumer build toolchain is required. With Node.js 22+ and npm, create a new application and install the attached [GitHub v1.8 package](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8) directly:
+
+```sh
+mkdir opm-app
+cd opm-app
+npm init -y
+npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8/opm.js-1.8.0.tgz
+```
+
+For an existing app, run only the install command in its root. The attached tarball is immutable and retains its historical documentation; this synchronized guide describes the current checkout. The public npm registry is **not assumed** to have `opm.js`.
+
+Alternatively, build a tarball from a [repository checkout (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/tree/v1.8). From the **OPM.js repository root**, with Node.js 22+ and npm installed:
 
 ```sh
 npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.7.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.8.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.7.0.tgz
+npm install ../OPM.js/opm.js-1.8.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.7.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, demo scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, or HTML pages. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.8.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, 12 demo entry scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, HTML pages, or the Vite example. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -37,15 +48,15 @@ For the existing checkout demos, from the **OPM.js repository root** run:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/index.html` for eight examples: notes, lookahead melody, live modulation, shared context, WAV, playground, audition and [shared scores/interruption recovery](../examples/sequence.html). Python 3 only serves local assets. Committed `dist/` needs no installation/build; after source/helper changes run `npm ci` then `npm run build`. Use HTTPS or localhost with ES modules/AudioWorklet, never `file://`.
+Open `http://localhost:8000/index.html` for 12 checkout-only HTML examples: notes, lookahead melody, live modulation, shared context, WAV, playground, audition, [shared scores/interruption recovery](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html), instrument/MIDI, sound design, audio buses and adaptive arrangement. Python 3 only serves local assets. Committed `dist/` needs no installation/build; after source/helper changes run `npm ci` then `npm run build`. Use HTTPS or localhost with ES modules/AudioWorklet, never `file://`.
 
-To create an app page, from the **opm-app root** created above, copy the entire installed distribution and license into the static public directory (POSIX shell; on other systems copy the same files manually):
+To create an app page, from the **opm-app root** created above, use the installed CLI to atomically copy the entire distribution and license into a **new** static directory:
 
 ```sh
-mkdir -p public/opm
-cp -R node_modules/opm.js/dist/. public/opm/
-cp node_modules/opm.js/LICENSE public/opm/LICENSE
+npx --no-install opm-assets copy public/opm
 ```
+
+Use a fresh destination; the CLI never overwrites differing host files and reuses an identical existing deployment. For upgrades, use a release-specific path (for example `public/audio/opm-1.8.0`) and update page imports together. `--no-install` prevents automatic registry fetching. POSIX manual equivalent: create `public/opm`, copy `node_modules/opm.js/dist/.` into it, and copy `node_modules/opm.js/LICENSE` to `public/opm/LICENSE`.
 
 Save this complete page as **`opm-app/public/index.html`**:
 
@@ -84,20 +95,28 @@ From the **opm-app root**, serve `public/` and visit `http://localhost:8000/`; c
 python3 -m http.server 8000 --directory public
 ```
 
+For a production host (with JavaScript MIME types and `X-Content-Type-Options: nosniff` configured), verify deployed bytes from the **installed opm-app root**:
+
+```sh
+npx --no-install opm-assets check https://your-host.example/opm/
+```
+
+Use your actual asset-base URL with its trailing slash; loopback HTTP is also supported. The CLI checks the complete installed release's bytes, HTTP status, MIME and `nosniff`, rejects redirects and uses a default 15-second overall deadline. Python's basic server lacks `nosniff` and is for the quick start, not this production check. The Node `opm.js/tools` API exposes `checkDeployment(baseUrl,{timeoutMs,requireNosniff})` (integer deadline 1–60000 ms); disabling `nosniff` is only for development hosts. This does not certify CSP, native Worker/AudioWorklet startup, listening or device deadlines.
+
 Without npm, instead copy the checkout's **complete** `dist/` contents to `site/opm/`, copy its `LICENSE` to `site/opm/LICENSE`, save the same page as `site/index.html`, then from the directory containing `site/` serve it with `python3 -m http.server 8000 --directory site`. Keep `api/`, `core/`, `worklet/`, `worker/`, and `voices/` together, including companion modules, maps and declarations. Do not relocate just one worklet/Worker file. Modules preserve source paths instead of using hashed chunks. The browser imports the served `./opm/api/index.js` URL, not the bare npm name. Static-copy deployment avoids relying on a bundler to discover either module graph.
 
-For an installed-package Vite app, follow [the standalone Vite guide](../examples/vite/README.md): install the local tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
+For an installed-package Vite app, follow [the standalone Vite guide (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/main/examples/vite/README.md): install the release tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
 
 ## Browser API and lifecycle
 
 | Call | Contract |
 | --- | --- |
-| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain = 1, tuning = {}, stealing = 'oldest', interruption = 'cancel', quality = 'standard', maxVoices = 8 } = {})` | Integer rate 8000–96000 Hz; immutable quality `'eco'`/`'standard'`/`'high'` and integer polyphony 1–8 survive close/restart. Borrowed contexts are never suspended/closed by OPM. Omitted destination uses `context.destination`; `null` disables connection. `workletUrl` optionally relocates the complete same-origin worklet tree without weakening secure-context/CSP/MIME requirements. |
+| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain = 1, tuning = {}, stealing = 'oldest', interruption = 'cancel', quality = 'standard', maxVoices = 8 } = {})` | Requested integer rate 8000–96000 Hz; immutable quality `'eco'`/`'standard'`/`'high'` and integer logical polyphony 1–32 (default 8) survive close/restart. The actual rate is `opm.context.sampleRate`; a borrowed context determines its own rate, and OPM never suspends/closes it. Omitted destination uses `context.destination`; `null` disables connection. `workletUrl` optionally relocates the complete same-origin worklet tree without weakening secure-context/CSP/MIME requirements. |
 | `await opm.start()` / `await opm.resume()` | Initialize/resume from a user gesture and await before playback. Concurrent starts coalesce; existing suspended contexts resume. |
 | `opm.connect(destination)` / `opm.disconnect(destination?)` | Connect/disconnect the started worklet; return the instance. Destination must belong to its context; omitted disconnect destination removes all connections. |
 | `opm.loadVoice(name, voice)` | Strictly validate/copy a voice under `[a-zA-Z0-9_-]{1,64}` in a registry bounded to 128 names. Works before startup; replacement affects future notes. |
 | `opm.replaceVoiceBank(source)` / `opm.exportVoiceBank()` / `opm.removeVoice(name)` | Validate the entire JSON string or readonly complete-voice array before replacing the registry; at most 128 entries and 256 KiB JSON. Plain `[]` clears, but JSON `"[]"` remains invalid under the parser's 1–128 contract. Export canonical named JSON (empty bank: `[]`), bounded to 256 KiB. Removal returns boolean and does not kill sounding/queued frozen patches. |
-| `opm.playNote({ voice = 'brass', note, time = 0, at, duration = null, velocity = 1, pan = 0, late = 'start' })` | Finite fractional MIDI 0–127; relative delay 0–60 seconds or mutually exclusive absolute `at`. Duration `(0,60]` or `null` to hold; velocity 0–1; pan −1–1. Returns a positive safe-integer note ID, not admission acknowledgement. |
+| `opm.playNote({ voice = 'brass', note, time = 0, at, duration = null, velocity = 1, pan = 0, voicePriority = 0, late = 'start' })` | Finite fractional MIDI 0–127; relative delay 0–60 seconds or mutually exclusive absolute `at`. Duration `(0,60]` or `null` to hold; velocity 0–1; pan −1–1; integer voicePriority 0–127. Returns a positive safe-integer note ID, not admission acknowledgement. |
 | `opm.stop(id, { at } = {})` | Return a command ID; cancel a pending onset/release a live note immediately or at `at`, preserving natural release-tail automation. `{cancelControls:true}` instead immediately cancels that ID's queued onset/control/off commands and releases it. `cancelControls`, even false, cannot combine with `at`. Inactive/already-released targets report command rejection without changing note state. |
 | `opm.updateNote(id, controls, { at } = {})` | Return a command ID; pending controls apply at onset, and releasing notes remain controllable. Inactive/invalid/queue-full commands report rejection. |
 | `opm.allNotesOff()` / `opm.panic()` | Return a command ID; bypass full scheduled queues. Cancel pending events and release active gates / immediately silence all tails and emit reset. Cache and routing survive. |
@@ -114,7 +133,7 @@ Absolute `at` must be finite, nonnegative, safely representable in sample frames
 
 Controls are a nonempty own-data object: pitch −48..48 semitones; glide 0..10 seconds requiring pitch; expression 0..1; pan −1..1; modulation 0..2 (AM capped at 1/PM 1200 cents); operatorLevels is four multipliers 0..2 over patch levels. Current checkout also accepts feedback 0..7, lfoRate 0..20 Hz, amDepth 0..1, pmDepth 0..1200 cents, four operatorRatios 0.125..32, four operatorFrequencies 1..20000 Hz or `null` to restore ratio mode, and four complete operatorADSR `{a,d,s,r}` objects. Ramp 0..10 seconds independently retargets supplied scalar/ratio/frequency controls from current values; glide remains independent and linear in semitones. Oscillator phase and feedback history survive controls. ADSR changes instead reanchor at current dB: held attack restarts, released notes begin a newly scaled release capped at 10 seconds, and zero release drains the filter immediately. Fixed Hz follows pitch controls but ignores tuning-table transposition. Unknown fields/accessors/nonfinite/out-of-range values reject. See [expressive voices](./expressive-voices.md) and [host integration](./host-integration.md).
 
-The selected 1–8 logical voices and eight short fades are bounded. Stealing defaults to oldest; release-first chooses oldest released before held, while quietest uses current carrier envelope × velocity × expression with oldest ties, not instantaneous sample amplitude. Events/IDs each cap at 256. Future timed notes reserve two events; controls/stops also consume slots. Terminal states reclaim obsolete events. Prepared patches use 128 content-keyed LRU registrations; validated replacement reuses IDs safely while queued/active notes keep their original snapshot.
+The selected 1–32 logical voices (default 8) and at most eight independent short stealing fades are bounded separately. `voicePriority` is integer 0–127, default 0: stealing considers only voices whose priority is no higher than the incoming note, selects the lowest eligible priority first, then applies the stealing policy. Stealing defaults to oldest; release-first chooses oldest released before held, while quietest uses current carrier envelope × velocity × expression with oldest ties, not instantaneous sample amplitude. If all voices have higher priority, the browser reports note rejection reason `priority`; direct `Synth.noteOn` throws `VoiceAdmissionError`. Events/IDs each cap at 256. Future timed notes reserve two events; controls/stops also consume slots. Terminal states reclaim obsolete events. Prepared patches use 128 content-keyed LRU registrations; validated replacement reuses IDs safely while queued/active notes keep their original snapshot.
 
 For customization and early release, **replace only the module `<script>` in `opm-app/public/index.html` above**, keeping its `#play` button and `#status` output:
 
@@ -283,7 +302,7 @@ Replace the quick-start module script with this shared live/offline score:
 
 Score times are relative seconds. Notes require unique positive IDs and finite durations; stop/control events reference those IDs. Full validation precedes posting. Limits are 128 notes, 256 reserved slots (two/note plus commands), 60 seconds including gates, and 4,000,000 offline frames. `playSequence` returns a defensive score-to-note ID map and idempotent `stop`; it cannot reserve capacity atomically against unrelated callers. `renderSequence` includes tails. Matching PCM requires equal settings/rate/frame origin and no competing notes; encode only its left/right/sampleRate fields for WAV.
 
-On physical iOS/Android, follow [mobile acceptance and the support matrix](./mobile-acceptance.md) using [example 08](../examples/sequence.html) over HTTPS. Capture device/OS/browser/rate/policy, observations and manual pass/fail/unverified results for lock/app/call/route/battery/long-play/stall scenarios. Reports remain local. Resume from a gesture; borrowed contexts remain host-owned. Desktop/headless signal checks are not physical recovery or audible-continuity evidence.
+On physical iOS/Android, follow [mobile acceptance and the support matrix](./mobile-acceptance.md) using [example 08 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html) over HTTPS. Capture device/OS/browser/rate/policy, observations and manual pass/fail/unverified results for lock/app/call/route/battery/long-play/stall scenarios. Reports remain local. Resume from a gesture; borrowed contexts remain host-owned. Desktop/headless signal checks are not physical recovery or audible-continuity evidence.
 
 ### Bounded long scores
 
@@ -314,8 +333,8 @@ Replace the quick-start module script, retaining `#play` and `#status`:
   import { OPM, createTransport, createPerformance } from './opm/api/index.js';
   const opm = new OPM({ quality: 'standard', maxVoices: 8 });
   const transport = createTransport(opm, [
-    { type: 'note', id: 1, beat: 0, duration: 1, note: 60 },
-    { type: 'note', id: 2, beat: 1, duration: 1, note: 64 }
+    { type: 'note', id: 1, beat: 1, duration: 1, note: 60 },
+    { type: 'note', id: 2, beat: 2, duration: 1, note: 64 }
   ], { bpm: 120, onError: console.error });
   const performance = createPerformance(opm, { parts: 1 });
   performance.configurePart(0, {
@@ -339,7 +358,13 @@ Replace the quick-start module script, retaining `#play` and `#status`:
 
 Transport uses quarter-note beats (including note durations), the AudioContext clock, and only its own note IDs. It provides `pause`, `resume`, `stop`, `seek`, `setTempo` (current position onward), `setTempoMap`, `setLoop`, `pump`, `dispose`, and read-only state/position/snapshot/IDs. Default BPM is 120; valid BPM 1–1000, tempo maps start at beat 0 and ascend strictly (at most 1024 points), and positions cap at 86400 beats. Signature numerator is 1–32, denominator a power of two up to 32. Horizon is 0.01–10 seconds, interval 0.001–horizon/2, and maxSlots 1–256. Pause/seek/loop restart envelopes/phases rather than restoring DSP snapshots: scalar/ratio ramps resume with remaining durations; latest fixed-Hz/null policy applies immediately, even mid-ramp, and latest ADSR reanchors the new onset. Core exports `beatsToSeconds`, `secondsToBeats`, `beatToBarBeat`, `barBeatToBeat`, and `normalizeTempoMap`.
 
-Performance has 1–16 zero-based parts (default 16), system/per-part key bounds up to 128, independent physical-key IDs even at equal pitch, poly/mono modes, last/high/low priority, sustain and part controls. Use `noteOff(part,key)`, `sustain(part,on)`, `updatePart(part,{glide,pan,expression})`, `allNotesOff(part?)`, `getPart(part)`, and `dispose()`. Held keys outrank pedal-only keys. Mono legato preserves the original gate/envelope/onset velocity/key scaling only within ±48 semitones of the original onset; beyond that it retriggers at the actual pitch. Steals prune keys without automatic readmission; interruption/reset clears helper state even with preserve mode. This is not a MIDI driver. See [host integration](./host-integration.md) for detailed recipes and [example 08](../examples/sequence.html) for interactive transport/performance controls.
+The recipe leaves a one-beat count-in. Transport starts its clock at the current AudioContext time and submits onsets with `late:'drop'`; a beat-0 onset can reach the worklet too late during cold startup. Such rejection stops the helper and reaches `onError`. The count-in gives scheduling lead time, not a guarantee against host stalls; `start()` resolving is not confirmation that every note sounded.
+
+Tempo points support default `curve:'step'` or `curve:'linear'` BPM interpolation in beat space up to the next point; the last point cannot be linear. Optional `endBpm` requires a linear segment and can preserve its endpoint when editing a map. Beat/second conversion integrates and inverts ramps. Import grid helpers `quantizeBeat` (`floor`, `ceil`, `nearest`, strictly-later `next`), `swingBeat` and `swingBeatEvents` from the package root `opm.js` (served `./opm/api/index.js` in plain browsers), not `opm.js/core`; swing transforms note positions, explicit controls/stops and automatic note ends coherently. See [host integration](./host-integration.md) for tempo/grid recipes.
+
+For layered section-based music, `createArrangement` aligns looping layers to the global beat grid and commits section/layer changes at quantized beat/bar/numeric boundaries no earlier than already admitted notes. Shared layers keep sounding without retriggering when unrelated layers change. Layer `voicePriority` combines with note priority by taking the maximum; refused lower-priority notes increment snapshot `priorityDrops` instead of failing the arrangement. See [adaptive music and arrangement](./adaptive-music.md) for limits, transitions and a complete recipe.
+
+Performance has 1–16 zero-based parts (default 16), system/per-part key bounds up to 128, independent physical-key IDs even at equal pitch, poly/mono modes, last/high/low key-selection priority, sustain and part controls. Part `voiceLimit` is 1–32; `voicePriority` is integer 0–127 and is distinct from key-selection priority. Use `noteOff(part,key)`, `sustain(part,on)`, `updatePart(part,{glide,pan,expression})`, `updateKey(part,key,controls)`, `updatePartNotes(part,controls)`, `allNotesOff(part?)`, `getPart(part)`, and `dispose()`. Per-key controls and part-wide defaults include expressive note controls and owned release tails. Held keys outrank pedal-only keys. Mono legato preserves the original gate/envelope/onset velocity/key scaling only within ±48 semitones of the original onset; beyond that it retriggers at the actual pitch. Steals prune keys without automatic readmission; interruption/reset clears helper state even with preserve mode. The performance helper itself is device-agnostic; optional `createMidiAdapter`/`requestMidiAccess` add bounded non-SysEx MIDI input. See [MIDI and expressive performance](./midi-performance.md), [host integration](./host-integration.md), and [example 08 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html).
 
 ## Offline PCM with Node.js
 
@@ -364,7 +389,7 @@ console.log(left.some(sample => sample !== 0), synth.errorCount);
 
 Run `node render.mjs` in **opm-app**; expected output is `true 0`. These are in-memory PCM buffers; center pan is dual mono, other positions are stereo. Checkout imports are `./dist/core/index.js` and `./dist/voices/brass.js`. Use `.mjs` or `"type": "module"`; there is no CommonJS entry.
 
-`new Synth(sampleRate, maxVoices = 8, {mixGain, tuning, stealing, quality = 'standard'} = {})` requires finite 8000–192000 Hz and integer 1–8 voices. `noteOn(voiceOrPrepared,note,id?,{velocity=1,pan=0}={})` accepts fractional MIDI 0–127 with strict velocity/pan bounds and unique positive safe IDs. Prepare immutable snapshots once or validate raw voices each call; pooled state is bounded. `updateNote`/`noteOff` return booleans. `allNotesOff` releases naturally; `panic` clears all tails; setters preserve phase/envelopes. `onVoiceEnded(id,reason)` reports exactly one terminal `stolen`, `ended`, `error` or `cancelled`; callback replacements start next frame and recursive render rejects.
+`new Synth(sampleRate, maxVoices = 8, {mixGain, tuning, stealing, quality = 'standard'} = {})` requires finite 8000–192000 Hz (not necessarily integer) and integer 1–32 logical voices, default 8, with at most eight independent stealing fades. `noteOn(voiceOrPrepared,note,id?,{velocity=1,pan=0,voicePriority=0}={})` accepts fractional MIDI 0–127 with strict velocity/pan bounds, integer priority 0–127 and unique positive safe IDs; it throws `VoiceAdmissionError` if all active voices have higher priority. Prepare immutable snapshots once or validate raw voices each call; pooled state is bounded. `updateNote`/`noteOff` return booleans. `allNotesOff` releases naturally; `panic` clears all tails; setters preserve phase/envelopes. `onVoiceEnded(id,reason)` reports exactly one terminal `stolen`, `ended`, `error` or `cancelled`; callback replacements start next frame and recursive render rejects.
 
 `render(left,right,offset=0,length=nativeLeftLength-offset)` requires native Float32Arrays and nonnegative safe-integer ranges fitting both actual buffers. Shadowed length/fill properties do not enlarge work; proxies/forgeries and numeric coercion reject. Inspect cumulative `currentFrame`/`errorCount`; split rendering at events and retain enough release frames.
 
@@ -509,9 +534,11 @@ try {
 } finally { await file.close(); }
 ```
 
-For long browser files, root export `renderSequenceInWorker(events,{...chunkOptions,quality,format,sink,signal,onProgress,workerUrl?})` returns `{capacity,format,bytesWritten,diagnostics}`. The sink implements `write(bytes)` and optionally `close()`/`abort(reason)`; writes are awaited, with at most one encoded chunk unacknowledged. Progress reports `{frames,totalFrames,bytesWritten,errors}`. Cancellation terminates/rejects immediately without awaiting a hung write/abort; the sink must invalidate outstanding writes and own rollback. The helper is browser-only; core/offline helpers work in Node.
+For long browser files, root export `renderSequenceInWorker(events,{...chunkOptions,quality,format,sink,signal,onProgress,startupTimeoutMs?,phaseDiagnostics?,onPhase?,workerUrl?})` returns `{capacity,format,bytesWritten,diagnostics}`. The sink implements `write(bytes)` and optionally `close()`/`abort(reason)`; writes are awaited, with at most one encoded chunk unacknowledged. Progress reports `{frames,totalFrames,bytesWritten,errors}`. `signal` must be a genuine AbortSignal, including a cross-realm signal; an already-aborted signal cancels before rendering. Cancellation terminates/rejects immediately with `AbortError` without awaiting a hung write, close or abort; the sink must invalidate outstanding writes and own rollback. The helper is browser-only; core/offline helpers work in Node.
 
-The default static module is `dist/worker/render.js`; optional URLs must be same-origin HTTP(S), never blob/data/eval. Copy the entire distribution and serve JavaScript MIME types under suitable `worker-src 'self'` and `script-src 'self'` CSP. See [streaming sequences](./streaming-sequences.md) for the complete cancellable file-sink recipe. [Example 08](../examples/sequence.html) offers format preview and long Worker export: long files require File System Access, without an aggregate-Blob fallback; short previews use an explicit 8 MiB memory budget.
+`startupTimeoutMs` is optional (no deadline by default), integer 1–2147483647 ms, and applies only until the module Worker reports ready; expiration rejects with `TimeoutError`, not a whole-render or sink deadline. `onPhase` synchronously observes `initializing`, `rendering`, `writing`, `closing` and terminal `completed`/`cancelled`/`failed` states with host-local elapsed timing and counters; an observer exception fails the render and invalidates the sink. `phaseDiagnostics:true` adds bounded phase totals to successful `diagnostics.phases`. These timings are not DSP benchmarks, network traces or realtime guarantees. See [Worker diagnostics](./worker-diagnostics.md) for interpretation and deadline/cancellation recipes.
+
+The default static module is `dist/worker/render.js`; optional URLs must be same-origin HTTP(S), never blob/data/eval. Copy the entire distribution and serve JavaScript MIME types under suitable `worker-src 'self'` and `script-src 'self'` CSP. See [streaming sequences](./streaming-sequences.md) for the complete cancellable file-sink recipe. [Example 08 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html) offers format preview and long Worker export: long files require File System Access, without an aggregate-Blob fallback; short previews use an explicit 8 MiB memory budget.
 
 ```text
 public/opm/
@@ -525,7 +552,7 @@ public/opm/
 
 ### DX7 conversion
 
-`importDX7(Uint8Array)` accepts exactly one framed/checksummed **163-byte single voice** or **4104-byte 32-voice bank**, rejecting raw/concatenated/invalid seven-bit messages. v1.7 returns normalized version 6 voices (v1.6 historically returned v5). `describeDX7` returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; original algorithms are 1–32, converted 0–7, with DX7 operator numbering 1–6.
+`importDX7(Uint8Array)` accepts exactly one framed/checksummed **163-byte single voice** or **4104-byte 32-voice bank**, rejecting raw/concatenated/invalid seven-bit messages. v1.8 returns normalized version 6 voices (v1.6 historically returned v5). `describeDX7` returns `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; original algorithms are 1–32, converted 0–7, with DX7 operator numbering 1–6.
 
 This remains a **lossy musical heuristic for six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained. Velocity/rate scaling, reduced pitch-envelope stages and LFO delay/sync are heuristic; unsupported descending saw/sample-and-hold waveforms produce substitutions and warnings. Reduced routing, oscillator sync, transpose, per-operator AM and envelope details remain lossy. Inspect descriptions and [expressive conversion limits](./expressive-voices.md) before auditioning. Browser hosts register converted patches with `loadVoice`; bound uploaded/downloaded bytes before buffering. See [voice quality](./voice-quality.md) for original recipes and numerical host trims.
 
@@ -533,7 +560,7 @@ This remains a **lossy musical heuristic for six-to-four-operator conversion**, 
 
 Maintainer commands run in the checkout, after `npm ci`:
 
-All authored programs use strict TypeScript. `npm run compile` emits ignored `.dev/`; `npm test` compiles/selects behavioral tests, unlike bare `node --test`. `npm run build` derives declarations, preserves module paths and builds eight demo scripts. `npm run typecheck` covers authored programs/public consumers. Every distribution JS has a matching map/declaration; consumers need neither TypeScript nor build tools.
+All authored programs use strict TypeScript. `npm run compile` emits ignored `.dev/`; `npm test` compiles/selects behavioral tests, unlike bare `node --test`. `npm run build` derives declarations, preserves module paths and builds 12 demo entry scripts. `npm run typecheck` covers authored programs/public consumers. Every distribution JS has a matching map/declaration; consumers need neither TypeScript nor build tools.
 
 ```sh
 npm run build
@@ -571,9 +598,9 @@ Every `.js` in `dist/` has a corresponding `.js.map` and generated `.d.ts`, incl
 | Worklet/module 404, HTML returned instead of JS, or MIME error | Copy the **whole** `dist/` tree; preserve relative paths and exclude assets from SPA HTML rewrites. Check the JavaScript MIME type. |
 | Autoplay blocked or playback before start | Invoke and await `opm.start()` inside a user click before `playNote()`. |
 | Invalid pitch, voice name, duration, or unknown voice | Check the [browser API](#browser-api-and-lifecycle) argument bounds and register custom names before playback. |
-| Scheduled notes disappear | Watch lifecycle rejections/steals and diagnostics; respect selected polyphony (1–8) and bounded IDs/events. |
+| Scheduled notes disappear | Watch lifecycle rejections/steals and diagnostics; respect selected logical polyphony (1–32, default 8), voicePriority admission and bounded IDs/events. |
 | Node makes no speaker sound/file | PCM must be played/saved explicitly; use the WAV export recipe above. |
 | Processor failure | Handle `onEvent` errors and failed diagnostics; close/restart rather than bypassing validation or substituting a fallback engine. |
-| npm registry `E404` | Pack this checkout and install the [local tarball](#acquire-and-install), not a presumed registry release. |
+| npm registry `E404` | Install the [GitHub release tarball or checkout-packed local tarball](#acquire-and-install), not a presumed registry release. |
 | Bank parse fails | Supply an array of complete, uniquely named schema voices within the bank size/count limits. |
 | Compressed bytes look like gibberish | Set the correct encoding and MIME response headers, or serve the ordinary `.js` modules without compression. |

@@ -14,7 +14,7 @@ OPM.js follows semantic versioning for the surfaces below. Within 1.x:
 
 | Surface | Promise |
 | --- | --- |
-| `opm.js` (browser API), `opm.js/core` (offline DSP), `opm.js/voices/*.js`, `opm.js/tools/assets.js` | Documented exports, option names, event shapes and error classes are stable in 1.x. Added fields are optional. |
+| `opm.js` (browser API), `opm.js/core` (offline DSP), `opm.js/voices/schema.js`, `opm.js/voices/normalize.js`, `opm.js/voices/dx7.js`, `opm.js/voices/*.js` (banks and metadata), `opm.js/tools/assets.js` | Documented exports, option names, event shapes and error classes are stable in 1.x. Added fields are optional. |
 | `opm-assets` command | `copy <destination>` and `check <base-url>` keep their arguments and one-line JSON result; new subcommands may be added. |
 | Voice JSON | Canonical **version 6**. Versions 1–5 normalize to version 6 for all of 1.x. See [below](#voice-format). |
 | `dist/` file layout | Deploy the **complete** matching tree. Relative paths between modules, the AudioWorklet processor and the Worker are an implementation detail, but the tree is released as one unit. |
@@ -27,7 +27,7 @@ OPM.js follows semantic versioning for the surfaces below. Within 1.x:
 - Version 6 is canonical. Exported banks are always version 6.
 - Legacy versions 1–5 are accepted for the whole 1.x line with their original shapes: v1 excludes key scaling, v1/2 velocity sensitivity, v1–3 waveform, v1–4 expressive fields and v1–5 per-operator LFO targets.
 - A new voice field requires a new version. Validation rejects unknown fields, so a voice written for a newer minor version may **fail to load** in an older runtime. Forward compatibility is not promised; backward compatibility is.
-- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in `src/voices/preset-metadata.ts`, outside the voice schema, and is never part of the exported voice JSON.
+- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/src/voices/preset-metadata.ts), outside the voice schema, and is never part of the exported voice JSON.
 
 ## Sound compatibility
 
@@ -45,7 +45,7 @@ Two facts matter when planning mixes:
 | Node.js | 22 or newer for offline rendering, tests, tooling and the `opm-assets` command. |
 | Browsers | Need ES modules and AudioWorklet on a secure context (HTTPS or localhost). Module Workers are required only for Worker WAV export. Web MIDI is optional and feature-detected. |
 | Desktop CI | The repository's workflow runs real AudioWorklet smoke and stress against Chromium, Firefox and WebKit. A configured workflow is a capability; consult the release notes for runs that actually passed. |
-| iOS Safari, Android Chrome | **Unverified on physical hardware.** The [mobile acceptance workflow](./mobile-acceptance.md) and `npm run device-evidence` exist so a maintainer can review real captures; none is supplied. |
+| iOS Safari, Android Chrome | **Unverified on physical hardware.** The [mobile acceptance workflow](./mobile-acceptance.md) and checkout-only `npm run device-evidence` exist so a maintainer can review real captures; none is supplied. |
 | Web MIDI | Availability depends on the browser and a user permission prompt. The package never requests access on import and never requests SysEx. |
 
 Support for a platform means "no known defect and the documented checks were run", never a certification for every device, OS version or audio route.

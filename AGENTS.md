@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. Its strict TypeScript implementation ships as plain JavaScript ES modules powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
-- **Status:** 1.7 release, including voice-format v6, Transport, performance and Worker rendering. Keep public APIs, voice format and README synchronized; GitHub distribution and npm publication are separate.
+- **Status:** 1.8 GitHub release (package 1.8.0), including voice-format v6, tempo curves/adaptive arrangements, expressive performance with optional Web MIDI, opt-in 32-voice polyphony, Worker diagnostics and asset deployment. Keep public APIs, voice format and README synchronized; GitHub distribution and npm publication are separate.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
 - **Usage:** Start with [README: Getting started](./README.md#getting-started); the [English](./doc/usage.en.md) and [繁體中文](./doc/usage.zh-TW.md) guides cover installation, deployment, and executable examples.
 
@@ -35,9 +35,10 @@ OPM (public API)                     processor
 - `src/core/` — pure DSP, offline sequence rendering, incremental WAV and beat conversion. **No Web Audio imports.**
 - `src/worklet/` — AudioWorkletProcessor and strict bounded message protocol.
 - `src/worker/` — static module Worker for encoded offline chunks with sink acknowledgements.
-- `src/api/` — public facade (`OPM`), atomic voice banks, schedulers, musical Transport, performance policies and Worker host.
+- `src/api/` — public facade (`OPM`), atomic voice banks, schedulers, musical Transport/arrangements, performance policies, optional Web MIDI adapter and Worker host.
 - `src/voices/` — typed voice assets and versioned JSON parsing (format below).
-- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes all eight browser example scripts. Deploy the complete tree. No hashed chunks are generated.
+- `src/tools/` — Node-only dependency-free asset deployment/check CLI, separate from browser/DSP modules.
+- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` and a compiler-generated `.d.ts`; maps embed TypeScript wherever runtime source exists. Includes all twelve bundled browser example scripts, not their HTML pages. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
@@ -72,5 +73,5 @@ A voice is JSON: four operators × (required ratio, optional `frequency` overrid
 
 - VGM / register-level chip emulation
 - Audio file playback (OPM.js synthesizes; it is not a music player)
-- MIDI drivers (a WebMIDI adapter may come later, but not in the engine)
+- Native MIDI drivers and SysEx transmission; the optional user-granted, non-SysEx Web MIDI adapter is API-layer integration, not DSP or a native driver.
 - Any UI beyond `demo/` helpers and `examples/` pages
