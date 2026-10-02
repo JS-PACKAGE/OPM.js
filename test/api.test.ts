@@ -433,6 +433,54 @@ test('interruption cancellation clears voices and pending events, preserve resum
   }
 });
 
+test('delayed context statechange cannot replay cancelled gates through resume or initialized start', async () => {
+  for (const method of ['resume', 'start'] as const) {
+    for (const interruption of ['cancel', 'preserve'] as const) {
+      for (const delivered of [false, true]) {
+        Object.assign(globalThis, { currentFrame: 0 });
+        const context = new MockContext();
+        if (!delivered) context.resume = async () => { context.state = 'running'; };
+        const events: OPMEvent[] = [];
+        const opm = new OPM({ context: context as unknown as AudioContext, interruption, onEvent: event => events.push(event) });
+        await opm.start();
+        try {
+          for (let cycle = 0; cycle < 2; cycle++) {
+            const held = opm.playNote({ note: 69 });
+            const pending = opm.playNote({ note: 60, time: 1 });
+            assert.ok(audible(render(opm).left));
+            // Native promises may settle before either suspended or running notifications.
+            context.state = 'suspended';
+            if (delivered) for (const listener of context.listeners) listener();
+            await opm[method]();
+            if (cycle === 1) for (const listener of context.listeners) listener();
+            const output = render(opm);
+            const diagnostics = await opm.getDiagnostics();
+            assert.equal(diagnostics.errors, 0);
+            if (interruption === 'cancel') {
+              assert.ok(output.left.every(value => value === 0));
+              assert.equal(diagnostics.activeVoices, 0);
+              assert.equal(diagnostics.pendingEvents, 0);
+              for (const id of [held, pending]) {
+                assert.equal(events.filter(event => event.type === 'note' && event.id === id && event.state === 'cancelled').length, 1);
+              }
+              assert.equal(events.filter(event => event.type === 'reset' && event.reason === 'interruption').length, cycle + 1);
+            } else {
+              assert.ok(audible(output.left));
+              assert.equal(diagnostics.activeVoices, cycle + 1);
+              assert.equal(diagnostics.pendingEvents, cycle + 1);
+              assert.equal(events.filter(event => event.type === 'reset').length, 0);
+            }
+            assert.equal(context.state, 'running');
+          }
+        } finally {
+          await opm.close();
+          assert.equal(context.state, 'running', 'the borrowed context remains host-owned');
+        }
+      }
+    }
+  }
+});
+
 test('cache replacement preserves an already accepted patch after more than 128 live edits', async () => {
   Object.assign(globalThis, { currentFrame: 0 });
   const opm = new OPM();

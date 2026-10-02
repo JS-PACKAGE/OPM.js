@@ -202,6 +202,8 @@ FinalInputsReview (A/B) and FinalDspReview (C/D) rechecked the final hardened so
 
 v1.5 release review: Release15Inputs approved scoped static A/B inspection; Release15DspSupply approved C/D for GitHub distribution of package 1.5.0, with no evidence-backed blockers. Neither reviewer executed runtime gates or certified external npm settings. The integration owner's fresh package, native browser, numerical, audit and report-only benchmark evidence is recorded in CHANGELOG.
 
+v1.5 interruption-repair recheck: Release15Inputs initially found that deferred running notifications could leave deduplication state stale. Both initial and existing-node resume now synchronize successful state observation; repeated fully deferred transitions and pending diagnostics are covered by consumer regressions. Release15Inputs then approved A/B and Release15DspSupply approved C/D without remaining scoped static findings. The original Linux WebKit CI failure blocks publication until repaired-candidate verification; static approval is not a waiver or runtime certification.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)

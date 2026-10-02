@@ -16,6 +16,7 @@ Package version 1.5.0. GitHub release distribution and npm registry publication 
 - Add bounded prepareSequence/renderSequence/playSequence with shared note/control/stop ordering, frame rounding, tuning and release tails.
 - Canonicalize voice format 4 with sine/triangle/saw/square LFO waveforms; retain versions 1/2/3 under old field rules. Add oldest/release-first/quietest stealing without instantaneous zero-crossing decisions.
 - Default context interruption to cancel; preserve is explicit. Non-running contexts/resets stop lookahead, with error reporting and gesture-driven restart rather than stale replay.
+- Observe context state before and after native resume rather than relying only on queued statechange notifications; cancel interrupted gates and diagnostics reliably without duplicate interruption resets.
 - Add example 08 with native playback, same-score WAV, gain/tuning/stealing controls, suspend/recovery/disposal, bounded local observation export and manually confirmed physical-device scenarios.
 
 ### Independent numerical and security acceptance
@@ -39,6 +40,15 @@ Package version 1.5.0. GitHub release distribution and npm registry publication 
 - All 1,728 sound cases, independent PM/feedback bounds, two 120-second streaming scenarios and 108 preset/conversion cells passed again.
 - Owned sandboxed, explicitly muted Chromium 153.0.8010.12/Playwright 1.63.0 passed native smoke/stress and installed-package Vite 8.3.2 production subpath/CSP/MIME/404/license checks again. The actual backend was 24 kHz; stress started 769 notes, stole 760, intentionally rejected one late note and settled with zero active/pending notes and DSP errors. These local runs do not certify locked Playwright 1.56.1, Firefox/WebKit or physical-phone coverage.
 - Fresh Apple M5 report-only benchmark (300 warmup blocks excluded, 2,000 measured 128-frame blocks at 48 kHz): eight voices with LFO p99/worst 0.630/2.520 ms and zero misses; raw burst 2.295/12.621 ms and 10 misses; prepared burst 0.914/1.963 ms and zero misses. No hard budgets were configured; these observations are not a universal realtime or glitch-free guarantee.
+
+### WebKit interruption repair
+
+- Initial package 1.5.0 [quality CI](https://github.com/YueyuHoshizora/OPM.js/actions/runs/36999119399) passed Node 22/24/26, Chromium and Firefox but failed Linux WebKit 26.0 interruption cancellation. Publication was paused; the failing assertion was not removed or waived.
+- Native suspend/resume promises can settle before queued statechange tasks. Synchronize observation around both initial and existing-node resumes, recording transitions before callbacks and deduplicating notifications.
+- Real-processor regressions cover deferred running/suspended notifications over consecutive cycles, both resume/start, cancel/preserve, actual PCM, queued/held cancellation exactly once and borrowed ownership. A separate consumer regression verifies outstanding diagnostics reject at recovery boundaries.
+- Release15Inputs re-reviewed A/B after fixing stale observer state; Release15DspSupply re-reviewed C/D. Both scoped static reviews passed without remaining findings; neither reviewer ran runtime gates.
+- Rebuilt 27-module distribution, all 159 behavioral tests, strict types, source/generated AST checks and installed-package render/WAV/declarations passed on Node.js 26.7.0.
+- Unmodified native smoke passed on owned WebKit 26.6 and sandboxed, explicitly muted Chromium 153.0.8010.12 with Playwright 1.63.0 on macOS arm64, using the repaired distribution and a muted audio graph. Both verified interruption reset, terminal cancellation and silent/empty recovery, with zero DSP errors; actual sample rate was 24 kHz. This is separate from locked Linux WebKit 26.0 acceptance.
 
 ## v1.4
 

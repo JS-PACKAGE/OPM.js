@@ -352,7 +352,10 @@ export class OPM {
     if (this.node) {
       const node = this.node;
       try {
+        // Native state promises may settle before statechange; observe both sides of resume.
+        this._contextListener?.listener();
         await this.context!.resume();
+        this._contextListener?.listener();
         if (this._processorFailure || this.node !== node) throw this._processorFailure ?? new Error('AudioWorklet stopped');
       } catch (error) {
         this._rejectDiagnostics(error);
@@ -377,9 +380,12 @@ export class OPM {
       node.port.onmessageerror = () => this._handleFailure(node!, new Error('AudioWorklet message could not be decoded'));
       node.onprocessorerror = () => this._handleFailure(node!, new Error('AudioWorklet processor failed'));
       if (typeof context.addEventListener === 'function') {
+        let observedState: ContextState = context.state;
         const listener = () => {
           if (this.node !== node) return;
           const state = context.state as ContextState;
+          if (state === observedState) return;
+          observedState = state;
           if (CONTEXT_STATES.includes(state)) {
             const time = context.currentTime;
             this._emit({ type: 'context', state, frame: Math.round(time * context.sampleRate), time });
@@ -399,6 +405,7 @@ export class OPM {
       const destination = this._destination === undefined ? context.destination : this._destination;
       if (destination !== null) node.connect(destination);
       await context.resume();
+      this._contextListener?.listener();
       if (this._processorFailure || this.node !== node) throw this._processorFailure ?? new Error('AudioWorklet stopped');
     } catch (error) {
       if (this.node === node) {

@@ -381,3 +381,25 @@ test('diagnostics requests are bounded and never recycle exhausted safe IDs', as
     audio.restore();
   }
 });
+
+test('resume boundaries reject pre-interruption diagnostics despite deferred state notifications', async () => {
+  for (const method of ['resume', 'start'] as const) {
+    const audio = mockAudio();
+    const context = new audio.Context();
+    context.resume = async () => { context.resumed++; context.state = 'running'; };
+    const opm = new OPM({ context: context as unknown as AudioContext, interruption: 'preserve' });
+    try {
+      await opm.start();
+      for (let cycle = 0; cycle < 2; cycle++) {
+        const rejected = assert.rejects(opm.getDiagnostics());
+        context.state = 'suspended';
+        await opm[method]();
+        await rejected;
+        assert.equal(context.state, 'running');
+      }
+    } finally {
+      await opm.close();
+      audio.restore();
+    }
+  }
+});
