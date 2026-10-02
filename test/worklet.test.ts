@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { brass } from '../src/voices/brass.js';
-import type { Synth } from '../src/core/synth.js';
+import { Synth } from '../src/core/synth.js';
+import type { Voice } from '../src/voices/schema.js';
 
 
 interface ProcessorMessage {
@@ -382,4 +383,55 @@ test('panic bypasses full queues, silences release and stealing tails, then reus
   processor.receive({ type: 'noteOn', id: 21, voiceId: 1, note: 60.5, at: 2048 / sampleRate, duration: null });
   assert.ok(block(processor, 2048).some(sample => sample !== 0));
   assert.equal(diagnostics(processor).errors, 0);
+});
+
+test('v5 prepared patches and detached operator automation render identically through the scheduled worklet boundary', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  const patch: Voice = {
+    version: 5, name: 'worklet-expressive', algorithm: 4, feedback: 2, modIndex: 2,
+    lfo: { rate: 3, amDepth: 0.2, pmDepth: 100, waveform: 'triangle', delay: 0.015, sync: 'global', phase: 0.2 },
+    pitchEnvelope: { a: 0.01, d: 0.02, r: 0.03, initial: -100, peak: 100, sustain: 0, final: -200 },
+    ops: [0, 1, 2, 3].map(index => ({ ratio: 1, frequency: 330 * (index + 1), rateKeyScale: 1,
+      level: 0.3, detune: 0, adsr: { a: 0.001, d: 0.01, s: 0.8, r: 0.05 } })) as Voice['ops'],
+  };
+  const original = structuredClone(patch);
+  processor.receive({ type: 'prepareVoice', voiceId: 9, voice: patch });
+  patch.pitchEnvelope!.peak = 4800; patch.ops[0].frequency = 19999; patch.lfo.phase = 1;
+  processor.receive({ type: 'noteOn', id: 1, voiceId: 9, note: 72, at: 64 / sampleRate, duration: null });
+  const levels: [number, number, number, number] = [0.1, 0.5, 1.5, 0];
+  const automation = { operatorLevels: levels, ramp: 0.02 };
+  const detached = structuredClone(automation);
+  processor.receive({ type: 'updateNote', id: 1, controls: automation, at: 256 / sampleRate });
+  levels.fill(0);
+  const live = { pitch: 12, glide: 0.01, expression: 0.4, pan: 0.3 };
+  processor.receive({ type: 'updateNote', id: 1, controls: live, at: 512 / sampleRate });
+  processor.receive({ type: 'noteOff', id: 1, at: 2048 / sampleRate });
+  let reads = 0;
+  const accessor = [1, 1, 1, 1];
+  Object.defineProperty(accessor, '0', { get() { reads++; return 0; } });
+  processor.receive({ type: 'updateNote', id: 1, controls: { operatorLevels: accessor }, at: 300 / sampleRate });
+  assert.equal(reads, 0);
+  const reference = new Synth(sampleRate);
+  const expectedLeft = new Float32Array(4096), expectedRight = new Float32Array(4096);
+  reference.render(expectedLeft, expectedRight, 0, 64);
+  reference.noteOn(original, 72, 1);
+  reference.render(expectedLeft, expectedRight, 64, 192);
+  reference.updateNote(1, detached);
+  reference.render(expectedLeft, expectedRight, 256, 256);
+  reference.updateNote(1, live);
+  reference.render(expectedLeft, expectedRight, 512, 1536);
+  reference.noteOff(1);
+  reference.render(expectedLeft, expectedRight, 2048);
+  const left = new Float32Array(4096), right = new Float32Array(4096);
+  for (let frame = 0; frame < left.length; frame += 128) {
+    Object.assign(globalThis, { currentFrame: frame });
+    processor.process([], [[left.subarray(frame, frame + 128), right.subarray(frame, frame + 128)]]);
+  }
+  assert.deepEqual(left, expectedLeft);
+  assert.deepEqual(right, expectedRight);
+  const report = diagnostics(processor);
+  assert.equal(report.errors, 1, 'malformed tuple rejection is counted without changing sound');
+  assert.equal(report.activeVoices, 0);
+  assert.equal(report.rejectedNotes, 0);
 });

@@ -18,6 +18,8 @@ npm run dev
 
 Open the printed localhost address. Turn output volume down, then press **Play brass**; **Stop** releases the real worklet note. The host routes audio through a gain of 0.08, uses velocity 0.65 and bounds each note to ten seconds. This is a host listening trim, not a patch rewrite or limiter.
 
+The host selects `BASE_URL + 'opm/worklet/processor.js'` through the same-origin `workletUrl` option. It uses an independent `subscribe()` listener and awaits the stop command's **admission**, not release-tail completion. Hover the status after onset for an output-time estimate derived from `getOutputTimestamp()` when available. Page teardown unsubscribes, aborts outstanding waits, permanently disposes the engine, disconnects its host gain and closes the host-owned context. See the [host integration recipe](../../doc/host-integration.md) for clock conversion and reusable component cleanup.
+
 The example manifest and lockfile contain only development tooling, not a guessed registry OPM release or a machine-specific tarball path. `npm ci` installs locked Vite tooling; install the engine tarball separately with `--no-save --package-lock=false`. Running `npm ci` again removes that unsaved engine, so reinstall the tarball afterward. For an npm-published package, install the desired exact version with these same flags instead of the local tarball. The current package version is 1.5.0; registry availability is a separate publication prerequisite. The GitHub release does not publish it to npm.
 
 ```sh

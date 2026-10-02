@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { OPM, type OPMEvent } from '../src/api/index.js';
+import { CommandRejectedError, OPM, type OPMEvent } from '../src/api/index.js';
 
 interface Deferred { promise: Promise<void>; resolve: () => void }
 interface MockAudioOptions {
@@ -21,7 +21,8 @@ interface MockContext {
   resumed: number;
   suspended: number;
   listeners: Set<() => void>;
-  audioWorklet: { addModule: () => Promise<void> };
+  modules: string[];
+  audioWorklet: { addModule: (url: URL) => Promise<void> };
   suspend(): Promise<void>;
   setState(state: string): void;
 }
@@ -56,7 +57,8 @@ function mockAudio({ failModuleAt = -1, failResumeAt = -1, moduleGate, closeGate
     resumed: number;
     suspended: number;
     listeners: Set<() => void>;
-    audioWorklet: { addModule: () => Promise<void> };
+    modules: string[];
+    audioWorklet: { addModule: (url: URL) => Promise<void> };
     constructor() {
       this.index = contexts.length;
       this.destination = {};
@@ -66,7 +68,9 @@ function mockAudio({ failModuleAt = -1, failResumeAt = -1, moduleGate, closeGate
       this.resumed = 0;
       this.suspended = 0;
       this.listeners = new Set<() => void>();
-      this.audioWorklet = { addModule: async () => {
+      this.modules = [];
+      this.audioWorklet = { addModule: async url => {
+        this.modules.push(url.href);
         if (this.index === failModuleAt) throw Error('module load failed');
         if (this.index === 0 && moduleGate) await moduleGate.promise;
       } };
@@ -401,5 +405,232 @@ test('resume boundaries reject pre-interruption diagnostics despite deferred sta
       await opm.close();
       audio.restore();
     }
+  }
+});
+
+test('custom modules stay same-origin and secure, snapshot URLs, and preserve module-load errors', async () => {
+  const originals = new Map(['location', 'isSecureContext'].map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
+  const audio = mockAudio({ failModuleAt: 1 });
+  try {
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: { href: 'https://host.test/app/index.html' } });
+    Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: true });
+    for (const workletUrl of ['https://remote.test/opm.js', 'data:text/javascript,1', 'blob:https://host.test/id',
+      'https://user:password@host.test/processor.js', '/processor.js#fragment']) {
+      assert.throws(() => new OPM({ workletUrl }), /same-origin/);
+    }
+    const url = new URL('https://host.test/assets/processor.js');
+    const opm = new OPM({ workletUrl: url });
+    url.pathname = '/changed.js';
+    await opm.start();
+    assert.deepEqual(contextOf(opm).modules, ['https://host.test/assets/processor.js']);
+    await opm.dispose();
+    const errors: string[] = [];
+    const failed = new OPM({ workletUrl: '../audio/processor.js', onEvent: event => {
+      if (event.type === 'error') errors.push(event.error.message);
+    } });
+    await assert.rejects(failed.start(), /module load failed/);
+    assert.deepEqual(errors, ['module load failed']);
+    assert.deepEqual(audio.contexts[1].modules, ['https://host.test/audio/processor.js']);
+    assert.equal(audio.contexts[1].closed, 1);
+    Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: false });
+    const insecure = new OPM();
+    await assert.rejects(insecure.start(), /secure context/);
+    assert.equal(audio.contexts.length, 2, 'security rejection must precede resource allocation');
+    assert.throws(() => new OPM({ workletUrl: '/processor.js' }), /secure context/);
+    Object.defineProperty(globalThis, 'isSecureContext', { configurable: true, value: true });
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: { href: 'http://host.test/' } });
+    assert.throws(() => new OPM({ workletUrl: '/processor.js' }), /HTTPS or loopback/);
+    Object.defineProperty(globalThis, 'location', { configurable: true, value: { href: 'http://localhost:5173/base/' } });
+    const loopback = new OPM({ workletUrl: 'processor.js' });
+    await loopback.start();
+    assert.deepEqual(contextOf(loopback).modules, ['http://localhost:5173/base/processor.js']);
+    await loopback.dispose();
+  } finally {
+    audio.restore();
+    for (const [key, descriptor] of originals) {
+      if (descriptor) Object.defineProperty(globalThis, key, descriptor);
+      else Reflect.deleteProperty(globalThis, key);
+    }
+  }
+});
+
+test('subscriptions isolate callbacks, defer additions, and distinguish close from terminal disposal', async () => {
+  const audio = mockAudio();
+  const calls: string[] = [];
+  const context = new audio.Context();
+  const opm = new OPM({ context: context as unknown as AudioContext, onEvent: event => {
+    if (event.type === 'command') calls.push('legacy');
+  } });
+  try {
+    await opm.start();
+    let removeSecond = () => {};
+    const removeFirst = opm.subscribe(event => {
+      if (event.type !== 'command') return;
+      calls.push('first');
+      removeSecond();
+      opm.subscribe(next => { if (next.type === 'command') calls.push('added'); });
+      event.state = 'rejected';
+    });
+    removeSecond = opm.subscribe(event => { if (event.type === 'command') calls.push('removed'); });
+    const listener = (event: OPMEvent) => {
+      if (event.type === 'command') { assert.equal(event.state, 'accepted'); calls.push('duplicate'); }
+    };
+    const removeDuplicate = opm.subscribe(listener);
+    const removeOtherDuplicate = opm.subscribe(listener);
+    const reply = { type: 'command', command: 'setMixGain', state: 'accepted', frame: 0, time: 0 };
+    nodeOf(opm).port.onmessage!({ data: reply });
+    assert.deepEqual(calls, ['first', 'duplicate', 'duplicate', 'legacy']);
+    removeFirst();
+    removeFirst();
+    removeDuplicate();
+    removeDuplicate();
+    await opm.close();
+    await opm.start();
+    calls.length = 0;
+    nodeOf(opm).port.onmessage!({ data: reply });
+    assert.deepEqual(calls, ['duplicate', 'added', 'legacy']);
+    const oldReceive = nodeOf(opm).port.onmessage!;
+    const disposal = opm.dispose();
+    assert.strictEqual(opm.dispose(), disposal);
+    await disposal;
+    oldReceive({ data: reply });
+    assert.deepEqual(calls, ['duplicate', 'added', 'legacy'], 'disposed ports cannot deliver stale events');
+    assert.equal(context.closed, 0);
+    assert.equal(context.suspended, 0);
+    assert.equal(context.listeners.size, 0);
+    assert.equal(opm.onEvent, undefined);
+    removeOtherDuplicate();
+    assert.throws(() => opm.subscribe(listener), /disposed/);
+    await assert.rejects(opm.start(), /disposed/);
+    assert.throws(() => opm.setMixGain(0.5), /disposed/);
+  } finally { await opm.dispose(); audio.restore(); }
+});
+
+test('command waits correlate multicast replies, retain immediate outcomes, and reject admission failures', async () => {
+  const audio = mockAudio();
+  const opm = new OPM();
+  try {
+    await opm.start();
+    const commandId = opm.setMixGain(0.5);
+    const first = opm.waitForCommand(commandId);
+    const second = opm.waitForCommand(commandId);
+    let settled = false;
+    void first.then(() => { settled = true; });
+    const reply = { type: 'command', command: 'setMixGain', commandId, state: 'accepted', frame: 100, time: 100 / 44100 };
+    nodeOf(opm).port.onmessage!({ data: { ...reply, command: 'panic' } });
+    nodeOf(opm).port.onmessage!({ data: { ...reply, commandId: commandId + 1 } });
+    await Promise.resolve();
+    assert.equal(settled, false);
+    nodeOf(opm).port.onmessage!({ data: reply });
+    assert.deepEqual(await first, await second);
+    nodeOf(opm).port.onmessage!({ data: { ...reply, state: 'rejected', reason: 'capacity' } });
+    assert.equal((await opm.waitForCommand(commandId)).state, 'accepted', 'first acknowledgement wins');
+    const rejectedId = opm.stop(42);
+    nodeOf(opm).port.onmessage!({ data: { ...reply, command: 'stop', commandId: rejectedId, id: 42, state: 'rejected', reason: 'inactive' } });
+    await assert.rejects(opm.waitForCommand(rejectedId), error =>
+      error instanceof CommandRejectedError && error.event.reason === 'inactive' && error.event.id === 42);
+    await assert.rejects(opm.waitForCommand(999), /Unknown or expired/);
+    await assert.rejects(opm.waitForCommand(commandId, { timeout: 0 }), /timeout/);
+  } finally { await opm.dispose(); audio.restore(); }
+});
+
+test('timeout and abort release only their own waits, with bounded receipts and no loss of live waiters', async () => {
+  const audio = mockAudio();
+  const opm = new OPM();
+  const timers = new Map<number, () => void>();
+  const savedTimeout = globalThis.setTimeout;
+  const savedClear = globalThis.clearTimeout;
+  let nextTimer = 1;
+  Object.assign(globalThis, {
+    setTimeout: (callback: () => void) => { const id = nextTimer++; timers.set(id, callback); return id; },
+    clearTimeout: (id: number) => { timers.delete(id); },
+  });
+  try {
+    await opm.start();
+    const commandId = opm.setMixGain(0.5);
+    const abort = new AbortController();
+    const reason = Error('component unmounted');
+    const aborted = assert.rejects(opm.waitForCommand(commandId, { signal: abort.signal }), error => error === reason);
+    const timedOut = assert.rejects(opm.waitForCommand(commandId, { timeout: 1 }), { name: 'TimeoutError' });
+    abort.abort(reason);
+    for (const callback of [...timers.values()]) callback();
+    await aborted;
+    await timedOut;
+    assert.equal(timers.size, 0);
+    await assert.rejects(opm.waitForCommand(commandId, { signal: abort.signal }), error => error === reason);
+    const waits = Array.from({ length: 64 }, () => opm.waitForCommand(commandId));
+    const settled = Promise.allSettled(waits);
+    await assert.rejects(opm.waitForCommand(commandId), /Too many pending/);
+    const expired = opm.setMixGain(0.6);
+    for (let index = 0; index < 130; index++) opm.setMixGain(0.7);
+    await assert.rejects(opm.waitForCommand(expired), /Unknown or expired/);
+    nodeOf(opm).port.onmessage!({ data: { type: 'command', command: 'setMixGain', commandId,
+      state: 'accepted', frame: 0, time: 0 } });
+    assert.ok((await settled).every(result => result.status === 'fulfilled' && result.value.commandId === commandId));
+    assert.equal(timers.size, 0);
+  } finally {
+    await opm.dispose();
+    Object.assign(globalThis, { setTimeout: savedTimeout, clearTimeout: savedClear });
+    audio.restore();
+  }
+});
+
+test('pending command waits settle on reset, suspension, close and failure; panic survives its own reset', async () => {
+  const audio = mockAudio();
+  const opm = new OPM({ interruption: 'preserve' });
+  try {
+    await opm.start();
+    const reset = assert.rejects(opm.waitForCommand(opm.setMixGain(0.5)), /reset: panic/);
+    const panicId = opm.panic();
+    const panic = opm.waitForCommand(panicId);
+    const laterId = opm.setMixGain(0.7);
+    const later = opm.waitForCommand(laterId);
+    nodeOf(opm).port.onmessage!({ data: { type: 'reset', reason: 'panic', commandId: panicId, frame: 0, time: 0 } });
+    nodeOf(opm).port.onmessage!({ data: { type: 'command', command: 'panic', commandId: panicId, state: 'accepted', frame: 0, time: 0 } });
+    nodeOf(opm).port.onmessage!({ data: { type: 'command', command: 'setMixGain', commandId: laterId, state: 'accepted', frame: 0, time: 0 } });
+    await reset;
+    assert.equal((await panic).state, 'accepted');
+    assert.equal((await later).state, 'accepted', 'a reset cannot cancel commands posted after its panic');
+    const suspended = assert.rejects(opm.waitForCommand(opm.setMixGain(0.5)), /acknowledgement interrupted/);
+    await contextOf(opm).suspend();
+    await suspended;
+    await opm.resume();
+    const closed = assert.rejects(opm.waitForCommand(opm.setMixGain(0.5)), /closed/);
+    await opm.close();
+    await closed;
+    await opm.start();
+    const failed = assert.rejects(opm.waitForCommand(opm.setMixGain(0.5)), /processor failed/);
+    nodeOf(opm).onprocessorerror!();
+    await failed;
+    await opm.start();
+    const interrupted = assert.rejects(opm.waitForCommand(opm.setMixGain(0.5)), /reset: interruption/);
+    nodeOf(opm).port.onmessage!({ data: { type: 'reset', reason: 'interruption', frame: 0, time: 0 } });
+    await interrupted;
+  } finally { await opm.dispose(); audio.restore(); }
+});
+
+test('terminal disposal during initialization cannot leak resources or admit a queued restart', async () => {
+  for (const borrowed of [false, true]) {
+    const moduleGate = deferred();
+    const audio = mockAudio({ moduleGate });
+    const host = borrowed ? new audio.Context() : undefined;
+    const opm = new OPM({ context: host as unknown as AudioContext | undefined });
+    try {
+      const starting = opm.start();
+      const disposal = opm.dispose();
+      assert.strictEqual(opm.dispose(), disposal);
+      await assert.rejects(opm.start(), /disposed/);
+      moduleGate.resolve();
+      await starting;
+      await disposal;
+      assert.equal(audio.contexts.length, 1);
+      assert.equal(audio.contexts[0].closed, borrowed ? 0 : 1);
+      assert.equal(audio.contexts[0].suspended, 0);
+      assert.equal(audio.contexts[0].listeners.size, 0);
+      assert.equal(audio.nodes[0].portClosed, 1);
+      assert.equal(audio.nodes[0].connections.size, 0);
+      assert.equal(opm.node, null);
+      await assert.rejects(opm.resume(), /disposed/);
+    } finally { await opm.dispose(); audio.restore(); }
   }
 });

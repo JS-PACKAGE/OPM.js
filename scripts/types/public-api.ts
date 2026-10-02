@@ -1,7 +1,7 @@
-import { OPM, createLookaheadScheduler, playSequence } from 'opm.js';
-import type { NoteControls, OPMEvent, VoiceInput, SequenceEvent, TuningOptions } from 'opm.js';
-import { Synth, renderNote, renderSequence, normalizeTuning, tuningFrequency, lfoValue, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice } from 'opm.js/core';
-import type { PreparedVoice } from 'opm.js/core';
+import { CommandRejectedError, OPM, createLookaheadScheduler, playSequence, streamSequence } from 'opm.js';
+import type { CommandEvent, CommandWaitOptions, NoteControls, OPMEvent, PitchEnvelope, VoiceInput, SequenceEvent, TuningOptions, SequenceStream } from 'opm.js';
+import { Synth, renderNote, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, normalizeTuning, tuningFrequency, lfoValue, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice } from 'opm.js/core';
+import type { PreparedVoice, SequenceCapacity, ChunkedSequenceOptions, ChunkedSequenceRender, SequenceChunk } from 'opm.js/core';
 import { brass } from 'opm.js/voices/brass.js';
 import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
@@ -11,6 +11,9 @@ import { voiceSchema } from 'opm.js/voices/voice.schema.js';
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
+  version: 5,
+  pitchEnvelope: { a: 0.01, d: 0.1, r: 0.2, initial: 0, peak: 100, sustain: 0, final: -100 },
+  lfo: { rate: 5, amDepth: 0.1, pmDepth: 0.1, delay: 0.05, sync: 'global', phase: 0.25 },
   ops: [brass.ops[0], brass.ops[1], brass.ops[2], brass.ops[3]],
 };
 const normalized = normalizeModule(patch);
@@ -25,8 +28,10 @@ synth.onVoiceEnded = (id, reason) => {
 const id: number = synth.noteOn(complete, 60.5, undefined, { velocity: 0.5, pan: -0.5 });
 const prepared: PreparedVoice = prepareVoice(patch);
 const controlledId = synth.noteOn(prepared, 60);
-const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5, ramp: 0.02 };
+const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5, ramp: 0.02,
+  operatorLevels: [1, 0.5, 0.5, 1] };
 const changed: boolean = synth.updateNote(controlledId, controls);
+const pitchEnvelope: PitchEnvelope | undefined = normalized.pitchEnvelope;
 const left = new Float32Array(128), right = new Float32Array(128);
 synth.render(left, right);
 const released: boolean = synth.noteOff(id);
@@ -42,6 +47,18 @@ const sequence: readonly SequenceEvent[] = [
   { type: 'control', id: 1, time: 0.05, controls: { expression: 0.5, ramp: 0.01 } },
 ];
 const sequenceAudio = renderSequence(sequence, { sampleRate: 48000, tuning, mixGain: 0.5, stealing: 'release-first' });
+const chunkOptions: ChunkedSequenceOptions = { sampleRate: 96000, chunkFrames: 4096, maxFrames: 8_000_000 };
+const longScore = prepareLongSequence([{ type: 'note', id: 1, time: 0, duration: 61, note: 60 }]);
+const capacity: SequenceCapacity = estimateSequenceCapacity(longScore.events, chunkOptions);
+const chunks: ChunkedSequenceRender = renderSequenceChunks(longScore.events, chunkOptions);
+const next = chunks.next();
+if (!next.done) {
+  const chunk: SequenceChunk = next.value;
+  const validFrames: number = chunk.frames;
+  void validFrames;
+}
+chunks.cancel();
+void capacity;
 synth.setMixGain(0.5);
 synth.setTuning(tuning);
 synth.allNotesOff();
@@ -67,8 +84,9 @@ function observe(event: OPMEvent) {
 }
 async function browserConsumer(context: AudioContext, destination: AudioNode) {
   const opm = new OPM({ context, destination: null, onEvent: observe, mixGain: 0.5, tuning,
-    stealing: 'quietest', interruption: 'cancel' });
+    stealing: 'quietest', interruption: 'cancel', workletUrl: new URL('/opm/worklet/processor.js', location.href) });
   opm.loadVoice('custom', complete);
+  const unsubscribe: () => void = opm.subscribe(observe);
   await opm.start();
   opm.connect(destination).disconnect(destination).connect(destination);
   const held: number = opm.playNote({ note: 64, velocity: 0.5, pan: -1 });
@@ -83,6 +101,15 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
   const tuningCommand: number = opm.setTuning(tuning);
   const releaseCommand: number = opm.allNotesOff();
   const panicCommand: number = opm.panic();
+  const waitOptions: CommandWaitOptions = { timeout: 2000, signal: new AbortController().signal };
+  const acknowledgement: CommandEvent = await opm.waitForCommand(panicCommand, waitOptions);
+  const admissionError = new CommandRejectedError({ ...acknowledgement, state: 'rejected', reason: 'capacity' });
+  const reason: string | undefined = admissionError.event.reason;
+  const stream: SequenceStream = streamSequence(opm, sequence, { horizon: 0.2, interval: 0.025, onError: console.error });
+  await stream.start();
+  stream.stop();
+  stream.dispose();
+  void reason;
   void [sequenceIds, mixCommand, tuningCommand, releaseCommand, panicCommand];
   const voices: ReadonlyMap<string, VoiceInput> = opm.voices;
   const scheduler = createLookaheadScheduler(opm, ({ from, to, maxNotes }) => {
@@ -98,6 +125,8 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
   const diagnostics = await opm.getDiagnostics();
   const errors: number = diagnostics.errors;
   await opm.close();
+  unsubscribe();
+  await opm.dispose();
   return errors;
 }
 
@@ -122,12 +151,20 @@ new OPM().playNote({ note: 60, at: 1, late: 'retry' });
 new OPM().playNote({ note: 60, at: 1, time: 0 });
 // @ts-expect-error named voice maps are read-only snapshots
 new OPM().voices.set('bypass', normalized);
+// @ts-expect-error listener must accept OPM events, not arbitrary strings
+new OPM().subscribe((event: string) => console.log(event));
+// @ts-expect-error worklet module options accept only a URL or string
+new OPM({ workletUrl: {} });
+// @ts-expect-error operatorLevels requires exactly four numeric entries
+synth.updateNote(id, { operatorLevels: [1, 1, 1] });
+// @ts-expect-error cumulative render budgets are numeric
+renderSequenceChunks(sequence, { maxFrames: 'unbounded' });
 void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, browserConsumer, legacyOperator, changed, forged];
 
 // Published classes remain structural contracts, without implementation state.
 declare const opmAdapter: Pick<OPM, 'sampleRate' | 'voices' | 'context' | 'node' |
   'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'updateNote' |
-  'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'getDiagnostics' | 'close'>;
+  'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'getDiagnostics' | 'subscribe' | 'waitForCommand' | 'close' | 'dispose'>;
 const compatibleOPM: OPM = opmAdapter;
 declare const synthAdapter: Pick<Synth, 'sampleRate' | 'maxVoices' | 'currentFrame' | 'errorCount' |
   'lastStolenId' | 'noteOn' | 'noteOff' | 'updateNote' | 'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'render'>;
@@ -137,4 +174,4 @@ void [compatibleOPM, compatibleSynth, literalBankLimit];
 const bundledBank: Map<string, FrozenVoice> = parseVoiceBank(examples);
 const schemaVersion: number = voiceSchema.properties.version.const;
 void [bundledBank, schemaVersion];
-void [frequency, lfo, sequenceAudio];
+void [frequency, lfo, sequenceAudio, pitchEnvelope];

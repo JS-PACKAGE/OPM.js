@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { OPM, createLookaheadScheduler } from '../src/api/index.js';
-import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions } from '../src/api/index.js';
+import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
 
 
@@ -511,4 +511,137 @@ test('cache replacement preserves an already accepted patch after more than 128 
 test('supplied null gain or tuning fails before an engine can default to audible settings', () => {
   assert.throws(() => new OPM({ mixGain: null } as unknown as OPMOptions), RangeError);
   assert.throws(() => new OPM({ tuning: null } as unknown as OPMOptions), TypeError);
+});
+
+test('immediate worklet acknowledgements stay awaitable without claiming future command execution', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const events: OPMEvent[] = [];
+  const opm = new OPM({ onEvent: event => events.push(event) });
+  await opm.start();
+  try {
+    const id = opm.playNote({ note: 69 });
+    render(opm);
+    const stop = opm.stop(id, { at: 0.1 });
+    assert.equal((await opm.waitForCommand(stop)).state, 'accepted');
+    assert.equal((await opm.getDiagnostics()).activeVoices, 1);
+    assert.equal(events.some(event => event.type === 'note' && event.id === id && event.state === 'released'), false);
+    render(opm, 2000);
+    assert.ok(events.some(event => event.type === 'note' && event.id === id && event.state === 'released' && event.frame === 1600));
+    const inactive = opm.stop(999);
+    await assert.rejects(opm.waitForCommand(inactive), /inactive/);
+    assert.equal((await opm.waitForCommand(opm.panic())).state, 'accepted', 'panic reset precedes its immediate acknowledgement');
+    assert.ok(render(opm).left.every(sample => sample === 0));
+  } finally { await opm.dispose(); }
+});
+
+test('evicted unwaited panic receipts cannot reject commands posted after their real worklet reset', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  await opm.start();
+  try {
+    opm.playNote({ note: 69 });
+    assert.ok(audible(render(opm).left));
+    const node = nodeOf(opm);
+    const deliver = node.port.postMessage;
+    const queued: unknown[] = [];
+    node.port.postMessage = message => { queued.push(structuredClone(message)); };
+    const panic = opm.panic();
+    const later = opm.setMixGain(0.3);
+    const accepted = opm.waitForCommand(later);
+    const outcome = accepted.then(event => event, error => error as Error);
+    for (let index = 0; index < 127; index++) opm.setMixGain(0.2);
+    await assert.rejects(opm.waitForCommand(panic), /Unknown or expired/);
+    for (const message of queued) deliver(message);
+    node.port.postMessage = deliver;
+    const result = await outcome;
+    assert.ok(!(result instanceof Error), result instanceof Error ? result.message : 'Later admission rejected');
+    assert.equal(result.commandId, later);
+    assert.equal(result.state, 'accepted');
+    assert.ok(render(opm).left.every(sample => sample === 0), 'panic actually clears the held gate');
+  } finally { await opm.dispose(); }
+});
+
+test('command waits use intrinsic AbortSignal state and never execute signal shadow accessors', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  await opm.start();
+  try {
+    const node = nodeOf(opm);
+    node.port.postMessage = () => {}; // Keep admission pending while cancellation is exercised.
+    const command = opm.setMixGain(0.4);
+    const controller = new AbortController();
+    let reads = 0;
+    for (const name of ['aborted', 'reason', 'addEventListener', 'removeEventListener']) {
+      Object.defineProperty(controller.signal, name, { get() { reads++; throw Error(`shadow ${name}`); } });
+    }
+    const reason = Error('host lifetime ended');
+    const wait = opm.waitForCommand(command, { signal: controller.signal });
+    const result = wait.then(event => event, error => error as Error);
+    controller.abort(reason);
+    assert.equal(await result, reason);
+    assert.equal(reads, 0);
+    const fake = { aborted: true, reason, addEventListener() {}, removeEventListener() {} };
+    await assert.rejects(opm.waitForCommand(command, { signal: fake as unknown as AbortSignal }), TypeError);
+    for (let index = 0; index < 64; index++) {
+      const abort = new AbortController();
+      const cancelled = assert.rejects(opm.waitForCommand(command, { signal: abort.signal }), { name: 'AbortError' });
+      abort.abort();
+      await cancelled;
+    }
+    assert.equal((await opm.waitForCommand(command, { timeout: 1 }).catch(error => error)).name, 'TimeoutError');
+  } finally { await opm.dispose(); }
+});
+
+test('named v5 edits retain detached frozen ownership and register every expressive field by content', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const base: Voice = {
+    version: 5, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
+    lfo: { rate: 7, pmDepth: 0.1, amDepth: 0.1, waveform: 'sine' },
+    ops: [
+      { ratio: 1, level: 0.8, detune: 0, adsr: { a: 0.01, d: 0.03, s: 0.7, r: 0.02 } },
+      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+    ],
+  };
+  const changes: ((voice: Voice) => void)[] = [
+    () => {},
+    voice => { voice.ops[0].frequency = 880; },
+    voice => { voice.ops[0].rateKeyScale = 1; },
+    voice => { voice.pitchEnvelope = { a: 0.02, d: 0.04, r: 0.03, initial: 300, peak: 700, sustain: 0, final: -300 }; },
+    voice => { voice.lfo.delay = 0.02; },
+    voice => { voice.lfo.phase = 0.25; },
+    voice => { voice.lfo.sync = 'global'; },
+  ];
+  const opm = new OPM();
+  await opm.start();
+  let baseline: Float32Array | undefined;
+  try {
+    for (const change of changes) {
+      const patch = structuredClone(base);
+      change(patch);
+      opm.panic();
+      opm.loadVoice('live', patch);
+      const expected = structuredClone(patch);
+      const snapshot = opm.voices.get('live')!;
+      assert.equal(snapshot.version, 5);
+      if (snapshot.pitchEnvelope) {
+        assert.throws(() => { snapshot.pitchEnvelope!.initial = 0; }, TypeError);
+        patch.pitchEnvelope!.initial = -1200;
+      }
+      patch.ops[0].level = 0;
+      const reference = new OPM();
+      await reference.start();
+      try {
+        const elapsed = contextOf(opm).frame;
+        if (elapsed > 0) render(reference, elapsed);
+        opm.playNote({ voice: 'live', note: 72 });
+        reference.playNote({ voice: expected, note: 72 });
+        const actual = render(opm, 512).left;
+        assert.deepEqual(actual, render(reference, 512).left);
+        if (baseline) assert.notDeepEqual(actual, baseline, 'the edit must change audible synthesis, not reuse the old registration');
+        else baseline = actual;
+      } finally { await reference.dispose(); }
+    }
+  } finally { await opm.dispose(); }
 });
