@@ -58,6 +58,12 @@ export declare const voiceSchema: {
                 additionalProperties: boolean;
                 required: string[];
                 properties: {
+                    velocitySensitivity: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
                     keyScale: {
                         type: string;
                         additionalProperties: boolean;

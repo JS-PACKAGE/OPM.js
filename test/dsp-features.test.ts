@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, renderNote, normalizeVoice, encodeWav } from '../src/core/index.js';
 import { validateVoice } from '../src/voices/schema.js';
-import type { Voice } from '../src/voices/schema.js';
+import type { LegacyVoice, LegacyVoiceV2, Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return { version: 2, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 3, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0 },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 1 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.03 } })) as Voice['ops'] };
@@ -157,10 +157,11 @@ test('key scaling attenuates on each side of the breakpoint and defaults to flat
   assert.equal(normalized.ops[0].keyScale!.rightDbPerOctave, 6);
 });
 
-test('version1 is legacy-only; canonical v2 keyScale validates strict versus clamped bounds', () => {
+test('legacy versions retain old shapes; keyScale validates strict versus clamped bounds', () => {
   const legacy: Omit<Voice, 'version'> & { version: number } = voice(); legacy.version = 1;
-  assert.equal(validateVoice(legacy).version, 2);
-  assert.equal(normalizeVoice(legacy as unknown as Parameters<typeof normalizeVoice>[0]).version, 2);
+  const normalized = normalizeVoice(legacy as unknown as Parameters<typeof normalizeVoice>[0]);
+  assert.deepEqual(normalized.ops, legacy.ops);
+  assert.deepEqual(validateVoice(legacy).ops, legacy.ops);
   legacy.ops[0].keyScale = { breakpoint: 60, leftDbPerOctave: 0, rightDbPerOctave: 6 };
   assert.throws(() => normalizeVoice(legacy as unknown as Parameters<typeof normalizeVoice>[0]));
   assert.throws(() => validateVoice(legacy));
@@ -179,6 +180,39 @@ test('version1 is legacy-only; canonical v2 keyScale validates strict versus cla
   assert.throws(() => normalizeVoice(input), /must be data/);
   assert.throws(() => validateVoice(input), /must be data/);
 });
+
+test('v1/v2 input shapes preserve old audio and only current operators accept velocity sensitivity', () => {
+  const current = voice();
+  const legacy1: LegacyVoice = { ...structuredClone(current), version: 1,
+    ops: current.ops.map(({ ratio, level, detune, adsr }) => ({ ratio, level, detune, adsr })) as LegacyVoice['ops'] };
+  const legacy2: LegacyVoiceV2 = { ...legacy1, version: 2 };
+  const options = { duration: 0.06, sampleRate: 8000, velocity: 0.4 };
+  assert.deepEqual(renderNote({ ...options, voice: legacy1 }).left,
+    renderNote({ ...options, voice: current }).left);
+  assert.deepEqual(renderNote({ ...options, voice: legacy2 }).left,
+    renderNote({ ...options, voice: current }).left);
+  current.ops[0].velocitySensitivity = 12;
+  assert.equal(normalizeVoice(current).ops[0].velocitySensitivity, 12);
+  assert.equal(validateVoice(current).ops[0].velocitySensitivity, 12);
+  for (const version of [1, 2]) {
+    const invalid = { ...current, version };
+    assert.throws(() => normalizeVoice(invalid as unknown as Parameters<typeof normalizeVoice>[0]));
+    assert.throws(() => validateVoice(invalid));
+  }
+  for (const value of [NaN, Infinity, undefined, null, '1', -1, 49]) {
+    const invalid = structuredClone(current);
+    Object.defineProperty(invalid.ops[0], 'velocitySensitivity', { value, enumerable: true });
+    assert.throws(() => normalizeVoice(invalid));
+    if (typeof value !== 'number' || !Number.isFinite(value)) assert.throws(() => validateVoice(invalid));
+    else assert.equal(validateVoice(invalid).ops[0].velocitySensitivity, value < 0 ? 0 : 48);
+  }
+  let reads = 0;
+  Object.defineProperty(current.ops[0], 'velocitySensitivity', { get() { reads++; return 12; } });
+  assert.throws(() => normalizeVoice(current), /must be data/);
+  assert.throws(() => validateVoice(current), /must be data/);
+  assert.equal(reads, 0);
+});
+
 
 test('WAV headers and PCM16 mono/stereo endpoints are interoperable and interleaved', () => {
   const left = Float32Array.of(-1, -0.5, 0, 0.5, 1);

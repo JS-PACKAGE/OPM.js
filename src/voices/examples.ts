@@ -2,7 +2,7 @@ import type { Voice } from './schema.js';
 
 export const examples: readonly Voice[] = [
   {
-    "version": 2,
+    "version": 3,
     "name": "bell",
     "algorithm": 4,
     "feedback": 0,
@@ -60,7 +60,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2,
+    "version": 3,
     "name": "brass",
     "algorithm": 2,
     "feedback": 4,
@@ -118,7 +118,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2,
+    "version": 3,
     "name": "bass",
     "algorithm": 0,
     "feedback": 3,
@@ -176,7 +176,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
+    "version": 3, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
     "lfo": { "rate": 3.5, "amDepth": 0.1, "pmDepth": 0 },
     "ops": [
       { "ratio": 1, "level": 0.7, "detune": 0, "adsr": { "a": 0.002, "d": 1.2, "s": 0, "r": 0.2 },
@@ -188,7 +188,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
+    "version": 3, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
     "lfo": { "rate": 5, "amDepth": 0.08, "pmDepth": 3 },
     "ops": [
       { "ratio": 0.5, "level": 0.8, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
@@ -198,7 +198,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
+    "version": 3, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
     "lfo": { "rate": 5.5, "amDepth": 0, "pmDepth": 15 },
     "ops": [
       { "ratio": 1, "level": 0.6, "detune": 0, "adsr": { "a": 0.01, "d": 0.1, "s": 0.6, "r": 0.1 } },
@@ -209,7 +209,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 2, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
+    "version": 3, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
     "lfo": { "rate": 4.8, "amDepth": 0.08, "pmDepth": 9 },
     "ops": [
       { "ratio": 1, "level": 0.45, "detune": -5, "adsr": { "a": 0.2, "d": 0.4, "s": 0.6, "r": 0.5 } },

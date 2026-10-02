@@ -2,7 +2,7 @@
 import type { LFO, Voice } from '../src/voices/schema.js';
 export function toneVoice({ ratio = 1, level = 0.5, lfo = { rate: 0, amDepth: 0, pmDepth: 0 } }: { ratio?: number; level?: number; lfo?: LFO } = {}): Voice {
   return {
-    version: 2, name: 'spectral-tone', algorithm: 7, feedback: 0, modIndex: 0, lfo,
+    version: 3, name: 'spectral-tone', algorithm: 7, feedback: 0, modIndex: 0, lfo,
     ops: Array.from({ length: 4 }, () => ({
       ratio, level, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.01 },
     })) as Voice['ops'],

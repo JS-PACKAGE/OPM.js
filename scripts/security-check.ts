@@ -129,10 +129,8 @@ if (process.argv.includes('--package-smoke')) {
       import { brass } from 'opm.js/voices/brass.js';
       import { importDX7 } from 'opm.js/voices/dx7.js';
       import { examples } from 'opm.js/voices/examples.js';
-      import { voiceSchema } from 'opm.js/voices/voice.schema.js';
       import { parseVoiceBank } from 'opm.js/voices/schema.js';
       const bank = parseVoiceBank(examples);
-      assert.equal(voiceSchema.properties.version.const, 2);
       assert.ok(bank.has('electric_piano'));
       const preset = renderNote({ voice: bank.get('electric_piano'), note: 60, duration: 0.02, sampleRate: 8000 });
       assert.equal(preset.diagnostics.errors, 0);

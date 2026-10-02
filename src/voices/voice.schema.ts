@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v2",
+  "title": "OPM.js canonical voice v3",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 2
+      "const": 3
     },
     "name": {
       "type": "string",
@@ -75,6 +75,12 @@ export const voiceSchema = {
           "adsr"
         ],
         "properties": {
+          "velocitySensitivity": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 48,
+            "description": "Operator attenuation in dB at velocity zero; omitted means zero."
+          },
           "keyScale": {
             "type": "object",
             "additionalProperties": false,

@@ -1,6 +1,7 @@
 import type { CompleteVoiceInput, FrozenVoice } from '../voices/schema.js';
 
-export type { ADSR, LFO, KeyScale, Operator, Voice, LegacyVoice, VoiceInput, FrozenVoice } from '../voices/schema.js';
+export type { ADSR, LFO, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
+export type { NoteOptions, NoteControls, VoiceEndReason } from './synth.js';
 export type { WavOptions } from './wav.js';
 
 export interface RenderNoteOptions {
@@ -25,7 +26,7 @@ import { validateVoice, bounded } from '../voices/schema.js';
 import { Synth } from './synth.js';
 export { envelopeAt } from './envelope.js';
 export { ALGORITHMS } from './algorithms.js';
-export { Synth, normalizeVoice } from './synth.js';
+export { Synth, normalizeVoice, prepareVoice, validateNoteControls } from './synth.js';
 export { encodeWav } from './wav.js';
 export const HEADROOM = 0.7; // -3.098 dB, with margin for Float32 rounding.
 export const OVERSAMPLE = 4;

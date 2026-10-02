@@ -1,5 +1,5 @@
 import { LIMITS } from './schema.js';
-import type { Algorithm, LFO, NormalizedVoice, Operator, VoiceInput } from './schema.js';
+import type { Algorithm, LFO, NormalizedVoice, Operator, PreparedVoice, VoiceInput } from './schema.js';
 
 const ZERO_LFO = Object.freeze({ rate: 0, amDepth: 0, pmDepth: 0 });
 
@@ -45,7 +45,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  if (Object.hasOwn(input, 'version') && ![1, 2].includes(field(input, 'version') as number)) {
+  if (Object.hasOwn(input, 'version') && ![1, 2, 3].includes(field(input, 'version') as number)) {
     throw new RangeError('Unsupported voice version');
   }
   const rawOps = field(input, 'ops');
@@ -55,7 +55,9 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
     const op: unknown = descriptor.value;
-    object(op, ['ratio', 'level', 'detune', 'adsr'], field(input, 'version') === 1 ? [] : ['keyScale'], 'operator');
+    const version = field(input, 'version');
+    object(op, ['ratio', 'level', 'detune', 'adsr'],
+      version === 1 ? [] : version === 2 ? ['keyScale'] : ['keyScale', 'velocitySensitivity'], 'operator');
     const adsr = field(op, 'adsr');
     object(adsr, ['a', 'd', 's', 'r'], [], 'adsr');
     ops[i] = {
@@ -67,6 +69,9 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
         s: number(field(adsr, 's'), 's'), r: number(field(adsr, 'r'), 'r'),
       },
     };
+    if (Object.hasOwn(op, 'velocitySensitivity')) {
+      ops[i].velocitySensitivity = number(field(op, 'velocitySensitivity'), 'velocitySensitivity');
+    }
     if (Object.hasOwn(op, 'keyScale')) {
       const scale = field(op, 'keyScale');
       object(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], [], 'keyScale');
@@ -87,9 +92,30 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
       pmDepth: number(field(rawLfo, 'pmDepth'), 'pmDepth'),
     };
   }
-  const voice: NormalizedVoice = { algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
+  const voice: NormalizedVoice = { version: 3, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4 };
   if (name !== undefined) voice.name = name as string;
-  if (Object.hasOwn(input, 'version')) voice.version = 2;
   return voice;
+}
+
+const preparedVoices = new WeakSet<object>();
+
+/** Validate once and retain a deeply immutable, caller-independent snapshot. */
+export function prepareVoice(input: VoiceInput): PreparedVoice {
+  const voice = normalizeVoice(input);
+  Object.freeze(voice.lfo);
+  for (const op of voice.ops) {
+    Object.freeze(op.adsr);
+    if (op.keyScale) Object.freeze(op.keyScale);
+    Object.freeze(op);
+  }
+  Object.freeze(voice.ops);
+  Object.freeze(voice);
+  preparedVoices.add(voice);
+  return voice as unknown as PreparedVoice;
+}
+
+/** @internal Identity, not a public property or structural shape, grants trust. */
+export function preparedVoiceValue(input: VoiceInput | PreparedVoice): PreparedVoice {
+  return preparedVoices.has(input) ? input as PreparedVoice : prepareVoice(input);
 }

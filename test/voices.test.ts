@@ -27,7 +27,7 @@ test('examples validate and normalization is detached and frozen', () => {
 test('malformed-voice fuzz: every numeric field rejects non-finite and wrong types; finite extremes clamp', () => {
   const paths = [['modIndex'], ...['rate','amDepth','pmDepth'].map(k => ['lfo',k]),
     ...Array.from({ length: 4 }, (_, i) => [
-      ...['ratio','level','detune'].map(k => ['ops',i,k]),
+      ...['ratio','level','detune','velocitySensitivity'].map(k => ['ops',i,k]),
       ...['a','d','s','r'].map(k => ['ops',i,'adsr',k]),
     ]).flat()];
   for (const path of paths) {

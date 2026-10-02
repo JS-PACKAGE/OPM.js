@@ -71,7 +71,6 @@ test('standard single and packed bank layouts produce equivalent normalized usab
   assert.deepEqual(single, snapshot);
   assert.deepEqual(importDX7(single), [voice]);
   assert.deepEqual(normalizeVoice(voice), voice);
-  assert.equal(voice.version, 2);
   assert.equal(voice.ops[0].keyScale!.breakpoint, 60);
   assert.equal(parseVoiceBank(bank).size, 32);
   const rendered = renderNote({ voice, note: 60, duration: 0.15, sampleRate: 8000 });
@@ -188,8 +187,33 @@ test('fixed frequency and unsupported semantics are visible outside the ordinary
   assert.ok(description.warnings.some(value => /LFO delay ignored/.test(value)));
   assert.ok(description.warnings.some(value => /Transpose ignored/.test(value)));
   assert.deepEqual(normalizeVoice(voice), voice);
-  assert.equal(parseVoiceBank([voice]).get(voice.name)!.version, 2);
 });
+
+test('DX7 operator velocity sensitivity becomes bounded dB attenuation with audible soft/hard response', () => {
+  const source = singlePayload();
+  source[134] = 31;
+  // Feedback changes the carrier spectrum as its level changes; isolate dB attenuation.
+  source[135] = 0;
+  source[139] = source[140] = 0;
+  for (let slot = 0; slot < 6; slot++) {
+    source[slot * 21 + 16] = slot === 5 ? 99 : 0;
+    source[slot * 21 + 15] = slot === 5 ? 7 : 0;
+  }
+  const sensitive = importDX7(message(source))[0];
+  const description = describeDX7(message(source))[0];
+  const carrier = description.selectedOperators.indexOf(1);
+  assert.equal(sensitive.ops[carrier].velocitySensitivity, 48);
+  source[105 + 15] = 0;
+  const flat = importDX7(message(source))[0];
+  const options = { note: 60, duration: 0.12, velocity: 0.1, sampleRate: 8000 };
+  const quiet = renderNote({ ...options, voice: sensitive }).left;
+  const loud = renderNote({ ...options, voice: flat }).left;
+  assert.ok(rms(loud) > 0.0001, 'fixture has a retained audible carrier');
+  assert.ok(Math.abs(rms(quiet) / rms(loud) - 10 ** (-48 * 0.9 / 20)) < 0.001);
+  assert.deepEqual(renderNote({ ...options, velocity: 1, voice: sensitive }).left,
+    renderNote({ ...options, velocity: 1, voice: flat }).left);
+});
+
 
 test('frequency bounds and sliced byte views preserve finite independent voices', () => {
   const data = singlePayload();

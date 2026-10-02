@@ -192,6 +192,8 @@ function convertOperator(data: Uint8Array, number: number): Operator {
     ratio: clampRatio(ratio),
     level: amplitude(data[at + 16]) * peakAmplitude,
     detune: (data[at + 20] - 7) * 3,
+    // Linear dB response is a musical approximation, not Yamaha's transfer curve.
+    velocitySensitivity: data[at + 15] / 7 * 48,
     adsr: {
       a: seconds(data[at]),
       d: Math.min(10, seconds(data[at + 1]) + seconds(data[at + 2])),
@@ -214,7 +216,7 @@ export function importDX7(input: Uint8Array): Voice[] {
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
     return normalizeVoice({
-      version: 2, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+      version: 3, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
       ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
       lfo: {
         rate: data[137] / 99 * 20,
@@ -239,7 +241,7 @@ export function describeDX7(input: Uint8Array): DX7ImportDescription[] {
       const at = operatorOffset(number);
       if (data[at + 17]) warnings.push(`OP${number} fixed frequency approximated as a MIDI-60 ratio if retained; key tracking changes.`);
       if (data[at + 13]) warnings.push(`OP${number} keyboard rate scaling ignored.`);
-      if (data[at + 15]) warnings.push(`OP${number} per-operator velocity sensitivity ignored; playback uses voice-wide velocity.`);
+      if (data[at + 15]) warnings.push(`OP${number} per-operator velocity sensitivity approximated as linear 0..48 dB attenuation if retained; not Yamaha response curves.`);
       if (data[at + 7]) warnings.push(`OP${number} nonzero final envelope level ignored; release ends at silence.`);
       if ((data[at + 9] && data[at + 11] >= 2) || (data[at + 10] && data[at + 12] >= 2)) {
         warnings.push(`OP${number} positive keyboard scaling ignored; negative curves become linear 0..24 dB/octave attenuation.`);

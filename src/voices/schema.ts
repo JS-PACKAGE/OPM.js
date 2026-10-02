@@ -2,17 +2,20 @@ export type Algorithm = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export interface ADSR { a: number; d: number; s: number; r: number }
 export interface LFO { rate: number; amDepth: number; pmDepth: number }
 export interface KeyScale { breakpoint: number; leftDbPerOctave: number; rightDbPerOctave: number }
-export interface LegacyOperator { ratio: number; level: number; detune: number; adsr: ADSR; keyScale?: never }
-export interface Operator { ratio: number; level: number; detune: number; adsr: ADSR; keyScale?: KeyScale }
+export interface LegacyOperator { ratio: number; level: number; detune: number; adsr: ADSR; keyScale?: never; velocitySensitivity?: never }
+export interface LegacyOperatorV2 extends Omit<LegacyOperator, 'keyScale'> { keyScale?: KeyScale }
+export interface Operator extends Omit<LegacyOperatorV2, 'velocitySensitivity'> { velocitySensitivity?: number }
 export type FourOperators<T = Operator> = [T, T, T, T];
 interface VoiceBase { name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex?: number; lfo?: LFO }
-/** Strict single-voice input; optional metadata and modulation have runtime defaults. */
-export type VoiceInput = (VoiceBase & { version?: 2; ops: readonly [Operator, Operator, Operator, Operator] }) |
+/** Strict single-voice input; omitted version uses the current operator shape. */
+export type VoiceInput = (VoiceBase & { version?: 3; ops: readonly [Operator, Operator, Operator, Operator] }) |
+  (VoiceBase & { version: 2; ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2] }) |
   (VoiceBase & { version: 1; ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator] });
-export interface Voice { version: 2; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
+export interface Voice { version: 3; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
 export interface LegacyVoice { version: 1; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators<LegacyOperator> }
-export interface NormalizedVoice { version?: 2; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
-export type CompleteVoiceInput = Voice | LegacyVoice;
+export interface LegacyVoiceV2 extends Omit<LegacyVoice, 'version' | 'ops'> { version: 2; ops: FourOperators<LegacyOperatorV2> }
+export interface NormalizedVoice { version: 3; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; ops: FourOperators }
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops'>> & {
   readonly lfo: Readonly<LFO>;
   readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
@@ -20,13 +23,21 @@ export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops'>> & {
 export type FrozenOperator = Readonly<Omit<Operator, 'adsr' | 'keyScale'>> & {
   readonly adsr: Readonly<ADSR>; readonly keyScale?: Readonly<KeyScale>;
 };
+declare const preparedVoiceBrand: unique symbol;
+/** Immutable validated snapshot. Only prepareVoice can create the trusted identity. */
+export type PreparedVoice = Readonly<Omit<NormalizedVoice, 'lfo' | 'ops'>> & {
+  readonly lfo: Readonly<LFO>;
+  readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
+  readonly [preparedVoiceBrand]: true;
+};
+export { prepareVoice } from './normalize.js';
 
 // Canonicalization uses explicit keys; no untrusted objects are merged.
 export const MAX_BANK_BYTES = 262144;
 export const MAX_BANK_VOICES = 128;
-type LimitKey = 'ratio' | 'level' | 'detune' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
+type LimitKey = 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
 export const LIMITS: Readonly<Record<LimitKey, readonly [number, number]>> = Object.freeze({
-  ratio: [0.125, 32], level: [0, 1], detune: [-1200, 1200],
+  ratio: [0.125, 32], level: [0, 1], detune: [-1200, 1200], velocitySensitivity: [0, 48],
   a: [0, 10], d: [0, 10], s: [0, 1], r: [0, 10],
   modIndex: [0, 16], rate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200],
   breakpoint: [0, 127], leftDbPerOctave: [0, 24], rightDbPerOctave: [0, 24],
@@ -77,7 +88,7 @@ function array(value: unknown, min: number, max: number, label: string): asserts
 
 export function validateVoice(input: unknown): FrozenVoice {
   record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice');
-  if (input.version !== 1 && input.version !== 2) throw new RangeError('Unsupported voice version');
+  if (input.version !== 1 && input.version !== 2 && input.version !== 3) throw new RangeError('Unsupported voice version');
   if (typeof input.name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
     throw new TypeError('Voice name must contain 1..64 letters, digits, underscores or hyphens');
   }
@@ -88,13 +99,15 @@ export function validateVoice(input: unknown): FrozenVoice {
   const ops: FrozenOperator[] = [];
   for (let i = 0; i < 4; i++) {
     const op = input.ops[i];
-    record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator', input.version === 1 ? [] : ['keyScale']);
+    record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator',
+      input.version === 1 ? [] : input.version === 2 ? ['keyScale'] : ['keyScale', 'velocitySensitivity']);
     record(op.adsr, ['a', 'd', 's', 'r'], 'adsr');
     const normalized: Operator = { ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
       detune: numeric(op.detune, 'detune'), adsr: Object.freeze({
         a: numeric(op.adsr.a, 'a'), d: numeric(op.adsr.d, 'd'),
         s: numeric(op.adsr.s, 's'), r: numeric(op.adsr.r, 'r'),
       }) };
+    if (Object.hasOwn(op, 'velocitySensitivity')) normalized.velocitySensitivity = numeric(op.velocitySensitivity, 'velocitySensitivity');
     if (Object.hasOwn(op, 'keyScale')) {
       record(op.keyScale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
       if (!Number.isInteger(op.keyScale.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
@@ -106,7 +119,7 @@ export function validateVoice(input: unknown): FrozenVoice {
     }
     ops.push(Object.freeze(normalized));
   }
-  return Object.freeze({ version: 2, name: input.name,
+  return Object.freeze({ version: 3, name: input.name,
     algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
     modIndex: numeric(input.modIndex, 'modIndex'), lfo, ops: Object.freeze(ops) as FrozenVoice['ops'] });
 }
