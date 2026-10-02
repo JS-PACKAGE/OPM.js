@@ -7,6 +7,8 @@ import { FM_REFERENCE_RATES } from '../test/fm-reference-fixtures.js';
 import { verifyPMSpectrum } from '../test/fm-reference-quality.js';
 import { verifyLongStream } from '../test/fm-reference-streaming.js';
 import { verifyFeedbackSpectrum } from '../test/fm-reference-feedback.js';
+import { verifyFourOperator } from '../test/fm-reference-four-operator.js';
+import { verifyDecimator } from '../test/decimator-quality.js';
 
 const started = performance.now();
 const matrix: object[] = [];
@@ -69,7 +71,7 @@ for (const sampleRate of QUALITY_SAMPLE_RATES) {
   const reference = binAmplitude(baseline.samples, sampleRate, baselineHz);
   assert.ok(reference > 0.02 && reference < 0.04, 'low-level reference must be audible without saturating');
   const passband: object[] = [];
-  let previous = reference;
+  const measuredPassbandDb: number[] = [];
   for (const fraction of [0.05, 0.1, 0.2, 0.35]) {
     const frequency = Math.round(sampleRate * fraction);
     const result = renderNote(controlledTone(sampleRate, frequency));
@@ -77,12 +79,14 @@ for (const sampleRate of QUALITY_SAMPLE_RATES) {
     assert.ok(signalMetrics(result.samples).finite);
     const amplitude = binAmplitude(result.samples, sampleRate, frequency);
     const lossDb = 20 * Math.log10(amplitude / reference);
-    assert.ok(amplitude > 0 && amplitude < previous, 'controlled low-level rolloff must be monotonic');
-    if (fraction <= 0.1) assert.ok(lossDb > -8 && lossDb < 0, 'usable controlled passband through 0.1 Fs');
+    assert.ok(Number.isFinite(lossDb) && lossDb <= 0.02, 'settled passband does not boost controlled tones');
+    if (fraction <= 0.2) assert.ok(lossDb > -0.03, 'flat passband through 0.2 Fs');
+    if (fraction === 0.35) assert.ok(lossDb > -12 && lossDb < -11, 'documented steep transition band');
     passband.push({ frequency, fractionOfSampleRate: fraction, lossDb });
-    previous = amplitude;
+    measuredPassbandDb.push(lossDb);
   }
   let harmonicEnergy = 0;
+  assert.ok(measuredPassbandDb[2] - measuredPassbandDb[3] > 10, 'passband and transition band remain distinct');
   for (let harmonic = 2; harmonic <= 8; harmonic++) {
     harmonicEnergy += binAmplitude(baseline.samples, sampleRate, baselineHz * harmonic) ** 2;
   }
@@ -103,19 +107,21 @@ for (const sampleRate of QUALITY_SAMPLE_RATES) {
 }
 const independentFM = FM_REFERENCE_RATES.flatMap(sampleRate => verifyPMSpectrum(sampleRate));
 const independentFeedback = FM_REFERENCE_RATES.map(sampleRate => verifyFeedbackSpectrum(sampleRate));
+const independentFourOperator = FM_REFERENCE_RATES.flatMap(sampleRate => verifyFourOperator(sampleRate));
+const decimatorComparison = QUALITY_SAMPLE_RATES.map(sampleRate => verifyDecimator(sampleRate));
 const longStreaming = verifyLongStream();
 console.log(JSON.stringify({ passed: true, elapsedMs: performance.now() - started,
-  matrixCases: matrix.length, controlled, independentFM, independentFeedback, longStreaming, matrix,
+  matrixCases: matrix.length, controlled, independentFM, independentFeedback, independentFourOperator, decimatorComparison, longStreaming, matrix,
   limitations: [
     'Synthetic clean-room fixtures, not hardware fidelity or perceptual preset evaluation.',
-    'Passband loss is relative to a low-frequency control and includes the existing four-pole filter and output saturation; no DSP was changed.',
+    'Controlled passband loss includes the upgraded eighth-order Butterworth filter and output saturation; decimatorComparison separately isolates measured linear response, folded aliases, phase and impulse delay against independent math and the former filter.',
     'THD measures harmonics 2..8 of one settled low-level pure tone, not noise, THD+N, or arbitrary FM distortion.',
     'Independent FM gates cover original zero-feedback two-operator PM at index 16, two frequency layouts and coherent one-second windows at 44.1/48/96 kHz. They are not a blanket alias-free claim.',
-    'The Bessel reference and closed-form accepted four-pole transfer function separate attenuated in-band brightness from folded ultrasonic energy; the existing 0.2 Fs filter tradeoff is explicitly retained.',
+    'The Bessel reference and independent Butterworth transfer separate attenuated in-band brightness from folded ultrasonic energy; the conservative .30 Fs cutoff flattens the upper passband without relaxing the controlled alias gates.',
     'The documented memoryless output tanh is inverted for independent FM, feedback and settled-stream analysis, isolating pre-saturation products rather than claiming nonlinear output spectra are ideal PM.',
     'Feedback7 at level 0.25 uses independent converged periodic phase grids with the same physical two-tap delays and a proven contraction; its harmonics, brightness loss, DC and aliases are checked, not PCM identity.',
     'Full-level feedback7 has a filter/Parseval-derived high-band energy gate. Its chaotic aliases cannot be uniquely separated from true in-band harmonics, so only the mathematical alias bound is reported; no chaotic PCM-convergence claim.',
-    'No cascaded four-operator or perceptual preset spectral reference is included; the existing matrix checks their finite signal and lifecycle, not spectral fidelity.',
+    'Independent explicit four-op nested chain, branched leaves and two-carrier equations cover unequal ratios, indices 1.5/4/8, two registers and attack/decay/interrupted-attack/release boundaries; they do not certify arbitrary patches or listening quality.',
     'The long-stream gate renders two deterministic 120-second offline replays with reused buffers, held AM/PM LFO, 96 interrupted glides, settled sine residual and terminal/silence checks. It does not measure browser suspension or real-device underruns.',
     'RMS dBFS is unweighted channel energy over a short held/released note, not LUFS or perceived loudness; null denotes silence.',
     'Elapsed time is offline wall time, not realtime worklet CPU cost, GC, underruns, or latency.'

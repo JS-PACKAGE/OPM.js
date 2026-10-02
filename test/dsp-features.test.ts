@@ -5,7 +5,7 @@ import { validateVoice } from '../src/voices/schema.js';
 import type { LegacyVoice, LegacyVoiceV2, Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return { version: 4, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 5, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 1 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.03 } })) as Voice['ops'] };
@@ -185,7 +185,7 @@ test('legacy versions retain old shapes; keyScale validates strict versus clampe
 
 test('v1/v2 input shapes preserve old audio and only current operators accept velocity sensitivity', () => {
   const current = voice();
-  const legacy1: LegacyVoice = { ...structuredClone(current), version: 1,
+  const legacy1: LegacyVoice = { name: current.name, algorithm: current.algorithm, feedback: current.feedback, modIndex: current.modIndex, version: 1,
     lfo: { rate: current.lfo.rate, amDepth: current.lfo.amDepth, pmDepth: current.lfo.pmDepth },
     ops: current.ops.map(({ ratio, level, detune, adsr }) => ({ ratio, level, detune, adsr })) as LegacyVoice['ops'] };
   const legacy2: LegacyVoiceV2 = { ...legacy1, version: 2 };

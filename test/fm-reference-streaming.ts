@@ -4,6 +4,9 @@ import type { NoteControls, VoiceEndReason } from '../src/core/synth.js';
 import {
   COEFFICIENT_TOLERANCE, acceptedFilterMagnitude, fourierBin, streamVoice, unsaturatedWindow,
 } from './fm-reference-fixtures.js';
+import { filterImpulseBounds } from './decimator-reference.js';
+
+const FILTER_L1 = filterImpulseBounds().l1;
 
 const SAMPLE_RATE = 48000;
 const SECONDS = 120;
@@ -28,10 +31,11 @@ function streamRun(chunks: readonly number[]) {
   const windows = [2, 38, 118].map(second => ({ start: second * SAMPLE_RATE, samples: new Float32Array(SAMPLE_RATE) }));
   let frame = 0, event = 0, block = 0, hash = 2166136261, previous = 0, peak = 0, maximumStep = 0, silentTailPeak = 0;
   // A sine at the greatest requested pitch/PM excursion bounds its derivative.
-  // Add the steepest envelope, AM LFO and modulation-ramp slopes; convex
-  // filtering and tanh cannot increase the bound, including control transitions.
+  // Add the steepest envelope, AM LFO and modulation-ramp slopes. The filter
+  // can ring, so its independent impulse L1 bounds derivative amplification;
+  // the memoryless tanh cannot increase the bound.
   const maximumHz = 880 * 2 ** (14 / 1200);
-  const stepBound = HEADROOM * LEVEL * (2 * Math.sin(Math.PI * maximumHz / SAMPLE_RATE) +
+  const stepBound = FILTER_L1 * HEADROOM * LEVEL * (2 * Math.sin(Math.PI * maximumHz / SAMPLE_RATE) +
     Math.LN10 * 96 / (20 * 0.01 * SAMPLE_RATE) + AM_DEPTH * Math.PI * 5 / SAMPLE_RATE +
     AM_DEPTH / (0.1 * SAMPLE_RATE)) + 1e-6;
   while (frame < SECONDS * SAMPLE_RATE) {

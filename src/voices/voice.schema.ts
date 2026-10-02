@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v4",
+  "title": "OPM.js canonical voice v5",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 4
+      "const": 5
     },
     "name": {
       "type": "string",
@@ -35,6 +35,20 @@ export const voiceSchema = {
       "minimum": 0,
       "maximum": 16
     },
+    "pitchEnvelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["a", "d", "r", "initial", "peak", "sustain", "final"],
+      "properties": {
+        "a": { "type": "number", "minimum": 0, "maximum": 10 },
+        "d": { "type": "number", "minimum": 0, "maximum": 10 },
+        "r": { "type": "number", "minimum": 0, "maximum": 10 },
+        "initial": { "type": "number", "minimum": -4800, "maximum": 4800 },
+        "peak": { "type": "number", "minimum": -4800, "maximum": 4800 },
+        "sustain": { "type": "number", "minimum": -4800, "maximum": 4800 },
+        "final": { "type": "number", "minimum": -4800, "maximum": 4800 }
+      }
+    },
     "lfo": {
       "type": "object",
       "additionalProperties": false,
@@ -45,6 +59,9 @@ export const voiceSchema = {
         "waveform"
       ],
       "properties": {
+        "delay": { "type": "number", "minimum": 0, "maximum": 10, "default": 0 },
+        "sync": { "type": "string", "enum": ["note", "global"], "default": "note" },
+        "phase": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 },
         "waveform": {
           "type": "string",
           "enum": ["sine", "triangle", "saw", "square"]
@@ -80,6 +97,14 @@ export const voiceSchema = {
           "adsr"
         ],
         "properties": {
+          "frequency": {
+            "type": "number", "minimum": 1, "maximum": 20000,
+            "description": "Fixed Hz before detune, live pitch, pitch envelope and LFO PM; overrides note times ratio."
+          },
+          "rateKeyScale": {
+            "type": "number", "minimum": 0, "maximum": 4,
+            "description": "Multiply ADSR seconds by 2^(-rateKeyScale*(note-60)/12), capped at 10 seconds."
+          },
           "velocitySensitivity": {
             "type": "number",
             "minimum": 0,

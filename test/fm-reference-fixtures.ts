@@ -23,7 +23,7 @@ export function pmFixtures(sampleRate: number): PMFixture[] {
 
 export function pmVoice(fixture: PMFixture): Voice {
   return {
-    version: 4, name: fixture.name, algorithm: 0, feedback: 0, modIndex: fixture.index,
+    version: 5, name: fixture.name, algorithm: 0, feedback: 0, modIndex: fixture.index,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, op) => ({
       ratio: (op === 2 ? fixture.modulatorHz : fixture.carrierHz) / 440,
@@ -35,7 +35,7 @@ export function pmVoice(fixture: PMFixture): Voice {
 
 export function streamVoice(): Voice {
   return {
-    version: 4, name: 'long-held-lfo-glide', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 5, name: 'long-held-lfo-glide', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 5, amDepth: 0.4, pmDepth: 14, waveform: 'sine' },
     ops: Array.from({ length: 4 }, () => ({ ratio: 1, level: 0.08,
       detune: 0, adsr: { a: 0.01, d: 0, s: 1, r: 0.05 } })) as Voice['ops'],
@@ -62,14 +62,19 @@ export function besselTailBound(index: number, lastOrder: number): number {
   return 2 * first / (1 - half / (lastOrder + 2));
 }
 
-// Closed-form magnitude of the accepted four-pole, 0.2 Fs pre-decimation
-// filter at 4 Fs. This is a transfer function, not a copy of its recurrence.
-// Its substantial upper-passband brightness loss is part of the report.
-export function acceptedFilterMagnitude(frequency: number, sampleRate: number): number {
+// Legacy four-pole transfer retained only for explicit design comparisons.
+export function legacyFilterMagnitude(frequency: number, sampleRate: number): number {
   const pole = Math.exp(-2 * Math.PI * 0.2 / 4);
   const numerator = (1 - pole) ** 2;
   const denominator = numerator + 4 * pole * Math.sin(Math.PI * frequency / (4 * sampleRate)) ** 2;
   return (numerator / denominator) ** 2;
+}
+
+// Independent bilinear-transform magnitude of an eighth-order Butterworth.
+// tan prewarping maps fc=.30 Fs at the 4 Fs internal rate to analog cutoff 1.
+export function acceptedFilterMagnitude(frequency: number, sampleRate: number): number {
+  const normalized = Math.tan(Math.PI * frequency / (4 * sampleRate)) / Math.tan(Math.PI * 0.30 / 4);
+  return 1 / Math.sqrt(1 + normalized ** 16);
 }
 
 export function foldedFrequency(frequency: number, sampleRate: number): number {

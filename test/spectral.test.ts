@@ -80,16 +80,19 @@ for (const rate of QUALITY_SAMPLE_RATES) {
       harmonicEnergy += binAmplitude(reference.samples, rate, frequency * harmonic) ** 2;
     }
     assert.ok(Math.sqrt(harmonicEnergy) / fundamental < 0.01, 'low-level THD below 1%');
-    let previous = fundamental;
+    const passbandDb: number[] = [];
     for (const fraction of [0.05, 0.1, 0.2, 0.35]) {
       const hz = Math.round(rate * fraction);
       const result = renderNote(controlledTone(rate, hz));
       assert.equal(result.diagnostics.errors, 0);
       const amplitude = binAmplitude(result.samples, rate, hz);
-      assert.ok(amplitude > 0 && amplitude < previous, 'controlled filter rolloff is monotonic');
-      if (fraction <= 0.1) assert.ok(amplitude / fundamental > 10 ** (-8 / 20), 'usable low/mid passband');
-      previous = amplitude;
+      const lossDb = 20 * Math.log10(amplitude / fundamental);
+      assert.ok(Number.isFinite(lossDb) && lossDb <= 0.02, 'controlled passband does not boost settled tones');
+      if (fraction <= 0.2) assert.ok(lossDb > -0.03, 'flat upper-register passband through 0.2 Fs');
+      if (fraction === 0.35) assert.ok(lossDb > -12 && lossDb < -11, 'documented steep transition band');
+      passbandDb.push(lossDb);
     }
+    assert.ok(passbandDb[2] - passbandDb[3] > 10, 'transition-band attenuation is distinct from passband brightness');
     for (const fraction of [0.625, 1.125]) {
       const sourceHz = Math.round(rate * fraction);
       const ultrasonic = renderNote(controlledTone(rate, sourceHz));

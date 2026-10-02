@@ -131,12 +131,14 @@ class OPMProcessor extends AudioWorkletProcessor {
     this.send(message);
   }
 
-  panic(reason: 'panic' | 'interruption'): void {
+  panic(reason: 'panic' | 'interruption', commandId?: unknown): void {
     this.events.length = 0;
     for (const id of this.notes.keys()) this.noteEvent(id, 'cancelled', reason);
     this.notes.clear();
     this.synth!.panic();
-    this.send({ type: 'reset', reason, frame: this.dispatchFrame, time: this.dispatchFrame / sampleRate });
+    const reset: ResetEvent = { type: 'reset', reason, frame: this.dispatchFrame, time: this.dispatchFrame / sampleRate };
+    if (validId(commandId)) reset.commandId = commandId;
+    this.send(reset);
   }
 
   insert(event: ScheduledEvent): void {
@@ -242,7 +244,7 @@ class OPMProcessor extends AudioWorkletProcessor {
         this.commandEvent(data, 'rejected', 'invalid-reason');
         return;
       }
-      this.panic(data.reason === 'interruption' ? 'interruption' : 'panic');
+      this.panic(data.reason === 'interruption' ? 'interruption' : 'panic', data.commandId);
       this.commandEvent(data, 'accepted');
       return;
     }

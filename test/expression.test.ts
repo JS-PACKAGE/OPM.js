@@ -5,7 +5,7 @@ import type { NoteControls, Voice } from '../src/core/index.js';
 import type { PreparedVoice } from '../src/voices/schema.js';
 
 function tone(): Voice {
-  return { version: 4, name: 'expression-tone', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 5, name: 'expression-tone', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 0.8 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.08 } })) as Voice['ops'] };

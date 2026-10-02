@@ -4,14 +4,12 @@ import { HEADROOM, renderNote, Synth } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return {
-    version: 4, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
-    ops: Array.from({ length: 4 }, (_, index) => ({
-      ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
-      adsr: { a: 0, d: 0, s: 1, r: 0.06 },
-    })) as unknown as Voice['ops'],
-  };
+  return { version: 5, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
+  lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+  ops: Array.from({ length: 4 }, (_, index) => ({
+    ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
+    adsr: { a: 0, d: 0, s: 1, r: 0.06 },
+  })) as unknown as Voice['ops'], };
 }
 
 function rms(samples: Float32Array) {
@@ -48,4 +46,26 @@ test('offline velocity scales audible samples without clipping and repeated rend
   assert.ok(full.samples.every(sample => Number.isFinite(sample) && Math.abs(sample) <= HEADROOM));
   assert.ok(mute.samples.every(sample => sample === 0));
   assert.ok(rms(half.samples) < rms(full.samples) && rms(half.samples) > rms(full.samples) * 0.45);
+});
+
+test('offline rendering retains the complete rate-key-scaled release at low notes', () => {
+  const sampleRate = 8000;
+  const duration = 0.1;
+  const patch = voice();
+  for (const op of patch.ops) op.rateKeyScale = 2;
+  const result = renderNote({ voice: patch, note: 48, duration, sampleRate });
+  const effectiveRelease = 0.06 * 4;
+  assert.equal(result.left.length, Math.ceil((duration + effectiveRelease + 0.01) * sampleRate));
+  const synth = new Synth(sampleRate);
+  const id = synth.noteOn(patch, 48);
+  const left = new Float32Array(result.left.length), right = new Float32Array(result.right.length);
+  const gate = Math.ceil(duration * sampleRate);
+  synth.render(left, right, 0, gate);
+  synth.noteOff(id);
+  synth.render(left, right, gate, left.length - gate);
+  assert.deepEqual(result.left, left);
+  assert.deepEqual(result.right, right);
+  assert.equal(result.diagnostics.errors, 0);
+  assert.ok(rms(left.subarray(1300, 1500)) > 0.0001, 'scaled release is not cut at the raw release time');
+  assert.ok(left.subarray(left.length - 32).every(sample => Math.abs(sample) < 1e-5));
 });

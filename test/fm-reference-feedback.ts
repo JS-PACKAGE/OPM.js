@@ -7,12 +7,15 @@ import {
   COEFFICIENT_TOLERANCE, acceptedFilterMagnitude, energyDb, foldedFrequency, fourierBin, unsaturatedWindow,
 } from './fm-reference-fixtures.js';
 
+import { filterImpulseBounds } from './decimator-reference.js';
+
+const FILTER_IMPULSE_BOUND = filterImpulseBounds();
 const FEEDBACK_LEVEL = 0.25;
 const HARMONICS = 96;
 
 function feedbackVoice(frequency: number, level: number): Voice {
   return {
-    version: 4, name: 'independent-feedback-7', algorithm: 7, feedback: 7, modIndex: 0,
+    version: 5, name: 'independent-feedback-7', algorithm: 7, feedback: 7, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: frequency / 880, level: i === 0 ? level : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 } })) as Voice['ops'],
@@ -171,7 +174,7 @@ function verifyFullFeedbackEnergy(sampleRate: number) {
     window[i] *= (0.5 - 0.5 * Math.cos(2 * Math.PI * i / frames)) / carrierGain;
     timeEnergy += window[i] ** 2 / frames;
   }
-  assert.ok(normalizedPeak <= 1 + COEFFICIENT_TOLERANCE, 'unit-bounded feedback source and convex filtering bound output');
+  assert.ok(normalizedPeak <= FILTER_IMPULSE_BOUND.l1 + COEFFICIENT_TOLERANCE, 'bounded feedback source obeys the independent filter impulse L1 bound');
   const powers = fftPower(window);
   let totalEnergy = 0, highBandEnergy = 0, maximumHighBandTransferPower = 0, maximumAliasTransferPower = 0;
   for (let bin = 0; bin < frames; bin++) {
@@ -194,9 +197,7 @@ function verifyFullFeedbackEnergy(sampleRate: number) {
   // the four decimation branches bounds band power by max(sum |H|^2)*input
   // power. Hann mean-square is 3/8. The explicit commutator/boundary allowance
   // is twice window Lipschitz pi/(4N) times the filter's impulse first moment.
-  const pole = Math.exp(-2 * Math.PI * 0.2 / 4);
-  const filterDelayInternalSamples = 4 * pole / (1 - pole);
-  const windowBoundaryRmsAllowance = 2 * Math.PI / (4 * frames) * filterDelayInternalSamples;
+  const windowBoundaryRmsAllowance = 2 * Math.PI / (4 * frames) * FILTER_IMPULSE_BOUND.absoluteFirstMoment;
   const sourceWindowRmsBound = Math.sqrt(3 / 8);
   const highBandEnergyBound = (Math.sqrt(maximumHighBandTransferPower) * sourceWindowRmsBound + windowBoundaryRmsAllowance) ** 2;
   const mathematicalAliasEnergyBound = (Math.sqrt(maximumAliasTransferPower) * sourceWindowRmsBound + windowBoundaryRmsAllowance) ** 2;

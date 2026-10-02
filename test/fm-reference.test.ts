@@ -4,6 +4,8 @@ import { FM_INDEX, FM_ORDER, FM_REFERENCE_RATES, besselJ, besselTailBound } from
 import { verifyPMSpectrum } from './fm-reference-quality.js';
 import { verifyLongStream } from './fm-reference-streaming.js';
 import { verifyFeedbackSpectrum } from './fm-reference-feedback.js';
+import { verifyFourOperator } from './fm-reference-four-operator.js';
+import { verifyDecimator } from './decimator-quality.js';
 
 test('independent Bessel expansion reconstructs continuous high-index phase modulation', () => {
   const coefficients = Array.from({ length: FM_ORDER * 2 + 1 }, (_, i) => besselJ(i - FM_ORDER, FM_INDEX));
@@ -28,6 +30,12 @@ for (const sampleRate of FM_REFERENCE_RATES) {
   });
   test(`${sampleRate} Hz feedback7 matches a contractive delayed reference and full-level spectral-energy bounds`, () => {
     verifyFeedbackSpectrum(sampleRate);
+  });
+  test(`${sampleRate} Hz four-operator chain, branch and multicarrier equations preserve routing and envelope transitions`, () => {
+    verifyFourOperator(sampleRate);
+  });
+  test(`${sampleRate} Hz flatter decimator preserves folded-alias rejection, phase and causal latency`, () => {
+    verifyDecimator(sampleRate);
   });
 }
 

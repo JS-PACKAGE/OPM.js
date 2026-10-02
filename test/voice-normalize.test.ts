@@ -48,12 +48,12 @@ test('nested accessors and sparse operator slots are rejected without reading ge
   assert.equal(getterCalls, 0);
 });
 
-test('legacy formats retain their old operator and LFO boundaries and canonicalize to v4', () => {
+test('legacy formats retain their old operator and LFO boundaries and canonicalize to v5', () => {
   const { waveform: _, ...lfo } = voice().lfo;
   for (const version of [1, 2, 3] as const) {
     const source = { ...voice(), version, lfo };
     const normalized = normalizeVoice(source as VoiceInput);
-    assert.deepEqual(normalized, { ...voice(), version: 4 });
+    assert.deepEqual(normalized, { ...voice(), version: 5 });
     assert.deepEqual(validateVoice(source), normalized);
     for (const convert of [normalizeVoice, validateVoice]) {
       assert.throws(() => convert({ ...source, lfo: { ...lfo, waveform: 'triangle' } } as unknown as VoiceInput));
@@ -69,14 +69,14 @@ test('legacy formats retain their old operator and LFO boundaries and canonicali
   assert.throws(() => normalizeVoice(second as VoiceInput));
   assert.throws(() => validateVoice(second));
   const third = { ...second, version: 3 as const };
-  assert.equal(normalizeVoice(third).ops[0].velocitySensitivity, 12);
+  assert.equal(normalizeVoice(third as unknown as VoiceInput).ops[0].velocitySensitivity, 12);
 });
 
 test('current LFO inputs default to sine and preserve every supported waveform', () => {
   const { waveform: _, ...lfo } = voice().lfo;
-  for (const version of [undefined, 4] as const) {
+  for (const version of [undefined, 4, 5] as const) {
     const source = { ...voice(), lfo };
-    const input = version === undefined ? { algorithm: source.algorithm, feedback: source.feedback, ops: source.ops, lfo } : source;
+    const input = version === undefined ? { algorithm: source.algorithm, feedback: source.feedback, ops: source.ops, lfo } : { ...source, version } as VoiceInput;
     assert.equal(normalizeVoice(input).lfo.waveform, 'sine');
   }
   assert.equal(validateVoice({ ...voice(), lfo }).lfo.waveform, 'sine');
