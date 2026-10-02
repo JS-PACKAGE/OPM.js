@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Detailed English website security policy
+
+- Expand the English security policy with deployment, upload/download limits, voice/DX7/PCM boundaries, scheduling, audio safety, privacy and private reporting guidance. Preserve mandatory security-review triggers and checklists.
+- Link the policy from the example catalog. Browser verification confirmed the link and HTTP 200 for the hosted policy.
+
 ### Website favicon
 
 - Add an original 16/32/48-pixel `favicon.ico` and link it from the catalog and all six examples.
