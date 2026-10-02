@@ -46,9 +46,20 @@ The committed `dist/` is ready to use; trying the demos needs no npm installatio
 python3 -m http.server 8000
 ```
 
-Open **http://localhost:8000/index.html** and press **播放曲子** for *Twinkle, Twinkle, Little Star*; **停止** ends it early. **http://localhost:8000/demo/index.html** includes seven selectable presets, held-note velocity/pan controls, a key-scaling arpeggio, DX7 file import, and WAV download. Stop the server with Ctrl+C when finished. Do not open the HTML through `file://`.
+Open **http://localhost:8000/index.html** for the English example catalog:
 
-If `dist/` is missing or you have changed `src/`, regenerate it using the [development commands](#optimized-distribution) first.
+| Example | Demonstrates |
+| --- | --- |
+| [Basic notes and voices](./examples/basic.html) | Presets, pitch, velocity, timed and held notes |
+| [Melody and chord scheduling](./examples/song.html) | *Twinkle, Twinkle, Little Star*, stereo scheduling and cancellation |
+| [Stereo and per-voice LFO](./examples/modulation.html) | Pan, AM, PM and settings applied to new notes |
+| [Shared AudioContext and routing](./examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
+| [Offline synthesis and WAV](./examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
+| [Advanced playground](./examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
+
+Click a playback button to start audio. Stop the server with Ctrl+C when finished. Do not open the HTML through `file://`. Pages and runtime messages are English; TypeScript helpers live in `demo/`.
+
+If `dist/` is missing or you have changed `src/` or `demo/` TypeScript, regenerate it using the [development commands](#optimized-distribution) first.
 
 ### Install into an npm project
 
@@ -230,9 +241,9 @@ This is an **approximate six-to-four-operator conversion**, not DX7 synthesis or
 
 ## Optimized distribution
 
-Every `.js` in `dist/` has a matching `.js.map` and compiler-generated `.d.ts`, including both demo scripts. Engine modules preserve the `src/` layout instead of producing hashed chunks, so declarations describe the actual corresponding exports. Demo modules export no API; their generated declarations accurately contain `export {};`. All JavaScript uses the same safe minification pipeline. Maps compose esbuild and Terser mappings back to the original TypeScript and embed source contents for debugging without a separate source checkout; publishing maps makes those sources readable. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`. The build and package smoke reject missing map/declaration companions.
+Every `.js` in `dist/` has a matching `.js.map` and compiler-generated `.d.ts`, including all six example scripts. Engine modules preserve the `src/` layout instead of producing hashed chunks, so declarations describe the actual corresponding exports. Demo modules export no API; their generated declarations accurately contain `export {};`. All JavaScript uses the same safe minification pipeline. Maps compose esbuild and Terser mappings back to the original TypeScript and embed source contents for debugging without a separate source checkout; publishing maps makes those sources readable. Keep each deployment's entire directory from the same build. Readable implementation files remain in `src/`; do not edit generated files in `dist/`. The build and package smoke reject missing map/declaration companions.
 
-Engine, AudioWorklet, demos, tests, and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/declaration approach, declarations are generated from implementation rather than maintained separately. OPM.js requires Node.js 22+ for Node usage and development. `tsconfig.json` checks the environment-independent/browser source and emits declarations; `tsconfig.dev.json` compiles development programs into ignored `.dev/`. ESM source imports retain `.js` specifiers. Use `npm test`, not bare `node --test`, to compile and run the behavioral tests; `npm run typecheck` checks source, tools, tests, demos, and the public consumer fixture. The build also produces `dist/demo/` scripts used by both HTML demos.
+Engine, AudioWorklet, demos, tests, and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s source/declaration approach, declarations are generated from implementation rather than maintained separately. OPM.js requires Node.js 22+ for Node usage and development. `tsconfig.json` checks the environment-independent/browser source and emits declarations; `tsconfig.dev.json` compiles development programs into ignored `.dev/`. ESM source imports retain `.js` specifiers. Use `npm test`, not bare `node --test`, to compile and run the behavioral tests; `npm run typecheck` checks source, tools, tests, demos, and the public consumer fixture. The build also produces six `dist/demo/` scripts used by the HTML pages in `examples/`; the root `index.html` is their catalog.
 
 In the **repository checkout**, not the installed npm package:
 

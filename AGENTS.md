@@ -36,7 +36,7 @@ OPM (public API)                     processor
 - `src/worklet/` — AudioWorkletProcessor and message protocol.
 - `src/api/` — public facade (`OPM` class), voice loading, scheduling.
 - `src/voices/` — typed voice assets and JSON voice parsing (format below).
-- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes both browser demos. Deploy the complete tree. No hashed chunks are generated.
+- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` with embedded TypeScript sources and a compiler-generated `.d.ts`; includes all six browser example scripts. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
@@ -56,7 +56,7 @@ A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedb
 
 - Consumers use committed `dist/` or an installed package without a build toolchain.
 - For development, use Node.js 22+ and run `npm ci` in the repository root; run `npm test` to compile and execute TypeScript behavioral tests. `npm run typecheck` checks source, tools, tests, demos, and generated public contracts. Do not maintain handwritten declarations alongside implementations.
-- After editing source, run `npm run build` before browser smoke checks: the demos import `dist/`, not `src/`. From the repository root, run `python3 -m http.server 8000` and open `http://localhost:8000/demo/index.html` or `http://localhost:8000/index.html`. `npm pack` rebuilds automatically before packaging.
+- After editing source or demo helpers, run `npm run build` before browser smoke checks: the examples import `dist/`, not `src/`. From the repository root, run `python3 -m http.server 8000` and open `http://localhost:8000/index.html` for the catalog of English pages in `examples/`. Helpers remain in `demo/`. `npm pack` rebuilds automatically before packaging.
 - Test the core offline in Node.js (render Float32Array, assert envelope shape / silence / no NaN).
 - Before claiming a milestone in `README.md` Roadmap is done, it must have: a test, a demo sound, and a README mention.
 - Keep commits focused; document non-obvious DSP math in comments with the formula.
@@ -72,4 +72,4 @@ A voice is JSON: 4 operators × (ratio, level, detune, ADSR) + algorithm + feedb
 - VGM / register-level chip emulation
 - Audio file playback (OPM.js synthesizes; it is not a music player)
 - MIDI drivers (a WebMIDI adapter may come later, but not in the engine)
-- Any UI beyond `demo/` helpers
+- Any UI beyond `demo/` helpers and `examples/` pages

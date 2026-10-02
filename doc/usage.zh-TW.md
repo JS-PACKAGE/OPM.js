@@ -39,7 +39,7 @@ npm install ../OPM.js/opm.js-1.2.0.tgz
 python3 -m http.server 8000
 ```
 
-開啟 `http://localhost:8000/index.html` 聽歌曲，或 `http://localhost:8000/demo/index.html` 聽和弦。此處 Python 3 僅用於本機 HTTP 服務；已提交的 `dist` 不必先建置。只有 `dist` 缺失或原始碼有修改時，才在 checkout 執行 `npm ci`、`npm run build`。瀏覽器必須支援 ES modules 與 AudioWorklet，並使用 HTTPS 或 localhost，不能直接開啟 `file://`。
+開啟 `http://localhost:8000/index.html` 查看英文範例索引，包含基本音符、旋律／和弦排程、聲像／LFO、共用 AudioContext 接線、離線 WAV 與進階控制台六個範例。歌曲位於 `http://localhost:8000/examples/song.html`；進階控制與 DX7 匯入位於 `http://localhost:8000/examples/playground.html`。頁面與執行時訊息皆為英文。此處 Python 3 僅用於本機 HTTP 服務；已提交的 `dist` 不必先建置。只有 `dist` 缺失或原始碼／helper 有修改時，才在 checkout 執行 `npm ci`、`npm run build`。瀏覽器必須支援 ES modules 與 AudioWorklet，並使用 HTTPS 或 localhost，不能直接開啟 `file://`。
 
 ## 瀏覽器靜態部署
 
@@ -329,7 +329,7 @@ checkout 匯入改為 `./dist/core/index.js`、`./dist/voices/brass.js` 與 `./d
 
 在 checkout 執行維護指令，不是在已安裝的套件中：
 
-所有程式皆使用 strict TypeScript，包含 DSP、AudioWorklet、demo、測試與開發工具。`npm run compile` 將開發程式編譯到忽略追蹤的 `.dev/`，最低支援 Node.js 22；npm 指令會先編譯再執行。請使用 `npm test`，不要直接執行 `node --test`：它會選取編譯後的行為測試，不將 fixture 模組計為測試。`npm run build` 從實作產生 `.d.ts`，建置瀏覽器模組與兩個 HTML 頁面所需的 `dist/demo/`；`npm run typecheck` 檢查原始碼、工具、測試、demo 及公開型別使用範例。使用者仍匯入 `.js`，不需要 TypeScript 或建置工具鏈。
+所有程式皆使用 strict TypeScript，包含 DSP、AudioWorklet、demo、測試與開發工具。`npm run compile` 將開發程式編譯到忽略追蹤的 `.dev/`，最低支援 Node.js 22；npm 指令會先編譯再執行。請使用 `npm test`，不要直接執行 `node --test`：它會選取編譯後的行為測試，不將 fixture 模組計為測試。`npm run build` 從實作產生 `.d.ts`、保留引擎模組路徑，並建置六個 HTML 範例所需的 `dist/demo/`；每個發佈 JS 都有對應 source map 與型別宣告。`npm run typecheck` 檢查原始碼、工具、測試、demo 及公開型別使用範例。使用者仍匯入 `.js`，不需要 TypeScript 或建置工具鏈。
 
 ```sh
 npm ci

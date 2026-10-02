@@ -2,9 +2,9 @@ import { OPM } from '../src/api/index.js';
 
 const opm = new OPM({ onEvent(event) {
   if (event.type === 'note' && event.state === 'rejected') {
-    status.textContent = `音符未被接受：${event.reason}`;
+    status.textContent = `Note rejected: ${event.reason}`;
   } else if (event.type === 'error') {
-    status.textContent = `音訊失敗：${event.error.message}`;
+    status.textContent = `Audio failed: ${event.error.message}`;
   }
 } });
 const play = document.querySelector<HTMLButtonElement>('#play')!;
@@ -54,18 +54,18 @@ play.addEventListener('click', async () => {
     await opm.start();
     playSong();
     stop.disabled = false;
-    status.textContent = '播放中：《小星星》';
+    status.textContent = 'Playing: Twinkle, Twinkle, Little Star';
     finishTimer = window.setTimeout(() => {
       notes = [];
       stop.disabled = true;
       play.disabled = false;
-      status.textContent = '播放完畢';
+      status.textContent = 'Playback complete';
     }, (songSeconds + 0.2) * 1000);
   } catch (error) {
     for (const id of notes) opm.stop(id);
     notes = [];
     play.disabled = false;
-    status.textContent = `播放失敗：${error instanceof Error ? error.message : String(error)}`;
+    status.textContent = `Playback failed: ${error instanceof Error ? error.message : String(error)}`;
   }
 });
 
@@ -75,5 +75,5 @@ stop.addEventListener('click', () => {
   notes = [];
   stop.disabled = true;
   play.disabled = false;
-  status.textContent = '已停止';
+  status.textContent = 'Stopped';
 });

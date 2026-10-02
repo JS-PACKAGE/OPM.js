@@ -12,7 +12,10 @@ const configPath = join(root, 'tsconfig.json');
 const config = ts.readConfigFile(configPath, ts.sys.readFile);
 if (config.error) throw new Error(ts.flattenDiagnosticMessageText(config.error.messageText, '\n'));
 const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
-const demoEntries = ['demo/main.ts', 'demo/song.ts'];
+const demoEntries = [
+  'demo/main.ts', 'demo/song.ts', 'demo/basic.ts', 'demo/modulation.ts',
+  'demo/context.ts', 'demo/wav.ts',
+];
 const program = ts.createProgram(
   [...parsed.fileNames, ...demoEntries.map(path => join(root, path))],
   { ...parsed.options, rootDir: root },

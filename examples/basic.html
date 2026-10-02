@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — Basic notes and voices</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <a href="../index.html">Back to the example index</a>
+    <h1>Basic notes and voices</h1>
+    <p>Choose a bundled voice, play a short note, or start a held note and release it. Each new note first releases the previous one.</p>
+    <fieldset>
+      <legend>Note settings</legend>
+      <label for="voice">Voice</label>
+      <select id="voice"></select>
+      <label for="note">MIDI pitch (0–127; 60 is middle C)</label>
+      <input id="note" type="number" min="0" max="127" step="1" value="60" required>
+      <label for="velocity">Velocity (0 is silent, 1 is maximum): <output id="velocity-value" for="velocity">0.8</output></label>
+      <input id="velocity" type="range" min="0" max="1" step="0.01" value="0.8">
+    </fieldset>
+    <div class="actions">
+      <button id="play" type="button" disabled>Play a 0.7-second note</button>
+      <button id="hold" type="button" disabled>Hold note</button>
+      <button id="release" type="button" disabled>Release note</button>
+    </div>
+    <p class="hint">The first click starts audio. Settings affect new notes only; a released note keeps its natural release tail.</p>
+    <output id="status" role="status" aria-live="polite">Loading voices…</output>
+  </main>
+  <script type="module" src="../dist/demo/basic.js"></script>
+</body>
+</html>

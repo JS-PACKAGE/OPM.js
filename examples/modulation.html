@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OPM.js — Stereo and per-voice LFO</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <a href="../index.html">Back to the example index</a>
+    <h1>Stereo and per-voice LFO</h1>
+    <p>Play middle C with a copy of the brass voice to compare stereo pan, amplitude modulation (AM), and pitch modulation (PM). Headphones make left and right easier to distinguish.</p>
+    <fieldset>
+      <legend>Pan and modulation for new notes</legend>
+      <label for="pan">Pan (-1 left, 0 center, 1 right): <output id="pan-value" for="pan">0</output></label>
+      <input id="pan" type="range" min="-1" max="1" step="0.01" value="0">
+      <label for="rate">LFO rate (0–20 Hz): <output id="rate-value" for="rate">5</output> Hz</label>
+      <input id="rate" type="range" min="0" max="20" step="0.1" value="5">
+      <label for="am-depth">AM depth (0–1): <output id="am-depth-value" for="am-depth">0.2</output></label>
+      <input id="am-depth" type="range" min="0" max="1" step="0.01" value="0.2">
+      <label for="pm-depth">PM depth (0–1200 cents): <output id="pm-depth-value" for="pm-depth">20</output> cents</label>
+      <input id="pm-depth" type="range" min="0" max="1200" step="1" value="20">
+    </fieldset>
+    <div class="actions">
+      <button id="play" type="button" disabled>Play / replay a 3-second note</button>
+      <button id="stop" type="button" disabled>Stop note</button>
+    </div>
+    <p class="hint">Settings apply to new notes, not notes already playing. LFO belongs to the voice copy; there is no global setLFO. Replay releases the previous note, and stopping leaves its natural release tail.</p>
+    <output id="status" role="status" aria-live="polite">Loading example…</output>
+  </main>
+  <script type="module" src="../dist/demo/modulation.js"></script>
+</body>
+</html>

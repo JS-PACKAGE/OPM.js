@@ -4,6 +4,14 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### English example catalog
+
+- Turn the root `index.html` into a six-example English catalog. Add basic notes/voices, stereo/per-voice LFO, shared AudioContext routing and offline WAV examples. Move the song to `examples/song.html` and the advanced playground to `examples/playground.html`; remove the old `demo/index.html` route.
+- Keep all six TypeScript helpers in `demo/` and build matching minified JS, embedded-source maps and genuine compiler-generated declarations. The build emits 21 JS/map/declaration triplets.
+- Browser smoke exercised English hold/release, pan/LFO settings, song start/stop, key scaling and real AudioWorklet diagnostics. Disposing and restarting OPM retained the running host context. The 390-pixel catalog had no horizontal overflow. Fix wrapped heading links so their entire title block is clickable; actual catalog navigation then started and released a note successfully.
+- Offline WAV smoke produced 11,246 stereo frames at 22,050 Hz (45,028 bytes), verified RIFF/WAVE, PCM16, sample rate and non-silent samples. The download action was exercised, but persisted browser-download files were not observed.
+- Verification: build, 73 behavioral tests, strict source/development/consumer typechecks, zero-runtime-dependency/dynamic-code gates and isolated installed-package rendering/WAV/types passed on Node.js 26.7.0. Remote CI and Firefox/WebKit were not run; full timed song completion was not verified by the browser automation.
+
 ### Node.js 22 minimum
 
 - Align root lockfile metadata and support/development documentation with the upstream package requirement of Node.js `>=22.0.0` and CI matrix of 22/24/26.

@@ -35,7 +35,7 @@ For the existing checkout demos, from the **OPM.js repository root** run:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/index.html` for the song demo or `http://localhost:8000/demo/index.html` for the chord demo. Python 3 is only used as a local static server. Committed `dist/` works without installing/building; if it is missing or source has changed, run `npm ci` then `npm run build` in the checkout. Use a modern browser supporting ES modules and AudioWorklet, served over HTTPS or localhost, not `file://`.
+Open `http://localhost:8000/index.html` for the English catalog of six examples: basic notes, melody/chord scheduling, stereo/LFO, shared AudioContext routing, offline WAV, and the advanced playground. The song is at `http://localhost:8000/examples/song.html`; advanced controls and DX7 import are at `http://localhost:8000/examples/playground.html`. Python 3 is only used as a local static server. Committed `dist/` works without installing/building; if it is missing or source/helpers have changed, run `npm ci` then `npm run build` in the checkout. Use a modern browser supporting ES modules and AudioWorklet, served over HTTPS or localhost, not `file://`.
 
 To create an app page, from the **opm-app root** created above, copy the entire installed distribution and license into the static public directory (POSIX shell; on other systems copy the same files manually):
 
@@ -325,7 +325,7 @@ This is **approximate six-to-four-operator conversion**, not DX7 synthesis/emula
 
 Maintainer commands run in the checkout, after `npm ci`:
 
-All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node.js 22+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source and bundles browser modules plus `dist/demo/` scripts; `npm run typecheck` checks all authored programs and the public consumer fixture. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
+All authored programs use strict TypeScript, including DSP, AudioWorklet, demos, tests, and tooling. `npm run compile` emits ignored `.dev/` JavaScript for Node.js 22+ development; npm scripts compile before running these programs. `npm test` selects behavioral `*.test.ts` files after compilation (do not use bare `node --test`). `npm run build` derives `.d.ts` from source, preserves engine-module paths, and builds six `dist/demo/` scripts for the HTML examples; `npm run typecheck` checks all authored programs and the public consumer fixture. Every distribution JS has matching source-map and declaration files. Consumers still import `.js` and need neither TypeScript nor a build toolchain.
 
 ```sh
 npm run build

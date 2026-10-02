@@ -1,16 +1,50 @@
 <!doctype html>
-<html lang="zh-Hant">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OPM.js 測試頁面</title>
+  <title>OPM.js — Example index</title>
+  <link rel="stylesheet" href="./examples/styles.css">
 </head>
 <body>
-  <h1>OPM.js 測試頁面</h1>
-  <p>播放完整的《小星星》旋律與和弦（約 24 秒）；和弦偏左、旋律偏右。</p>
-  <button id="play" type="button">播放曲子</button>
-  <button id="stop" type="button" disabled>停止</button>
-  <output id="status" role="status" aria-live="polite"></output>
-  <script type="module" src="./dist/demo/song.js"></script>
+  <main>
+    <h1>OPM.js examples</h1>
+    <p>Four-operator FM synthesis: from your first note to voice modulation, live audio routing, and offline WAV export.</p>
+    <p class="hint">Open live-audio examples over HTTPS or localhost, then click a button to start audio. Keep your volume comfortable; offline WAV rendering needs no AudioContext.</p>
+    <nav class="card-grid" aria-label="Interactive examples">
+      <article class="card">
+        <h2><a href="./examples/basic.html">01 · Basic notes and voice banks</a></h2>
+        <p>Choose a preset, pitch, and velocity. Play a short or held note, then release it manually.</p>
+        <p class="hint">OPM · parseVoiceBank · playNote · stop</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/song.html">02 · Melody and chord scheduling</a></h2>
+        <p>Use Twinkle, Twinkle, Little Star to explore melody, chords, stereo pan, and scheduling or cancelling future notes.</p>
+        <p class="hint">time · duration · stereo pan</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/modulation.html">03 · Stereo and LFO modulation</a></h2>
+        <p>Compare left/right pan, amplitude modulation, and pitch modulation. Each new note uses the current voice settings.</p>
+        <p class="hint">pan · lfo.rate · amDepth · pmDepth</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/context.html">04 · Shared AudioContext and routing</a></h2>
+        <p>Borrow the host context, adjust GainNode volume, disconnect/reconnect routing, and verify that disposing the synth leaves host audio open.</p>
+        <p class="hint">context · destination · connect · close</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/wav.html">05 · Offline PCM and WAV export</a></h2>
+        <p>Render stereo PCM without starting live audio, inspect frame counts and diagnostics, then download PCM16 WAV.</p>
+        <p class="hint">renderNote · encodeWav · Float32Array</p>
+      </article>
+      <article class="card">
+        <h2><a href="./examples/playground.html">06 · Advanced controls and DX7 import</a></h2>
+        <p>Explore key scaling, suspend/resume, diagnostics, and approximate six-to-four-operator DX7 SysEx conversion.</p>
+        <p class="hint">keyScale · diagnostics · importDX7</p>
+      </article>
+    </nav>
+    <p class="hint">Examples run the built dist/ ES modules. Their TypeScript helpers live in demo/; every JS has a matching source map and declaration.</p>
+    <p><a href="./README.md">README and API</a> · <a href="./doc/usage.en.md">English guide</a> · <a href="./doc/usage.zh-TW.md">Traditional Chinese guide</a></p>
+  </main>
 </body>
 </html>

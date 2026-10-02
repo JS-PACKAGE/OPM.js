@@ -1,0 +1,45 @@
+:root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+  line-height: 1.6;
+  --surface: #ffffff;
+  --background: #f4f5fa;
+  --text: #202437;
+  --muted: #596175;
+  --border: #cbd1df;
+  --accent: #5140ad;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--background); color: var(--text); }
+main { max-width: 1060px; margin: 0 auto; padding: 32px 24px 64px; }
+a { color: var(--accent); text-underline-offset: 3px; }
+h1 { line-height: 1.2; margin: 24px 0 12px; }
+h2 { font-size: 1.2rem; margin: 0 0 8px; }
+p { margin: 12px 0; }
+.hint { color: var(--muted); font-size: 0.95rem; }
+.card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; margin: 28px 0; }
+.card, fieldset { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 20px; }
+.card { display: flex; flex-direction: column; }
+.card h2 a { display: block; }
+.card p { flex: 1; }
+.card .hint { flex: 0; margin-bottom: 0; }
+fieldset { margin: 24px 0; min-width: 0; }
+legend { font-weight: 650; padding: 0 8px; }
+label { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; max-width: 520px; }
+label[for] { display: block; }
+button, input, select { font: inherit; }
+input:not([type=range]), select { padding: 8px 10px; border: 1px solid var(--border); border-radius: 6px; max-width: 100%; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+button { padding: 9px 15px; border: 1px solid var(--accent); border-radius: 7px; background: var(--accent); color: white; cursor: pointer; margin: 4px 4px 4px 0; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:not(:disabled):hover { filter: brightness(1.12); }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; }
+output[role=status] { display: block; padding: 14px 16px; border-left: 4px solid var(--accent); background: var(--surface); white-space: pre-wrap; overflow-wrap: anywhere; min-height: 54px; }
+output:not([role=status]) { font-variant-numeric: tabular-nums; }
+code { font-size: 0.92em; }
+@media (prefers-color-scheme: dark) {
+  :root { --surface: #252838; --background: #191c29; --text: #f1f2f8; --muted: #b6bfd2; --border: #515b72; --accent: #ada0ff; }
+  button { color: #191c29; }
+}
+@media (max-width: 600px) { main { padding: 20px 16px 40px; } fieldset { padding: 16px; } }
