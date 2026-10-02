@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { OPM, createLookaheadScheduler } from '../src/api/index.js';
-import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, Voice } from '../src/api/index.js';
+import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, StopOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
 import { Synth } from '../src/core/synth.js';
 import { MAX_BANK_BYTES, parseVoiceBank } from '../src/voices/schema.js';
@@ -855,4 +855,53 @@ test('bank replacement and cache eviction cannot alter active or admitted future
     assert.equal(diagnostics.errors, 0);
     assert.equal(diagnostics.rejectedNotes, 0);
   } finally { await opm.dispose(); await reference.dispose(); }
+});
+
+test('explicit stop cancellation removes only its own automation and leaves a natural release tail', async () => {
+  for (const cancelControls of [false, true]) {
+    Object.assign(globalThis, { currentFrame: 0 });
+    const opm = new OPM();
+    await opm.start();
+    try {
+      const left = opm.playNote({ note: 69, pan: -1 });
+      const right = opm.playNote({ note: 72, pan: 1 });
+      render(opm);
+      opm.updateNote(left, { expression: 0 }, { at: 256 / sampleRate });
+      opm.updateNote(right, { expression: 0 }, { at: 256 / sampleRate });
+      if (cancelControls) opm.stop(left, { cancelControls: true });
+      else opm.stop(left);
+      const tail = render(opm);
+      assert.ok(audible(tail.left), 'cancellation releases instead of silencing immediately');
+      const after = render(opm);
+      assert.equal(audible(after.left), cancelControls);
+      assert.ok(after.right.every(sample => Math.abs(sample) < 1e-10), 'another gate keeps its own automation');
+      opm.panic();
+      const future = opm.playNote({ note: 69, time: 1 });
+      opm.updateNote(future, { expression: 0 }, { at: 2 });
+      opm.stop(future, { cancelControls: true });
+      assert.equal((await opm.getDiagnostics()).pendingEvents, 0);
+    } finally { await opm.dispose(); }
+  }
+});
+
+test('malformed stop cancellation cannot remove controls or release its note', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  await opm.start();
+  let reads = 0;
+  try {
+    const id = opm.playNote({ note: 69 });
+    render(opm);
+    opm.updateNote(id, { expression: 0 }, { at: 256 / sampleRate });
+    const accessor = {};
+    Object.defineProperty(accessor, 'cancelControls', { get() { reads++; return true; } });
+    for (const options of [accessor, { cancelControls: 1 }, { cancelControls: undefined },
+      { cancelControls: true, at: 0 }, { cancelControls: false, at: 0 }]) {
+      assert.throws(() => opm.stop(id, options as StopOptions));
+    }
+    assert.equal(reads, 0);
+    assert.equal((await opm.getDiagnostics()).pendingEvents, 1);
+    assert.ok(audible(render(opm).left));
+    assert.ok(render(opm).left.every(sample => sample === 0));
+  } finally { await opm.dispose(); }
 });

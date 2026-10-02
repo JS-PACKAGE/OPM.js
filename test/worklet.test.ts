@@ -520,3 +520,46 @@ test('new operator and LFO controls snapshot at admission and malformed updates 
   assert.notDeepEqual(actual.subarray(256), baseline.subarray(256), 'valid controls must change audible synthesis');
   assert.equal(diagnostics(processor).errors, invalid.length);
 });
+
+test('raw stop cancellation rejects malformed booleans and removes only the selected gate automation', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(1, 0, null));
+  processor.receive(note(2, 0, null));
+  block(processor, 0);
+  processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0 }, at: 256 / sampleRate });
+  processor.receive({ type: 'updateNote', id: 2, controls: { expression: 0 }, at: 256 / sampleRate });
+  let reads = 0;
+  const accessor = { type: 'noteOff', id: 1, commandId: 1 };
+  Object.defineProperty(accessor, 'cancelControls', { get() { reads++; return true; } });
+  const malformed = [accessor,
+    { type: 'noteOff', id: 1, commandId: 2, cancelControls: 1 },
+    { type: 'noteOff', id: 1, commandId: 3, cancelControls: undefined },
+    { type: 'noteOff', id: 1, commandId: 4, cancelControls: true, at: 0 },
+    { type: 'noteOff', id: 1, commandId: 5, cancelControls: false, at: 0 },
+  ];
+  for (const message of malformed) processor.receive(message);
+  assert.equal(reads, 0);
+  assert.equal(diagnostics(processor).pendingEvents, 2);
+  assert.equal(processor.messages.filter(message => message.type === 'note' && message.state === 'released').length, 0);
+  processor.receive({ type: 'noteOff', id: 1, commandId: 6, cancelControls: true });
+  assert.equal(diagnostics(processor).pendingEvents, 1);
+  const reference = new Synth(sampleRate);
+  reference.noteOn(brass, 69, 1);
+  reference.noteOn(brass, 69, 2);
+  reference.render(new Float32Array(128), new Float32Array(128));
+  reference.noteOff(1);
+  const expectedTail = new Float32Array(128), expectedTailRight = new Float32Array(128);
+  reference.render(expectedTail, expectedTailRight);
+  assert.deepEqual(block(processor, 128), expectedTail);
+  reference.updateNote(2, { expression: 0 });
+  const expectedAfter = new Float32Array(128), expectedAfterRight = new Float32Array(128);
+  reference.render(expectedAfter, expectedAfterRight);
+  assert.deepEqual(block(processor, 256), expectedAfter);
+  assert.ok(expectedAfter.some(sample => sample !== 0), 'cancelled automation does not silence the release tail');
+  processor.receive(note(3, 1024, null));
+  processor.receive({ type: 'updateNote', id: 3, controls: { expression: 0 }, at: 2048 / sampleRate });
+  processor.receive({ type: 'noteOff', id: 3, cancelControls: true });
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.ok(!processor.messages.some(message => message.id === 3 && message.state === 'started'));
+});

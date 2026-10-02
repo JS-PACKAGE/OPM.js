@@ -9,7 +9,7 @@ import type { TuningOptions } from '../core/tuning.js';
 type RawMessage =
   | { type: 'prepareVoice'; voiceId: unknown; voice: unknown }
   | { type: 'noteOn'; id: unknown; voice?: unknown; voiceId?: unknown; note: unknown; at: unknown; duration: unknown; velocity?: unknown; pan?: unknown; late?: unknown }
-  | { type: 'noteOff'; id: unknown; at?: unknown; commandId?: unknown }
+  | { type: 'noteOff'; id: unknown; at?: unknown; cancelControls?: unknown; commandId?: unknown }
   | { type: 'updateNote'; id: unknown; controls: unknown; at?: unknown; commandId?: unknown }
   | { type: 'allNotesOff'; commandId?: unknown }
   | { type: 'panic'; commandId?: unknown; reason?: unknown }
@@ -32,7 +32,7 @@ const MAX_DURATION = 60;
 const MESSAGE_FIELDS: Record<RawMessage['type'], readonly [readonly string[], readonly string[]]> = {
   prepareVoice: [['type', 'voiceId', 'voice'], []],
   noteOn: [['type', 'id', 'note', 'at', 'duration'], ['voice', 'voiceId', 'velocity', 'pan', 'late']],
-  noteOff: [['type', 'id'], ['at', 'commandId']],
+  noteOff: [['type', 'id'], ['at', 'cancelControls', 'commandId']],
   updateNote: [['type', 'id', 'controls'], ['at', 'commandId']],
   allNotesOff: [['type'], ['commandId']],
   panic: [['type'], ['commandId', 'reason']],
@@ -184,11 +184,12 @@ class OPMProcessor extends AudioWorkletProcessor {
     this.events.splice(index, 0, event);
   }
 
-  removeEvents(id: number, onlyAutomatic = false): void {
+  removeEvents(id: number, mode: 'all' | 'automatic' | 'controls' = 'all'): void {
     let kept = 0;
     for (let index = 0; index < this.events.length; index++) {
       const event = this.events[index];
-      if (event.id !== id || onlyAutomatic && !(event.type === 'noteOff' && event.automatic)) this.events[kept++] = event;
+      if (event.id !== id || mode === 'automatic' && !(event.type === 'noteOff' && event.automatic) ||
+          mode === 'controls' && event.type !== 'updateNote') this.events[kept++] = event;
     }
     this.events.length = kept;
   }
@@ -200,7 +201,7 @@ class OPMProcessor extends AudioWorkletProcessor {
     this.noteEvent(id, reason === 'stolen' ? 'stolen' : reason === 'cancelled' ? 'cancelled' : 'ended', reason === 'error' ? 'error' : undefined, frame);
   }
 
-  release(id: number): void {
+  release(id: number, cancelControls = false): void {
     const note = this.notes.get(id);
     if (!note) return;
     if (note.state === 'pending') {
@@ -208,8 +209,9 @@ class OPMProcessor extends AudioWorkletProcessor {
       this.removeEvents(id);
       this.noteEvent(id, 'cancelled');
     } else {
-      // Keep scheduled controls for the release tail, but no redundant automatic off.
-      this.removeEvents(id, true);
+      // Ordinary stops keep tail controls; explicit cancellation removes only this gate's automation.
+      if (cancelControls) this.removeEvents(id, 'controls');
+      this.removeEvents(id, 'automatic');
       if (this.synth!.noteOff(id)) {
         note.state = 'released';
         this.noteEvent(id, 'released');
@@ -302,6 +304,12 @@ class OPMProcessor extends AudioWorkletProcessor {
     }
     if (data.type === 'noteOff' || data.type === 'updateNote') {
       if (!validId(data.id)) { this.errorCount++; this.commandEvent(data, 'rejected', 'invalid-note-id'); return; }
+      if (data.type === 'noteOff' && Object.hasOwn(data, 'cancelControls') &&
+          (typeof data.cancelControls !== 'boolean' || Object.hasOwn(data, 'at'))) {
+        this.errorCount++;
+        this.commandEvent(data, 'rejected', 'invalid-cancellation');
+        return;
+      }
       let controls: NoteControls | undefined;
       if (data.type === 'updateNote') {
         try { controls = validateNoteControls(data.controls as NoteControls); }
@@ -312,7 +320,7 @@ class OPMProcessor extends AudioWorkletProcessor {
       const note = this.notes.get(data.id);
       if (!note) { this.commandEvent(data, 'rejected', 'inactive'); return; }
       if (data.type === 'noteOff' && !Object.hasOwn(data, 'at')) {
-        this.release(data.id);
+        this.release(data.id, data.cancelControls === true);
         this.commandEvent(data, 'accepted');
         return;
       }
@@ -396,7 +404,7 @@ class OPMProcessor extends AudioWorkletProcessor {
             if (next.durationFrames !== null && next.frame < this.dispatchFrame) {
               const end = this.dispatchFrame + next.durationFrames;
               if (!Number.isSafeInteger(end)) throw new RangeError('Unsafe end frame');
-              this.removeEvents(next.id, true);
+              this.removeEvents(next.id, 'automatic');
               this.insert({ type: 'noteOff', id: next.id, frame: end, automatic: true });
             }
             this.synth!.noteOn(next.voice, next.note, next.id, next.options);

@@ -12,6 +12,8 @@ export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';
 export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
 export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
+export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
+export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat } from './transport.js';
 export { renderSequenceInWorker } from './render-worker.js';
 export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult } from './render-worker.js';
 
@@ -93,6 +95,9 @@ export interface ScheduledNoteOptions {
   /** Absolute AudioContext seconds. Stop without at is immediate, including cancellation. */
   at?: number;
 }
+/** Explicit cancellation is immediate-only; ordinary stops preserve tail automation. */
+export type StopOptions = ScheduledNoteOptions & { cancelControls?: never } |
+  { at?: never; cancelControls?: boolean };
 interface MutableAudioState {
   context: AudioContext | null;
   node: AudioWorkletNode | null;
@@ -737,12 +742,18 @@ export class OPM {
     return id;
   }
 
-  stop(id: number, options: ScheduledNoteOptions = {}): number {
+  stop(id: number, options: StopOptions = {}): number {
     const node = this._requireNode();
     noteId(id);
-    const data = ownData(options, ['at'], 'stop options');
+    const data = ownData(options, ['at', 'cancelControls'], 'stop options');
+    if (Object.hasOwn(data, 'cancelControls')) {
+      if (typeof data.cancelControls !== 'boolean') throw new TypeError('cancelControls must be a boolean');
+      if (Object.hasOwn(data, 'at')) throw new TypeError('cancelControls cannot be combined with at');
+    }
     const at = Object.hasOwn(data, 'at') ? absoluteTime(data.at, this.context!) : undefined;
-    return this._postCommand(node, 'stop', { type: 'noteOff', id, ...(at === undefined ? {} : { at }) });
+    return this._postCommand(node, 'stop', { type: 'noteOff', id,
+      ...(at === undefined ? {} : { at }),
+      ...(Object.hasOwn(data, 'cancelControls') ? { cancelControls: data.cancelControls } : {}) });
   }
 
   /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
