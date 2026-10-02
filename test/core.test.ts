@@ -212,3 +212,41 @@ test('nonfinite DSP state snaps to silence and increments the error count', () =
   assert.equal(synth.errorCount, 1);
   assert.equal(synth.voices.length, 0);
 });
+
+test('native buffer bounds ignore shadow metadata and reject forged channels without advancing sound', () => {
+  const synth = new Synth(8000), reference = new Synth(8000);
+  synth.noteOn(voice(), 60.5);
+  reference.noteOn(voice(), 60.5);
+  const left = new Float32Array(6), right = new Float32Array(6);
+  let reads = 0;
+  for (const channel of [left, right]) {
+    Object.defineProperty(channel, 'length', { get() { reads++; return 64; } });
+  }
+  synth.render(left, right);
+  const expectedLeft = new Float32Array(6), expectedRight = new Float32Array(6);
+  reference.render(expectedLeft, expectedRight);
+  assert.equal(reads, 0);
+  assert.equal(synth.currentFrame, 6);
+  assert.deepEqual(left.subarray(0), expectedLeft);
+  assert.deepEqual(right.subarray(0), expectedRight);
+  for (const invalid of [Object.create(Float32Array.prototype), new Proxy(new Float32Array(6), {}), new Float64Array(6)]) {
+    assert.throws(() => synth.render(invalid as Float32Array, right), RangeError);
+  }
+  assert.throws(() => synth.render(left, right, 0, 7), RangeError);
+  const hostileOffset = { valueOf() { reads++; return 0; } };
+  assert.throws(() => synth.render(left, right, hostileOffset as unknown as number), RangeError);
+  assert.equal(reads, 0);
+  assert.equal(synth.currentFrame, 6);
+  synth.render(left, right);
+  reference.render(expectedLeft, expectedRight);
+  assert.deepEqual(left.subarray(0), expectedLeft);
+  assert.deepEqual(right.subarray(0), expectedRight);
+  const idle = new Synth(8000);
+  const silent = new Float32Array(6).fill(1);
+  Object.defineProperty(silent, 'fill', { get() { reads++; throw Error('host method invoked'); } });
+  idle.render(silent, right);
+  assert.equal(reads, 0);
+  assert.ok(silent.subarray(0).every(value => value === 0));
+  assert.ok(right.subarray(0).every(value => value === 0));
+  assert.equal(idle.currentFrame, 6);
+});

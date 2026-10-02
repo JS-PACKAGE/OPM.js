@@ -3,6 +3,10 @@ import { performance } from 'node:perf_hooks';
 import { HEADROOM, Synth, renderNote } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
 import { QUALITY_SAMPLE_RATES, matrixVoice, controlledTone, binAmplitude, signalMetrics, decibels } from '../test/quality-fixtures.js';
+import { FM_REFERENCE_RATES } from '../test/fm-reference-fixtures.js';
+import { verifyPMSpectrum } from '../test/fm-reference-quality.js';
+import { verifyLongStream } from '../test/fm-reference-streaming.js';
+import { verifyFeedbackSpectrum } from '../test/fm-reference-feedback.js';
 
 const started = performance.now();
 const matrix: object[] = [];
@@ -97,13 +101,22 @@ for (const sampleRate of QUALITY_SAMPLE_RATES) {
   }
   controlled.push({ sampleRate, baselineHz, passband, thdPercent: thd * 100, thdDb: decibels(thd), aliases });
 }
+const independentFM = FM_REFERENCE_RATES.flatMap(sampleRate => verifyPMSpectrum(sampleRate));
+const independentFeedback = FM_REFERENCE_RATES.map(sampleRate => verifyFeedbackSpectrum(sampleRate));
+const longStreaming = verifyLongStream();
 console.log(JSON.stringify({ passed: true, elapsedMs: performance.now() - started,
-  matrixCases: matrix.length, controlled, matrix,
+  matrixCases: matrix.length, controlled, independentFM, independentFeedback, longStreaming, matrix,
   limitations: [
     'Synthetic clean-room fixtures, not hardware fidelity or perceptual preset evaluation.',
     'Passband loss is relative to a low-frequency control and includes the existing four-pole filter and output saturation; no DSP was changed.',
     'THD measures harmonics 2..8 of one settled low-level pure tone, not noise, THD+N, or arbitrary FM distortion.',
-    'Alias bounds cover two isolated ultrasonic sine oscillators only; high-index FM and feedback are not claimed alias-free.',
+    'Independent FM gates cover original zero-feedback two-operator PM at index 16, two frequency layouts and coherent one-second windows at 44.1/48/96 kHz. They are not a blanket alias-free claim.',
+    'The Bessel reference and closed-form accepted four-pole transfer function separate attenuated in-band brightness from folded ultrasonic energy; the existing 0.2 Fs filter tradeoff is explicitly retained.',
+    'The documented memoryless output tanh is inverted for independent FM, feedback and settled-stream analysis, isolating pre-saturation products rather than claiming nonlinear output spectra are ideal PM.',
+    'Feedback7 at level 0.25 uses independent converged periodic phase grids with the same physical two-tap delays and a proven contraction; its harmonics, brightness loss, DC and aliases are checked, not PCM identity.',
+    'Full-level feedback7 has a filter/Parseval-derived high-band energy gate. Its chaotic aliases cannot be uniquely separated from true in-band harmonics, so only the mathematical alias bound is reported; no chaotic PCM-convergence claim.',
+    'No cascaded four-operator or perceptual preset spectral reference is included; the existing matrix checks their finite signal and lifecycle, not spectral fidelity.',
+    'The long-stream gate renders two deterministic 120-second offline replays with reused buffers, held AM/PM LFO, 96 interrupted glides, settled sine residual and terminal/silence checks. It does not measure browser suspension or real-device underruns.',
     'RMS dBFS is unweighted channel energy over a short held/released note, not LUFS or perceived loudness; null denotes silence.',
     'Elapsed time is offline wall time, not realtime worklet CPU cost, GC, underruns, or latency.'
   ] }, null, 2));

@@ -125,7 +125,7 @@ if (process.argv.includes('--package-smoke')) {
       import assert from 'node:assert/strict';
       import { readFile } from 'node:fs/promises';
       import { OPM } from 'opm.js';
-      import { renderNote, encodeWav } from 'opm.js/core';
+      import { renderNote, renderSequence, normalizeTuning, tuningFrequency, encodeWav } from 'opm.js/core';
       import { brass } from 'opm.js/voices/brass.js';
       import { importDX7 } from 'opm.js/voices/dx7.js';
       import { examples } from 'opm.js/voices/examples.js';
@@ -141,6 +141,17 @@ if (process.argv.includes('--package-smoke')) {
       assert.equal(result.diagnostics.errors, 0);
       assert.ok(result.left.some(value => Math.abs(value) > 0.0001));
       assert.ok(result.left.every(Number.isFinite));
+      const tuning = normalizeTuning({ referenceHz: 442 });
+      assert.equal(tuningFrequency(69, tuning), 442);
+      const score = [
+        { type: 'note', id: 1, voice: brass, note: 69.5, time: 0, duration: 0.03 },
+        { type: 'control', id: 1, time: 0.01, controls: { expression: 0.5, ramp: 0.005 } },
+      ];
+      const shared = renderSequence(score, { sampleRate: 8000, mixGain: 0.5, tuning, stealing: 'quietest' });
+      const muted = renderSequence(score, { sampleRate: 8000, mixGain: 0, tuning });
+      assert.equal(shared.diagnostics.errors, 0);
+      assert.ok(shared.left.some(value => Math.abs(value) > 0.0001));
+      assert.ok(muted.left.every(value => value === 0) && muted.right.every(value => value === 0));
       const wav = encodeWav({ left: result.left, right: result.right, sampleRate: result.sampleRate });
       assert.equal(new TextDecoder().decode(wav.subarray(0, 4)), 'RIFF');
       assert.equal(new DataView(wav.buffer, wav.byteOffset).getUint32(40, true), result.left.length * 4);
