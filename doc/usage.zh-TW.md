@@ -2,7 +2,7 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-OPM.js 1.2 提供瀏覽器 AudioWorklet 即時合成的 `OPM`、Node.js 離線立體聲 PCM 渲染的 `Synth`／`renderNote`、PCM16 WAV 匯出與近似 DX7 音色匯入。公開 ESM 入口皆附 TypeScript 型別宣告。請先取得包含本文件的 checkout／封存檔；以下路徑皆以明示的工作目錄為準。
+OPM.js 1.3 提供瀏覽器 AudioWorklet 即時合成的 `OPM`、Node.js 離線立體聲 PCM 渲染的 `Synth`／`renderNote`、PCM16 WAV 匯出與近似 DX7 音色匯入。公開 ESM 入口皆附 TypeScript 型別宣告。請先取得包含本文件的 checkout／封存檔；以下路徑皆以明示的工作目錄為準。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -21,14 +21,14 @@ npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.2.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
+此 checkout 的套件版本產生 `opm.js-1.3.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.2.0.tgz
+npm install ../OPM.js/opm.js-1.3.0.tgz
 ```
 
 既有專案只需在該目錄以 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、demo scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、開發 scripts 或 HTML 範例頁面；維護指令應在 checkout 執行。

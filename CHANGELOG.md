@@ -2,7 +2,15 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.3.0
+
+### Release verification and security review
+
+- **Security:** independent reviewers **Release13Inputs** (A/B, including the v1.2.0 release diff) and **Release13DspSupply** (C/D, current source/build/package controls) approved scoped static reviews with no evidence-backed blockers. Runtime checks were executed by 語喵, not the reviewers.
+- Fresh local verification on Node.js 26.7.0: build produced 21 JS/map/declaration triplets; all 73 tests, strict source/development/consumer typechecks, AST security gates and both npm audits passed (zero vulnerabilities). The runtime dependency tree is empty. Installed v1.3.0 package rendering produced 1,440 frames and a 5,804-byte WAV; installed consumer types passed.
+- Real Chromium 153.0.8010.12 AudioWorklet smoke passed on macOS arm64 using the existing Playwright 1.63.0 launcher: stereo/pan, note lifecycle, routing, suspend/resume and context ownership passed with zero DSP errors. Locked Playwright 1.56.1 Chromium installation did not complete locally; this is not locked-browser coverage.
+- Observed pre-release [quality CI](https://github.com/YueyuHoshizora/OPM.js/actions/runs/36961878570) for `b177bed` passed Node 22/24/26 and Chromium/Firefox/WebKit jobs; [Pages deployment](https://github.com/YueyuHoshizora/OPM.js/actions/runs/36961878648) also passed. These runs precede the release metadata commit.
+- Apple M5 / Node 26 benchmark excluded 300 warmup blocks and measured 2,000 blocks per scenario. Burst p99 was 1.121 ms, worst 1.534 ms, with zero missed 2.667 ms deadlines. This report-only local measurement is not a universal realtime guarantee.
 
 ### Detailed English website security policy
 
