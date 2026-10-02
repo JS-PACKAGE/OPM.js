@@ -51,6 +51,19 @@ No physical-device capture is supplied with this repository. Every physical resu
 
 Keep exported JSON locally unless you intentionally choose to share it. Review notes and device identifiers before sharing. The runner deliberately has no JSON import or auto-trust path: opening a capture never upgrades it into a verified physical result. To review an artifact, validate its format/version, bounds and counters; check device/browser versions, sample rates, ended timestamp, declared environment/listening, judgment and notes, then correlate marker timestamps with retained events. Missing/truncated evidence should remain unverified. Preserve original files rather than editing them to fill missing results.
 
+## Reviewing exported evidence with `npm run device-evidence`
+
+```sh
+npm run device-evidence -- opm-device-observations.json [other-device.json …]
+npm run device-evidence -- --require-complete ios.json android.json    # exit 1 unless every cell passes
+```
+
+The command (Node 22+, no network) re-derives every status from the declared run fields; it does **not** trust the file's own `acceptanceStatus` or `coverage`, and prints a warning when they disagree. A capture can fill a cell only if all of these hold: the declared environment is `physical-ios-safari` or `physical-android-chrome`; the run finished (`endedAt` after `startedAt`); listening was declared; the policy at the end equals the policy at the start; begin and end context sample rates were recorded; device, OS and browser strings are nonempty; the user agent contains `iPhone`/`iPad` (iOS) or `Android`; and a long-play run lasted at least 600 seconds. The cell then takes the capture's own `manualJudgment` (`pass`, `fail` or `unverified`). The latest finished capture per cell wins, and a later unfinished retry never replaces it. The 36 cells with no accepted capture stay `unverified`.
+
+Input is validated strictly: format `opm-local-device-acceptance` version 1, at most 2 MiB, 24 runs, 256 observations and 64 markers per run, 1,200 note characters, unique run IDs, known scenarios and policies, plausible sample rates. Anything else is rejected rather than interpreted. One export holds at most 24 captures, so review the first device's file before capturing a second device (a full device needs 18). Pass several files to review them side by side; the matrix is evaluated per file, not merged.
+
+What this does **not** do: authenticate hardware (a desktop browser can spoof its user agent and the form fields are self-declared), measure underruns, or replace reading the markers and notes. A green matrix means "complete declared captures with passing manual judgments", never a certification. `test/device-evidence.test.ts` checks the derivation rules with synthetic shapes that are not evidence for the support matrix.
+
 ## Desktop smoke workflow (not physical acceptance)
 
 After the integration build, open example 08 on desktop localhost. Choose Desktop / automation and actual desktop metadata, then:

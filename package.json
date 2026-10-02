@@ -1,6 +1,6 @@
 {
   "name": "opm.js",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "A zero-dependency four-operator FM synthesis engine",
   "type": "module",
   "license": "Apache-2.0",
@@ -9,6 +9,9 @@
     "url": "git+https://github.com/YueyuHoshizora/OPM.js.git"
   },
   "types": "./dist/api/index.d.ts",
+  "bin": {
+    "opm-assets": "./bin/opm-assets.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/api/index.d.ts",
@@ -37,6 +40,10 @@
     "./voices/*.js": {
       "types": "./dist/voices/*.d.ts",
       "import": "./dist/voices/*.js"
+    },
+    "./tools/assets.js": {
+      "types": "./dist/tools/assets.d.ts",
+      "import": "./dist/tools/assets.js"
     }
   },
   "files": [
@@ -44,6 +51,7 @@
     "dist/**/*.js.map",
     "dist/**/*.d.ts",
     "doc/",
+    "bin/opm-assets.js",
     "LICENSE",
     "README.md",
     "CHANGELOG.md",
@@ -57,6 +65,7 @@
     "voice-quality": "npm run compile && node .dev/scripts/voice-quality.js",
     "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
     "vite-smoke": "npm run compile && node .dev/scripts/vite-smoke.js",
+    "device-evidence": "npm run compile && node .dev/scripts/device-evidence.js",
     "registry-verify": "npm run compile && node .dev/scripts/registry-verify.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",

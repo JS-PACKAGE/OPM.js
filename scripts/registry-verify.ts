@@ -66,7 +66,7 @@ assert.equal(new Set(entries).size, entries.length, 'Duplicate archive paths');
 const files = new Set(entries.map(path => {
   assert.ok(path.startsWith('package/') && !path.split('/').some(part => part === '' || part === '..' || part === '.'), 'Unsafe archive path');
   const relative = path.slice('package/'.length);
-  assert.ok(/^(?:dist\/[a-zA-Z0-9_./-]+\.(?:js|js\.map|d\.ts)|doc\/[a-zA-Z0-9_./-]+|package\.json|README\.md|CHANGELOG\.md|SECURITY\.md|LICENSE)$/.test(relative),
+  assert.ok(/^(?:dist\/[a-zA-Z0-9_./-]+\.(?:js|js\.map|d\.ts)|doc\/[a-zA-Z0-9_./-]+|bin\/opm-assets\.js|package\.json|README\.md|CHANGELOG\.md|SECURITY\.md|LICENSE)$/.test(relative),
     `Unexpected package file: ${relative}`);
   return relative;
 }));

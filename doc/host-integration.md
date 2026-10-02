@@ -227,24 +227,20 @@ For a shared context owned elsewhere, omit its final `context.close()`; disconne
 
 ## Other bundlers and SSR hosts
 
-Webpack, Rollup and Parcel hosts can use the same explicit static-asset contract without relying on unverified worklet-plugin APIs: copy the installed package's **entire `dist/` tree plus package-root `LICENSE`** into the host's public/static directory, preserving relative paths. This is a packaging recipe, not a claim that these other bundlers were exercised. Only the existing Vite production smoke provides bundler-specific runtime verification.
+Webpack, Rollup, Parcel and static hosts use the same explicit static-asset contract without relying on unverified worklet-plugin APIs: deploy the installed package's **entire `dist/` tree plus the package-root `LICENSE`** at a same-origin URL, preserving relative paths. This is a packaging recipe, not a claim that those other bundlers were exercised. Only the existing Vite production smoke provides bundler-specific runtime verification.
 
-For example, run this dependency-free Node script in a host project where `opm.js` is installed. Replace `public/audio/opm` with that host's static directory; this script only copies and does not delete existing host files.
+The package ships a dependency-free helper that does this safely:
 
-```js
-import { cp, copyFile, mkdir } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const entry = fileURLToPath(import.meta.resolve('opm.js'));
-const dist = resolve(dirname(entry), '..'); // installed dist/api/index.js
-const target = resolve('public/audio/opm');
-await mkdir(target, { recursive: true });
-await cp(dist, target, { recursive: true });
-await copyFile(resolve(dist, '../LICENSE'), resolve(target, 'LICENSE'));
+```sh
+npx opm-assets copy public/audio/opm-1.8.0     # atomic copy into a NEW directory
+npx opm-assets check https://example.test/audio/opm-1.8.0/   # byte-for-byte check of what is served
 ```
 
-Publish that directory at a same-origin URL such as `/audio/opm/`; retain the license and configure `new OPM({ workletUrl: '/audio/opm/worklet/processor.js' })`. The worklet's own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import `/audio/opm/api/index.js` externally. Use a fresh release-specific asset directory or atomic deployment so removed old assets cannot mix with a new package tree.
+`copy` (also `import { copyAssets } from 'opm.js/tools/assets.js'`, Node only) inspects the installed release first: only `.js`, `.js.map` and `.d.ts` files under `dist/`, no symlinks, every `.js` with its map and declaration, the entry modules `api/index.js`, `core/index.js`, `worklet/processor.js` and `worker/render.js`, and a bounded size (4,096 files, 16 MiB). It stages a temporary directory beside the destination, copies and re-hashes every file, writes `opm-assets.json` (SHA-256 and size per file, plus `LICENSE`) and renames the staging directory into place. It **never overwrites**: a destination that already holds exactly this release is reported as `reused: true`; anything else is an error and left untouched. Use a fresh release-specific directory (or an atomic deployment switch) so removed old assets cannot mix with a new tree.
+
+`check` (or `checkDeployment(url)`) downloads each listed file from an HTTPS or loopback-HTTP base URL and compares status, a JavaScript MIME type, `X-Content-Type-Options: nosniff` (disable with `requireNosniff: false`) and the SHA-256 against the installed release. Redirects are errors, so an SPA fallback that returns HTML with status 200 fails on MIME or bytes. It cannot see your page's Content-Security-Policy and does not start an AudioWorklet or Worker: run the browser smoke or the [Vite example](../examples/vite/README.md) for that.
+
+Configure `new OPM({ workletUrl: '/audio/opm-1.8.0/worklet/processor.js' })` and, for Worker export, `workerUrl: '/audio/opm-1.8.0/worker/render.js'`. The worklet's own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import `/audio/opm-1.8.0/api/index.js` externally.
 
 An SSR module may import types safely, but instantiate/resume OPM only on the client, from a trusted user gesture. Keep module initialization free of `window`, `document` and `AudioContext` access on the server; dynamically import the runtime inside client-only code when required by the host. Dispose it during component teardown using the ownership recipe above.
 
@@ -291,3 +287,5 @@ gate without later automatic readmission; reset clears state. Interruption
 releases helper-owned notes even when direct OPM notes use preserve policy.
 Dispose performance/Transport helpers before disposing their shared engine.
 Their cleanup does not release unrelated host or Transport notes.
+
+Release 1.8 adds `updateKey`, `updatePartNotes`, per-part `voiceLimit`/`voicePriority` and an optional Web MIDI adapter; see [expressive performance and MIDI](./midi-performance.md). Looping layers and boundary-quantized section switching are covered in [adaptive music](./adaptive-music.md), and Worker startup and phase diagnostics in [Worker diagnostics](./worker-diagnostics.md).

@@ -8,6 +8,7 @@ import { parse, type AnyNode } from 'acorn';
 import ts from 'typescript';
 
 interface Manifest {
+  version?: string;
   dependencies?: Record<string, string>;
   optionalDependencies?: Record<string, string>;
   peerDependencies?: Record<string, string>;
@@ -23,6 +24,8 @@ for (const key of ['dependencies', 'optionalDependencies', 'peerDependencies'] a
 for (const [name, version] of Object.entries(manifest.devDependencies ?? {})) {
   assert.match(version, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/, `${name} must have an exact version`);
 }
+const versionSource = await readFile(join(root, 'src/version.ts'), 'utf8');
+assert.equal(/VERSION = '([^']+)'/.exec(versionSource)?.[1], manifest.version, 'src/version.ts must match package.json');
 
 function command(args: string[], cwd = root): string {
   const result = spawnSync('npm', args, { cwd, encoding: 'utf8', timeout: 120000 });
@@ -111,6 +114,7 @@ if (process.argv.includes('--package-smoke')) {
     const packagedPaths = new Set(archive.files.map(file => file.path));
     for (const file of archive.files) {
       assert.ok(!/^(src|scripts|test|node_modules)\//.test(file.path), `unexpected packaged development file: ${file.path}`);
+      assert.ok(file.path.startsWith('dist/') || file.path.startsWith('doc/') || ['bin/opm-assets.js', 'package.json', 'README.md', 'CHANGELOG.md', 'SECURITY.md', 'LICENSE'].includes(file.path), `unexpected packaged file: ${file.path}`);
       if (file.path.startsWith('dist/')) {
         assert.ok(file.path.endsWith('.js') || file.path.endsWith('.d.ts') || file.path.endsWith('.js.map'), `unexpected distribution file: ${file.path}`);
         if (file.path.endsWith('.js')) {
@@ -124,7 +128,7 @@ if (process.argv.includes('--package-smoke')) {
     const script = `
       import assert from 'node:assert/strict';
       import { readFile } from 'node:fs/promises';
-      import { OPM } from 'opm.js';
+      import { OPM, createArrangement, createMidiAdapter, requestMidiAccess, VERSION } from 'opm.js';
       import { renderNote, renderSequence, normalizeTuning, tuningFrequency, encodeWav } from 'opm.js/core';
       import { brass } from 'opm.js/voices/brass.js';
       import { importDX7 } from 'opm.js/voices/dx7.js';
@@ -156,6 +160,15 @@ if (process.argv.includes('--package-smoke')) {
       assert.equal(new TextDecoder().decode(wav.subarray(0, 4)), 'RIFF');
       assert.equal(new DataView(wav.buffer, wav.byteOffset).getUint32(40, true), result.left.length * 4);
       const pkg = JSON.parse(await readFile('node_modules/opm.js/package.json', 'utf8'));
+      assert.equal(VERSION, pkg.version);
+      assert.equal(typeof createArrangement, 'function');
+      assert.equal(typeof createMidiAdapter, 'function');
+      assert.equal(typeof requestMidiAccess, 'function');
+      const priority = renderSequence([
+        { type: 'note', id: 1, time: 0, duration: 0.02, note: 72, voice: brass, voicePriority: 100 },
+        { type: 'note', id: 2, time: 0.005, duration: 0.02, note: 48, voice: brass },
+      ], { sampleRate: 8000, maxVoices: 1 });
+      assert.equal(priority.diagnostics.errors, 0);
       assert.equal(Object.keys(pkg.dependencies ?? {}).length, 0);
       console.log(JSON.stringify({ gate: 'installed-package', version: pkg.version, frames: result.left.length, wavBytes: wav.length, passed: true }));
     `;
@@ -163,6 +176,16 @@ if (process.argv.includes('--package-smoke')) {
     if (result.error) throw result.error;
     assert.equal(result.status, 0, `installed package smoke failed\n${result.stdout}\n${result.stderr}`);
     process.stdout.write(result.stdout);
+    const cli = (action: string[]) => spawnSync(process.execPath, [join(directory, 'node_modules', 'opm.js', 'bin', 'opm-assets.js'), ...action], { cwd: directory, encoding: 'utf8', timeout: 30000 });
+    const deployed = join(directory, 'deployed', 'opm');
+    const firstCopy = cli(['copy', deployed]);
+    assert.equal(firstCopy.status, 0, `installed opm-assets copy failed\n${firstCopy.stdout}\n${firstCopy.stderr}`);
+    assert.equal((JSON.parse(firstCopy.stdout) as { reused: boolean }).reused, false);
+    const secondCopy = cli(['copy', deployed]);
+    assert.equal(secondCopy.status, 0, `installed opm-assets repeat failed\n${secondCopy.stdout}\n${secondCopy.stderr}`);
+    assert.equal((JSON.parse(secondCopy.stdout) as { reused: boolean }).reused, true);
+    assert.ok((await readFile(join(deployed, 'LICENSE'), 'utf8')).length > 0);
+    console.log(JSON.stringify({ gate: 'installed-asset-cli', passed: true }));
     const fixture = join(directory, 'public-api.ts');
     await writeFile(fixture, await readFile(join(root, 'scripts/types/public-api.ts'), 'utf8'));
     const types = spawnSync(process.execPath, [
