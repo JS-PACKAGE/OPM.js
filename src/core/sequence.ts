@@ -150,15 +150,16 @@ const EVENT_ORDER = { stop: 0, note: 1, control: 2 } as const;
 
 /** Shared sample-frame ordering, including automatic releases and pending controls. */
 export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin = 0): { queue: SequenceFrameEvent[]; length: number } {
-  const onsets = new Map<number, number>();
+  const onsets = new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
   const queue: SequenceFrameEvent[] = [];
   let lastFrame = 0;
   for (const event of score.events) {
     if (event.type !== 'note') continue;
     const frame = Math.round((origin + event.time) * sampleRate);
     const endFrame = frame + Math.max(1, Math.ceil(event.duration * sampleRate));
-    onsets.set(event.id, frame);
-    queue.push({ frame, order: EVENT_ORDER.note, event });
+    const onset = { frame, order: EVENT_ORDER.note, event };
+    onsets.set(event.id, onset);
+    queue.push(onset);
     queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
     for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, op.rateKeyScale));
@@ -166,10 +167,22 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
   }
   for (const event of score.events) {
     if (event.type === 'note') continue;
-    const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets.get(event.id)!)
+    const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets.get(event.id)!.frame)
       : Math.round((origin + event.time) * sampleRate);
     queue.push({ frame, order: EVENT_ORDER[event.type], event });
     lastFrame = Math.max(lastFrame, frame);
+    if (event.type === 'control' && event.controls.operatorADSR !== undefined) {
+      const onset = onsets.get(event.id)!;
+      const note = onset.event;
+      let release = 0;
+      for (let index = 0; index < 4; index++) {
+        release = Math.max(release, operatorDuration(event.controls.operatorADSR[index].r, note.note, note.voice.ops[index].rateKeyScale));
+      }
+      // A released envelope can be reanchored by later controls. Keep a conservative
+      // tail bound even if an explicit stop or stealing ends this gate sooner.
+      const gateEnd = onset.frame + Math.max(1, Math.ceil(note.duration * sampleRate));
+      lastFrame = Math.max(lastFrame, Math.max(gateEnd, frame) + Math.ceil(release * sampleRate));
+    }
   }
   queue.sort((a, b) => a.frame - b.frame || a.order - b.order);
   return { queue, length: lastFrame + Math.ceil(0.01 * sampleRate) };

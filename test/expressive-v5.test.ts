@@ -5,7 +5,7 @@ import { validateVoice } from '../src/voices/schema.js';
 import type { NoteControls, Voice, VoiceInput } from '../src/core/index.js';
 
 function tone(): Voice {
-  return { version: 5, name: 'expressive-v5', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 6, name: 'expressive-v5', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [0, 1, 2, 3].map(index => ({ ratio: 1, level: index === 0 ? 0.4 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: 0.6 } })) as Voice['ops'] };
@@ -138,7 +138,7 @@ test('operator level ramps are independent of other controls, interrupt continuo
   assert.deepEqual(audio(whole, 512), audio(fresh, 512), 'recycled expressive state cannot leak into plain voices');
 });
 
-test('v5 snapshots detach expressive data and explicit legacy versions reject every new shape', () => {
+test('expressive snapshots detach data and explicit v1–v4 reject later shapes', () => {
   const patch = tone();
   patch.ops[0].frequency = 330; patch.ops[0].rateKeyScale = 2;
   patch.pitchEnvelope = { a: 0.1, d: 0.2, r: 0.3, initial: -4800, peak: 4800, sustain: 0, final: -100 };
@@ -152,7 +152,6 @@ test('v5 snapshots detach expressive data and explicit legacy versions reject ev
   for (const version of [1, 2, 3, 4] as const) {
     const legacy = { ...tone(), version, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } };
     for (const convert of [normalizeVoice, validateVoice]) {
-      assert.equal(convert(legacy as VoiceInput).version, 5);
       assert.throws(() => convert({ ...legacy, pitchEnvelope: prepared.pitchEnvelope } as unknown as VoiceInput));
       for (const key of ['frequency', 'rateKeyScale'] as const) {
         const invalid = structuredClone(legacy); Object.assign(invalid.ops[0], { [key]: key === 'frequency' ? 330 : 1 });
@@ -163,6 +162,31 @@ test('v5 snapshots detach expressive data and explicit legacy versions reject ev
       }
     }
   }
+});
+
+test('legacy v5 and implicit all-operator LFO targets preserve identical expressive audio', () => {
+  const patch = tone();
+  patch.ops[0].frequency = 330;
+  patch.ops[0].rateKeyScale = 1.5;
+  patch.ops[0].adsr = { a: 0.02, d: 0.08, s: 0.7, r: 0.2 };
+  patch.pitchEnvelope = { a: 0.04, d: 0.1, r: 0.1, initial: -200, peak: 300, sustain: 0, final: -100 };
+  const lfo = { rate: 3, amDepth: 0.6, pmDepth: 20, waveform: 'triangle' as const, delay: 0.02, sync: 'global' as const, phase: 0.125 };
+  patch.lfo = lfo;
+  const legacy: VoiceInput = { ...patch, version: 5, lfo };
+  const explicit = structuredClone(patch);
+  explicit.lfo.amTargets = explicit.lfo.pmTargets = [1, 1, 1, 1];
+  const { version: _, ...omitted } = patch;
+  const inputs = [legacy, patch, explicit, omitted];
+  const synths = inputs.map(() => new Synth(16000));
+  const ids = synths.map((synth, index) => {
+    audio(synth, 320);
+    return synth.noteOn(inputs[index], 67, undefined, { velocity: 0.7 });
+  });
+  const held = synths.map(synth => audio(synth, 4000));
+  for (const samples of held.slice(1)) assert.deepEqual(samples, held[0]);
+  synths.forEach((synth, index) => synth.noteOff(ids[index]));
+  const released = synths.map(synth => audio(synth, 6400));
+  for (const samples of released.slice(1)) assert.deepEqual(samples, released[0]);
 });
 
 test('new numeric fields preserve strict versus clamped parser bounds and never invoke getters', () => {

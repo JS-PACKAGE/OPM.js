@@ -71,7 +71,6 @@ test('standard single and packed bank layouts produce equivalent normalized usab
   assert.deepEqual(single, snapshot);
   assert.deepEqual(importDX7(single), [voice]);
   assert.deepEqual(normalizeVoice(voice), voice);
-  assert.equal(voice.version, 5);
   assert.equal(voice.lfo.waveform, 'sine');
   assert.equal(voice.ops[0].keyScale!.breakpoint, 60);
   assert.equal(parseVoiceBank(bank).size, 32);

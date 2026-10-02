@@ -4,7 +4,7 @@ import { HEADROOM, Synth } from '../src/core/index.js';
 import type { NoteControls, Voice } from '../src/core/index.js';
 
 function tone(): Voice {
-  return { version: 5, name: 'dsp-controls', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 6, name: 'dsp-controls', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 1 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.06 } })) as Voice['ops'] };

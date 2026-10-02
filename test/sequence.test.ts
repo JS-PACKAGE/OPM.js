@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { encodeWav, prepareSequence, renderNote, renderSequence, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS } from '../src/core/index.js';
+import { Synth, encodeWav, prepareSequence, renderNote, renderSequence, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS } from '../src/core/index.js';
 import type { SequenceEvent, SequenceNoteEvent } from '../src/core/sequence.js';
 import { estimateSequenceCapacity, prepareLongSequence, renderSequenceChunks, MAX_LONG_SEQUENCE_EVENTS } from '../src/core/sequence.js';
-import type { Voice } from '../src/voices/schema.js';
+import type { Voice, ADSR } from '../src/voices/schema.js';
 
 function toneVoice(release = 0.006): Voice {
   return {
-    version: 5, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 6, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { waveform: 'sine', rate: 0, amDepth: 0, pmDepth: 0 },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: release } })) as Voice['ops'],
@@ -175,6 +175,33 @@ test('borrowed chunks concatenate bit-exactly across stop/onset/control boundari
     assert.equal(renderer.diagnostics.errors, 0);
     assert.equal(renderer.capacity.pcmBytes, left.byteLength + right.byteLength);
   }
+});
+
+test('live ADSR changes retain extended and reanchored release tails in offline output', () => {
+  const voice = toneVoice(0.03);
+  const first = voice.ops.map(op => ({ ...op.adsr, r: 0.2 })) as [ADSR, ADSR, ADSR, ADSR];
+  const second = first.map(adsr => ({ ...adsr, r: 0.3 })) as typeof first;
+  const score: SequenceEvent[] = [
+    { type: 'note', id: 1, time: 0, duration: 0.1, note: 69, voice },
+    { type: 'control', id: 1, time: 0.05, controls: { operatorADSR: first } },
+    { type: 'control', id: 1, time: 0.12, controls: { operatorADSR: second } },
+  ];
+  const output = renderSequence(score, { sampleRate });
+  const synth = new Synth(sampleRate);
+  const id = synth.noteOn(voice, 69);
+  const left = new Float32Array(output.left.length), right = new Float32Array(output.right.length);
+  synth.render(left, right, 0, 400);
+  synth.updateNote(id, { operatorADSR: first });
+  synth.render(left, right, 400, 400);
+  synth.noteOff(id);
+  synth.render(left, right, 800, 160);
+  synth.updateNote(id, { operatorADSR: second });
+  synth.render(left, right, 960, left.length - 960);
+  assert.deepEqual(output.left, left);
+  assert.deepEqual(output.right, right);
+  assert.ok(left.subarray(1040, 1440).some(value => Math.abs(value) > 0.001), 'extended release remains audible beyond the original tail');
+  assert.ok(left.subarray(-32).every(value => value === 0), 'render retains the complete reanchored tail');
+  assert.throws(() => renderSequenceChunks(score, { sampleRate, maxFrames: 1600 }));
 });
 
 test('60-second96k and beyond60-second scores use bounded reusable PCM with accurate capacity', () => {

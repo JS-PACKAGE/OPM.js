@@ -49,7 +49,7 @@ export function verifyFourOperator(sampleRate: number) {
     const gate = gateFrames / sampleRate;
     const levels = algorithm === 4 ? [0.55, 0.035, 0.43, 0.025] : [0.55, 0.43, 0.31, 0.025];
     const voice: Voice = {
-      version: 5, name: scenario.name, algorithm, feedback: 0, modIndex: scenario.index,
+      version: 6, name: scenario.name, algorithm, feedback: 0, modIndex: scenario.index,
       lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
       ops: Array.from({ length: 4 }, (_, op) => ({ ratio: scenario.ratios[op], level: levels[op], detune: 0,
         adsr: scenario.transition ? { a: [0.006, 0.012, 0.023, 0.003][op], d: [0.025, 0.018, 0.007, 0.009][op],

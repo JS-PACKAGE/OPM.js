@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { brass } from '../src/voices/brass.js';
 import { Synth } from '../src/core/synth.js';
+import type { NoteControls } from '../src/core/synth.js';
 import type { Voice } from '../src/voices/schema.js';
 
 
@@ -385,11 +386,11 @@ test('panic bypasses full queues, silences release and stealing tails, then reus
   assert.equal(diagnostics(processor).errors, 0);
 });
 
-test('v5 prepared patches and detached operator automation render identically through the scheduled worklet boundary', () => {
+test('prepared patches and detached operator automation render identically through the scheduled worklet boundary', () => {
   Object.assign(globalThis, { currentFrame: 0 });
   const processor = new Processor();
   const patch: Voice = {
-    version: 5, name: 'worklet-expressive', algorithm: 4, feedback: 2, modIndex: 2,
+    version: 6, name: 'worklet-expressive', algorithm: 4, feedback: 2, modIndex: 2,
     lfo: { rate: 3, amDepth: 0.2, pmDepth: 100, waveform: 'triangle', delay: 0.015, sync: 'global', phase: 0.2 },
     pitchEnvelope: { a: 0.01, d: 0.02, r: 0.03, initial: -100, peak: 100, sustain: 0, final: -200 },
     ops: [0, 1, 2, 3].map(index => ({ ratio: 1, frequency: 330 * (index + 1), rateKeyScale: 1,
@@ -456,4 +457,66 @@ test('processor initialization rejects hostile polyphony and synth options witho
     { processorOptions: { unknown: true } }, Object.create({ processorOptions: { maxVoices: 1 } }),
   ]) assert.throws(() => new Processor(options as AudioWorkletNodeOptions));
   assert.equal(reads, 0);
+});
+
+test('new operator and LFO controls snapshot at admission and malformed updates cannot change scheduled sound', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor({ processorOptions: { maxVoices: 1, quality: 'eco' } });
+  const patch: Voice = {
+    version: 6, name: 'controls', algorithm: 0, feedback: 2, modIndex: 3,
+    lfo: { rate: 3, amDepth: 0.3, pmDepth: 200, waveform: 'sine',
+      amTargets: [1, 0, 0.5, 1], pmTargets: [0, 1, 1, 0.5] },
+    ops: [0, 1, 2, 3].map(index => ({ ratio: index + 1, level: 0.7, detune: 0,
+      adsr: { a: 0, d: 0.01, s: 0.8, r: 0.03 } })) as Voice['ops'],
+  };
+  const controls: NoteControls = {
+    feedback: 5, operatorRatios: [1, 1.5, 2, 3], operatorFrequencies: [660, null, null, 880],
+    operatorADSR: [0, 1, 2, 3].map(() => ({ a: 0.001, d: 0.02, s: 0.6, r: 0.04 })) as unknown as NoteControls['operatorADSR'],
+    lfoRate: 11, amDepth: 0.8, pmDepth: 330, ramp: 0.002,
+  };
+  const expectedControls = structuredClone(controls);
+  processor.receive({ ...note(1, 64, null), voice: patch });
+  processor.receive({ type: 'updateNote', id: 1, controls, at: 256 / sampleRate });
+  (controls.operatorRatios as unknown as number[]).fill(32);
+  (controls.operatorFrequencies as unknown as (number | null)[]).fill(1);
+  controls.operatorADSR![0].s = 0;
+  controls.feedback = 0; controls.lfoRate = 0;
+  let reads = 0;
+  const accessor = [1, 1, 1, 1];
+  Object.defineProperty(accessor, '1', { get() { reads++; throw Error('tuple getter ran'); } });
+  const envelope = { a: 0, d: 0, s: 1, r: 0 };
+  Object.defineProperty(envelope, 's', { get() { reads++; throw Error('ADSR getter ran'); } });
+  const invalid = [
+    { feedback: -0.01 }, { feedback: 8 }, { operatorRatios: accessor }, { operatorRatios: [1, 1, 1] },
+    { operatorRatios: [1, 1, 1, 0] }, { operatorFrequencies: [1, null, null, undefined] },
+    { operatorFrequencies: [1, null, null, 20001] }, { operatorADSR: [envelope, envelope, envelope, envelope] },
+    { operatorADSR: [{ a: 0 }, { a: 0 }, { a: 0 }, { a: 0 }] },
+    { lfoRate: Infinity }, { amDepth: 1.1 }, { pmDepth: 1201 },
+  ];
+  for (const [index, bad] of invalid.entries()) {
+    processor.receive({ type: 'updateNote', id: 1, controls: bad, commandId: index + 1, at: 128 / sampleRate });
+  }
+  assert.equal(reads, 0);
+  assert.equal(processor.messages.filter(message => message.type === 'command' && message.state === 'rejected').length, invalid.length);
+  const reference = new Synth(sampleRate, 1, { quality: 'eco' });
+  const untouched = new Synth(sampleRate, 1, { quality: 'eco' });
+  const expected = new Float32Array(1024), expectedRight = new Float32Array(1024);
+  const baseline = new Float32Array(1024), baselineRight = new Float32Array(1024);
+  reference.render(expected, expectedRight, 0, 64);
+  untouched.render(baseline, baselineRight, 0, 64);
+  reference.noteOn(patch, 69, 1);
+  untouched.noteOn(patch, 69, 1);
+  reference.render(expected, expectedRight, 64, 192);
+  reference.updateNote(1, expectedControls);
+  reference.render(expected, expectedRight, 256);
+  untouched.render(baseline, baselineRight, 64);
+  const actual = new Float32Array(1024), actualRight = new Float32Array(1024);
+  for (let frame = 0; frame < actual.length; frame += 128) {
+    Object.assign(globalThis, { currentFrame: frame });
+    processor.process([], [[actual.subarray(frame, frame + 128), actualRight.subarray(frame, frame + 128)]]);
+  }
+  assert.deepEqual(actual, expected);
+  assert.deepEqual(actualRight, expectedRight);
+  assert.notDeepEqual(actual.subarray(256), baseline.subarray(256), 'valid controls must change audible synthesis');
+  assert.equal(diagnostics(processor).errors, invalid.length);
 });

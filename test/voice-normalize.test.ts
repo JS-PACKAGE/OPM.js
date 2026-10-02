@@ -48,12 +48,13 @@ test('nested accessors and sparse operator slots are rejected without reading ge
   assert.equal(getterCalls, 0);
 });
 
-test('legacy formats retain their old operator and LFO boundaries and canonicalize to v5', () => {
+test('legacy formats retain their old operator and LFO boundaries', () => {
   const { waveform: _, ...lfo } = voice().lfo;
   for (const version of [1, 2, 3] as const) {
     const source = { ...voice(), version, lfo };
     const normalized = normalizeVoice(source as VoiceInput);
-    assert.deepEqual(normalized, { ...voice(), version: 5 });
+    assert.deepEqual(normalized.ops, voice().ops);
+    assert.deepEqual(normalized.lfo, voice().lfo);
     assert.deepEqual(validateVoice(source), normalized);
     for (const convert of [normalizeVoice, validateVoice]) {
       assert.throws(() => convert({ ...source, lfo: { ...lfo, waveform: 'triangle' } } as unknown as VoiceInput));
@@ -74,7 +75,7 @@ test('legacy formats retain their old operator and LFO boundaries and canonicali
 
 test('current LFO inputs default to sine and preserve every supported waveform', () => {
   const { waveform: _, ...lfo } = voice().lfo;
-  for (const version of [undefined, 4, 5] as const) {
+  for (const version of [undefined, 4, 5, 6] as const) {
     const source = { ...voice(), lfo };
     const input = version === undefined ? { algorithm: source.algorithm, feedback: source.feedback, ops: source.ops, lfo } : { ...source, version } as VoiceInput;
     assert.equal(normalizeVoice(input).lfo.waveform, 'sine');
@@ -118,4 +119,83 @@ test('prepared identity is trusted only after validation and snapshots are deepl
   assert.throws(() => Object.assign(prepared.lfo, { waveform: 'triangle' }), TypeError);
   assert.throws(() => Object.assign(prepared.ops[0].adsr, { s: 0 }), TypeError);
   assert.throws(() => preparedVoiceValue({ ...voice(), lfo: { ...voice().lfo, waveform: 'noise' } } as unknown as VoiceInput));
+});
+
+test('current targets accept booleans and bounded weights as detached immutable numeric tuples', () => {
+  const amTargets: [boolean, boolean, number, number] = [true, false, 0.5, 1];
+  const pmTargets: [number, number, boolean, boolean] = [0, 0.25, true, false];
+  const source = { ...voice(), lfo: { ...voice().lfo, amTargets, pmTargets } };
+  const withoutVersion = { algorithm: source.algorithm, feedback: source.feedback, ops: source.ops, lfo: source.lfo };
+  const snapshots = [normalizeVoice(source), normalizeVoice(withoutVersion), prepareVoice(source), validateVoice(source)];
+  amTargets[0] = false;
+  pmTargets[1] = 1;
+  for (const snapshot of snapshots) {
+    assert.deepEqual(snapshot.lfo.amTargets, [1, 0, 0.5, 1]);
+    assert.deepEqual(snapshot.lfo.pmTargets, [0, 0.25, 1, 0]);
+    assert.throws(() => Object.assign(snapshot.lfo.amTargets!, { 0: 0 }), TypeError);
+    assert.throws(() => Object.assign(snapshot.lfo.pmTargets!, { 1: 0 }), TypeError);
+  }
+});
+
+test('every explicit legacy LFO rejects operator targets rather than silently accepting new fields', () => {
+  for (const version of [1, 2, 3, 4, 5] as const) {
+    const source = { ...voice(), version, lfo: { rate: 1, amDepth: 0.5, pmDepth: 20 } };
+    for (const key of ['amTargets', 'pmTargets'] as const) {
+      const invalid = { ...source, lfo: { ...source.lfo, [key]: [true, false, 0.5, 1] } };
+      assert.throws(() => normalizeVoice(invalid as unknown as VoiceInput), TypeError);
+      assert.throws(() => validateVoice(invalid), TypeError);
+    }
+  }
+});
+
+test('target bounds stay strict for single voices and clamp only finite bank values', () => {
+  for (const key of ['amTargets', 'pmTargets'] as const) {
+    for (let index = 0; index < 4; index++) {
+      for (const value of [-0.001, 1.001, -1e300, 1e300]) {
+        const targets = [0, 0.25, 0.5, 1];
+        targets[index] = value;
+        const source = { ...voice(), lfo: { ...voice().lfo, [key]: targets } };
+        assert.throws(() => normalizeVoice(source as unknown as VoiceInput), RangeError);
+        const expected = targets.slice();
+        expected[index] = value < 0 ? 0 : 1;
+        assert.deepEqual(validateVoice(source).lfo[key], expected);
+      }
+      for (const value of [NaN, Infinity, -Infinity, undefined, null, '0.5', {}, []]) {
+        const targets: unknown[] = [0, 0.25, 0.5, 1];
+        targets[index] = value;
+        const source = { ...voice(), lfo: { ...voice().lfo, [key]: targets } };
+        assert.throws(() => normalizeVoice(source as unknown as VoiceInput), TypeError);
+        assert.throws(() => validateVoice(source), TypeError);
+      }
+    }
+  }
+});
+
+test('target tuples require dense own data and reject accessors without executing them', () => {
+  let reads = 0;
+  const getter = () => { reads++; return 1; };
+  for (const key of ['amTargets', 'pmTargets'] as const) {
+    for (const convert of [normalizeVoice, validateVoice]) {
+      const accessorField = voice();
+      Object.defineProperty(accessorField.lfo, key, { get: getter });
+      assert.throws(() => convert(accessorField), TypeError);
+      const sparse = [1, 1, 1, 1];
+      delete (sparse as Array<number | undefined>)[1];
+      const inherited = [1, 1, 1, 1];
+      delete (inherited as Array<number | undefined>)[2];
+      const prototype = Object.create(Array.prototype) as object;
+      Object.defineProperty(prototype, '2', { get: getter });
+      Object.setPrototypeOf(inherited, prototype);
+      const accessor = [1, 1, 1, 1];
+      Object.defineProperty(accessor, '0', { get: getter });
+      const extra = [1, 1, 1, 1];
+      Object.defineProperty(extra, 'extra', { get: getter });
+      const symbol = Object.assign([1, 1, 1, 1], { [Symbol('extra')]: 1 });
+      for (const targets of [sparse, inherited, accessor, extra, symbol, [], [1, 1, 1], [1, 1, 1, 1, 1], undefined, null, { 0: 1, 1: 1, 2: 1, 3: 1, length: 4 }]) {
+        const source = { ...voice(), lfo: { ...voice().lfo, [key]: targets } };
+        assert.throws(() => convert(source as unknown as VoiceInput), TypeError);
+      }
+    }
+  }
+  assert.equal(reads, 0);
 });

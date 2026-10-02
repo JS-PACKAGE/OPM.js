@@ -5,7 +5,7 @@ import { validateNoteControls } from '../core/synth.js';
 import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import { normalizeTuning } from '../core/tuning.js';
 import type { TuningOptions } from '../core/tuning.js';
-export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4 } from '../voices/schema.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5 } from '../voices/schema.js';
 export type { NoteControls, SynthOptions, QualityProfile } from '../core/synth.js';
 export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';

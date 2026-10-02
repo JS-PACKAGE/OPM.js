@@ -1,4 +1,4 @@
-import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
+import type { ADSR, PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { AlgorithmGraph } from './algorithms.js';
 import { normalizeTuning, tuningFrequency } from './tuning.js';
 import type { NormalizedTuning, TuningOptions } from './tuning.js';
@@ -14,7 +14,15 @@ const typedArrayFill = Float32Array.prototype.fill;
 
 export type VoiceEndReason = 'stolen' | 'ended' | 'error' | 'cancelled';
 export interface NoteOptions { velocity?: number; pan?: number }
-export interface NoteControls { pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number; ramp?: number; operatorLevels?: readonly [number, number, number, number] }
+export interface NoteControls {
+  pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number; ramp?: number;
+  operatorLevels?: readonly [number, number, number, number];
+  feedback?: number; lfoRate?: number; amDepth?: number; pmDepth?: number;
+  operatorRatios?: readonly [number, number, number, number];
+  /** A number enables fixed Hz; null restores the operator's live ratio. Pitch still applies. */
+  operatorFrequencies?: readonly [number | null, number | null, number | null, number | null];
+  operatorADSR?: readonly [ADSR, ADSR, ADSR, ADSR];
+}
 export interface SynthOptions {
   mixGain?: number;
   tuning?: TuningOptions;
@@ -24,6 +32,7 @@ export interface SynthOptions {
 
 const CONTROL_LIMITS = Object.freeze({
   pitch: [-48, 48], glide: [0, 10], expression: [0, 1], pan: [-1, 1], modulation: [0, 2], ramp: [0, 10],
+  feedback: [0, 7], lfoRate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200],
 } as const);
 
 /** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
@@ -36,25 +45,43 @@ export function validateNoteControls(input: NoteControls): NoteControls {
   if (keys.length === 0) throw new TypeError('controls must not be empty');
   const result: NoteControls = {};
   for (const key of keys) {
-    if (typeof key !== 'string' || key !== 'operatorLevels' && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
+    if (typeof key !== 'string' || !['operatorLevels', 'operatorRatios', 'operatorFrequencies', 'operatorADSR'].includes(key) && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
     const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
     if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`controls.${key} must be data`);
     const value: unknown = descriptor.value;
-    if (key === 'operatorLevels') {
-      if (!Array.isArray(value) || value.length !== 4 || Reflect.ownKeys(value).length !== 5) {
-        throw new TypeError('operatorLevels must be a dense four-number tuple');
-      }
-      const levels: number[] = [];
+    if (key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR') {
+      if (!Array.isArray(value) || value.length !== 4 || Reflect.ownKeys(value).length !== 5 ||
+          Object.getPrototypeOf(value) !== Array.prototype) throw new TypeError(`${key} must be a dense four-element tuple`);
+      const tuple: unknown[] = [];
       for (let op = 0; op < 4; op++) {
         const element = Object.getOwnPropertyDescriptor(value, String(op));
-        if (!element || !Object.hasOwn(element, 'value')) throw new TypeError('operatorLevels must contain data');
-        const level: unknown = element.value;
-        if (typeof level !== 'number' || !Number.isFinite(level) || level < 0 || level > 2) {
-          throw new RangeError('operatorLevels must be finite and in 0..2');
+        if (!element || !Object.hasOwn(element, 'value')) throw new TypeError(`${key} must contain data`);
+        const item: unknown = element.value;
+        if (key === 'operatorADSR') {
+          if (!item || typeof item !== 'object' || Array.isArray(item) ||
+              (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) ||
+              Reflect.ownKeys(item).length !== 4) throw new TypeError('operatorADSR requires full plain ADSR objects');
+          const adsr: ADSR = { a: 0, d: 0, s: 0, r: 0 };
+          for (const field of ['a', 'd', 's', 'r'] as const) {
+            const data = Object.getOwnPropertyDescriptor(item, field);
+            if (!data || !Object.hasOwn(data, 'value')) throw new TypeError('operatorADSR must contain data');
+            const number: unknown = data.value;
+            if (typeof number !== 'number' || !Number.isFinite(number) || number < 0 || number > (field === 's' ? 1 : 10)) {
+              throw new RangeError('operatorADSR has an out-of-range value');
+            }
+            adsr[field] = number;
+          }
+          tuple.push(Object.freeze(adsr));
+        } else {
+          const min = key === 'operatorRatios' ? 0.125 : key === 'operatorFrequencies' ? 1 : 0;
+          const max = key === 'operatorRatios' ? 32 : key === 'operatorFrequencies' ? 20000 : 2;
+          if (key !== 'operatorFrequencies' || item !== null) {
+            if (typeof item !== 'number' || !Number.isFinite(item) || item < min || item > max) throw new RangeError(`${key} must be finite and in ${min}..${max}`);
+          }
+          tuple.push(item);
         }
-        levels.push(level);
       }
-      result.operatorLevels = Object.freeze(levels) as NoteControls['operatorLevels'];
+      Object.defineProperty(result, key, { value: Object.freeze(tuple), enumerable: true });
       continue;
     }
     const control = key as keyof typeof CONTROL_LIMITS;
@@ -65,9 +92,8 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     result[control] = value;
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
-  if (Object.hasOwn(result, 'ramp') && !Object.hasOwn(result, 'expression') &&
-      !Object.hasOwn(result, 'pan') && !Object.hasOwn(result, 'modulation') && !Object.hasOwn(result, 'operatorLevels')) {
-    throw new TypeError('ramp requires expression, pan, modulation or operatorLevels');
+  if (Object.hasOwn(result, 'ramp') && !Reflect.ownKeys(result).some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {
+    throw new TypeError('ramp requires a rampable control');
   }
   return Object.freeze(result);
 }
@@ -90,6 +116,14 @@ interface ActiveVoice {
   controlRamps: number;
   modIndex: number; amDepth: number; pmDepth: number;
   pitchFrom: number; pitchTarget: number; pitchStart: number; pitchFrames: number;
+  scalarValues: Float64Array; scalarFrom: Float64Array; scalarTargets: Float64Array; scalarStarts: Float64Array; scalarFrames: Float64Array;
+  ratios: Float64Array; ratioFrom: Float64Array; ratioTargets: Float64Array; ratioStart: number; ratioFrames: number;
+  frequencies: Float64Array; frequencyFrom: Float64Array; frequencyTargets: Float64Array; frequencyStart: number; frequencyFrames: number;
+  envelopeStart: Float64Array; envelopeFromDb: Float64Array; envelopeEdited: Uint8Array; releaseStarts: Float64Array;
+  lfoTurns: number; lfoLive: boolean;
+  tunedFrequency: number;
+  frequencyScales: Float64Array;
+  amGains: Float64Array; pmFactors: Float64Array;
 }
 
 interface MutableCounters {
@@ -112,6 +146,14 @@ const EXPRESSION_RAMP = 1;
 const PAN_RAMP = 2;
 const MODULATION_RAMP = 4;
 const OPERATOR_RAMP = 8;
+const ENGINE_RAMP = 16;
+const RATIO_RAMP = 32;
+const FREQUENCY_RAMP = 64;
+const SCALAR_FIELDS = ['feedback', 'lfoRate', 'amDepth', 'pmDepth'] as const;
+
+function feedbackGain(value: number): number {
+  return value <= 1 ? value * 0.5 * 2 ** -6 * Math.PI : 0.5 * 2 ** (value - 7) * Math.PI;
+}
 
 /** @internal Scale once per admission; low-note durations never exceed the voice's ten-second budget. */
 export function operatorDuration(seconds: number, note: number, rateKeyScale = 0): number {
@@ -172,6 +214,14 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     modulation: 1, modulationFrom: 1, modulationTarget: 1, modulationStart: 0, modulationFrames: 0,
     controlRamps: 0,
     modIndex: 0, amDepth: 0, pmDepth: 0, pitchFrom: 0, pitchTarget: 0, pitchStart: 0, pitchFrames: 0,
+    scalarValues: new Float64Array(4), scalarFrom: new Float64Array(4), scalarTargets: new Float64Array(4), scalarStarts: new Float64Array(4), scalarFrames: new Float64Array(4),
+    ratios: new Float64Array(4), ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
+    frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
+    envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
+    lfoTurns: 0, lfoLive: false,
+    tunedFrequency: 0,
+    frequencyScales: new Float64Array(4),
+    amGains: new Float64Array(4), pmFactors: new Float64Array(4),
   };
 }
 
@@ -198,8 +248,8 @@ function pitchEnvelopeAt(active: ActiveVoice, time: number): number {
 
 function updateModulation(active: ActiveVoice): void {
   active.modIndex = active.voice.modIndex * active.modulation;
-  active.amDepth = Math.min(1, active.voice.lfo.amDepth * active.modulation);
-  active.pmDepth = Math.min(1200, active.voice.lfo.pmDepth * active.modulation);
+  active.amDepth = Math.min(1, active.scalarValues[2] * active.modulation);
+  active.pmDepth = Math.min(1200, active.scalarValues[3] * active.modulation);
   if (active.pmDepth === 0) {
     for (let op = 0; op < 4; op++) active.steps[op] = active.increments[op];
   }
@@ -228,6 +278,23 @@ function advanceControls(active: ActiveVoice): void {
     }
     if (frame >= active.operatorStart + active.operatorFrames) active.controlRamps &= ~OPERATOR_RAMP;
   }
+  if (ramps & ENGINE_RAMP) {
+    let pending = false, modulationChanged = false;
+    for (let field = 0; field < 4; field++) {
+      if (active.scalarFrames[field] === 0) continue;
+      active.scalarValues[field] = rampAt(active.scalarFrom[field], active.scalarTargets[field], active.scalarStarts[field], active.scalarFrames[field], frame);
+      if (frame < active.scalarStarts[field] + active.scalarFrames[field]) pending = true;
+      else active.scalarFrames[field] = 0;
+      if (field === 0) active.feedbackScale = feedbackGain(active.scalarValues[0]);
+      if (field >= 2) modulationChanged = true;
+    }
+    if (modulationChanged) updateModulation(active);
+    if (!pending) active.controlRamps &= ~ENGINE_RAMP;
+  }
+  if (ramps & RATIO_RAMP) {
+    for (let op = 0; op < 4; op++) active.ratios[op] = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
+    if (frame >= active.ratioStart + active.ratioFrames) active.controlRamps &= ~RATIO_RAMP;
+  }
 }
 
 function updatePan(active: ActiveVoice): void {
@@ -249,7 +316,27 @@ function heldDb(time: number, attack: number, decay: number, sustainDb: number):
   return sustainDb;
 }
 
+function envelopeDbAt(active: ActiveVoice, time: number, op: number): number {
+  if (active.releaseTime >= 0) {
+    const release = active.releaseTimes[op], start = active.releaseStarts[op];
+    if (release === 0 || time >= start + release) return FLOOR_DB;
+    return active.releaseDb[op] + (FLOOR_DB - active.releaseDb[op]) * ((time - start) / release);
+  }
+  if (!active.envelopeEdited[op]) return heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
+  const elapsed = time - active.envelopeStart[op], attack = active.attackTimes[op], decay = active.decayTimes[op];
+  // A zero attack still preserves the boundary value: the new decay starts at
+  // the interrupted dB instead of jumping to full scale.
+  if (attack > 0 && elapsed < attack) return active.envelopeFromDb[op] * (1 - elapsed / attack);
+  const from = attack > 0 ? 0 : active.envelopeFromDb[op];
+  if (decay > 0 && elapsed < attack + decay) return from + (active.sustainDb[op] - from) * (elapsed - attack) / decay;
+  return active.sustainDb[op];
+}
+
 function gainAt(active: ActiveVoice, time: number, op: number): number {
+  if (active.envelopeEdited[op]) {
+    const db = envelopeDbAt(active, time, op);
+    return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
+  }
   const release = active.releaseTimes[op];
   if (active.releaseTime >= 0) {
     if (release === 0 || time >= active.releaseTime + release) return 0;
@@ -267,6 +354,10 @@ function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array)
   const oversample = subTimes.length;
   const lastTime = time + subTimes[oversample - 1];
   for (let op = 0; op < 4; op++) {
+    if (active.envelopeEdited[op]) {
+      for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = gainAt(active, time + subTimes[sub], op);
+      continue;
+    }
     const attack = attackTimes[op], decay = decayTimes[op], release = releaseTimes[op];
     let step: number | undefined;
     if (active.releaseTime >= 0) {
@@ -409,11 +500,15 @@ export class Synth {
   /** @internal */
   retuneVoice(active: ActiveVoice): void {
     const frequency = tuningFrequency(active.note, this.tuning);
+    active.tunedFrequency = frequency;
     const rate = this.sampleRate * this.oversample;
     const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
     for (let op = 0; op < 4; op++) {
       const source = active.voice.ops[op];
-      active.baseIncrements[op] = TAU * (source.frequency ?? frequency * source.ratio) * 2 ** (source.detune / 1200) / rate;
+      const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, active.elapsed);
+      const target = active.frequencyTargets[op] || frequency * ratio;
+      const hz = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, active.elapsed);
+      active.baseIncrements[op] = TAU * hz * 2 ** (source.detune / 1200) / rate;
       active.increments[op] = Math.min(TAU * 0.45, active.baseIncrements[op] * factor);
       active.steps[op] = active.increments[op];
     }
@@ -465,11 +560,15 @@ export class Synth {
     const rate = this.sampleRate * this.oversample;
     for (let i = 0; i < 4; i++) {
       const op = voice.ops[i];
+      active.ratios[i] = active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
+      active.frequencyTargets[i] = op.frequency ?? 0;
+      active.frequencies[i] = active.frequencyFrom[i] = op.frequency ?? frequency * op.ratio;
       const scale = op.keyScale;
       const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
         (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
       levels[i] = op.level * 10 ** (-(attenuation + (op.velocitySensitivity ?? 0) * (1 - velocity)) / 20);
       const operatorFrequency = (op.frequency ?? frequency * op.ratio) * 2 ** (op.detune / 1200);
+      active.frequencyScales[i] = TAU * 2 ** (op.detune / 1200) / rate;
       baseIncrements[i] = TAU * operatorFrequency / rate;
       // Retain the original pre-PM cap, but keep unclipped pitch bases so a
       // downward bend can bring high-ratio operators back into audible range.
@@ -505,6 +604,22 @@ export class Synth {
     active.operatorFrom.fill(1);
     active.operatorTargets.fill(1);
     active.operatorStart = active.operatorFrames = 0;
+    active.tunedFrequency = frequency;
+    active.ratioStart = active.ratioFrames = active.frequencyStart = active.frequencyFrames = 0;
+    active.scalarValues[0] = voice.feedback;
+    active.scalarValues[1] = voice.lfo.rate;
+    active.scalarValues[2] = voice.lfo.amDepth;
+    active.scalarValues[3] = voice.lfo.pmDepth;
+    active.scalarFrom.set(active.scalarValues);
+    active.scalarTargets.set(active.scalarValues);
+    active.scalarStarts.fill(0);
+    active.scalarFrames.fill(0);
+    active.envelopeStart.fill(0);
+    active.envelopeFromDb.fill(FLOOR_DB);
+    active.envelopeEdited.fill(0);
+    active.releaseStarts.fill(0);
+    active.lfoTurns = 0;
+    active.lfoLive = false;
     active.pitchRelease = 0;
     updatePan(active);
     active.lastSample = active.fadeRemaining = 0;
@@ -517,7 +632,7 @@ export class Synth {
     active.releaseStep.fill(0);
     active.gains.fill(0);
     active.previous = active.older = active.elapsed = 0;
-    active.feedbackScale = voice.feedback === 0 ? 0 : 0.5 * 2 ** (voice.feedback - 7) * Math.PI;
+    active.feedbackScale = feedbackGain(voice.feedback);
     active.releaseTime = active.releaseEnd = -1;
     (this as MutableCounters).lastStolenId = null;
     if (this.voices.length >= this.maxVoices) {
@@ -553,17 +668,19 @@ export class Synth {
 
   /** @internal */
   releaseVoice(active: ActiveVoice): void {
-    active.pitchRelease = pitchEnvelopeAt(active, active.elapsed / this.sampleRate);
-    active.releaseTime = active.elapsed / this.sampleRate;
+    const time = active.elapsed / this.sampleRate;
+    active.pitchRelease = pitchEnvelopeAt(active, time);
     let maxRelease = 0;
-    for (let op = 0; op < 4; op++) maxRelease = Math.max(maxRelease, active.releaseTimes[op]);
-    active.releaseEnd = active.releaseTime + maxRelease;
     for (let op = 0; op < 4; op++) {
-      active.releaseDb[op] = heldDb(active.releaseTime, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
+      active.releaseDb[op] = envelopeDbAt(active, time, op);
+      active.releaseStarts[op] = time;
       const release = active.releaseTimes[op];
+      maxRelease = Math.max(maxRelease, release);
       active.releaseStep[op] = release === 0 ? 0 :
         10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * this.oversample));
     }
+    active.releaseTime = time;
+    active.releaseEnd = time + maxRelease;
   }
   allNotesOff(): void {
     for (let index = 0; index < this.voices.length; index++) {
@@ -605,6 +722,82 @@ export class Synth {
       active.pitchFrames = (controls.glide ?? 0) * this.sampleRate;
     }
     const frames = (controls.ramp ?? 0) * this.sampleRate;
+    if (controls.lfoRate !== undefined && !active.lfoLive) {
+      const lfo = active.voice.lfo;
+      const clock = lfo.sync === 'global' ? this.currentFrame : active.elapsed;
+      active.lfoTurns = clock / this.sampleRate * active.scalarValues[1] + (lfo.phase ?? 0);
+      active.lfoTurns -= Math.floor(active.lfoTurns);
+      active.lfoLive = true;
+    }
+    for (let field = 0; field < SCALAR_FIELDS.length; field++) {
+      const value = controls[SCALAR_FIELDS[field]];
+      if (value === undefined) continue;
+      active.scalarFrom[field] = active.scalarValues[field];
+      active.scalarTargets[field] = value;
+      active.scalarStarts[field] = active.elapsed;
+      active.scalarFrames[field] = active.scalarValues[field] === value ? 0 : frames;
+      if (active.scalarFrames[field] === 0) {
+        active.scalarValues[field] = value;
+        if (field === 0) active.feedbackScale = feedbackGain(value);
+        if (field >= 2) updateModulation(active);
+      }
+      active.controlRamps |= ENGINE_RAMP;
+    }
+    if (active.controlRamps & ENGINE_RAMP) advanceControls(active);
+    if (controls.operatorRatios !== undefined || controls.operatorFrequencies !== undefined) {
+      // Sample ongoing pitch-independent Hz before changing either timeline.
+      for (let op = 0; op < 4; op++) {
+        const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, active.elapsed);
+        const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
+        active.frequencies[op] = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, active.elapsed);
+      }
+    }
+    if (controls.operatorRatios !== undefined) {
+      for (let op = 0; op < 4; op++) {
+        active.ratioFrom[op] = active.ratios[op];
+        active.ratioTargets[op] = controls.operatorRatios[op];
+        if (frames === 0) active.ratios[op] = controls.operatorRatios[op];
+      }
+      active.ratioStart = active.elapsed;
+      active.ratioFrames = frames;
+      if (frames !== 0) active.controlRamps |= RATIO_RAMP;
+      else active.controlRamps &= ~RATIO_RAMP;
+    }
+    if (controls.operatorFrequencies !== undefined) {
+      for (let op = 0; op < 4; op++) {
+        active.frequencyFrom[op] = active.frequencies[op];
+        active.frequencyTargets[op] = controls.operatorFrequencies[op] ?? 0;
+      }
+      active.frequencyStart = active.elapsed;
+      active.frequencyFrames = frames;
+      if (frames !== 0) active.controlRamps |= FREQUENCY_RAMP;
+      else active.controlRamps &= ~FREQUENCY_RAMP;
+    }
+    if (controls.operatorRatios !== undefined || controls.operatorFrequencies !== undefined) this.retuneVoice(active);
+    if (controls.operatorADSR !== undefined) {
+      const time = active.elapsed / this.sampleRate;
+      for (let op = 0; op < 4; op++) {
+        const db = envelopeDbAt(active, time, op), adsr = controls.operatorADSR[op];
+        const keyScale = active.voice.ops[op].rateKeyScale;
+        active.envelopeFromDb[op] = db;
+        active.envelopeStart[op] = time;
+        active.envelopeEdited[op] = 1;
+        active.attackTimes[op] = operatorDuration(adsr.a, active.note, keyScale);
+        active.decayTimes[op] = operatorDuration(adsr.d, active.note, keyScale);
+        if (active.attackTimes[op] === 0 && active.decayTimes[op] === 0) active.decayTimes[op] = 1 / this.sampleRate;
+        active.sustainDb[op] = adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(adsr.s));
+        active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : 10 ** (active.sustainDb[op] / 20);
+        active.releaseTimes[op] = operatorDuration(adsr.r, active.note, keyScale);
+        if (active.releaseTime >= 0) {
+          active.releaseDb[op] = db;
+          active.releaseStarts[op] = time;
+        }
+      }
+      if (active.releaseTime >= 0) {
+        active.releaseEnd = time;
+        for (let op = 0; op < 4; op++) active.releaseEnd = Math.max(active.releaseEnd, time + active.releaseTimes[op]);
+      }
+    }
     if (controls.expression !== undefined) {
       active.expressionFrom = active.expression;
       active.expressionTarget = controls.expression;
@@ -680,15 +873,26 @@ export class Synth {
     let tremolo = 0;
     if (lfoEnabled && (active.amDepth !== 0 || active.pmDepth !== 0)) {
       const clock = lfo.sync === 'global' ? this.currentFrame : active.elapsed;
-      const turns = clock / this.sampleRate * lfo.rate + (lfo.phase ?? 0);
+      const turns = active.lfoLive ? active.lfoTurns : clock / this.sampleRate * lfo.rate + (lfo.phase ?? 0);
       tremolo = lfoValue((turns - Math.floor(turns)) * TAU, lfo.waveform);
     }
     const amGain = !lfoEnabled || active.amDepth === 0 ? 1 : 1 - active.amDepth * (0.5 + 0.5 * tremolo);
     const pmFactor = !lfoEnabled || active.pmDepth === 0 ? 1 : 2 ** (active.pmDepth * tremolo / 1200);
+    if (lfo.amTargets || lfo.pmTargets) {
+      for (let op = 0; op < 4; op++) {
+        const am = lfo.amTargets?.[op] ?? 1, pm = lfo.pmTargets?.[op] ?? 1;
+        active.amGains[op] = am === 1 ? amGain : !lfoEnabled ? 1 : 1 - active.amDepth * am * (0.5 + 0.5 * tremolo);
+        active.pmFactors[op] = pm === 1 ? pmFactor : !lfoEnabled ? 1 : 2 ** (active.pmDepth * pm * tremolo / 1200);
+      }
+    }
     const gliding = active.pitchFrames !== 0;
-    const dynamicPitch = gliding || active.voice.pitchEnvelope !== undefined;
+    const frequencyRamping = active.ratioFrames !== 0 || active.frequencyFrames !== 0;
+    const dynamicPitch = gliding || active.voice.pitchEnvelope !== undefined || frequencyRamping;
     if (!dynamicPitch && active.pmDepth !== 0) {
-      for (let op = 0; op < 4; op++) steps[op] = Math.min(TAU * 0.45, increments[op] * pmFactor);
+      for (let op = 0; op < 4; op++) {
+        const factor = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
+        steps[op] = Math.min(TAU * 0.45, increments[op] * factor);
+      }
     }
     const operatorRamping = (active.controlRamps & OPERATOR_RAMP) !== 0;
     if (!finished) prepareGains(active, time, this.subTimes);
@@ -698,7 +902,14 @@ export class Synth {
       if (dynamicPitch) {
         const factor = 2 ** (pitchAt(active, frame) / 12 + pitchEnvelopeAt(active, time + this.subTimes[sub]) / 1200);
         for (let op = 0; op < 4; op++) {
-          steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, active.baseIncrements[op] * factor) * pmFactor);
+          if (frequencyRamping) {
+            const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
+            const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
+            const hz = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, frame);
+            active.baseIncrements[op] = hz * active.frequencyScales[op];
+          }
+          const pm = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
+          steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, active.baseIncrements[op] * factor) * pm);
         }
       }
       let sample = 0;
@@ -709,7 +920,8 @@ export class Synth {
           for (let j = 0; j < inputs.length; j++) modulation += values[inputs[j]] * active.modIndex;
           const operatorLevel = operatorRamping ?
             rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
-          values[op] = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * operatorLevel * amGain;
+          const am = lfo.amTargets ? active.amGains[op] : amGain;
+          values[op] = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * operatorLevel * am;
           const phase = phases[op] + steps[op];
           phases[op] = phase < TAU ? phase : phase - TAU;
           if (!Number.isFinite(values[op]) || !Number.isFinite(phases[op])) return NaN;
@@ -722,6 +934,10 @@ export class Synth {
       output = decimateSample(sample, filters, this.decimatorCoefficients);
       if (!Number.isFinite(output)) return NaN;
     }
+    if (active.lfoLive) {
+      active.lfoTurns += active.scalarValues[1] / this.sampleRate;
+      active.lfoTurns -= Math.floor(active.lfoTurns);
+    }
     active.elapsed++;
     if (gliding && active.elapsed >= active.pitchStart + active.pitchFrames) {
       active.pitchFrames = 0;
@@ -730,6 +946,14 @@ export class Synth {
         increments[op] = Math.min(TAU * 0.45, active.baseIncrements[op] * factor);
         steps[op] = increments[op];
       }
+    }
+    if (frequencyRamping) {
+      if (active.elapsed >= active.ratioStart + active.ratioFrames) active.ratioFrames = 0;
+      if (active.elapsed >= active.frequencyStart + active.frequencyFrames) {
+        active.frequencyFrames = 0;
+        active.controlRamps &= ~FREQUENCY_RAMP;
+      }
+      if (active.ratioFrames === 0 && active.frequencyFrames === 0) this.retuneVoice(active);
     }
     active.lastSample = output;
     return active.lastSample;

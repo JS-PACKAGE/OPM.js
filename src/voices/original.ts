@@ -3,7 +3,7 @@ import type { Voice } from './schema.js';
 // Original four-operator recipes; operator levels shape timbre, never host loudness matching.
 export const originalPresets: readonly Voice[] = [
   {
-    version: 5, name: 'wood_mallet', algorithm: 4, feedback: 0, modIndex: 2.1,
+    version: 6, name: 'wood_mallet', algorithm: 4, feedback: 0, modIndex: 2.1,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [
       { ratio: 3, level: 0.42, detune: 0, rateKeyScale: 0.7, velocitySensitivity: 12, adsr: { a: 0.001, d: 0.12, s: 0, r: 0.08 } },
@@ -13,7 +13,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'glass_pluck', algorithm: 4, feedback: 0, modIndex: 2.8,
+    version: 6, name: 'glass_pluck', algorithm: 4, feedback: 0, modIndex: 2.8,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [
       { ratio: 2, level: 0.56, detune: 0, velocitySensitivity: 15, rateKeyScale: 0.6, adsr: { a: 0.001, d: 0.18, s: 0, r: 0.1 } },
@@ -23,7 +23,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'hollow_reed', algorithm: 4, feedback: 1, modIndex: 1.6,
+    version: 6, name: 'hollow_reed', algorithm: 4, feedback: 1, modIndex: 1.6,
     lfo: { rate: 5.1, amDepth: 0.025, pmDepth: 7, waveform: 'sine', delay: 0.3, sync: 'note', phase: 0 },
     ops: [
       { ratio: 2, level: 0.5, detune: 0, velocitySensitivity: 10, adsr: { a: 0.035, d: 0.15, s: 0.68, r: 0.12 } },
@@ -33,7 +33,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'slow_air_pad', algorithm: 4, feedback: 0, modIndex: 1.2,
+    version: 6, name: 'slow_air_pad', algorithm: 4, feedback: 0, modIndex: 1.2,
     lfo: { rate: 0.7, amDepth: 0.08, pmDepth: 5, waveform: 'triangle', delay: 0.4, sync: 'global', phase: 0.25 },
     pitchEnvelope: { a: 0.5, d: 0.5, r: 0.5, initial: -14, peak: 3, sustain: 0, final: -8 },
     ops: [
@@ -44,7 +44,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'bronze_plate', algorithm: 4, feedback: 2, modIndex: 3.2,
+    version: 6, name: 'bronze_plate', algorithm: 4, feedback: 2, modIndex: 3.2,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [
       { ratio: 2.73, level: 0.56, detune: 0, velocitySensitivity: 10, adsr: { a: 0.001, d: 0.3, s: 0, r: 0.2 } },
@@ -54,7 +54,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'membrane_tom', algorithm: 4, feedback: 0, modIndex: 1.3,
+    version: 6, name: 'membrane_tom', algorithm: 4, feedback: 0, modIndex: 1.3,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     pitchEnvelope: { a: 0.001, d: 0.07, r: 0.06, initial: 650, peak: 350, sustain: 0, final: -60 },
     ops: [
@@ -65,7 +65,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'fixed_hz_chime', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 6, name: 'fixed_hz_chime', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [
       { ratio: 1, frequency: 317, level: 0.72, detune: 0, adsr: { a: 0.003, d: 1.8, s: 0, r: 0.6 } },
@@ -75,7 +75,7 @@ export const originalPresets: readonly Voice[] = [
     ],
   },
   {
-    version: 5, name: 'wire_kalimba', algorithm: 4, feedback: 1, modIndex: 1.9,
+    version: 6, name: 'wire_kalimba', algorithm: 4, feedback: 1, modIndex: 1.9,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [
       { ratio: 4, level: 0.42, detune: 0, rateKeyScale: 0.7, velocitySensitivity: 15, adsr: { a: 0.001, d: 0.09, s: 0, r: 0.06 } },

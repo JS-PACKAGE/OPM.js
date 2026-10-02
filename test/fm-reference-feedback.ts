@@ -15,7 +15,7 @@ const HARMONICS = 96;
 
 function feedbackVoice(frequency: number, level: number): Voice {
   return {
-    version: 5, name: 'independent-feedback-7', algorithm: 7, feedback: 7, modIndex: 0,
+    version: 6, name: 'independent-feedback-7', algorithm: 7, feedback: 7, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: frequency / 880, level: i === 0 ? level : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 } })) as Voice['ops'],

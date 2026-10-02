@@ -220,7 +220,7 @@ export function importDX7(input: Uint8Array): Voice[] {
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
     const voice: Voice = {
-      version: 5, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+      version: 6, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
       ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
       lfo: {
         rate: data[137] / 99 * 20,

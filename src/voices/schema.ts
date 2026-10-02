@@ -1,9 +1,12 @@
 export type Algorithm = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
 export interface ADSR { a: number; d: number; s: number; r: number }
-export interface LegacyLFO { rate: number; amDepth: number; pmDepth: number; waveform?: never; delay?: never; sync?: never; phase?: never }
+export type LFOTargets = readonly [number, number, number, number];
+export type LFOTargetsInput = readonly [number | boolean, number | boolean, number | boolean, number | boolean];
+export interface LegacyLFO { rate: number; amDepth: number; pmDepth: number; waveform?: never; delay?: never; sync?: never; phase?: never; amTargets?: never; pmTargets?: never }
 export interface LegacyLFOV4 extends Omit<LegacyLFO, 'waveform'> { waveform: 'sine' | 'triangle' | 'saw' | 'square' }
-export interface LFO extends Omit<LegacyLFOV4, 'delay' | 'sync' | 'phase'> { delay?: number; sync?: 'note' | 'global'; phase?: number }
-export type LFOInput = Omit<LFO, 'waveform'> & { waveform?: LFO['waveform'] };
+export interface LegacyLFOV5 extends Omit<LegacyLFOV4, 'delay' | 'sync' | 'phase'> { delay?: number; sync?: 'note' | 'global'; phase?: number }
+export interface LFO extends Omit<LegacyLFOV5, 'amTargets' | 'pmTargets'> { amTargets?: LFOTargets; pmTargets?: LFOTargets }
+export type LFOInput = Omit<LFO, 'waveform' | 'amTargets' | 'pmTargets'> & { waveform?: LFO['waveform']; amTargets?: LFOTargetsInput; pmTargets?: LFOTargetsInput };
 export interface PitchEnvelope { a: number; d: number; r: number; initial: number; peak: number; sustain: number; final: number }
 export interface KeyScale { breakpoint: number; leftDbPerOctave: number; rightDbPerOctave: number }
 export interface LegacyOperator { ratio: number; level: number; detune: number; adsr: ADSR; keyScale?: never; velocitySensitivity?: never; frequency?: never; rateKeyScale?: never }
@@ -13,18 +16,20 @@ export interface Operator extends Omit<LegacyOperatorV3, 'frequency' | 'rateKeyS
 export type FourOperators<T = Operator> = [T, T, T, T];
 interface VoiceBase { name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex?: number }
 /** Strict single-voice input; omitted version uses the current shape. */
-export type VoiceInput = (VoiceBase & { version?: 5; lfo?: LFOInput; pitchEnvelope?: PitchEnvelope; ops: readonly [Operator, Operator, Operator, Operator] }) |
+export type VoiceInput = (VoiceBase & { version?: 6; lfo?: LFOInput; pitchEnvelope?: PitchEnvelope; ops: readonly [Operator, Operator, Operator, Operator] }) |
+  (VoiceBase & { version: 5; lfo?: Omit<LegacyLFOV5, 'waveform'> & { waveform?: LFO['waveform'] }; pitchEnvelope?: PitchEnvelope; ops: readonly [Operator, Operator, Operator, Operator] }) |
   (VoiceBase & { version: 4; lfo?: Omit<LegacyLFOV4, 'waveform'> & { waveform?: LFO['waveform'] }; pitchEnvelope?: never; ops: readonly [LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3] }) |
   (VoiceBase & { version: 3; lfo?: LegacyLFO; pitchEnvelope?: never; ops: readonly [LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3] }) |
   (VoiceBase & { version: 2; lfo?: LegacyLFO; pitchEnvelope?: never; ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2] }) |
   (VoiceBase & { version: 1; lfo?: LegacyLFO; pitchEnvelope?: never; ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator] });
-export interface Voice { version: 5; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; pitchEnvelope?: PitchEnvelope; ops: FourOperators }
+export interface Voice { version: 6; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; pitchEnvelope?: PitchEnvelope; ops: FourOperators }
 export interface LegacyVoice { version: 1; name: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LegacyLFO; pitchEnvelope?: never; ops: FourOperators<LegacyOperator> }
 export interface LegacyVoiceV2 extends Omit<LegacyVoice, 'version' | 'ops'> { version: 2; ops: FourOperators<LegacyOperatorV2> }
 export interface LegacyVoiceV3 extends Omit<LegacyVoice, 'version' | 'ops'> { version: 3; ops: FourOperators<LegacyOperatorV3> }
 export interface LegacyVoiceV4 extends Omit<LegacyVoiceV3, 'version' | 'lfo'> { version: 4; lfo: LegacyLFOV4 }
-export interface NormalizedVoice { version: 5; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; pitchEnvelope?: PitchEnvelope; ops: FourOperators }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4;
+export interface LegacyVoiceV5 extends Omit<Voice, 'version' | 'lfo'> { version: 5; lfo: LegacyLFOV5 }
+export interface NormalizedVoice { version: 6; name?: string; algorithm: Algorithm; feedback: Algorithm; modIndex: number; lfo: LFO; pitchEnvelope?: PitchEnvelope; ops: FourOperators }
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops' | 'pitchEnvelope'>> & {
   readonly lfo: Readonly<LFO>;
   readonly pitchEnvelope?: Readonly<PitchEnvelope>;
@@ -100,6 +105,23 @@ function array(value: unknown, min: number, max: number, label: string): asserts
   }
 }
 
+/** @internal Canonical immutable targets; only bank parsing clamps finite numbers. */
+export function lfoTargets(value: unknown, clamp = false): LFOTargets {
+  array(value, 4, 4, 'LFO targets');
+  const targets: [number, number, number, number] = [0, 0, 0, 0];
+  for (let i = 0; i < 4; i++) {
+    const item: unknown = Object.getOwnPropertyDescriptor(value, String(i))!.value;
+    if (typeof item === 'boolean') {
+      targets[i] = item ? 1 : 0;
+    } else {
+      const target = bounded(item, 0, 1, 'LFO target');
+      if (!clamp && target !== item) throw new RangeError('LFO target must be in 0..1');
+      targets[i] = target;
+    }
+  }
+  return Object.freeze(targets);
+}
+
 export function lfoWaveform(value: unknown): LFO['waveform'] {
   if (value !== 'sine' && value !== 'triangle' && value !== 'saw' && value !== 'square') {
     throw new RangeError('Unsupported LFO waveform');
@@ -112,26 +134,29 @@ export function lfoSync(value: unknown): NonNullable<LFO['sync']> {
 }
 export function validateVoice(input: unknown): FrozenVoice {
   record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice', ['pitchEnvelope']);
-  if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4 && input.version !== 5) throw new RangeError('Unsupported voice version');
-  if (input.version !== 5 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5');
+  if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4 && input.version !== 5 && input.version !== 6) throw new RangeError('Unsupported voice version');
+  if (input.version !== 5 && input.version !== 6 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
   if (typeof input.name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
     throw new TypeError('Voice name must contain 1..64 letters, digits, underscores or hyphens');
   }
   array(input.ops, 4, 4, 'ops');
   record(input.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo',
-    input.version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : input.version === 4 ? ['waveform'] : []);
+    input.version === 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
+      input.version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : input.version === 4 ? ['waveform'] : []);
   const lfo: LFO = { rate: numeric(input.lfo.rate, 'rate'),
     amDepth: numeric(input.lfo.amDepth, 'amDepth'), pmDepth: numeric(input.lfo.pmDepth, 'pmDepth'),
     waveform: Object.hasOwn(input.lfo, 'waveform') ? lfoWaveform(input.lfo.waveform) : 'sine' };
   if (Object.hasOwn(input.lfo, 'delay')) lfo.delay = numeric(input.lfo.delay, 'delay');
   if (Object.hasOwn(input.lfo, 'sync')) lfo.sync = lfoSync(input.lfo.sync);
   if (Object.hasOwn(input.lfo, 'phase')) lfo.phase = numeric(input.lfo.phase, 'phase');
+  if (Object.hasOwn(input.lfo, 'amTargets')) lfo.amTargets = lfoTargets(input.lfo.amTargets, true);
+  if (Object.hasOwn(input.lfo, 'pmTargets')) lfo.pmTargets = lfoTargets(input.lfo.pmTargets, true);
   Object.freeze(lfo);
   const ops: FrozenOperator[] = [];
   for (let i = 0; i < 4; i++) {
     const op = input.ops[i];
     record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator',
-      input.version === 1 ? [] : input.version === 2 ? ['keyScale'] : input.version === 5 ?
+      input.version === 1 ? [] : input.version === 2 ? ['keyScale'] : input.version === 5 || input.version === 6 ?
         ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale'] : ['keyScale', 'velocitySensitivity']);
     record(op.adsr, ['a', 'd', 's', 'r'], 'adsr');
     const normalized: Operator = { ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
@@ -153,7 +178,7 @@ export function validateVoice(input: unknown): FrozenVoice {
     }
     ops.push(Object.freeze(normalized));
   }
-  const voice: Voice = { version: 5, name: input.name,
+  const voice: Voice = { version: 6, name: input.name,
     algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
     modIndex: numeric(input.modIndex, 'modIndex'), lfo, ops: Object.freeze(ops) as unknown as Voice['ops'] };
   if (Object.hasOwn(input, 'pitchEnvelope')) {

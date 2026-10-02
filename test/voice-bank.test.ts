@@ -24,14 +24,22 @@ test('duplicate bank names are rejected and returned voices are independent snap
   const second = copy();
   second.name = 'alternate';
   second.ops[0].level = 0.13;
+  const targets: [number, number, number, number] = [0, 0.25, 0.5, 1];
+  first.lfo.amTargets = second.lfo.amTargets = targets;
   assert.throws(() => parseVoiceBank([first, copy()]), TypeError);
 
   const bank = parseVoiceBank([first, second]);
   const originalLevel = first.ops[0].level;
   first.ops[0].level = 0;
   second.ops[0].level = 0;
+  targets[1] = 1;
   assert.equal(bank.get(first.name)!.ops[0].level, originalLevel);
   assert.equal(bank.get('alternate')!.ops[0].level, 0.13);
   assert.notStrictEqual(bank.get(first.name)!.ops[0], bank.get('alternate')!.ops[0]);
   assert.ok(Object.isFrozen(bank.get('alternate')!.ops[0]));
+  for (const snapshot of bank.values()) {
+    assert.deepEqual(snapshot.lfo.amTargets, [0, 0.25, 0.5, 1]);
+    assert.throws(() => Object.assign(snapshot.lfo.amTargets!, { 1: 0 }), TypeError);
+  }
+  assert.notStrictEqual(bank.get(first.name)!.lfo.amTargets, bank.get('alternate')!.lfo.amTargets);
 });

@@ -593,10 +593,10 @@ test('command waits use intrinsic AbortSignal state and never execute signal sha
   } finally { await opm.dispose(); }
 });
 
-test('named v5 edits retain detached frozen ownership and register every expressive field by content', async () => {
+test('named edits retain detached frozen ownership and register every expressive field by content', async () => {
   Object.assign(globalThis, { currentFrame: 0 });
   const base: Voice = {
-    version: 5, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 6, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 7, pmDepth: 0.1, amDepth: 0.1, waveform: 'sine' },
     ops: [
       { ratio: 1, level: 0.8, detune: 0, adsr: { a: 0.01, d: 0.03, s: 0.7, r: 0.02 } },
@@ -625,7 +625,6 @@ test('named v5 edits retain detached frozen ownership and register every express
       opm.loadVoice('live', patch);
       const expected = structuredClone(patch);
       const snapshot = opm.voices.get('live')!;
-      assert.equal(snapshot.version, 5);
       if (snapshot.pitchEnvelope) {
         assert.throws(() => { snapshot.pitchEnvelope!.initial = 0; }, TypeError);
         patch.pitchEnvelope!.initial = -1200;

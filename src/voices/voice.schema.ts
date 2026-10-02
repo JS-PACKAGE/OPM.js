@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v5",
+  "title": "OPM.js canonical voice v6",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 5
+      "const": 6
     },
     "name": {
       "type": "string",
@@ -62,6 +62,16 @@ export const voiceSchema = {
         "delay": { "type": "number", "minimum": 0, "maximum": 10, "default": 0 },
         "sync": { "type": "string", "enum": ["note", "global"], "default": "note" },
         "phase": { "type": "number", "minimum": 0, "maximum": 1, "default": 0 },
+        "amTargets": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "description": "Per-operator AM depth multipliers; omitted means all one."
+        },
+        "pmTargets": {
+          "type": "array", "minItems": 4, "maxItems": 4,
+          "items": { "type": "number", "minimum": 0, "maximum": 1 },
+          "description": "Per-operator PM depth multipliers; omitted means all one."
+        },
         "waveform": {
           "type": "string",
           "enum": ["sine", "triangle", "saw", "square"]
