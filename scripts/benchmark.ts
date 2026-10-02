@@ -3,6 +3,7 @@ import { cpus, platform, arch } from 'node:os';
 import { Synth } from '../src/core/index.js';
 import { brass } from '../src/voices/brass.js';
 import type { VoiceInput } from '../src/voices/schema.js';
+import type { QualityProfile } from '../src/core/synth.js';
 import type { OPMProcessor } from '../src/worklet/processor.js';
 
 interface Diagnostics { errors: number; activeVoices: number; pendingEvents: number; rejectedNotes: number }
@@ -30,8 +31,8 @@ const left = new Float32Array(blockSize);
 const right = new Float32Array(blockSize);
 const steady = { ...brass, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } };
 
-function realtime(count: number, patch: VoiceInput = brass): BenchmarkRun {
-  const synth = new Synth(sampleRate);
+function realtime(count: number, patch: VoiceInput = brass, quality: QualityProfile = 'standard'): BenchmarkRun {
+  const synth = new Synth(sampleRate, 8, { quality });
   for (let i = 0; i < count; i++) synth.noteOn(patch, 48 + i * 3);
   const run = () => synth.render(left, right);
   run.diagnostics = () => ({ errors: synth.errorCount, activeVoices: synth.voices.length, pendingEvents: 0, rejectedNotes: 0 });
@@ -93,17 +94,20 @@ function burst(prepared = false): BenchmarkRun {
   return run;
 }
 
-const cases: [string, BenchmarkRun][] = [
+const cases: [string, BenchmarkRun, boolean?][] = [
   ['idle', realtime(0)],
   ['one voice + LFO', realtime(1)],
   ['eight voices + LFO', realtime(8)],
   ['eight voices, no LFO', realtime(8, steady)],
   ['burst noteOn + steal + event queue + render', burst()],
   ['prepared burst noteOn + steal + event queue + render', burst(true)],
+  ['quality comparison: eco, eight voices + LFO', realtime(8, brass, 'eco'), true],
+  ['quality comparison: standard, eight voices + LFO', realtime(8, brass, 'standard'), true],
+  ['quality comparison: high, eight voices + LFO', realtime(8, brass, 'high'), true],
 ];
 const results = [];
 let failed = false;
-for (const [scenario, run] of cases) {
+for (const [scenario, run, reportOnly = false] of cases) {
   for (let i = 0; i < warmup; i++) run();
   const measurements = new Float64Array(iterations);
   let missedDeadlines = 0;
@@ -123,10 +127,10 @@ for (const [scenario, run] of cases) {
   const percentile = (fraction: number) => measurements[Math.ceil(iterations * fraction) - 1]!;
   const p99Ms = percentile(0.99);
   const worstMs = measurements[iterations - 1]!;
-  const passed = (p99BudgetRatio === null || p99Ms <= deadlineMs * p99BudgetRatio) &&
+  const passed = reportOnly || (p99BudgetRatio === null || p99Ms <= deadlineMs * p99BudgetRatio) &&
     (worstBudgetRatio === null || worstMs <= deadlineMs * worstBudgetRatio);
   if (!passed) failed = true;
-  results.push({ scenario, measuredBlocks: iterations, medianMs: percentile(0.5),
+  results.push({ scenario, reportOnly, measuredBlocks: iterations, medianMs: percentile(0.5),
     p95Ms: percentile(0.95), p99Ms, worstMs, p99DeadlineRatio: p99Ms / deadlineMs,
     worstDeadlineRatio: worstMs / deadlineMs, missedDeadlines, diagnostics, passedConfiguredBudgets: passed });
 }

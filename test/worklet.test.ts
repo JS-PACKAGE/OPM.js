@@ -36,7 +36,7 @@ interface TestProcessor {
 
 const globals = ['sampleRate', 'currentFrame', 'AudioWorkletProcessor', 'registerProcessor'];
 const originals = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-let Processor: new () => TestProcessor;
+let Processor: new (options?: AudioWorkletNodeOptions) => TestProcessor;
 const sampleRate = 44100;
 Object.assign(globalThis, { sampleRate });
 Object.assign(globalThis, { currentFrame: 0 });
@@ -47,7 +47,7 @@ Object.assign(globalThis, { AudioWorkletProcessor: class {
     this.port = { postMessage: (message: ProcessorMessage) => this.messages.push(message), close: () => {} };
   }
 } });
-Object.assign(globalThis, { registerProcessor: (_name: string, constructor: unknown) => { Processor = constructor as new () => TestProcessor; } });
+Object.assign(globalThis, { registerProcessor: (_name: string, constructor: unknown) => { Processor = constructor as new (options?: AudioWorkletNodeOptions) => TestProcessor; } });
 await import('../src/worklet/processor.js');
 after(() => {
   for (const [key, descriptor] of originals) {
@@ -434,4 +434,26 @@ test('v5 prepared patches and detached operator automation render identically th
   assert.equal(report.errors, 1, 'malformed tuple rejection is counted without changing sound');
   assert.equal(report.activeVoices, 0);
   assert.equal(report.rejectedNotes, 0);
+});
+
+test('processor initialization rejects hostile polyphony and synth options without invoking accessors', () => {
+  let reads = 0;
+  const getter = () => { reads++; throw Error('getter ran'); };
+  const accessor = {};
+  Object.defineProperty(accessor, 'maxVoices', { get: getter });
+  const qualityAccessor = {};
+  Object.defineProperty(qualityAccessor, 'quality', { get: getter });
+  const rootAccessor = {};
+  Object.defineProperty(rootAccessor, 'processorOptions', { get: getter });
+  for (const options of [
+    rootAccessor, { processorOptions: accessor }, { processorOptions: qualityAccessor },
+    { processorOptions: Object.assign(Object.create({ quality: 'eco' }), { maxVoices: 1 }) },
+    { processorOptions: null }, { processorOptions: [] }, { processorOptions: { [Symbol('quality')]: 'eco' } },
+    ...[0, 9, 1.5, NaN, Infinity, '2', true, null, undefined, { valueOf: getter }].map(maxVoices => ({
+      processorOptions: { maxVoices },
+    })),
+    { processorOptions: { quality: 'other' } }, { processorOptions: { quality: undefined } },
+    { processorOptions: { unknown: true } }, Object.create({ processorOptions: { maxVoices: 1 } }),
+  ]) assert.throws(() => new Processor(options as AudioWorkletNodeOptions));
+  assert.equal(reads, 0);
 });

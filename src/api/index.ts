@@ -2,11 +2,11 @@ import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import { validateNoteControls } from '../core/synth.js';
-import type { NoteControls, SynthOptions } from '../core/synth.js';
+import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import { normalizeTuning } from '../core/tuning.js';
 import type { TuningOptions } from '../core/tuning.js';
 export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4 } from '../voices/schema.js';
-export type { NoteControls, SynthOptions } from '../core/synth.js';
+export type { NoteControls, SynthOptions, QualityProfile } from '../core/synth.js';
 export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
 export { playSequence, streamSequence } from './sequence.js';
 export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from './sequence.js';
@@ -62,6 +62,10 @@ export interface OPMOptions {
   mixGain?: number;
   tuning?: TuningOptions;
   stealing?: SynthOptions['stealing'];
+  /** Immutable synthesis profile; standard preserves the default sound. */
+  quality?: QualityProfile;
+  /** Logical polyphony, an integer in 1..8; default 8. */
+  maxVoices?: number;
   /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
   interruption?: 'cancel' | 'preserve';
   onEvent?: (event: OPMEvent) => void;
@@ -228,6 +232,10 @@ function replyData(data: unknown): Exclude<OPMEvent, ErrorEvent | ContextEvent> 
 /** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
 export class OPM {
   declare readonly sampleRate: number | undefined;
+  get quality(): QualityProfile { return this._synthOptions.quality!; }
+  get maxVoices(): number { return this._maxVoices; }
+  /** @internal */
+  declare private _maxVoices: number;
   /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
   get voices(): ReadonlyMap<string, NormalizedVoice> { return new Map(this._voices); }
   /** @internal */
@@ -279,8 +287,8 @@ export class OPM {
   declare private _disposePromise: Promise<void> | null;
 
   constructor(options: OPMOptions = {}) {
-    const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, interruption, workletUrl } = ownData(options,
-      ['sampleRate', 'context', 'destination', 'onEvent', 'mixGain', 'tuning', 'stealing', 'interruption', 'workletUrl'], 'OPM options') as OPMOptions;
+    const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, quality, maxVoices, interruption, workletUrl } = ownData(options,
+      ['sampleRate', 'context', 'destination', 'onEvent', 'mixGain', 'tuning', 'stealing', 'quality', 'maxVoices', 'interruption', 'workletUrl'], 'OPM options') as OPMOptions;
     if (sampleRate !== undefined && (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)) {
       throw new RangeError('sampleRate must be an integer in 8000..96000');
     }
@@ -290,6 +298,10 @@ export class OPM {
     }
     if (onEvent !== undefined && typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
     if (stealing !== undefined && !['oldest', 'release-first', 'quietest'].includes(stealing)) throw new RangeError('Invalid stealing policy');
+    if (quality !== undefined && quality !== 'eco' && quality !== 'standard' && quality !== 'high') throw new RangeError('Invalid quality profile');
+    if (maxVoices !== undefined && (typeof maxVoices !== 'number' || !Number.isInteger(maxVoices) || maxVoices < 1 || maxVoices > 8)) {
+      throw new RangeError('maxVoices must be an integer in 1..8');
+    }
     if (interruption !== undefined && interruption !== 'cancel' && interruption !== 'preserve') throw new RangeError('Invalid interruption policy');
     if (workletUrl !== undefined && typeof workletUrl !== 'string' && !(workletUrl instanceof URL)) {
       throw new TypeError('workletUrl must be a string or URL');
@@ -298,7 +310,8 @@ export class OPM {
     this._workletUrl = workletUrl instanceof URL ? new URL(workletUrl.href) : workletUrl;
     if (workletUrl !== undefined) workletModuleUrl(this._workletUrl);
     this._synthOptions = { mixGain: mixGainValue(mixGain === undefined ? 1 : mixGain),
-      tuning: normalizeTuning(tuning === undefined ? {} : tuning), stealing: stealing ?? 'oldest' };
+      tuning: normalizeTuning(tuning === undefined ? {} : tuning), stealing: stealing ?? 'oldest', quality: quality ?? 'standard' };
+    this._maxVoices = maxVoices ?? 8;
     this._interruption = interruption ?? 'cancel';
     this.sampleRate = sampleRate;
     this._voices = new Map([['brass', frozenPatch(brass)]]);
@@ -514,7 +527,7 @@ export class OPM {
     try {
       await context.audioWorklet.addModule(moduleUrl);
       node = new globalThis.AudioWorkletNode(context, 'opm-processor', {
-        outputChannelCount: [2], processorOptions: this._synthOptions,
+        outputChannelCount: [2], processorOptions: { maxVoices: this.maxVoices, ...this._synthOptions },
       });
       (this as MutableAudioState).node = node;
       node.port.onmessage = (event) => { if (this.node === node) this._receive(event.data); };

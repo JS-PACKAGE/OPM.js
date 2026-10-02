@@ -3,7 +3,9 @@ import type { AlgorithmGraph } from './algorithms.js';
 import { normalizeTuning, tuningFrequency } from './tuning.js';
 import type { NormalizedTuning, TuningOptions } from './tuning.js';
 import { lfoValue } from './lfo.js';
-import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample } from './decimator.js';
+import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, qualityOversample } from './decimator.js';
+import type { QualityProfile } from './decimator.js';
+export type { QualityProfile } from './decimator.js';
 
 const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype);
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
@@ -17,6 +19,7 @@ export interface SynthOptions {
   mixGain?: number;
   tuning?: TuningOptions;
   stealing?: 'oldest' | 'release-first' | 'quietest';
+  quality?: QualityProfile;
 }
 
 const CONTROL_LIMITS = Object.freeze({
@@ -99,7 +102,6 @@ import { TAU } from './operator.js';
 import { preparedVoiceValue } from '../voices/normalize.js';
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 
-const OVERSAMPLE = 4;
 const HEADROOM = 0.7;
 const MAX_VOICES = 8;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
@@ -130,12 +132,15 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
   }
   const result: SynthOptions = {};
   for (const key of Reflect.ownKeys(input)) {
-    if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing') throw new TypeError('options has an unknown field');
+    if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing' && key !== 'quality') throw new TypeError('options has an unknown field');
     const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
     if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`options.${key} must be data`);
     if (key === 'mixGain') {
       validateMixGain(descriptor.value);
       result.mixGain = descriptor.value;
+    } else if (key === 'quality') {
+      qualityOversample(descriptor.value);
+      result.quality = descriptor.value;
     } else if (key === 'stealing') {
       if (descriptor.value !== 'oldest' && descriptor.value !== 'release-first' && descriptor.value !== 'quietest') {
         throw new TypeError('stealing must be oldest, release-first or quietest');
@@ -148,7 +153,7 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
   return result;
 }
 
-function createVoiceSlot(): ActiveVoice {
+function createVoiceSlot(oversample: number): ActiveVoice {
   return {
     id: 0, sequence: 0, note: 0, voice: null!, graph: ALGORITHMS[0],
     baseIncrements: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
@@ -157,9 +162,9 @@ function createVoiceSlot(): ActiveVoice {
     attackTimes: new Float64Array(4), decayTimes: new Float64Array(4), releaseTimes: new Float64Array(4),
     operatorLevels: new Float64Array(4), operatorFrom: new Float64Array(4), operatorTargets: new Float64Array(4),
     operatorStart: 0, operatorFrames: 0,
-    gains: new Float64Array(4 * OVERSAMPLE), levels: new Float64Array(4),
+    gains: new Float64Array(4 * oversample), levels: new Float64Array(4),
     leftGain: 0, rightGain: 0, lastSample: 0, fadeRemaining: 0, lastFadeGain: 1, carrierGain: 0,
-    phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(DECIMATOR_STATE_SIZE), releaseDb: new Float64Array(4),
+    phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(oversample === 2 ? 4 : DECIMATOR_STATE_SIZE), releaseDb: new Float64Array(4),
     previous: 0, older: 0, pitchRelease: 0, feedbackScale: 0,
     elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0,
     expressionFrom: 1, expressionTarget: 1, expressionStart: 0, expressionFrames: 0,
@@ -259,18 +264,19 @@ function gainAt(active: ActiveVoice, time: number, op: number): number {
 
 function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array): void {
   const { sustainGain, gains, attackStep, decayStep, releaseStep, attackTimes, decayTimes, releaseTimes } = active;
-  const lastTime = time + subTimes[OVERSAMPLE - 1];
+  const oversample = subTimes.length;
+  const lastTime = time + subTimes[oversample - 1];
   for (let op = 0; op < 4; op++) {
     const attack = attackTimes[op], decay = decayTimes[op], release = releaseTimes[op];
     let step: number | undefined;
     if (active.releaseTime >= 0) {
       if (release === 0 || time >= active.releaseTime + release) {
-        gains[op] = gains[op + 4] = gains[op + 8] = gains[op + 12] = 0;
+        for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = 0;
         continue;
       }
       if (lastTime < active.releaseTime + release) step = releaseStep[op];
     } else if (time >= attack + decay) {
-      gains[op] = gains[op + 4] = gains[op + 8] = gains[op + 12] = sustainGain[op];
+      for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = sustainGain[op];
       continue;
     } else if (time > 0 && lastTime < attack) {
       step = attackStep[op];
@@ -281,12 +287,12 @@ function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array)
     // or depend on render chunking. Boundary-crossing frames keep exact dB rules.
     if (step !== undefined) {
       let gain = gainAt(active, time, op);
-      for (let sub = 0; sub < OVERSAMPLE; sub++) {
+      for (let sub = 0; sub < oversample; sub++) {
         gains[op + sub * 4] = gain;
         gain *= step;
       }
     } else {
-      for (let sub = 0; sub < OVERSAMPLE; sub++) {
+      for (let sub = 0; sub < oversample; sub++) {
         gains[op + sub * 4] = gainAt(active, time + subTimes[sub], op);
       }
     }
@@ -312,6 +318,9 @@ function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
 export class Synth {
   declare readonly sampleRate: number;
   declare readonly maxVoices: number;
+  declare readonly quality: QualityProfile;
+  /** @internal */
+  declare oversample: number;
   declare readonly currentFrame: number;
   declare readonly errorCount: number;
   declare readonly lastStolenId: number | null;
@@ -359,6 +368,8 @@ export class Synth {
       throw new RangeError('maxVoices must be an integer in 1..8');
     }
     const settings = readSynthOptions(options);
+    this.quality = settings.quality ?? 'standard';
+    this.oversample = qualityOversample(this.quality);
     this.mixGain = settings.mixGain ?? 1;
     this.tuning = settings.tuning === undefined ? DEFAULT_TUNING : normalizeTuning(settings.tuning);
     this.stealing = settings.stealing ?? 'oldest';
@@ -366,7 +377,7 @@ export class Synth {
     this.maxVoices = maxVoices;
     this.voices = [];
     this.fades = [];
-    this.freeVoices = Array.from({ length: maxVoices + MAX_VOICES + 1 }, createVoiceSlot);
+    this.freeVoices = Array.from({ length: maxVoices + MAX_VOICES + 1 }, () => createVoiceSlot(this.oversample));
     this.terminalIds = new Float64Array(maxVoices);
     this.terminalErrors = new Uint8Array(maxVoices);
     this.rendering = false;
@@ -379,9 +390,9 @@ export class Synth {
     this.currentFrame = 0;
     this.errorCount = 0;
     this.nextId = 1;
-    this.subTimes = Float64Array.from({ length: OVERSAMPLE }, (_, sub) => sub / (sampleRate * OVERSAMPLE));
+    this.subTimes = Float64Array.from({ length: this.oversample }, (_, sub) => sub / (sampleRate * this.oversample));
     this.sequence = 0;
-    this.decimatorCoefficients = createDecimatorCoefficients(sampleRate);
+    this.decimatorCoefficients = createDecimatorCoefficients(sampleRate, this.quality);
   }
   setMixGain(gain: number): void {
     validateMixGain(gain);
@@ -398,7 +409,7 @@ export class Synth {
   /** @internal */
   retuneVoice(active: ActiveVoice): void {
     const frequency = tuningFrequency(active.note, this.tuning);
-    const rate = this.sampleRate * OVERSAMPLE;
+    const rate = this.sampleRate * this.oversample;
     const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
     for (let op = 0; op < 4; op++) {
       const source = active.voice.ops[op];
@@ -451,7 +462,7 @@ export class Synth {
     const active = this.freeVoices.pop()!;
     const { baseIncrements, increments, sustainDb, sustainGain, steps, attackStep, decayStep, levels } = active;
     const frequency = tuningFrequency(note, this.tuning);
-    const rate = this.sampleRate * OVERSAMPLE;
+    const rate = this.sampleRate * this.oversample;
     for (let i = 0; i < 4; i++) {
       const op = voice.ops[i];
       const scale = op.keyScale;
@@ -551,7 +562,7 @@ export class Synth {
       active.releaseDb[op] = heldDb(active.releaseTime, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
       const release = active.releaseTimes[op];
       active.releaseStep[op] = release === 0 ? 0 :
-        10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * OVERSAMPLE));
+        10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * this.oversample));
     }
   }
   allNotesOff(): void {
@@ -682,8 +693,8 @@ export class Synth {
     const operatorRamping = (active.controlRamps & OPERATOR_RAMP) !== 0;
     if (!finished) prepareGains(active, time, this.subTimes);
     let output = 0;
-    for (let sub = 0; sub < OVERSAMPLE; sub++) {
-      const frame = active.elapsed + sub / OVERSAMPLE;
+    for (let sub = 0; sub < this.oversample; sub++) {
+      const frame = active.elapsed + sub / this.oversample;
       if (dynamicPitch) {
         const factor = 2 ** (pitchAt(active, frame) / 12 + pitchEnvelopeAt(active, time + this.subTimes[sub]) / 1200);
         for (let op = 0; op < 4; op++) {

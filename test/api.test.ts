@@ -3,6 +3,7 @@ import test, { after } from 'node:test';
 import { OPM, createLookaheadScheduler } from '../src/api/index.js';
 import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
+import { Synth } from '../src/core/synth.js';
 
 
 interface MockPort {
@@ -644,4 +645,57 @@ test('named v5 edits retain detached frozen ownership and register every express
       } finally { await reference.dispose(); }
     }
   } finally { await opm.dispose(); }
+});
+
+test('quality and polyphony are immutable host settings whose rendered behavior survives restart', async () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const options: OPMOptions = { quality, maxVoices: 2 };
+    const events: OPMEvent[] = [];
+    options.onEvent = event => events.push(event);
+    const opm = new OPM(options);
+    options.quality = quality === 'eco' ? 'high' : 'eco';
+    options.maxVoices = 8;
+    assert.equal(Reflect.set(opm, 'quality', 'eco'), false);
+    assert.equal(Reflect.set(opm, 'maxVoices', 8), false);
+    try {
+      for (let run = 0; run < 2; run++) {
+        Object.assign(globalThis, { currentFrame: 0 });
+        await opm.start();
+        const reference = new Synth(sampleRate, 2, { quality });
+        const ids = [60, 64, 67].map(note => {
+          const id = opm.playNote({ note });
+          reference.noteOn(brass, note, id);
+          return id;
+        });
+        const actual = render(opm, 512);
+        const left = new Float32Array(512), right = new Float32Array(512);
+        reference.render(left, right);
+        assert.deepEqual(actual.left, left);
+        assert.deepEqual(actual.right, right);
+        assert.ok(audible(actual.left));
+        assert.equal((await opm.getDiagnostics()).activeVoices, 2);
+        assert.ok(events.some(event => event.type === 'note' && event.id === ids[0] && event.state === 'stolen'));
+        assert.equal(opm.quality, quality);
+        assert.equal(opm.maxVoices, 2);
+        await opm.close();
+      }
+    } finally { await opm.dispose(); }
+  }
+});
+
+test('host quality and polyphony reject hostile options without getter or numeric coercion', () => {
+  let reads = 0;
+  const getter = () => { reads++; throw Error('getter ran'); };
+  const quality = {};
+  Object.defineProperty(quality, 'quality', { get: getter });
+  const maxVoices = {};
+  Object.defineProperty(maxVoices, 'maxVoices', { get: getter });
+  for (const input of [
+    quality, maxVoices, Object.assign(Object.create({ quality: 'eco' }), { maxVoices: 1 }),
+    { quality: 'other' }, { quality: null }, { quality: { [Symbol.toPrimitive]: getter } },
+    { maxVoices: 0 }, { maxVoices: 9 }, { maxVoices: 1.5 }, { maxVoices: NaN },
+    { maxVoices: Infinity }, { maxVoices: '2' }, { maxVoices: true }, { maxVoices: null },
+    { maxVoices: { valueOf: getter } }, { [Symbol('quality')]: 'eco' },
+  ]) assert.throws(() => new OPM(input as OPMOptions));
+  assert.equal(reads, 0);
 });

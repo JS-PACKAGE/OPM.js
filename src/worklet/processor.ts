@@ -77,6 +77,37 @@ function scheduledFrame(at: unknown): number | null {
   return Number.isSafeInteger(frame) && frame <= currentFrame + MAX_DURATION * sampleRate ? frame : null;
 }
 
+function processorSettings(options: AudioWorkletNodeOptions): [number, SynthOptions | undefined] {
+  if (options === null || typeof options !== 'object' || Array.isArray(options) ||
+      (Object.getPrototypeOf(options) !== Object.prototype && Object.getPrototypeOf(options) !== null)) {
+    throw new TypeError('worklet options must be a plain data object');
+  }
+  const descriptor = Object.getOwnPropertyDescriptor(options, 'processorOptions');
+  if (!descriptor) return [8, undefined];
+  if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('processorOptions must be data');
+  const input: unknown = descriptor.value;
+  if (input === undefined) return [8, undefined];
+  if (input === null || typeof input !== 'object' || Array.isArray(input) ||
+      (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
+    throw new TypeError('processorOptions must be a plain data object');
+  }
+  let maxVoices = 8;
+  const synthOptions: Record<string, unknown> = Object.create(null);
+  for (const key of Reflect.ownKeys(input)) {
+    if (typeof key !== 'string') throw new TypeError('processorOptions has an unknown field');
+    const field = Object.getOwnPropertyDescriptor(input, key);
+    if (!field || !Object.hasOwn(field, 'value')) throw new TypeError(`processorOptions.${key} must be data`);
+    if (key === 'maxVoices') {
+      const value: unknown = field.value;
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > 8) {
+        throw new RangeError('maxVoices must be an integer in 1..8');
+      }
+      maxVoices = value;
+    } else synthOptions[key] = field.value;
+  }
+  return [maxVoices, synthOptions as SynthOptions];
+}
+
 class OPMProcessor extends AudioWorkletProcessor {
   declare synth: Synth | null;
   declare events: ScheduledEvent[];
@@ -91,7 +122,8 @@ class OPMProcessor extends AudioWorkletProcessor {
 
   constructor(options: AudioWorkletNodeOptions = {}) {
     super();
-    this.synth = new Synth(sampleRate, 8, options.processorOptions as SynthOptions | undefined);
+    const [maxVoices, synthOptions] = processorSettings(options);
+    this.synth = new Synth(sampleRate, maxVoices, synthOptions);
     this.events = [];
     this.notes = new Map();
     this.patches = new Map();

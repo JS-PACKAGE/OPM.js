@@ -3,7 +3,7 @@ import type { SynthOptions } from './synth.js';
 import { MAX_RENDER_SAMPLES, sampleRateValue } from './sequence.js';
 
 export type { ADSR, PitchEnvelope, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, LegacyVoiceV3, LegacyVoiceV4, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
-export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions } from './synth.js';
+export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions, QualityProfile } from './synth.js';
 export type { TuningOptions, NormalizedTuning } from './tuning.js';
 export { normalizeTuning, tuningFrequency } from './tuning.js';
 export { lfoValue } from './lfo.js';
@@ -42,7 +42,7 @@ export const OVERSAMPLE = 4;
 // The returned buffer includes the longest release and a short filter tail.
 export function renderNote(options: RenderNoteOptions): RenderResult;
 export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100,
-  mixGain, tuning, stealing }: Partial<RenderNoteOptions> = {}): RenderResult {
+  mixGain, tuning, stealing, quality }: Partial<RenderNoteOptions> = {}): RenderResult {
   voice = validateVoice(voice);
   sampleRate = sampleRateValue(sampleRate);
   note = bounded(note, 0, 127, 'note');
@@ -57,6 +57,7 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan
   if (mixGain !== undefined) engine.mixGain = mixGain;
   if (tuning !== undefined) engine.tuning = tuning;
   if (stealing !== undefined) engine.stealing = stealing;
+  if (quality !== undefined) engine.quality = quality;
   const synth = new Synth(sampleRate, 8, engine);
   const left = new Float32Array(length);
   const right = new Float32Array(length);
