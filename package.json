@@ -49,6 +49,8 @@
     "compile": "tsc -p tsconfig.dev.json",
     "test": "npm run compile && node .dev/scripts/test.js",
     "benchmark": "npm run compile && node .dev/scripts/benchmark.js",
+    "sound-quality": "npm run compile && node .dev/scripts/sound-quality.js",
+    "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",
     "browser-smoke": "npm run compile && node .dev/scripts/browser-smoke.js",

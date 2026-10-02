@@ -1,9 +1,5 @@
 import assert from 'node:assert/strict';
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { chromium, firefox, webkit } from 'playwright';
+import { browserEngines, startBrowserFixture } from './browser-runner.js';
 import type { Browser } from 'playwright';
 import type * as APIModule from '../src/api/index.js';
 import type * as CoreModule from '../src/core/index.js';
@@ -33,35 +29,13 @@ declare global {
   }
 }
 
-const engines = { chromium, firefox, webkit };
 const engine = process.argv[2] ?? 'chromium';
 assert.ok(engine === 'chromium' || engine === 'firefox' || engine === 'webkit',
   'browser must be chromium, firefox or webkit');
-const root = fileURLToPath(new URL('../../', import.meta.url));
-const server = createServer(async (request, response) => {
-  try {
-    const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-    if (pathname === '/') {
-      response.writeHead(200, { 'Content-Type': 'text/html', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; object-src 'none'" });
-      response.end('<!doctype html><title>OPM browser audio smoke</title><button id="start">Start audio smoke</button>');
-      return;
-    }
-    const path = resolve(root, '.' + decodeURIComponent(pathname));
-    if (!path.startsWith(resolve(root, 'dist') + sep)) {
-      response.writeHead(403).end();
-      return;
-    }
-    const data = await readFile(path);
-    response.writeHead(200, { 'Content-Type': 'text/javascript' });
-    response.end(data);
-  } catch {
-    response.writeHead(404).end();
-  }
-});
-await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+const { server, url } = await startBrowserFixture('OPM browser audio smoke');
 let browser: Browser | undefined;
 try {
-  browser = await engines[engine].launch({ headless: true, ...(engine === 'chromium' ? { channel: 'chromium' } : {}) });
+  browser = await browserEngines[engine].launch({ headless: true, ...(engine === 'chromium' ? { channel: 'chromium' } : {}) });
   console.log(`[${engine}] ${browser.version()} on ${process.platform}/${process.arch}`);
   const page = await browser.newPage();
   const pageErrors: string[] = [];
@@ -75,9 +49,7 @@ try {
     }
   });
   page.on('requestfailed', request => console.error(`[${engine}] request failed: ${request.url()} ${request.failure()?.errorText}`));
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string', 'HTTP server must have a TCP address');
-  await page.goto(`http://127.0.0.1:${address.port}/`);
+  await page.goto(url);
   await page.evaluate(async () => {
     let stage = 'loading modules';
     let borrowedContext: AudioContext | undefined;
