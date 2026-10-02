@@ -1,7 +1,12 @@
 import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
-import type { NoteControls } from '../core/synth.js';
-export type { ADSR, LFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice } from '../voices/schema.js';
-export type { NoteControls } from '../core/synth.js';
+import type { NoteControls, SynthOptions } from '../core/synth.js';
+import type { TuningOptions } from '../core/tuning.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, LegacyVoiceV3 } from '../voices/schema.js';
+export type { NoteControls, SynthOptions } from '../core/synth.js';
+export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
+export { playSequence } from './sequence.js';
+export type { PlaySequenceOptions, SequencePlayback } from './sequence.js';
+export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
     type: 'note';
@@ -24,13 +29,43 @@ export interface ErrorEvent {
     type: 'error';
     error: Error;
 }
-export type OPMEvent = NoteEvent | DiagnosticsEvent | ErrorEvent;
+export type CommandName = 'stop' | 'updateNote' | 'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning';
+export interface CommandEvent {
+    type: 'command';
+    command: CommandName;
+    commandId?: number;
+    id?: number;
+    /** Accepted means admitted or immediately applied, not a future execution guarantee. */
+    state: 'accepted' | 'rejected';
+    reason?: string;
+    frame: number;
+    time: number;
+}
+export type ContextState = AudioContextState | 'interrupted';
+export interface ContextEvent {
+    type: 'context';
+    state: ContextState;
+    frame: number;
+    time: number;
+}
+export interface ResetEvent {
+    type: 'reset';
+    reason: 'close' | 'failure' | 'panic' | 'interruption';
+    frame: number;
+    time: number;
+}
+export type OPMEvent = NoteEvent | DiagnosticsEvent | CommandEvent | ContextEvent | ResetEvent | ErrorEvent;
 export interface OPMOptions {
     sampleRate?: number;
     /** Borrowed context: OPM never closes or suspends it. */
     context?: AudioContext;
     /** Omit to connect to context.destination; null disables automatic connection. */
     destination?: AudioNode | null;
+    mixGain?: number;
+    tuning?: TuningOptions;
+    stealing?: SynthOptions['stealing'];
+    /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
+    interruption?: 'cancel' | 'preserve';
     onEvent?: (event: OPMEvent) => void;
 }
 interface PlayNoteBase {
@@ -73,9 +108,15 @@ export declare class OPM {
     connect(destination: AudioNode): this;
     disconnect(destination?: AudioNode): this;
     playNote(options: PlayNoteOptions): number;
-    stop(id: number, options?: ScheduledNoteOptions): void;
+    stop(id: number, options?: ScheduledNoteOptions): number;
     /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
-    updateNote(id: number, controls: NoteControls, options?: ScheduledNoteOptions): void;
+    updateNote(id: number, controls: NoteControls, options?: ScheduledNoteOptions): number;
+    /** Cancel all pending events and release all active gates, preserving release tails. */
+    allNotesOff(): number;
+    /** Immediate silence, including release/stealing tails; routing and patch cache survive. */
+    panic(): number;
+    setMixGain(gain: number): number;
+    setTuning(tuning: TuningOptions): number;
     getDiagnostics(): Promise<DiagnosticsEvent>;
     close(): Promise<void>;
 }

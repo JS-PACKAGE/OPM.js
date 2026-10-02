@@ -48,6 +48,7 @@ function finish(message: string) {
 }
 
 const opm = new OPM({ onEvent(event) {
+  if (event.type === 'reset') { finish(`Audio reset: ${event.reason}`); return; }
   if (event.type === 'error') { finish(`Audio failed: ${event.error.message}`); return; }
   if (event.type !== 'note') return;
   if (event.state === 'accepted') live.add(event.id);

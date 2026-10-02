@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { brass } from '../src/voices/brass.js';
+import type { Synth } from '../src/core/synth.js';
 
 
 interface ProcessorMessage {
@@ -10,6 +11,8 @@ interface ProcessorMessage {
   reason?: string;
   frame?: number;
   time?: number;
+  command?: string;
+  commandId?: number;
   activeVoices?: number;
   pendingEvents?: number;
   rejectedNotes?: number;
@@ -27,7 +30,7 @@ interface TestProcessor {
   messages: ProcessorMessage[];
   notes: Map<number, unknown>;
   events: unknown[];
-  synth: import('../src/core/synth.js').Synth;
+  synth: Synth;
 }
 
 const globals = ['sampleRate', 'currentFrame', 'AudioWorkletProcessor', 'registerProcessor'];
@@ -224,6 +227,9 @@ test('registered and inline patches snapshot immediately and cannot be replaced 
   reference.receive(note(3, 160, null));
   inline.ops.forEach(op => { op.level = 0; });
   assert.deepEqual(block(processor, 128), block(reference, 128));
+  processor.receive({ type: 'noteOn', id: 4, voiceId: 1, note: 69, at: 256 / sampleRate, duration: null });
+  reference.receive({ ...note(4, 256, null), voice: source });
+  assert.deepEqual(block(processor, 256), block(reference, 256), 'slot replacement affects new notes, not admitted snapshots');
 });
 
 test('voice registrations are bounded while valid inline notes remain usable past the cache limit', () => {
@@ -246,11 +252,14 @@ test('controls and scheduled stops share the event bound and cancellation frees 
   const processor = new Processor();
   processor.receive(note(1, 1024, null));
   for (let index = 0; index < 255; index++) processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0.5 }, at: 2048 / sampleRate });
-  processor.receive({ type: 'noteOff', id: 1, at: 512 / sampleRate });
+  processor.receive({ type: 'noteOff', id: 1, commandId: 77, at: 512 / sampleRate });
   const full = diagnostics(processor);
   assert.equal(full.pendingEvents, 256);
   assert.equal(full.errors, 1);
   assert.equal(full.rejectedNotes, 0, 'control/off capacity failures cannot reject an admitted note');
+  assert.ok(processor.messages.some(message => message.type === 'command' &&
+    message.commandId === 77 && message.command === 'stop' && message.state === 'rejected' && message.reason === 'capacity'));
+  assert.equal(processor.messages.filter(message => message.type === 'note' && message.state === 'rejected').length, 0);
   processor.receive({ type: 'noteOff', id: 1 });
   assert.equal(diagnostics(processor).pendingEvents, 0);
   assert.equal(processor.notes.size, 0);
@@ -268,7 +277,7 @@ test('same-frame stops win onset and ordered onset steals reclaim scheduled tail
     processor.receive({ type: 'updateNote', id, controls: { expression: 0.5 }, at: 4096 / sampleRate });
   }
   block(processor, 0);
-  assert.deepEqual(processor.messages.filter(message => message.id === 100).map(message => [message.state, message.frame]),
+  assert.deepEqual(processor.messages.filter(message => message.type === 'note' && message.id === 100).map(message => [message.state, message.frame]),
     [['accepted', 0], ['cancelled', 32]]);
   assert.deepEqual(processor.messages.filter(message => message.state === 'started').map(message => message.id), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
   assert.deepEqual(processor.messages.filter(message => message.state === 'stolen').map(message => [message.id, message.frame]), [[1, 32]]);
@@ -303,4 +312,74 @@ test('raw controls and scheduling fields use own data and reject malformed recor
   assert.equal(processor.messages.filter(message => message.state === 'released').length, 0);
   processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0 }, at: 256 / sampleRate });
   assert.ok(block(processor, 256).every(sample => sample === 0));
+});
+
+test('full control queues report a rejected held-note stop and immediate recovery still ends the voice', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(1, 0, null));
+  block(processor, 0);
+  for (let index = 0; index < 256; index++) {
+    processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0.5 }, at: 10 });
+  }
+  processor.receive({ type: 'noteOff', id: 1, commandId: 91, at: 256 / sampleRate });
+  assert.ok(block(processor, 128, 512).some(sample => sample !== 0));
+  assert.equal(diagnostics(processor).activeVoices, 1);
+  assert.ok(processor.messages.some(message => message.type === 'command' &&
+    message.commandId === 91 && message.state === 'rejected' && message.reason === 'capacity'));
+  processor.receive({ type: 'noteOff', id: 1, commandId: 92 });
+  for (let frame = 640; frame < 10000; frame += 128) block(processor, frame);
+  assert.ok(block(processor, 10112).every(sample => sample === 0));
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.deepEqual(processor.messages.filter(message => message.type === 'note' && message.id === 1).map(message => message.state),
+    ['accepted', 'started', 'released', 'ended']);
+});
+
+test('allNotesOff cancels future automation and onsets while preserving natural release tails', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive(note(1, 0, null));
+  processor.receive(note(2, 1024, null));
+  processor.receive(note(3, 0, null));
+  block(processor, 0);
+  processor.receive({ type: 'noteOff', id: 3 });
+  for (let index = 0; index < 255; index++) processor.receive({
+    type: 'updateNote', id: 1, controls: { expression: 0.5 }, at: 10,
+  });
+  processor.receive({ type: 'allNotesOff', commandId: 100 });
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.ok(block(processor, 128).some(sample => sample !== 0), 'release tails must remain audible');
+  for (let frame = 256; frame < 10000; frame += 128) block(processor, frame);
+  assert.ok(block(processor, 10112).every(sample => sample === 0));
+  for (const id of [1, 3]) {
+    assert.deepEqual(processor.messages.filter(message => message.type === 'note' && message.id === id).map(message => message.state),
+      ['accepted', 'started', 'released', 'ended']);
+  }
+  assert.deepEqual(processor.messages.filter(message => message.type === 'note' && message.id === 2).map(message => message.state),
+    ['accepted', 'cancelled']);
+});
+
+test('panic bypasses full queues, silences release and stealing tails, then reuses the registered patch', () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const processor = new Processor();
+  processor.receive({ type: 'prepareVoice', voiceId: 1, voice: brass });
+  for (let id = 1; id <= 10; id++) processor.receive(note(id, 0, null));
+  processor.receive(note(20, 2048, null));
+  block(processor, 0);
+  processor.receive({ type: 'noteOff', id: 10 });
+  for (let index = 0; index < 255; index++) processor.receive({
+    type: 'updateNote', id: 9, controls: { pan: 1 }, at: 10,
+  });
+  processor.receive({ type: 'panic', commandId: 101 });
+  assert.ok(block(processor, 128).every(sample => sample === 0));
+  assert.ok(block(processor, 2048).every(sample => sample === 0));
+  assert.equal(diagnostics(processor).pendingEvents, 0);
+  assert.equal(diagnostics(processor).activeVoices, 0);
+  for (const id of [3, 4, 5, 6, 7, 8, 9, 10, 20]) {
+    assert.equal(processor.messages.filter(message => message.type === 'note' &&
+      message.id === id && message.state === 'cancelled').length, 1);
+  }
+  processor.receive({ type: 'noteOn', id: 21, voiceId: 1, note: 60.5, at: 2048 / sampleRate, duration: null });
+  assert.ok(block(processor, 2048).some(sample => sample !== 0));
+  assert.equal(diagnostics(processor).errors, 0);
 });

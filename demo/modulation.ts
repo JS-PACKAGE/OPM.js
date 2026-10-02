@@ -25,6 +25,13 @@ function updateButtons() {
 }
 
 const opm = new OPM({ onEvent(event) {
+  if (event.type === 'reset') {
+    activeId = null;
+    released = false;
+    updateButtons();
+    status.textContent = `Audio reset: ${event.reason}`;
+    return;
+  }
   if (event.type === 'error') {
     activeId = null;
     updateButtons();

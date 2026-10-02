@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
-import { OPM, createLookaheadScheduler, type LookaheadNote, type OPMEvent, type OPMOptions, type PlayNoteOptions } from '../src/api/index.js';
+import { OPM, createLookaheadScheduler } from '../src/api/index.js';
+import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
 
 
@@ -22,16 +23,24 @@ class MockContext {
   state = 'suspended';
   destination = {};
   audioWorklet = { addModule: async () => {} };
-  async resume() { this.state = 'running'; }
-  async close() { this.state = 'closed'; }
+  listeners = new Set<() => void>();
+  addEventListener(type: string, listener: () => void) { if (type === 'statechange') this.listeners.add(listener); }
+  removeEventListener(type: string, listener: () => void) { if (type === 'statechange') this.listeners.delete(listener); }
+  setState(state: string) {
+    this.state = state;
+    for (const listener of this.listeners) listener();
+  }
+  async suspend() { this.setState('suspended'); }
+  async resume() { this.setState('running'); }
+  async close() { this.setState('closed'); }
 }
 class MockNode {
   processor: TestProcessor;
   context: MockContext;
   port: { postMessage: (message: unknown) => void; close: () => void; onmessage: ((event: { data: unknown }) => void) | null };
-  constructor(context: MockContext) {
+  constructor(context: MockContext, _name?: string, options?: AudioWorkletNodeOptions) {
     this.context = context;
-    this.processor = new Processor();
+    this.processor = new Processor(options);
     this.port = {
       postMessage: message => this.processor.receive(structuredClone(message)),
       close: () => { this.port.onmessage = null; },
@@ -48,12 +57,14 @@ function nodeOf(opm: OPM): MockNode { return opm.node as unknown as MockNode; }
 
 const globals = ['sampleRate', 'currentFrame', 'AudioWorkletProcessor', 'registerProcessor', 'AudioContext', 'AudioWorkletNode'];
 const originals = new Map(globals.map(key => [key, Object.getOwnPropertyDescriptor(globalThis, key)]));
-let Processor: new () => TestProcessor;
+let Processor: new (options?: AudioWorkletNodeOptions) => TestProcessor;
 const sampleRate = 16000;
 Object.assign(globalThis, { sampleRate });
 Object.assign(globalThis, { currentFrame: 0 });
 Object.assign(globalThis, { AudioWorkletProcessor: class { port: Partial<MockPort> = {}; } });
-Object.assign(globalThis, { registerProcessor: (_name: string, constructor: unknown) => { Processor = constructor as new () => TestProcessor; } });
+Object.assign(globalThis, { registerProcessor: (_name: string, constructor: unknown) => {
+  Processor = constructor as new (options?: AudioWorkletNodeOptions) => TestProcessor;
+} });
 await import('../src/worklet/processor.js');
 Object.assign(globalThis, { AudioContext: MockContext, AudioWorkletNode: MockNode });
 after(() => {
@@ -141,7 +152,7 @@ test('invalid public note arguments cannot admit a note or exhaust an ID', async
   await opm.start();
   try {
     for (const args of [
-      { note: 128 }, { note: 60.5 }, { note: 60, time: -1 }, { note: 60, time: 61 },
+      { note: 128 }, { note: NaN }, { note: 60, time: -1 }, { note: 60, time: 61 },
       { note: 60, duration: 0 }, { note: 60, duration: 61 }, { note: 60, duration: NaN },
       { note: 60, velocity: -0.1 }, { note: 60, velocity: Infinity }, { note: 60, pan: 1.1 },
       { note: 60, voice: 'missing' },
@@ -331,9 +342,9 @@ test('named snapshots resist host mutation and bounded registrations survive nod
       const id = opm.playNote({ voice: { ...brass, name: `cache_${index}` }, note: 60, time: 1 });
       opm.stop(id);
     }
-    const inline = opm.playNote({ voice: { ...brass, name: 'beyond_cache' }, note: 69 });
+    const replacement = opm.playNote({ voice: { ...brass, name: 'beyond_cache' }, note: 69 });
     assert.ok(audible(render(opm).left));
-    assert.ok(events.some(event => event.type === 'note' && event.id === inline && event.state === 'started'));
+    assert.ok(events.some(event => event.type === 'note' && event.id === replacement && event.state === 'started'));
     const diagnostics = await opm.getDiagnostics();
     assert.equal(diagnostics.errors, 0);
     assert.equal(diagnostics.rejectedNotes, 0);
@@ -362,4 +373,94 @@ test('lookahead refuses over-capacity or accessor batches before they can enqueu
     assert.match(errors[1].message, /capacity/);
     assert.match(errors[2].message, /inside the window/);
   } finally { await opm.close(); }
+});
+
+test('public command failures identify the failed stop without rejecting its sounding note', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const events: OPMEvent[] = [];
+  const opm = new OPM({ onEvent: event => events.push(event) });
+  await opm.start();
+  try {
+    const id = opm.playNote({ note: 60.5 });
+    render(opm);
+    for (let index = 0; index < 256; index++) opm.updateNote(id, { expression: 0.5 }, { at: 10 });
+    const failed = opm.stop(id, { at: 0.1 });
+    assert.ok(events.some(event => event.type === 'command' && event.commandId === failed &&
+      event.command === 'stop' && event.id === id && event.state === 'rejected' && event.reason === 'capacity'));
+    assert.ok(audible(render(opm, 3200).left));
+    assert.equal((await opm.getDiagnostics()).activeVoices, 1);
+    assert.equal(events.filter(event => event.type === 'note' && event.state === 'rejected').length, 0);
+    opm.panic();
+    assert.ok(render(opm).left.every(value => value === 0));
+  } finally { await opm.close(); }
+});
+
+test('interruption cancellation clears voices and pending events, preserve resumes the same gates', async () => {
+  for (const interruption of ['cancel', 'preserve'] as const) {
+    Object.assign(globalThis, { currentFrame: 0 });
+    const context = new MockContext();
+    const events: OPMEvent[] = [];
+    const opm = new OPM({ context: context as unknown as AudioContext, interruption, onEvent: event => events.push(event) });
+    await opm.start();
+    try {
+      const held = opm.playNote({ note: 69 });
+      const pending = opm.playNote({ note: 60, time: 1 });
+      assert.ok(audible(render(opm).left));
+      context.setState('interrupted');
+      await assert.rejects(opm.getDiagnostics());
+      assert.ok(events.some(event => event.type === 'context' && event.state === 'interrupted'));
+      await opm.resume();
+      const output = render(opm);
+      const diagnostics = await opm.getDiagnostics();
+      if (interruption === 'cancel') {
+        assert.ok(output.left.every(value => value === 0));
+        assert.equal(diagnostics.activeVoices, 0);
+        assert.equal(diagnostics.pendingEvents, 0);
+        for (const id of [held, pending]) {
+          assert.equal(events.filter(event => event.type === 'note' && event.id === id && event.state === 'cancelled').length, 1);
+        }
+        assert.ok(events.some(event => event.type === 'reset' && event.reason === 'interruption'));
+      } else {
+        assert.ok(audible(output.left));
+        assert.equal(diagnostics.activeVoices, 1);
+        assert.equal(diagnostics.pendingEvents, 1);
+        assert.equal(events.filter(event => event.type === 'reset').length, 0);
+      }
+      await opm.close();
+      assert.equal(context.state, 'running', 'borrowed contexts remain owned by the host');
+      assert.equal(events.filter(event => event.type === 'reset' && event.reason === 'close').length, 1);
+    } finally { await opm.close(); }
+  }
+});
+
+test('cache replacement preserves an already accepted patch after more than 128 live edits', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  const reference = new OPM();
+  await opm.start();
+  await reference.start();
+  try {
+    opm.loadVoice('editor', brass);
+    opm.playNote({ voice: 'editor', note: 60.5, time: 64 / sampleRate });
+    reference.playNote({ note: 60.5, time: 64 / sampleRate });
+    for (let index = 0; index < 140; index++) {
+      const patch = { ...brass, name: `edit_${index}` };
+      opm.loadVoice('editor', patch);
+      const id = opm.playNote({ voice: 'editor', note: 69, time: 1 });
+      opm.stop(id);
+    }
+    assert.deepEqual(render(opm).left, render(reference).left, 'accepted notes retain the pre-edit snapshot');
+    assert.equal((await opm.getDiagnostics()).errors, 0);
+    opm.panic();
+    const silent = structuredClone(brass);
+    silent.ops.forEach(operator => { operator.level = 0; });
+    opm.loadVoice('editor', silent);
+    opm.playNote({ voice: 'editor', note: 69 });
+    assert.ok(render(opm).left.every(value => value === 0), 'later notes receive the replacement');
+  } finally { await opm.close(); await reference.close(); }
+});
+
+test('supplied null gain or tuning fails before an engine can default to audible settings', () => {
+  assert.throws(() => new OPM({ mixGain: null } as unknown as OPMOptions), RangeError);
+  assert.throws(() => new OPM({ tuning: null } as unknown as OPMOptions), TypeError);
 });

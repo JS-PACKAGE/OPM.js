@@ -91,9 +91,11 @@ test('late, repeated and unknown stops are harmless and do not report rejected a
   processor.receive({ type: 'noteOn', id: 1, voice: brass, note: 69, at: 0, duration: 32 / 16000 });
   for (let frame = 0; frame <= 4096; frame += 128) block(processor, frame);
   assert.ok(replies.some(message => message.id === 1 && message.state === 'ended'));
-  const lifecycle = replies.slice();
+  const lifecycle = replies.filter(message => message.type === 'note');
   for (const id of [1, 1, 999]) processor.receive({ type: 'noteOff', id });
-  assert.deepEqual(replies, lifecycle);
+  assert.deepEqual(replies.filter(message => message.type === 'note'), lifecycle);
+  assert.deepEqual(replies.filter(message => message.type === 'command').map(({ id, state, reason }) =>
+    ({ id, state, reason })), [1, 1, 999].map(id => ({ id, state: 'rejected', reason: 'inactive' })));
   processor.receive({ type: 'diagnostics', requestId: 1 });
   assert.equal(replies.at(-1)!.rejectedNotes, 0);
   assert.equal(replies.at(-1)!.activeVoices, 0);

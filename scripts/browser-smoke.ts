@@ -104,7 +104,7 @@ try {
         const context = new AudioContext();
         borrowedContext = context;
         const events: OPMEvent[] = [];
-        const synth = new OPM({ context, destination: null, onEvent: event => events.push(event) });
+        const synth = new OPM({ context, destination: null, interruption: 'preserve', onEvent: event => events.push(event) });
         borrowed = synth;
         const splitter = context.createChannelSplitter(2);
         const analysers = [context.createAnalyser(), context.createAnalyser()];
@@ -180,6 +180,29 @@ try {
           mark('borrowed synth close');
           await synth.close();
           check(context.state === 'running', 'closing borrowed context must not suspend or close it');
+          mark('cancel-policy interruption');
+          const cancelledEvents: OPMEvent[] = [];
+          const cancelling = new OPM({ context, destination: null, interruption: 'cancel',
+            onEvent: event => cancelledEvents.push(event) });
+          try {
+            await cancelling.start();
+            cancelling.connect(splitter);
+            const heldId = cancelling.playNote({ voice, note: 60.5 });
+            const futureId = cancelling.playNote({ voice, note: 67, time: 1 });
+            await until(() => rms(0) > 0.03, 'cancel-policy held note produces actual PCM');
+            await context.suspend();
+            await cancelling.resume();
+            await until(() => cancelledEvents.some(event => event.type === 'reset' && event.reason === 'interruption'),
+              'cancel policy reports interruption reset');
+            await until(() => rms(0) < 1e-5 && rms(1) < 1e-5, 'cancel policy clears old output after resume');
+            for (const cancelledId of [heldId, futureId]) {
+              check(cancelledEvents.filter(event => event.type === 'note' && event.id === cancelledId &&
+                event.state === 'cancelled').length === 1, 'held and future notes cancel exactly once');
+            }
+            const cancelled = await cancelling.getDiagnostics();
+            check(cancelled.activeVoices === 0 && cancelled.pendingEvents === 0 && cancelled.errors === 0,
+              'cancel policy leaves no old gates/events');
+          } finally { await cancelling.close(); }
           owned = new OPM({ destination: null });
           try {
             mark('owned context start');

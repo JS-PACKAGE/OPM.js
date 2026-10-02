@@ -64,6 +64,7 @@ start.addEventListener('click', async () => {
         destination: null,
         onEvent(event) {
           if (leaving || opm !== instance) return;
+          if (event.type === 'reset') heldId = null;
           if (event.type === 'error') {
             status.textContent = `Audio failed: ${event.error.message}`;
           } else if (event.type === 'note') {

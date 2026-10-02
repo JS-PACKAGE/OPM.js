@@ -18,6 +18,11 @@ const selector = element<HTMLSelectElement>('#voice');
 const voices = new Map<string, Voice | FrozenVoice>([['brass', brass]]);
 let heldId: number | null = null;
 const opm = new OPM({ onEvent(event) {
+  if (event.type === 'reset') {
+    heldId = null;
+    release.disabled = true;
+    status.textContent = `Audio reset: ${event.reason}`;
+  }
   if (event.type === 'error') status.textContent = event.error.message;
   if (event.type === 'note' && event.state === 'rejected') {
     status.textContent = `Note rejected: ${event.reason}`;

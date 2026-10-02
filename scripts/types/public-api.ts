@@ -1,5 +1,7 @@
-import { OPM, createLookaheadScheduler, type NoteControls, type OPMEvent, type VoiceInput } from 'opm.js';
-import { Synth, renderNote, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice, type PreparedVoice } from 'opm.js/core';
+import { OPM, createLookaheadScheduler, playSequence } from 'opm.js';
+import type { NoteControls, OPMEvent, VoiceInput, SequenceEvent, TuningOptions } from 'opm.js';
+import { Synth, renderNote, renderSequence, normalizeTuning, tuningFrequency, lfoValue, encodeWav, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice } from 'opm.js/core';
+import type { PreparedVoice } from 'opm.js/core';
 import { brass } from 'opm.js/voices/brass.js';
 import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
@@ -23,7 +25,7 @@ synth.onVoiceEnded = (id, reason) => {
 const id: number = synth.noteOn(complete, 60.5, undefined, { velocity: 0.5, pan: -0.5 });
 const prepared: PreparedVoice = prepareVoice(patch);
 const controlledId = synth.noteOn(prepared, 60);
-const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5 };
+const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5, ramp: 0.02 };
 const changed: boolean = synth.updateNote(controlledId, controls);
 const left = new Float32Array(128), right = new Float32Array(128);
 synth.render(left, right);
@@ -32,6 +34,18 @@ const stolen: number | null = synth.lastStolenId;
 const audio = renderNote({ voice: complete, pan: 1 });
 const wav: Uint8Array = encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate });
 const mono: Uint8Array = encodeWav({ left: audio.samples, sampleRate: audio.sampleRate });
+const tuning: TuningOptions = { referenceHz: 442, offsets: Array<number>(128).fill(0) };
+const frequency: number = tuningFrequency(60.5, normalizeTuning(tuning));
+const lfo: number = lfoValue(0.25, 'triangle');
+const sequence: readonly SequenceEvent[] = [
+  { type: 'note', id: 1, voice: brass, time: 0, note: 60.5, duration: 0.1 },
+  { type: 'control', id: 1, time: 0.05, controls: { expression: 0.5, ramp: 0.01 } },
+];
+const sequenceAudio = renderSequence(sequence, { sampleRate: 48000, tuning, mixGain: 0.5, stealing: 'release-first' });
+synth.setMixGain(0.5);
+synth.setTuning(tuning);
+synth.allNotesOff();
+synth.panic();
 const imports = importDX7(new Uint8Array(163));
 const descriptions: DX7ImportDescription[] = describeDX7(new Uint8Array(163));
 const carrier: number = ALGORITHMS[normalized.algorithm].carriers[0];
@@ -46,10 +60,14 @@ function observe(event: OPMEvent) {
     const time: number = event.time;
     console.log(event.id, state, event.reason, frame, time);
   } else if (event.type === 'diagnostics') console.log(event.pendingEvents, event.rejectedNotes);
-  else { const error: Error = event.error; console.error(error); }
+  else if (event.type === 'error') { const error: Error = event.error; console.error(error); }
+  else if (event.type === 'command') console.log(event.commandId, event.command, event.state, event.reason);
+  else if (event.type === 'reset') console.log(event.reason);
+  else console.log(event.state);
 }
 async function browserConsumer(context: AudioContext, destination: AudioNode) {
-  const opm = new OPM({ context, destination: null, onEvent: observe });
+  const opm = new OPM({ context, destination: null, onEvent: observe, mixGain: 0.5, tuning,
+    stealing: 'quietest', interruption: 'cancel' });
   opm.loadVoice('custom', complete);
   await opm.start();
   opm.connect(destination).disconnect(destination).connect(destination);
@@ -58,6 +76,14 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
   opm.stop(held, { at: context.currentTime + 0.2 });
   const absolute: number = opm.playNote({ note: 60, at: context.currentTime + 0.3, late: 'drop' });
   opm.stop(absolute);
+  const playback = playSequence(opm, sequence, { at: context.currentTime + 0.1 });
+  const sequenceIds: ReadonlyMap<number, number> = playback.ids;
+  playback.stop();
+  const mixCommand: number = opm.setMixGain(0.25);
+  const tuningCommand: number = opm.setTuning(tuning);
+  const releaseCommand: number = opm.allNotesOff();
+  const panicCommand: number = opm.panic();
+  void [sequenceIds, mixCommand, tuningCommand, releaseCommand, panicCommand];
   const voices: ReadonlyMap<string, VoiceInput> = opm.voices;
   const scheduler = createLookaheadScheduler(opm, ({ from, to, maxNotes }) => {
     console.log(to, maxNotes);
@@ -100,13 +126,15 @@ void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, b
 
 // Published classes remain structural contracts, without implementation state.
 declare const opmAdapter: Pick<OPM, 'sampleRate' | 'voices' | 'context' | 'node' |
-  'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'updateNote' | 'getDiagnostics' | 'close'>;
+  'loadVoice' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'updateNote' |
+  'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'getDiagnostics' | 'close'>;
 const compatibleOPM: OPM = opmAdapter;
 declare const synthAdapter: Pick<Synth, 'sampleRate' | 'maxVoices' | 'currentFrame' | 'errorCount' |
-  'lastStolenId' | 'noteOn' | 'noteOff' | 'updateNote' | 'render'>;
+  'lastStolenId' | 'noteOn' | 'noteOff' | 'updateNote' | 'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'render'>;
 const compatibleSynth: Synth = synthAdapter;
 const literalBankLimit: 262144 = MAX_BANK_BYTES;
 void [compatibleOPM, compatibleSynth, literalBankLimit];
 const bundledBank: Map<string, FrozenVoice> = parseVoiceBank(examples);
 const schemaVersion: number = voiceSchema.properties.version.const;
 void [bundledBank, schemaVersion];
+void [frequency, lfo, sequenceAudio];

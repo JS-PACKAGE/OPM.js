@@ -27,6 +27,7 @@ let gain: GainNode | null = null;
 let generation = 0;
 let busy = false;
 const opm = new OPM({ destination: null, onEvent(event) {
+  if (event.type === 'reset') ids.clear();
   if (event.type === 'error') status.textContent = `Audio failed: ${event.error.message}`;
   if (event.type === 'note' && ['ended', 'cancelled', 'stolen', 'rejected'].includes(event.state)) ids.delete(event.id);
   if (event.type === 'note' && event.state === 'rejected') status.textContent = `Note rejected: ${event.reason ?? 'unknown reason'}`;

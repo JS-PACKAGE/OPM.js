@@ -2,9 +2,15 @@ import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import type { NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import { validateNoteControls } from '../core/synth.js';
-import type { NoteControls } from '../core/synth.js';
-export type { ADSR, LFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice } from '../voices/schema.js';
-export type { NoteControls } from '../core/synth.js';
+import type { NoteControls, SynthOptions } from '../core/synth.js';
+import { normalizeTuning } from '../core/tuning.js';
+import type { TuningOptions } from '../core/tuning.js';
+export type { ADSR, LFO, LFOInput, LegacyLFO, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, LegacyVoiceV3 } from '../voices/schema.js';
+export type { NoteControls, SynthOptions } from '../core/synth.js';
+export type { TuningOptions, NormalizedTuning } from '../core/tuning.js';
+export { playSequence } from './sequence.js';
+export type { PlaySequenceOptions, SequencePlayback } from './sequence.js';
+export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from '../core/sequence.js';
 
 export type NoteState = 'accepted' | 'started' | 'released' | 'ended' | 'stolen' | 'cancelled' | 'rejected';
 export interface NoteEvent {
@@ -17,13 +23,29 @@ export interface DiagnosticsEvent {
   pendingEvents: number; errors: number; rejectedNotes: number;
 }
 export interface ErrorEvent { type: 'error'; error: Error }
-export type OPMEvent = NoteEvent | DiagnosticsEvent | ErrorEvent;
+export type CommandName = 'stop' | 'updateNote' | 'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning';
+export interface CommandEvent {
+  type: 'command'; command: CommandName; commandId?: number; id?: number;
+  /** Accepted means admitted or immediately applied, not a future execution guarantee. */
+  state: 'accepted' | 'rejected'; reason?: string; frame: number; time: number;
+}
+export type ContextState = AudioContextState | 'interrupted';
+export interface ContextEvent { type: 'context'; state: ContextState; frame: number; time: number }
+export interface ResetEvent {
+  type: 'reset'; reason: 'close' | 'failure' | 'panic' | 'interruption'; frame: number; time: number;
+}
+export type OPMEvent = NoteEvent | DiagnosticsEvent | CommandEvent | ContextEvent | ResetEvent | ErrorEvent;
 export interface OPMOptions {
   sampleRate?: number;
   /** Borrowed context: OPM never closes or suspends it. */
   context?: AudioContext;
   /** Omit to connect to context.destination; null disables automatic connection. */
   destination?: AudioNode | null;
+  mixGain?: number;
+  tuning?: TuningOptions;
+  stealing?: SynthOptions['stealing'];
+  /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
+  interruption?: 'cancel' | 'preserve';
   onEvent?: (event: OPMEvent) => void;
 }
 interface PlayNoteBase {
@@ -59,7 +81,16 @@ const MAX_DURATION = 60;
 const MAX_DIAGNOSTICS_REQUESTS = 64;
 const NOTE_STATES = ['accepted', 'started', 'released', 'ended', 'stolen', 'cancelled', 'rejected'];
 const MAX_REGISTERED_VOICES = 128;
-const NOTE_OBSERVERS = new WeakMap<OPM, Set<(event: NoteEvent) => void>>();
+const EVENT_OBSERVERS = new WeakMap<OPM, Set<(event: OPMEvent) => void>>();
+const COMMAND_NAMES: readonly CommandName[] = ['stop', 'updateNote', 'allNotesOff', 'panic', 'setMixGain', 'setTuning'];
+const CONTEXT_STATES: readonly ContextState[] = ['running', 'suspended', 'interrupted', 'closed'];
+
+function mixGainValue(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 1) {
+    throw new RangeError('mixGain must be finite and in 0..1');
+  }
+  return value;
+}
 
 function ownData(value: unknown, allowed: readonly string[], label: string): Record<string, unknown> {
   if (value === null || typeof value !== 'object' || Array.isArray(value) ||
@@ -101,35 +132,45 @@ function noteId(id: number): void {
   if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('Invalid note id');
 }
 
-function replyData(data: unknown): NoteEvent | DiagnosticsEvent | null {
+function replyData(data: unknown): Exclude<OPMEvent, ErrorEvent | ContextEvent> | null {
   if (data === null || typeof data !== 'object' || Array.isArray(data)) return null;
   const prototype = Object.getPrototypeOf(data);
   if (prototype !== Object.prototype && prototype !== null) return null;
   const type = Object.getOwnPropertyDescriptor(data, 'type');
   if (!type || !Object.hasOwn(type, 'value')) return null;
   const required = type.value === 'note' ? ['type', 'id', 'state', 'frame', 'time']
-    : type.value === 'diagnostics' ? ['type', 'requestId', 'activeVoices', 'pendingEvents', 'errors', 'rejectedNotes'] : null;
+    : type.value === 'diagnostics' ? ['type', 'requestId', 'activeVoices', 'pendingEvents', 'errors', 'rejectedNotes']
+    : type.value === 'command' ? ['type', 'command', 'state', 'frame', 'time']
+    : type.value === 'reset' ? ['type', 'reason', 'frame', 'time'] : null;
   if (!required) return null;
-  const result: Record<PropertyKey, unknown> = {};
+  const optional = type.value === 'note' ? ['reason'] : type.value === 'command' ? ['id', 'commandId', 'reason'] : [];
+  const result: Record<PropertyKey, unknown> = Object.create(null);
   for (const key of Reflect.ownKeys(data)) {
-    if (!required.includes(key as string) && !(type.value === 'note' && key === 'reason')) return null;
+    if (!required.includes(key as string) && !optional.includes(key as string)) return null;
     const descriptor = Object.getOwnPropertyDescriptor(data, key);
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) return null;
     result[key] = descriptor.value;
   }
   for (const key of required) if (!Object.hasOwn(result, key)) return null;
-  if (result.type === 'note') {
-    if (!Number.isSafeInteger(result.id) || (result.id as number) <= 0 || !NOTE_STATES.includes(result.state as string) ||
-        (Object.hasOwn(result, 'reason') && typeof result.reason !== 'string') ||
-        !Number.isSafeInteger(result.frame) || (result.frame as number) < 0 ||
-        typeof result.time !== 'number' || !Number.isFinite(result.time) || result.time < 0) return null;
-  } else {
+  if (result.type === 'diagnostics') {
     if (!Number.isSafeInteger(result.requestId) || (result.requestId as number) <= 0) return null;
     for (const key of ['activeVoices', 'pendingEvents', 'errors', 'rejectedNotes']) {
       if (!Number.isSafeInteger(result[key]) || (result[key] as number) < 0) return null;
     }
+  } else {
+    if (!Number.isSafeInteger(result.frame) || (result.frame as number) < 0 ||
+        typeof result.time !== 'number' || !Number.isFinite(result.time) || result.time < 0 ||
+        Object.hasOwn(result, 'reason') && typeof result.reason !== 'string') return null;
+    if (result.type === 'note') {
+      if (!Number.isSafeInteger(result.id) || (result.id as number) <= 0 || !NOTE_STATES.includes(result.state as string)) return null;
+    } else if (result.type === 'command') {
+      if (!COMMAND_NAMES.includes(result.command as CommandName) || !['accepted', 'rejected'].includes(result.state as string)) return null;
+      for (const key of ['id', 'commandId']) {
+        if (Object.hasOwn(result, key) && (!Number.isSafeInteger(result[key]) || (result[key] as number) <= 0)) return null;
+      }
+    } else if (!['panic', 'interruption'].includes(result.reason as string)) return null;
   }
-  return result as unknown as NoteEvent | DiagnosticsEvent;
+  return result as unknown as Exclude<OPMEvent, ErrorEvent | ContextEvent>;
 }
 
 /** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
@@ -140,11 +181,17 @@ export class OPM {
   /** @internal */
   declare private _voices: Map<string, NormalizedVoice>;
   /** @internal */
-  declare private _voiceIds: Map<NormalizedVoice, number>;
-  /** @internal */
-  declare private _rawVoices: Map<string, NormalizedVoice>;
+  declare private _voiceIds: Map<string, number>;
+  /** @internal Content keys avoid repeated serialization for immutable named patches. */
+  declare private _patchKeys: WeakMap<NormalizedVoice, string>;
   /** @internal */
   declare private _nextVoiceId: number;
+  /** @internal */
+  declare private _nextCommandId: number;
+  /** @internal */
+  declare private _synthOptions: SynthOptions;
+  /** @internal */
+  declare private _interruption: 'cancel' | 'preserve';
   declare readonly context: AudioContext | null;
   declare readonly node: AudioWorkletNode | null;
   /** @internal */
@@ -170,8 +217,8 @@ export class OPM {
   } | null | undefined;
 
   constructor(options: OPMOptions = {}) {
-    const { sampleRate, context, destination, onEvent } = ownData(options,
-      ['sampleRate', 'context', 'destination', 'onEvent'], 'OPM options') as OPMOptions;
+    const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, interruption } = ownData(options,
+      ['sampleRate', 'context', 'destination', 'onEvent', 'mixGain', 'tuning', 'stealing', 'interruption'], 'OPM options') as OPMOptions;
     if (sampleRate !== undefined && (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)) {
       throw new RangeError('sampleRate must be an integer in 8000..96000');
     }
@@ -180,11 +227,17 @@ export class OPM {
       throw new TypeError('context must be an AudioContext with AudioWorklet support');
     }
     if (onEvent !== undefined && typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
+    if (stealing !== undefined && !['oldest', 'release-first', 'quietest'].includes(stealing)) throw new RangeError('Invalid stealing policy');
+    if (interruption !== undefined && interruption !== 'cancel' && interruption !== 'preserve') throw new RangeError('Invalid interruption policy');
+    this._synthOptions = { mixGain: mixGainValue(mixGain === undefined ? 1 : mixGain),
+      tuning: normalizeTuning(tuning === undefined ? {} : tuning), stealing: stealing ?? 'oldest' };
+    this._interruption = interruption ?? 'cancel';
     this.sampleRate = sampleRate;
     this._voices = new Map([['brass', frozenPatch(brass)]]);
     this._voiceIds = new Map();
-    this._rawVoices = new Map();
+    this._patchKeys = new WeakMap();
     this._nextVoiceId = 1;
+    this._nextCommandId = 1;
     (this as MutableAudioState).context = context ?? null;
     (this as MutableAudioState).node = null;
     this.nextId = 1;
@@ -205,9 +258,24 @@ export class OPM {
 
   /** @internal */
   private _emit(event: OPMEvent): void {
-    const observers = NOTE_OBSERVERS.get(this);
-    if (event.type === 'note' && observers) for (const observe of observers) observe(event);
+    const observers = EVENT_OBSERVERS.get(this);
+    if (observers) for (const observe of observers) {
+      try { observe(event); } catch { /* Host error callbacks cannot break lifecycle cleanup. */ }
+    }
     try { this.onEvent?.(event); } catch { /* Host callbacks cannot break audio lifecycle handling. */ }
+  }
+
+  /** @internal */
+  private _reset(reason: ResetEvent['reason'], context = this.context): void {
+    const time = context?.currentTime ?? 0;
+    const frame = Math.round(time * (context?.sampleRate ?? this.sampleRate ?? 44100));
+    this._emit({ type: 'reset', reason, frame, time });
+  }
+
+  /** @internal */
+  private _commandId(): number {
+    if (!Number.isSafeInteger(this._nextCommandId) || this._nextCommandId <= 0) throw new RangeError('Command ID space exhausted');
+    return this._nextCommandId++;
   }
 
   /** @internal */
@@ -219,7 +287,7 @@ export class OPM {
   /** @internal */
   private _disposeNode(node: AudioWorkletNode | null): void {
     this._voiceIds.clear();
-    this._rawVoices.clear();
+    this._patchKeys = new WeakMap();
     this._nextVoiceId = 1;
     if (!node) return;
     if (this._contextListener?.node === node) {
@@ -243,12 +311,13 @@ export class OPM {
     (this as MutableAudioState).node = null;
     this._rejectDiagnostics(error);
     this._disposeNode(node);
+    this._reset('failure');
     this._emit({ type: 'error', error });
   }
 
   /** @internal */
   private _receive(raw: unknown): void {
-    let event: NoteEvent | DiagnosticsEvent | null;
+    let event: Exclude<OPMEvent, ErrorEvent | ContextEvent> | null;
     try { event = replyData(raw); } catch { return; }
     if (!event) return;
     if (event.type === 'diagnostics') {
@@ -300,15 +369,29 @@ export class OPM {
     let node: AudioWorkletNode | null = null;
     try {
       await context.audioWorklet.addModule(new URL('../worklet/processor.js', import.meta.url));
-      node = new globalThis.AudioWorkletNode(context, 'opm-processor', { outputChannelCount: [2] });
+      node = new globalThis.AudioWorkletNode(context, 'opm-processor', {
+        outputChannelCount: [2], processorOptions: this._synthOptions,
+      });
       (this as MutableAudioState).node = node;
       node.port.onmessage = (event) => { if (this.node === node) this._receive(event.data); };
       node.port.onmessageerror = () => this._handleFailure(node!, new Error('AudioWorklet message could not be decoded'));
       node.onprocessorerror = () => this._handleFailure(node!, new Error('AudioWorklet processor failed'));
       if (typeof context.addEventListener === 'function') {
         const listener = () => {
-          if (context.state === 'closed') this._handleFailure(node!, new Error('AudioContext is closed'));
-          else if (context.state !== 'running') this._rejectDiagnostics(new Error('AudioContext is not running; call resume() before getDiagnostics()'));
+          if (this.node !== node) return;
+          const state = context.state as ContextState;
+          if (CONTEXT_STATES.includes(state)) {
+            const time = context.currentTime;
+            this._emit({ type: 'context', state, frame: Math.round(time * context.sampleRate), time });
+          }
+          if (state === 'closed') this._handleFailure(node!, new Error('AudioContext is closed'));
+          else if (state !== 'running') {
+            this._rejectDiagnostics(new Error('AudioContext is not running; call resume() before getDiagnostics()'));
+            if (this._interruption === 'cancel') {
+              try { node!.port.postMessage({ type: 'panic', reason: 'interruption' }); }
+              catch { this._handleFailure(node!, new Error('AudioWorklet interruption cleanup failed')); }
+            }
+          }
         };
         context.addEventListener('statechange', listener);
         this._contextListener = { context, node, listener };
@@ -363,7 +446,7 @@ export class OPM {
     const velocity = data.velocity === undefined ? 1 : data.velocity;
     const pan = data.pan === undefined ? 0 : data.pan;
     const late = data.late === undefined ? 'start' : data.late;
-    if (!Number.isInteger(note) || (note as number) < 0 || (note as number) > 127) throw new RangeError('note must be a MIDI integer in 0..127');
+    if (typeof note !== 'number' || !Number.isFinite(note) || note < 0 || note > 127) throw new RangeError('note must be finite and in 0..127');
     if (Object.hasOwn(data, 'at') && Object.hasOwn(data, 'time')) throw new TypeError('at and time are mutually exclusive');
     const time = data.time === undefined ? 0 : data.time;
     if (typeof time !== 'number' || !Number.isFinite(time) || time < 0 || time > MAX_DURATION) throw new RangeError('time must be a delay in 0..60 seconds');
@@ -385,38 +468,88 @@ export class OPM {
       // Every raw call validates a fresh snapshot; mutations must not bypass validation.
       patch = frozenPatch(voice as VoiceInput);
       rawKey = JSON.stringify(patch);
-      patch = this._rawVoices.get(rawKey) ?? patch;
     }
     if (!patch) throw new RangeError('Unknown voice');
-    let voiceId = this._voiceIds.get(patch);
-    if (voiceId === undefined && this._voiceIds.size < MAX_REGISTERED_VOICES) {
-      voiceId = this._nextVoiceId++;
-      node.port.postMessage({ type: 'prepareVoice', voiceId, voice: patch });
-      this._voiceIds.set(patch, voiceId);
-      if (rawKey !== undefined) this._rawVoices.set(rawKey, patch);
+    const key = this._patchKeys.get(patch) ?? rawKey ?? JSON.stringify(patch);
+    this._patchKeys.set(patch, key);
+    let voiceId = this._voiceIds.get(key);
+    if (voiceId === undefined) {
+      if (this._voiceIds.size < MAX_REGISTERED_VOICES) voiceId = this._nextVoiceId++;
+      else {
+        const oldest = this._voiceIds.keys().next().value!;
+        voiceId = this._voiceIds.get(oldest)!;
+        // Validate in the processor before replacing: queued/active notes retain their snapshots.
+        node.port.postMessage({ type: 'prepareVoice', voiceId, voice: patch });
+        this._voiceIds.delete(oldest);
+        this._voiceIds.set(key, voiceId);
+      }
+      if (!this._voiceIds.has(key)) {
+        node.port.postMessage({ type: 'prepareVoice', voiceId, voice: patch });
+        this._voiceIds.set(key, voiceId);
+      }
+    } else {
+      this._voiceIds.delete(key);
+      this._voiceIds.set(key, voiceId);
     }
     const id = this.nextId++;
-    node.port.postMessage({ type: 'noteOn', id, ...(voiceId === undefined ? { voice: patch } : { voiceId }),
-      note, at, duration, velocity, pan, late });
+    node.port.postMessage({ type: 'noteOn', id, voiceId, note, at, duration, velocity, pan, late });
     return id;
   }
 
-  stop(id: number, options: ScheduledNoteOptions = {}): void {
+  stop(id: number, options: ScheduledNoteOptions = {}): number {
     const node = this._requireNode();
     noteId(id);
     const data = ownData(options, ['at'], 'stop options');
     const at = Object.hasOwn(data, 'at') ? absoluteTime(data.at, this.context!) : undefined;
-    node.port.postMessage({ type: 'noteOff', id, ...(at === undefined ? {} : { at }) });
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'noteOff', id, commandId, ...(at === undefined ? {} : { at }) });
+    return commandId;
   }
 
   /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
-  updateNote(id: number, controls: NoteControls, options: ScheduledNoteOptions = {}): void {
+  updateNote(id: number, controls: NoteControls, options: ScheduledNoteOptions = {}): number {
     const node = this._requireNode();
     noteId(id);
     const snapshot = validateNoteControls(controls);
     const data = ownData(options, ['at'], 'update options');
     const at = Object.hasOwn(data, 'at') ? absoluteTime(data.at, this.context!) : undefined;
-    node.port.postMessage({ type: 'updateNote', id, controls: snapshot, ...(at === undefined ? {} : { at }) });
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'updateNote', id, commandId, controls: snapshot, ...(at === undefined ? {} : { at }) });
+    return commandId;
+  }
+
+  /** Cancel all pending events and release all active gates, preserving release tails. */
+  allNotesOff(): number {
+    const node = this._requireNode();
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'allNotesOff', commandId });
+    return commandId;
+  }
+
+  /** Immediate silence, including release/stealing tails; routing and patch cache survive. */
+  panic(): number {
+    const node = this._requireNode();
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'panic', commandId });
+    return commandId;
+  }
+
+  setMixGain(gain: number): number {
+    const node = this._requireNode();
+    gain = mixGainValue(gain);
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'setMixGain', gain, commandId });
+    this._synthOptions.mixGain = gain;
+    return commandId;
+  }
+
+  setTuning(tuning: TuningOptions): number {
+    const node = this._requireNode();
+    const snapshot = normalizeTuning(tuning);
+    const commandId = this._commandId();
+    node.port.postMessage({ type: 'setTuning', tuning: snapshot, commandId });
+    this._synthOptions.tuning = snapshot;
+    return commandId;
   }
 
   getDiagnostics(): Promise<DiagnosticsEvent> {
@@ -465,6 +598,7 @@ export class OPM {
     this._processorFailure = null;
     this._rejectDiagnostics(new Error('OPM is closed'));
     this._disposeNode(node);
+    if (node) this._reset('close', context);
     if (context && !this._providedContext && context.state !== 'closed') await context.close();
   }
 }
@@ -524,11 +658,18 @@ export function createLookaheadScheduler(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let starting: Promise<void> | null = null;
   const gates = new Set<number>();
-  const observers = NOTE_OBSERVERS.get(opm) ?? new Set<(event: NoteEvent) => void>();
-  NOTE_OBSERVERS.set(opm, observers);
+  const observers = EVENT_OBSERVERS.get(opm) ?? new Set<(event: OPMEvent) => void>();
+  EVENT_OBSERVERS.set(opm, observers);
   let admitting = false;
   let admissionTerminal: number | null = null;
-  const observe = (event: NoteEvent) => {
+  const observe = (event: OPMEvent) => {
+    if (event.type === 'reset') { gates.clear(); stop(false); return; }
+    if (event.type === 'context' && event.state !== 'running') {
+      stop(false);
+      onError(new Error(`Lookahead AudioContext is ${event.state}; restart from a user gesture`));
+      return;
+    }
+    if (event.type !== 'note') return;
     if (event.state === 'ended' || event.state === 'stolen' || event.state === 'cancelled' || event.state === 'rejected') {
       gates.delete(event.id);
       if (admitting) admissionTerminal = event.id;

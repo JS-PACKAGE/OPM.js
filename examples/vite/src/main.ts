@@ -11,10 +11,15 @@ let note: number | undefined;
 let busy = false;
 
 const report = (event: OPMEvent) => {
+  if (event.type === 'reset') {
+    note = undefined;
+    stop.disabled = true;
+    status.textContent = `Reset: ${event.reason}`;
+  }
   if (event.type === 'error') status.textContent = `Error: ${event.error.message}`;
   if (event.type === 'note' && event.id === note) {
     status.textContent = event.state;
-    if (event.state === 'ended' || event.state === 'rejected' || event.state === 'stolen') {
+    if (['ended', 'rejected', 'stolen', 'cancelled'].includes(event.state)) {
       note = undefined;
       stop.disabled = true;
     }
