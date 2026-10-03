@@ -1,2 +1,2 @@
-const o="1.11.0";export{o as VERSION};
+const o="1.11.1";export{o as VERSION};
 //# sourceMappingURL=version.js.map

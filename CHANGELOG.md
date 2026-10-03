@@ -2,6 +2,14 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## v1.11.1
+
+Package version 1.11.1, a GitHub release (not on npm). Performance patch over v1.11; no API, voice-format (still v7) or protocol changes. Output differs from v1.11 by about 1e-10 for sine operators. Security: scoped static review of the `src/core` change found no evidence-backed issue.
+
+### Faster sine operators
+
+Sine operators now use a deterministic polynomial `fastSin` (odd degree-13 after reduction to ±π/2) instead of `Math.sin`, and all-sine voices with static operator levels and shared AM take a branch-light render path. Measured on Node 26 with `npm run benchmark`: `standard` 8 held voices 0.265 → 0.215 ms/block (−19%), 32 voices 1.132 → 0.900 ms (−20%), `high` 32 voices 1.977 → 1.515 ms (−23%). `fastSin` is bounded by 1 with |error| ≤ 2.0e-10 against the exact sine (about −194 dB, below Float32 resolution) plus about 1e-16·|phase| from range reduction, and is pure arithmetic, so results no longer depend on each JavaScript engine's `Math.sin` rounding. Rendered samples differ from v1.11 at the ~1e-10 level; non-sine operator shapes, LFOs and effects still use `Math.sin`. These timings are one Node process on one machine, not a browser AudioWorklet or device measurement.
+
 ## v1.11
 
 Package version 1.11.0, published as a GitHub release (not on npm). Voice format v7 (per-operator waveforms and held noise; v1–v6 inputs still accepted), optional stereo effects, MIDI program maps with RPN bend sensitivity and approximate `.opm` import. Remote CI for the release content (commit `64ed642`) passed on Node 22/24/26 and Chromium/Firefox/WebKit: https://github.com/JS-PACKAGE/OPM.js/actions/runs/37117509642. An isolated `git archive` build passed `npm run security -- --package-smoke`. Physical-device, MIDI-hardware and human-listening acceptance remain unverified, and GitHub distribution is separate from npm publication. The repository now lives at `JS-PACKAGE/OPM.js`; links to historical CI runs and review issues keep their originally recorded addresses.

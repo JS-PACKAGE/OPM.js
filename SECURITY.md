@@ -253,6 +253,8 @@ v1.10 release review: Release110Inputs approved scoped static **A/B** and Releas
 
 v1.11 review: SecInputsProtocol approved scoped static **A/B** (voice v7 validation, `.opm` parser, MIDI program/RPN boundaries, synth and effects worklet protocols, effects URL/lifecycle) with no evidence-backed vulnerability. SecDspSupply returned approved-with-fixes **C/D** with low/informational findings only: the deployment inventory now requires `worklet/fx-processor.js` (with a rejection test), the effects headroom documentation is qualified as a steady-state ceiling (a feedback decrease can briefly exceed 0.7 during its 20 ms ramp), the input table above now covers v7 and `.opm`, and capacity candidates are documented as sine-operator measurements. Reviewers ran no runtime gates. The integration owner separately observed the typecheck, the full behavioral suite, the `npm run security` gate, and a real Chromium AudioWorklet smoke of the noise and waveform voices through the effects insert. Physical devices, MIDI hardware and human listening remain unverified; this is not a release, npm publication or deployment record.
 
+v1.11.1 review: SecFastSin approved a scoped static review of the `fastSin` polynomial and all-sine render fast path (NaN/Infinity containment, |value| ≤ 1 bound, determinism, O(1) cost, state parity with the generic path) with no evidence-backed vulnerability. The reviewer ran no runtime gates; the integration owner ran tests, typecheck, the package-smoke security gates and a Chrome AudioWorklet smoke.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)
