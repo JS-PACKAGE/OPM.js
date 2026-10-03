@@ -1,6 +1,6 @@
 # Polyphony budgets, voice priority and independent buses
 
-OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/buses.html) demonstrates independent buses.
+OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (v1.9 source)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/buses.html) demonstrates independent buses; run `examples/buses.html` locally from the current checkout for current code.
 
 ## One engine, more voices
 
@@ -24,7 +24,9 @@ Use it for protected melodies, bass lines and stingers; do not use it to hide an
 
 ### What it costs
 
-The checkout-only maintenance command `npm run benchmark` renders 128-frame blocks of the real DSP. The 1.8.0 run below was taken on an Apple M5 (Node 26.7.0, 48 kHz, 2.667 ms block deadline) on a laptop whose load average was about 24 from unrelated processes, so **absolute p99 values are not meaningful and the CI budget gate was not applied**. The median cost relative to the eight-voice standard case is the useful number: cost grows roughly linearly with the number of sounding voices.
+The checkout-only maintenance command `npm run benchmark` renders 128-frame blocks of the real DSP. The **Unreleased checkout** (package version remains 1.9.0) adds exact workload metadata and conservative **candidate configurations**, using observed p99 ≤ half the block deadline by default, zero measured misses and clean diagnostics ([criteria and report fields](./acoustic-quality.md#conservative-host-capacity-candidates)). Run the current local checkout; the immutable published v1.9 archive does not include this new output. The full matrix covers 1/4/8/16/32 held voices for every quality profile; raw/prepared eight-start-per-block bursts and two/four independent eight-voice engines remain separate measured workloads. This does not measure browser effects graphs or AudioWorklet underruns.
+
+The **historical 1.8.0** scaling run below was taken on an Apple M5 (Node 26.7.0, 48 kHz, 2.667 ms block deadline) on a laptop whose load average was about 24 from unrelated processes, so **it is not a capacity recommendation and the CI budget gate was not applied**. It illustrates how cost grows with sounding voices; these relative medians are not portable scaling constants.
 
 | Scenario (median block time ÷ deadline) | Median | Relative to 8 voices |
 | --- | --- | --- |
@@ -36,7 +38,9 @@ The checkout-only maintenance command `npm run benchmark` renders 128-frame bloc
 | 2 engines × 8 voices | 1.29 | 2.0× |
 | 4 engines × 8 voices | 2.26 | 3.5× |
 
-Under that load even the eight-voice case missed its block deadline at p99 (5.7× in this run; the median stayed at 0.65×). For contrast, the release record for an unloaded run of the same host class measured the eight-voice standard p99 at 0.19× the deadline ([acoustic quality](./acoustic-quality.md#coverage-and-evidence)). Treat the table as a scaling guide only and measure on your target hardware with `npm run benchmark` (optional `OPM_BENCH_P99_BUDGET_RATIO` makes it a gate). Mobile devices have not been measured. Prefer `eco`, a lower `maxVoices`, or fewer simultaneous notes where the deadline is tight.
+Under that load even the eight-voice case missed its block deadline at p99 (5.7× in this run; the median stayed at 0.65×). For contrast, the historical unloaded run of the same host class measured the eight-voice standard p99 at 0.19× the deadline ([acoustic quality](./acoustic-quality.md#coverage-and-evidence)). Neither historical table selects a current capacity candidate. Measure again on the target host, retain all rows including worst times/misses and compare configurations **within the same workload**. An eligible steady eight-voice row does not establish eligibility for bursts, 32 voices, several buses, different patches or effects.
+
+Use `capacityGuidance.candidates` to identify exact `quality`/per-engine `maxVoices`/`engineCount`/`voicesPerEngine` combinations worth verifying, then run the matching application in the target browser and on physical devices under sustained load and interruptions. `OPM_BENCH_CAPACITY_P99_RATIO` defaults to 0.5 and can only tighten selection. The independent `OPM_BENCH_P99_BUDGET_RATIO` and `OPM_BENCH_WORST_BUDGET_RATIO` retain the original six baseline CI timing gates; comparison/matrix rows remain report-only. No command automatically lowers quality or claims realtime certification. Physical mobile acceptance must be recorded separately; Node host results cannot supply it. Lower voices, shorter tails, fewer buses or `eco` are configurations to **measure and audition**, not guaranteed safe fallbacks.
 
 ## Several engines on one AudioContext
 
@@ -67,4 +71,4 @@ For offline stems render each bus separately with `renderSequence` (or the Worke
 | A melody that accompaniment must not steal | `voicePriority` on the melody, one engine |
 | More than eight sounding notes, one tonal group | `maxVoices` up to 32; measure CPU |
 | Separate effects, ducking or stems per instrument group | One engine per bus |
-| Fewest CPU surprises on weak devices | Fewer voices, shorter releases, `eco` |
+| Reduce DSP work before target-device measurements | Fewer voices, shorter releases, fewer buses; audition `eco` |
