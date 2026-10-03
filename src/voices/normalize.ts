@@ -1,4 +1,4 @@
-import { LIMITS, lfoSync, lfoTargets, lfoWaveform } from './schema.js';
+import { LIMITS, lfoSync, lfoTargets, lfoWaveform, operatorWaveform } from './schema.js';
 import type { Algorithm, LFO, NormalizedVoice, Operator, PreparedVoice, VoiceInput } from './schema.js';
 
 const ZERO_LFO: Readonly<LFO> = Object.freeze({ rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' });
@@ -45,11 +45,11 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  const version = field(input, 'version') ?? 6;
-  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4, 5, 6].includes(field(input, 'version') as number)) {
+  const version = field(input, 'version') ?? 7;
+  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4, 5, 6, 7].includes(field(input, 'version') as number)) {
     throw new RangeError('Unsupported voice version');
   }
-  if (version !== 5 && version !== 6 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
+  if ((version as number) < 5 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
   const rawOps = field(input, 'ops');
   if (!Array.isArray(rawOps) || rawOps.length !== 4) throw new TypeError('ops must contain four operators');
   if (Reflect.ownKeys(rawOps).length !== 5) throw new TypeError('ops has unknown fields');
@@ -58,7 +58,9 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
     const op: unknown = descriptor.value;
+    if (op && typeof op === 'object' && version !== 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate requires voice version 7');
     object(op, ['ratio', 'level', 'detune', 'adsr'],
+      version === 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :
       version === 1 ? [] : version === 2 ? ['keyScale'] : version === 5 || version === 6 ?
         ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale'] : ['keyScale', 'velocitySensitivity'], 'operator');
     const adsr = field(op, 'adsr');
@@ -77,6 +79,8 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     }
     if (Object.hasOwn(op, 'frequency')) ops[i].frequency = number(field(op, 'frequency'), 'frequency');
     if (Object.hasOwn(op, 'rateKeyScale')) ops[i].rateKeyScale = number(field(op, 'rateKeyScale'), 'rateKeyScale');
+    if (Object.hasOwn(op, 'waveform')) ops[i].waveform = operatorWaveform(field(op, 'waveform'));
+    if (Object.hasOwn(op, 'noiseRate')) ops[i].noiseRate = number(field(op, 'noiseRate'), 'noiseRate');
     if (Object.hasOwn(op, 'keyScale')) {
       const scale = field(op, 'keyScale');
       object(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], [], 'keyScale');
@@ -90,7 +94,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   let lfo: LFO = ZERO_LFO;
   if (Object.hasOwn(input, 'lfo')) {
     const rawLfo = field(input, 'lfo');
-    object(rawLfo, ['rate', 'amDepth', 'pmDepth'], version === 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
+    object(rawLfo, ['rate', 'amDepth', 'pmDepth'], (version as number) >= 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
       version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : version === 4 ? ['waveform'] : [], 'lfo');
     lfo = {
       rate: number(field(rawLfo, 'rate'), 'rate'),
@@ -104,7 +108,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     if (Object.hasOwn(rawLfo, 'amTargets')) lfo.amTargets = lfoTargets(field(rawLfo, 'amTargets'));
     if (Object.hasOwn(rawLfo, 'pmTargets')) lfo.pmTargets = lfoTargets(field(rawLfo, 'pmTargets'));
   }
-  const voice: NormalizedVoice = { version: 6, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
+  const voice: NormalizedVoice = { version: 7, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4 };
   if (name !== undefined) voice.name = name as string;
   if (Object.hasOwn(input, 'pitchEnvelope')) {

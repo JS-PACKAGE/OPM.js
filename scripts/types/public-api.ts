@@ -17,7 +17,7 @@ import type { ArrangementProject, ArrangementDefinition, MidiFileLossSummary, Mi
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
-  version: 5,
+  version: 7,
   pitchEnvelope: { a: 0.01, d: 0.1, r: 0.2, initial: 0, peak: 100, sustain: 0, final: -100 },
   lfo: { rate: 5, amDepth: 0.1, pmDepth: 0.1, delay: 0.05, sync: 'global', phase: 0.25 },
   ops: [brass.ops[0], brass.ops[1], brass.ops[2], brass.ops[3]],

@@ -74,7 +74,7 @@ function restore() {
 }
 after(restore);
 const voice: VoiceInput = {
-  version: 5, name: 'transport-tone', algorithm: 7, feedback: 0, modIndex: 0,
+  version: 7, name: 'transport-tone', algorithm: 7, feedback: 0, modIndex: 0,
   lfo: { waveform: 'triangle', rate: 0, amDepth: 0, pmDepth: 0 },
   ops: [1, 0, 0, 0].map(level => ({ ratio: 1, level, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.008 } })) as unknown as VoiceInput['ops'],
 };
@@ -144,7 +144,7 @@ test('actual worklet audio follows tempo-boundary gate conversion', async () => 
 
 test('release-tied expression, late ADSR edits and a final-endpoint control match sequence PCM', async () => {
   const opm = await engine();
-  const tailVoice: VoiceInput = { ...voice, version: 5,
+  const tailVoice: VoiceInput = { ...voice, version: 7,
     ops: voice.ops.map(op => ({ ...op, adsr: { ...op.adsr, r: 0.1 } })) as unknown as VoiceInput['ops'] };
   const adsr = [{ a: 0, d: 0, s: 0.8, r: 0.2 }, { a: 0, d: 0, s: 1, r: 0.2 },
     { a: 0, d: 0, s: 1, r: 0.2 }, { a: 0, d: 0, s: 1, r: 0.2 }] as const;
@@ -179,7 +179,7 @@ test('release-tied expression, late ADSR edits and a final-endpoint control matc
 
 test('loop release-tail controls apply before the seam but endpoint controls do not leak across it', async () => {
   const opm = await engine();
-  const tailVoice: VoiceInput = { ...voice, version: 5,
+  const tailVoice: VoiceInput = { ...voice, version: 7,
     ops: voice.ops.map(op => ({ ...op, adsr: { ...op.adsr, r: 0.2 } })) as unknown as VoiceInput['ops'] };
   const transport = createTransport(opm, [
     { type: 'note', id: 1, beat: 0, duration: 0.0625, note: 69, voice: tailVoice },

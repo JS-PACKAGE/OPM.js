@@ -60,7 +60,7 @@ function restore() {
 }
 after(restore);
 function tone(attack = 0, release = 0): VoiceInput {
-  return { version: 5, name: 'performance-tone', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'performance-tone', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { waveform: 'sine', rate: 0, amDepth: 0, pmDepth: 0 },
     ops: [0, 1, 2, 3].map(index => ({ ratio: 1, level: index === 0 ? 0.8 : 0,
       detune: 0, adsr: { a: attack, d: 0, s: 1, r: release } })) as [Operator, Operator, Operator, Operator],

@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { Synth, renderNote, prepareVoice, normalizeVoice, validateNoteControls } from '../src/core/index.js';
 import { validateVoice } from '../src/voices/schema.js';
 import type { NoteControls, Voice, VoiceInput } from '../src/core/index.js';
+import type { FourOperators, LegacyOperatorV6 } from '../src/voices/schema.js';
 
 function tone(): Voice {
-  return { version: 6, name: 'expressive-v5', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'expressive-v5', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [0, 1, 2, 3].map(index => ({ ratio: 1, level: index === 0 ? 0.4 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: 0.6 } })) as Voice['ops'] };
@@ -172,7 +173,8 @@ test('legacy v5 and implicit all-operator LFO targets preserve identical express
   patch.pitchEnvelope = { a: 0.04, d: 0.1, r: 0.1, initial: -200, peak: 300, sustain: 0, final: -100 };
   const lfo = { rate: 3, amDepth: 0.6, pmDepth: 20, waveform: 'triangle' as const, delay: 0.02, sync: 'global' as const, phase: 0.125 };
   patch.lfo = lfo;
-  const legacy: VoiceInput = { ...patch, version: 5, lfo };
+  const legacy: VoiceInput = { ...patch, version: 5, lfo,
+    ops: patch.ops.map(({ waveform: _waveform, noiseRate: _noiseRate, ...op }) => op) as FourOperators<LegacyOperatorV6> };
   const explicit = structuredClone(patch);
   explicit.lfo.amTargets = explicit.lfo.pmTargets = [1, 1, 1, 1];
   const { version: _, ...omitted } = patch;

@@ -3,7 +3,7 @@ import { originalPresets } from './original.js';
 
 export const examples: readonly Voice[] = [
   {
-    "version": 6,
+    "version": 7,
     "name": "bell",
     "algorithm": 4,
     "feedback": 0,
@@ -62,7 +62,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6,
+    "version": 7,
     "name": "brass",
     "algorithm": 2,
     "feedback": 4,
@@ -121,7 +121,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6,
+    "version": 7,
     "name": "bass",
     "algorithm": 0,
     "feedback": 3,
@@ -180,7 +180,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
+    "version": 7, "name": "electric_piano", "algorithm": 4, "feedback": 1, "modIndex": 4,
     "lfo": { "rate": 3.5, "amDepth": 0.1, "pmDepth": 0, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.7, "detune": 0, "adsr": { "a": 0.002, "d": 1.2, "s": 0, "r": 0.2 },
@@ -192,7 +192,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
+    "version": 7, "name": "organ", "algorithm": 7, "feedback": 0, "modIndex": 0,
     "lfo": { "rate": 5, "amDepth": 0.08, "pmDepth": 3, "waveform": "sine" },
     "ops": [
       { "ratio": 0.5, "level": 0.8, "detune": 0, "adsr": { "a": 0.008, "d": 0, "s": 1, "r": 0.08 } },
@@ -202,7 +202,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
+    "version": 7, "name": "lead", "algorithm": 0, "feedback": 5, "modIndex": 3,
     "lfo": { "rate": 5.5, "amDepth": 0, "pmDepth": 15, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.6, "detune": 0, "adsr": { "a": 0.01, "d": 0.1, "s": 0.6, "r": 0.1 } },
@@ -213,7 +213,7 @@ export const examples: readonly Voice[] = [
     ]
   },
   {
-    "version": 6, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
+    "version": 7, "name": "strings", "algorithm": 4, "feedback": 2, "modIndex": 2.5,
     "lfo": { "rate": 4.8, "amDepth": 0.08, "pmDepth": 9, "waveform": "sine" },
     "ops": [
       { "ratio": 1, "level": 0.45, "detune": -5, "adsr": { "a": 0.2, "d": 0.4, "s": 0.6, "r": 0.5 } },

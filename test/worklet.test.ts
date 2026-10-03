@@ -390,7 +390,7 @@ test('prepared patches and detached operator automation render identically throu
   Object.assign(globalThis, { currentFrame: 0 });
   const processor = new Processor();
   const patch: Voice = {
-    version: 6, name: 'worklet-expressive', algorithm: 4, feedback: 2, modIndex: 2,
+    version: 7, name: 'worklet-expressive', algorithm: 4, feedback: 2, modIndex: 2,
     lfo: { rate: 3, amDepth: 0.2, pmDepth: 100, waveform: 'triangle', delay: 0.015, sync: 'global', phase: 0.2 },
     pitchEnvelope: { a: 0.01, d: 0.02, r: 0.03, initial: -100, peak: 100, sustain: 0, final: -200 },
     ops: [0, 1, 2, 3].map(index => ({ ratio: 1, frequency: 330 * (index + 1), rateKeyScale: 1,
@@ -463,7 +463,7 @@ test('new operator and LFO controls snapshot at admission and malformed updates 
   Object.assign(globalThis, { currentFrame: 0 });
   const processor = new Processor({ processorOptions: { maxVoices: 1, quality: 'eco' } });
   const patch: Voice = {
-    version: 6, name: 'controls', algorithm: 0, feedback: 2, modIndex: 3,
+    version: 7, name: 'controls', algorithm: 0, feedback: 2, modIndex: 3,
     lfo: { rate: 3, amDepth: 0.3, pmDepth: 200, waveform: 'sine',
       amTargets: [1, 0, 0.5, 1], pmTargets: [0, 1, 1, 0.5] },
     ops: [0, 1, 2, 3].map(index => ({ ratio: index + 1, level: 0.7, detune: 0,

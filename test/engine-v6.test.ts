@@ -8,7 +8,7 @@ import type { ADSR, Voice } from '../src/voices/schema.js';
 import { fft, filterByFourier } from './decimator-reference.js';
 
 function tone(): Voice {
-  return { version: 6, name: 'engine-test', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'engine-test', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 4, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 0.7 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.1 } })) as Voice['ops'] };

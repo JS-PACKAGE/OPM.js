@@ -4,11 +4,9 @@ import { Synth, VoiceAdmissionError, renderNote, renderSequence } from '../src/c
 import type { SequenceEvent } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
 
-const voice: Voice = {
-  version: 6, name: 'priority-tone', algorithm: 7, feedback: 0, modIndex: 0,
-  lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
-  ops: [1, 0, 0, 0].map(level => ({ ratio: 1, level, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 } })) as unknown as Voice['ops'],
-};
+const voice: Voice = { version: 7, name: 'priority-tone', algorithm: 7, feedback: 0, modIndex: 0,
+lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+ops: [1, 0, 0, 0].map(level => ({ ratio: 1, level, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 } })) as unknown as Voice['ops'], };
 const audio = (synth: Synth, frames: number) => {
   const left = new Float32Array(frames), right = new Float32Array(frames);
   synth.render(left, right);

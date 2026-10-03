@@ -50,6 +50,9 @@ export const presetMetadata: Readonly<Record<string, PresetMetadata>> = Object.f
     'src/voices/original.ts', 1, 'AM on modulators moves sideband strength, not the bass floor; PM only on the upper modulator adds motion while fundamental and sub remain stable. Short modulator decay exposes a sustained low body. Use monophonic lines and moderate velocity.', [0.35, 0.9]),
   orbit_pad: entry('pad', [48, 76], -12, 'Slow harmonic pad with asymmetric spectral and amplitude movement.',
     'src/voices/original.ts', 3, 'Shallow AM on the lower carrier preserves the body while stronger upper-pair motion changes color. PM stays on modulators; detuned carriers provide width without LFO pitch wobble. Key-scaled upper modulation limits brightness in higher chords. Allow the attack to develop and release tails to clear.', [0.25, 0.8]),
+  'noise-snare': entry('percussion', [36, 84], -6, 'Short held noise burst above two fixed-Hz body tones; original synthetic snare recipe.'),
+  'noise-hihat': entry('percussion', [36, 84], -6, 'Fast high-rate noise and a quiet square partial; original synthetic closed-hat recipe.'),
+  explosion: entry('percussion', [36, 84], -6, 'Low hold-rate noise, sub body and a brief bright transient; original short effect recipe.'),
 });
 
 /** The separate default brass export is not the bank brass recipe. */

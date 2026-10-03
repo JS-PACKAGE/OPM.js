@@ -65,7 +65,7 @@ function restore() {
 after(restore);
 
 const voice: VoiceInput = {
-  version: 5, name: 'arrangement-tone', algorithm: 7, feedback: 0, modIndex: 0,
+  version: 7, name: 'arrangement-tone', algorithm: 7, feedback: 0, modIndex: 0,
   lfo: { waveform: 'triangle', rate: 0, amDepth: 0, pmDepth: 0 },
   ops: [1, 0, 0, 0].map(level => ({ ratio: 1, level, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.008 } })) as unknown as VoiceInput['ops'],
 };

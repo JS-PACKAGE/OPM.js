@@ -173,6 +173,7 @@ interface ActiveVoice {
   tunedFrequency: number;
   frequencyScales: Float64Array;
   amGains: Float64Array; pmFactors: Float64Array;
+  waveforms: Uint8Array; noiseStates: Uint32Array; noiseTurns: Float64Array; noiseSteps: Float64Array;
 }
 
 interface MutableCounters {
@@ -181,7 +182,7 @@ interface MutableCounters {
 
 import { ALGORITHMS } from './algorithms.js';
 import { FLOOR_DB } from './envelope.js';
-import { TAU } from './operator.js';
+import { TAU, waveformCode, periodicWaveform, NOISE_SEED, advanceNoise } from './operator.js';
 import { preparedVoiceValue } from '../voices/normalize.js';
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 
@@ -274,6 +275,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     tunedFrequency: 0,
     frequencyScales: new Float64Array(4),
     amGains: new Float64Array(4), pmFactors: new Float64Array(4),
+    waveforms: new Uint8Array(4), noiseStates: new Uint32Array(4), noiseTurns: new Float64Array(4), noiseSteps: new Float64Array(4),
   };
 }
 
@@ -620,6 +622,8 @@ export class Synth {
       const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
         (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
       levels[i] = op.level * 10 ** (-(attenuation + (op.velocitySensitivity ?? 0) * (1 - velocity)) / 20);
+      active.waveforms[i] = waveformCode(op.waveform);
+      active.noiseSteps[i] = (op.noiseRate ?? 8000) / rate;
       const operatorFrequency = (op.frequency ?? frequency * op.ratio) * 2 ** (op.detune / 1200);
       active.frequencyScales[i] = TAU * 2 ** (op.detune / 1200) / rate;
       baseIncrements[i] = TAU * operatorFrequency / rate;
@@ -688,6 +692,8 @@ export class Synth {
     active.lastFadeGain = 1;
     active.carrierGain = HEADROOM / active.graph.carriers.length;
     active.phases.fill(0);
+    active.noiseStates.fill(NOISE_SEED);
+    active.noiseTurns.fill(0);
     active.values.fill(0);
     active.filters.fill(0);
     active.releaseDb.fill(0);
@@ -984,7 +990,18 @@ export class Synth {
           const operatorLevel = operatorRamping ?
             rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
           const am = lfo.amTargets ? active.amGains[op] : amGain;
-          const value = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * operatorLevel * am;
+          const code = active.waveforms[op];
+          let oscillator: number;
+          if (code === 0) oscillator = Math.sin(phases[op] + modulation);
+          else if (code === 8) {
+            oscillator = (active.noiseStates[op] & 1) === 0 ? -1 : 1;
+            const turns = active.noiseTurns[op] + active.noiseSteps[op];
+            // At the minimum clock a 20 kHz hold rate needs at most two ticks.
+            const ticks = Math.floor(turns);
+            for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
+            active.noiseTurns[op] = turns - ticks;
+          } else oscillator = periodicWaveform(phases[op] + modulation, code);
+          const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
           values[op] = value;
           const phase = phases[op] + steps[op];
           const wrapped = phase < TAU ? phase : phase - TAU;

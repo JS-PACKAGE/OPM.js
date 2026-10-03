@@ -50,14 +50,12 @@ export function verifyFourOperator(sampleRate: number, quality: QualityProfile =
     const gateFrames = Math.ceil(sampleRate * (scenario.transition ? 0.018 : 0.12));
     const gate = gateFrames / sampleRate;
     const levels = algorithm === 4 ? [0.55, 0.035, 0.43, 0.025] : [0.55, 0.43, 0.31, 0.025];
-    const voice: Voice = {
-      version: 6, name: scenario.name, algorithm, feedback: 0, modIndex: scenario.index,
-      lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
-      ops: Array.from({ length: 4 }, (_, op) => ({ ratio: scenario.ratios[op], level: levels[op], detune: 0,
-        adsr: scenario.transition ? { a: [0.006, 0.012, 0.023, 0.003][op], d: [0.025, 0.018, 0.007, 0.009][op],
-          s: [0.7, 0.4, 0.6, 0.5][op], r: [0.018, 0.026, 0.031, 0.022][op] } : { a: 0, d: 0, s: 1, r: 0.01 },
-      })) as Voice['ops'],
-    };
+    const voice: Voice = { version: 7, name: scenario.name, algorithm, feedback: 0, modIndex: scenario.index,
+    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+    ops: Array.from({ length: 4 }, (_, op) => ({ ratio: scenario.ratios[op], level: levels[op], detune: 0,
+      adsr: scenario.transition ? { a: [0.006, 0.012, 0.023, 0.003][op], d: [0.025, 0.018, 0.007, 0.009][op],
+        s: [0.7, 0.4, 0.6, 0.5][op], r: [0.018, 0.026, 0.031, 0.022][op] } : { a: 0, d: 0, s: 1, r: 0.01 },
+    })) as Voice['ops'], };
     const frequency = 440 * 2 ** ((scenario.note - 69) / 12);
     const source = Float64Array.from({ length: frames * factor }, (_, sub) => sourceAt(sub / (factor * sampleRate), voice, frequency, gate));
     const independent = filterByFourier(source, sampleRate, quality);

@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v6",
+  "title": "OPM.js canonical voice v7",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 6
+      "const": 7
     },
     "name": {
       "type": "string",
@@ -107,6 +107,8 @@ export const voiceSchema = {
           "adsr"
         ],
         "properties": {
+          "waveform": { "type": "string", "enum": ["sine", "half", "abs", "quarter", "alternating", "camel", "square", "saw", "noise"], "default": "sine" },
+          "noiseRate": { "type": "number", "minimum": 20, "maximum": 20000, "default": 8000, "description": "Noise hold clock in Hz; ignored for periodic waveforms." },
           "frequency": {
             "type": "number", "minimum": 1, "maximum": 20000,
             "description": "Fixed Hz before detune, live pitch, pitch envelope and LFO PM; overrides note times ratio."

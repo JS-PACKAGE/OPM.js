@@ -29,24 +29,20 @@ export function pmFixtures(sampleRate: number): PMFixture[] {
 }
 
 export function pmVoice(fixture: PMFixture): Voice {
-  return {
-    version: 6, name: fixture.name, algorithm: 0, feedback: 0, modIndex: fixture.index,
-    lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
-    ops: Array.from({ length: 4 }, (_, op) => ({
-      ratio: (op === 2 ? fixture.modulatorHz : fixture.carrierHz) / 440,
-      level: op === 2 ? 1 : op === 3 ? FM_LEVEL : 0,
-      detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 },
-    })) as Voice['ops'],
-  };
+  return { version: 7, name: fixture.name, algorithm: 0, feedback: 0, modIndex: fixture.index,
+  lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+  ops: Array.from({ length: 4 }, (_, op) => ({
+    ratio: (op === 2 ? fixture.modulatorHz : fixture.carrierHz) / 440,
+    level: op === 2 ? 1 : op === 3 ? FM_LEVEL : 0,
+    detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.05 },
+  })) as Voice['ops'], };
 }
 
 export function streamVoice(): Voice {
-  return {
-    version: 6, name: 'long-held-lfo-glide', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 5, amDepth: 0.4, pmDepth: 14, waveform: 'sine' },
-    ops: Array.from({ length: 4 }, () => ({ ratio: 1, level: 0.08,
-      detune: 0, adsr: { a: 0.01, d: 0, s: 1, r: 0.05 } })) as Voice['ops'],
-  };
+  return { version: 7, name: 'long-held-lfo-glide', algorithm: 7, feedback: 0, modIndex: 0,
+  lfo: { rate: 5, amDepth: 0.4, pmDepth: 14, waveform: 'sine' },
+  ops: Array.from({ length: 4 }, () => ({ ratio: 1, level: 0.08,
+    detune: 0, adsr: { a: 0.01, d: 0, s: 1, r: 0.05 } })) as Voice['ops'], };
 }
 
 // Fourier integral for integer-order J_n, evaluated with periodic trapezoidal

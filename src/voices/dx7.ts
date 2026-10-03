@@ -219,18 +219,16 @@ export function importDX7(input: Uint8Array): Voice[] {
     const { algorithm, selected } = selection(data);
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
-    const voice: Voice = {
-      version: 6, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
-      ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
-      lfo: {
-        rate: data[137] / 99 * 20,
-        amDepth: data[140] / 99 * amSensitivity,
-        pmDepth: data[139] / 99 * data[143] / 7 * 1200,
-        waveform: DX7_LFO_WAVES[data[142]],
-        delay: data[138] / 99 * 10,
-        sync: data[141] === 1 ? 'note' : 'global',
-      },
-    };
+    const voice: Voice = { version: 7, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+    ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
+    lfo: {
+      rate: data[137] / 99 * 20,
+      amDepth: data[140] / 99 * amSensitivity,
+      pmDepth: data[139] / 99 * data[143] / 7 * 1200,
+      waveform: DX7_LFO_WAVES[data[142]],
+      delay: data[138] / 99 * 10,
+      sync: data[141] === 1 ? 'note' : 'global',
+    }, };
     if (data[130] !== 50 || data[131] !== 50 || data[132] !== 50 || data[133] !== 50) {
       voice.pitchEnvelope = {
         a: seconds(data[126]), d: Math.min(10, seconds(data[127]) + seconds(data[128])), r: seconds(data[129]),

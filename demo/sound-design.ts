@@ -1,6 +1,6 @@
 import { OPM } from '../src/api/index.js';
 import type { NoteControls, QualityProfile } from '../src/api/index.js';
-import type { NormalizedVoice, FourOperators, ADSR } from '../src/voices/schema.js';
+import type { NormalizedVoice, FourOperators, ADSR, OperatorWaveform } from '../src/voices/schema.js';
 import { examples } from '../src/voices/examples.js';
 import { presetMetadata } from '../src/voices/preset-metadata.js';
 import { ALGORITHMS, designerPatch, parseDesignerPatch, envelopePoints, MAX_PATCH_BYTES } from './sound-design-model.js';
@@ -92,6 +92,8 @@ function render(): void {
     for (const name of ['a', 'd', 's', 'r'] as const) field(`op${i}-${name}`).value = String(op.adsr[name]);
     field(`op${i}-am`).value = String(patch.lfo.amTargets?.[i] ?? 1);
     field(`op${i}-pm`).value = String(patch.lfo.pmTargets?.[i] ?? 1);
+    choice(`op${i}-waveform`).value = op.waveform ?? 'sine';
+    field(`op${i}-noiseRate`).value = String(op.noiseRate ?? 8000);
   }
   for (const [id, value] of [['lfo-rate', patch.lfo.rate], ['am-depth', patch.lfo.amDepth], ['pm-depth', patch.lfo.pmDepth], ['lfo-delay', patch.lfo.delay ?? 0], ['lfo-phase', patch.lfo.phase ?? 0]] as const) field(id).value = String(value);
   choice('waveform').value = patch.lfo.waveform ?? 'sine'; choice('lfo-sync').value = patch.lfo.sync ?? 'note';
@@ -106,6 +108,8 @@ function edit(id: string): void {
     const op = candidate.ops[i]!;
     for (const key of ['ratio', 'level', 'detune'] as const) op[key] = field(`op${i}-${key}`).valueAsNumber;
     for (const key of ['a', 'd', 's', 'r'] as const) op.adsr[key] = field(`op${i}-${key}`).valueAsNumber;
+    op.waveform = choice(`op${i}-waveform`).value as OperatorWaveform;
+    op.noiseRate = field(`op${i}-noiseRate`).valueAsNumber;
   }
   candidate.lfo = { rate: field('lfo-rate').valueAsNumber, amDepth: field('am-depth').valueAsNumber, pmDepth: field('pm-depth').valueAsNumber,
     waveform: choice('waveform').value as NormalizedVoice['lfo']['waveform'], delay: field('lfo-delay').valueAsNumber, phase: field('lfo-phase').valueAsNumber,
@@ -130,13 +134,23 @@ for (const voice of examples) { const option = document.createElement('option');
 const operators = document.querySelector('#operators')!;
 for (let i = 0; i < 4; i++) {
   const group = document.createElement('fieldset'), legend = document.createElement('legend'); legend.textContent = `Operator ${i + 1}`; group.append(legend);
+  const waveLabel = document.createElement('label'), waveSelect = document.createElement('select');
+  waveLabel.textContent = 'Oscillator waveform'; waveSelect.id = `op${i}-waveform`;
+  for (const name of ['sine', 'half', 'abs', 'quarter', 'alternating', 'camel', 'square', 'saw', 'noise']) {
+    const option = document.createElement('option'); option.value = name; option.textContent = name; waveSelect.append(option);
+  }
+  waveLabel.append(waveSelect); group.append(waveLabel);
+  const noiseLabel = document.createElement('label'), noiseInput = document.createElement('input');
+  noiseLabel.textContent = 'Noise hold rate Hz (noise only)'; noiseInput.id = `op${i}-noiseRate`;
+  noiseInput.type = 'number'; noiseInput.min = '20'; noiseInput.max = '20000'; noiseInput.step = '1';
+  noiseLabel.append(noiseInput); group.append(noiseLabel);
   for (const [key, label, min, max, step] of [['ratio', 'Frequency ratio', 0.125, 32, 0.125], ['level', 'Level amplitude', 0, 1, 0.01], ['detune', 'Detune cents', -1200, 1200, 1], ['a', 'Attack seconds', 0, 10, 0.01], ['d', 'Decay seconds', 0, 10, 0.01], ['s', 'Sustain amplitude', 0, 1, 0.01], ['r', 'Release seconds', 0, 10, 0.01], ['am', 'LFO AM target weight', 0, 1, 0.1], ['pm', 'LFO PM target weight', 0, 1, 0.1]] as const) {
     const wrapper = document.createElement('label'), input = document.createElement('input'); wrapper.textContent = label; input.id = `op${i}-${key}`; input.type = 'number'; input.min = String(min); input.max = String(max); input.step = String(step); wrapper.append(input); group.append(wrapper);
   }
   operators.append(group);
 }
 function guard(action: () => void): void { try { action(); } catch (error) { status.textContent = `Rejected: ${errorText(error)}`; } }
-for (const input of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#operators input, #algorithm, #feedback, #mod-index, #patch-name, #lfo-rate, #am-depth, #pm-depth, #waveform, #lfo-delay, #lfo-phase, #lfo-sync')) input.addEventListener('change', () => guard(() => edit(input.id)));
+for (const input of document.querySelectorAll<HTMLInputElement | HTMLSelectElement>('#operators input, #operators select, #algorithm, #feedback, #mod-index, #patch-name, #lfo-rate, #am-depth, #pm-depth, #waveform, #lfo-delay, #lfo-phase, #lfo-sync')) input.addEventListener('change', () => guard(() => edit(input.id)));
 field('preview-gate').addEventListener('input', () => guard(visualize));
 function recipe(): void {
   patch = designerPatch(examples.find(voice => voice.name === choice('recipe').value)!);
@@ -176,7 +190,7 @@ button('dispose').addEventListener('click', () => { void close().then(() => { st
 choice('quality').addEventListener('change', () => { void close().then(() => { status.textContent = 'Quality selected. Old audio disposed; click Start to create the new immutable profile.'; }).catch(error => { status.textContent = errorText(error); }); });
 button('diagnostics').addEventListener('click', async () => { try { const info = await opm!.getDiagnostics(); status.textContent = `Native Worklet: voices ${info.activeVoices}; pending ${info.pendingEvents}; errors ${info.errors}; rejected ${info.rejectedNotes}.`; } catch (error) { status.textContent = errorText(error); } });
 field('host-gain').addEventListener('input', () => guard(() => { const value = field('host-gain').valueAsNumber; if (!Number.isFinite(value) || value < 0 || value > 0.3) throw new RangeError('Host gain must be 0..0.3'); document.querySelector('#host-gain-value')!.textContent = String(value); if (context && gain) gain.gain.setTargetAtTime(value, context.currentTime, 0.01); }));
-function importPatch(text: string): void { const next = parseDesignerPatch(text); patch = next; render(); retrigger(); status.textContent = 'Strict patch imported; canonical version 6. Optional fixed-frequency/key/pitch settings are preserved in JSON.'; }
+function importPatch(text: string): void { const next = parseDesignerPatch(text); patch = next; render(); retrigger(); status.textContent = 'Strict patch imported; canonical version 7. Optional waveform/noise/fixed-frequency/key/pitch settings are preserved in JSON.'; }
 button('import-patch').addEventListener('click', () => guard(() => importPatch(json.value)));
 button('export-patch').addEventListener('click', () => guard(() => { json.value = JSON.stringify(designerPatch(patch), null, 2); const url = URL.createObjectURL(new Blob([json.value], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = `${patch.name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = 'Canonical runnable patch exported locally; no upload.'; }));
 field('patch-file').addEventListener('change', async () => { const file = field('patch-file').files?.[0]; if (!file) return; try { if (file.size > MAX_PATCH_BYTES) throw new RangeError('Patch exceeds 16 KiB'); importPatch(await file.text()); } catch (error) { status.textContent = `Rejected: ${errorText(error)}`; } finally { field('patch-file').value = ''; } });

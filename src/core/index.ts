@@ -2,7 +2,7 @@ import type { CompleteVoiceInput, FrozenVoice } from '../voices/schema.js';
 import type { SynthOptions } from './synth.js';
 import { MAX_RENDER_SAMPLES, sampleRateValue } from './sequence.js';
 
-export type { ADSR, PitchEnvelope, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
+export type { ADSR, PitchEnvelope, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, OperatorWaveform, Voice, LegacyVoice, LegacyVoiceV2, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5, LegacyVoiceV6, VoiceInput, FrozenVoice, PreparedVoice } from '../voices/schema.js';
 export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions, QualityProfile } from './synth.js';
 export type { TuningOptions, NormalizedTuning } from './tuning.js';
 export { normalizeTuning, tuningFrequency } from './tuning.js';

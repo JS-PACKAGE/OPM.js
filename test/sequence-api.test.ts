@@ -71,7 +71,7 @@ after(() => {
 });
 
 function toneVoice(): Voice {
-  return { version: 6, name: 'sequence-api', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'sequence-api', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { waveform: 'triangle', rate: 3, amDepth: 0.1, pmDepth: 8 },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: 0.008 } })) as Voice['ops'] };

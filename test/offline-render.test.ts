@@ -4,7 +4,7 @@ import { HEADROOM, renderNote, Synth } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return { version: 6, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'offline', algorithm: 7, feedback: 0, modIndex: 0,
   lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
   ops: Array.from({ length: 4 }, (_, index) => ({
     ratio: 1, level: index === 0 ? 1 : 0, detune: 0,

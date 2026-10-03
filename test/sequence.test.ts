@@ -7,7 +7,7 @@ import type { Voice, ADSR } from '../src/voices/schema.js';
 
 function toneVoice(release = 0.006): Voice {
   return {
-    version: 6, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
+    version: 7, name: 'score', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { waveform: 'sine', rate: 0, amDepth: 0, pmDepth: 0 },
     ops: Array.from({ length: 4 }, (_, index) => ({ ratio: 1, level: index === 0 ? 1 : 0, detune: 0,
       adsr: { a: 0, d: 0, s: 1, r: release } })) as Voice['ops'],

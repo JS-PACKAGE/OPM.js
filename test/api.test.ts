@@ -597,20 +597,21 @@ test('command waits use intrinsic AbortSignal state and never execute signal sha
 
 test('named edits retain detached frozen ownership and register every expressive field by content', async () => {
   Object.assign(globalThis, { currentFrame: 0 });
-  const base: Voice = {
-    version: 6, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
-    lfo: { rate: 7, pmDepth: 0.1, amDepth: 0.1, waveform: 'sine' },
-    ops: [
-      { ratio: 1, level: 0.8, detune: 0, adsr: { a: 0.01, d: 0.03, s: 0.7, r: 0.02 } },
-      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
-      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
-      { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
-    ],
-  };
+  const base: Voice = { version: 7, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
+  lfo: { rate: 7, pmDepth: 0.1, amDepth: 0.1, waveform: 'sine' },
+  ops: [
+    { ratio: 1, level: 0.8, detune: 0, adsr: { a: 0.01, d: 0.03, s: 0.7, r: 0.02 } },
+    { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+    { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+    { ratio: 1, level: 0, detune: 0, adsr: { a: 0, d: 0, s: 0, r: 0 } },
+  ], };
   const changes: ((voice: Voice) => void)[] = [
     () => {},
     voice => { voice.ops[0].frequency = 880; },
     voice => { voice.ops[0].rateKeyScale = 1; },
+    voice => { voice.ops[0].waveform = 'saw'; },
+    voice => { voice.ops[0].waveform = 'noise'; voice.ops[0].noiseRate = 1234; },
+    voice => { voice.ops[0].waveform = 'noise'; voice.ops[0].noiseRate = 20000; },
     voice => { voice.pitchEnvelope = { a: 0.02, d: 0.04, r: 0.03, initial: 300, peak: 700, sustain: 0, final: -300 }; },
     voice => { voice.lfo.delay = 0.02; },
     voice => { voice.lfo.phase = 0.25; },
@@ -804,21 +805,19 @@ test('registry size is bounded, replacement frees capacity, and disposed bank op
 
 test('valid array banks cannot export beyond the UTF-8 output budget', async () => {
   const opm = new OPM();
-  const detailed: Voice = {
-    version: 6, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,
-    lfo: { rate: 19.123456789012345, amDepth: 0.12345678901234567, pmDepth: 1199.1234567890123,
-      waveform: 'triangle', delay: 9.123456789012345, sync: 'global', phase: 0.12345678901234567,
-      amTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567],
-      pmTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567] },
-    pitchEnvelope: { a: 9.123456789012345, d: 9.123456789012345, r: 9.123456789012345,
-      initial: -4321.123456789012, peak: 4321.123456789012, sustain: 321.12345678901234, final: -321.12345678901234 },
-    ops: [0, 1, 2, 3].map(() => ({
-      ratio: 31.123456789012345, level: 0.12345678901234567, detune: -1199.1234567890123,
-      adsr: { a: 9.123456789012345, d: 9.123456789012345, s: 0.12345678901234567, r: 9.123456789012345 },
-      frequency: 19999.123456789012, velocitySensitivity: 47.123456789012345, rateKeyScale: 3.1234567890123457,
-      keyScale: { breakpoint: 64, leftDbPerOctave: 23.123456789012345, rightDbPerOctave: 23.123456789012345 },
-    })) as Voice['ops'],
-  };
+  const detailed: Voice = { version: 7, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,
+  lfo: { rate: 19.123456789012345, amDepth: 0.12345678901234567, pmDepth: 1199.1234567890123,
+    waveform: 'triangle', delay: 9.123456789012345, sync: 'global', phase: 0.12345678901234567,
+    amTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567],
+    pmTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567] },
+  pitchEnvelope: { a: 9.123456789012345, d: 9.123456789012345, r: 9.123456789012345,
+    initial: -4321.123456789012, peak: 4321.123456789012, sustain: 321.12345678901234, final: -321.12345678901234 },
+  ops: [0, 1, 2, 3].map(() => ({
+    ratio: 31.123456789012345, level: 0.12345678901234567, detune: -1199.1234567890123,
+    adsr: { a: 9.123456789012345, d: 9.123456789012345, s: 0.12345678901234567, r: 9.123456789012345 },
+    frequency: 19999.123456789012, velocitySensitivity: 47.123456789012345, rateKeyScale: 3.1234567890123457,
+    keyScale: { breakpoint: 64, leftDbPerOctave: 23.123456789012345, rightDbPerOctave: 23.123456789012345 },
+  })) as Voice['ops'], };
   try {
     opm.replaceVoiceBank(Array.from({ length: 128 }, (_, index) => ({ ...detailed, name: String(index).padStart(64, 'v') })));
     assert.throws(() => opm.exportVoiceBank(), /256 KiB/);

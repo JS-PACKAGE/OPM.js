@@ -5,7 +5,7 @@ import { validateVoice } from '../src/voices/schema.js';
 import type { LegacyVoice, LegacyVoiceV2, Voice } from '../src/voices/schema.js';
 
 function voice(): Voice {
-  return { version: 6, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 7, name: 'features', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: Array.from({ length: 4 }, (_, i) => ({ ratio: 1, level: i === 0 ? 1 : 0,
       detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0.03 } })) as Voice['ops'] };
