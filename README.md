@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis with a default eight-voice budget (configurable up to 32), multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** the current checkout is package 1.11.0 (unreleased): voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. The latest published [v1.10 GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6; runtime dependencies remain empty. Voice v1–v6 inputs remain accepted.
+> **Status:** v1.11 (package 1.11.0) is the latest [GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.11): voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. Voice v1–v6 inputs remain accepted; runtime dependencies remain empty. The previous [v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6.
 >
 > GitHub release distribution and npm registry publication are separate. Use the release tarball or a source checkout; no npm publication is implied. See the [compatibility policy](./doc/compatibility.md).
 
@@ -14,7 +14,7 @@ Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.m
 
 ## New in v1.11
 
-These APIs are in the current checkout and are not part of the published v1.10 archive. Physical-device, MIDI-hardware and human-listening acceptance remain unverified.
+These APIs are new in the v1.11 release and are not part of the v1.10 archive. Physical-device, MIDI-hardware and human-listening acceptance remain unverified.
 
 - Voice format v7: per-operator `waveform` (`sine`, `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`) and `noiseRate`; see [Voice format](#voice-format) and the [expressive voice reference](./doc/expressive-voices.md).
 - Three original noise-based percussion recipes (`noise-snare`, `noise-hihat`, `explosion`) in the bundled bank.
@@ -608,7 +608,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 
 - [x] v1.0 — 4-operator FM engine, eight algorithms, feedback, ADSR, LFO, detune, browser API, and offline rendering
 - [x] v1.2 — key scaling, approximate DX7 SysEx voice import, and WAV export (regression tests and actual browser demo/import/download verified; see CHANGELOG for evidence and limits)
-- [ ] v1.11 — voice v7 waveforms and noise, stereo chorus/reverb, MIDI program maps and RPN, `.opm` import (implemented with regression tests, a real-browser audio smoke and demo coverage; not yet released, and physical-device and human-listening acceptance are unverified)
+- [x] v1.11 — voice v7 waveforms and noise, stereo chorus/reverb, MIDI program maps and RPN, `.opm` import (regression tests, a real-browser audio smoke, passing Node 22/24/26 and Chromium/Firefox/WebKit CI, and demo coverage; physical-device and human-listening acceptance are unverified)
 
 ## Limitations
 

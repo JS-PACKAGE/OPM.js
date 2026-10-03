@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## v1.11 (unreleased)
+## v1.11
 
-Package version 1.11.0 (unreleased). Voice format v7 (per-operator waveforms and held noise; v1–v6 inputs still accepted), optional stereo effects, MIDI program maps with RPN bend sensitivity and approximate `.opm` import. Not published: physical-device, MIDI-hardware and human-listening acceptance remain unverified, and GitHub distribution is separate from npm publication. The repository now lives at `JS-PACKAGE/OPM.js`; links to historical CI runs and review issues keep their originally recorded addresses.
+Package version 1.11.0, published as a GitHub release (not on npm). Voice format v7 (per-operator waveforms and held noise; v1–v6 inputs still accepted), optional stereo effects, MIDI program maps with RPN bend sensitivity and approximate `.opm` import. Remote CI for the release content (commit `64ed642`) passed on Node 22/24/26 and Chromium/Firefox/WebKit: https://github.com/JS-PACKAGE/OPM.js/actions/runs/37117509642. An isolated `git archive` build passed `npm run security -- --package-smoke`. Physical-device, MIDI-hardware and human-listening acceptance remain unverified, and GitHub distribution is separate from npm publication. The repository now lives at `JS-PACKAGE/OPM.js`; links to historical CI runs and review issues keep their originally recorded addresses.
 
 ### Approximate OPM text import
 
