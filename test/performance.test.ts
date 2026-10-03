@@ -84,6 +84,52 @@ function audio(opm: OPM, frames: number): Float32Array {
   return left;
 }
 function gate(p: Performance, key: number): number | null { return p.getPart(0).keys.find(item => item.key === key)?.gateId ?? null; }
+
+test('forced note-off validates own data and releases only its pedal key with real DSP release', async () => {
+  const s = await setup();
+  try {
+    s.performance.sustain(0, true);
+    const own = s.performance.noteOn(0, 60);
+    const foreign = s.performance.noteOn(0, 72);
+    s.performance.noteOff(0, own); s.performance.noteOff(0, foreign);
+    audio(s.opm, 512);
+    const before = s.performance.getPart(0);
+    let getters = 0;
+    assert.throws(() => s.performance.noteOff(0, own, { get force() { getters++; return true; } }), /accessor|data/i);
+    assert.throws(() => s.performance.noteOff(0, own, { force: 1 } as never), /boolean/);
+    assert.throws(() => s.performance.noteOff(0, own, { extra: true } as never), /unknown/);
+    assert.equal(getters, 0);
+    assert.deepEqual(s.performance.getPart(0), before);
+    assert.equal(s.performance.noteOff(0, own), false);
+    assert.equal(s.performance.noteOff(0, own, { force: true }), true);
+    assert.equal(s.performance.noteOff(0, own, { force: true }), false);
+    assert.deepEqual(s.performance.getPart(0).keys.map(key => key.key), [foreign]);
+    assert.equal(s.performance.getPart(0).sustain, true);
+    assert.ok(energy(audio(s.opm, 1024)) > 0.1);
+    s.performance.noteOff(0, foreign, { force: true });
+    audio(s.opm, 512);
+    assert.ok(audio(s.opm, 128).every(value => value === 0));
+  } finally { await s.close(); }
+});
+
+test('forced mono release retargets held and pedal-latched selection without changing sustain', async () => {
+  const s = await setup();
+  try {
+    s.performance.configurePart(0, { mode: 'mono', legato: true, priority: 'last' });
+    s.performance.sustain(0, true);
+    const a = s.performance.noteOn(0, 60);
+    const b = s.performance.noteOn(0, 72);
+    s.performance.noteOff(0, a);
+    s.performance.noteOff(0, b, { force: true });
+    assert.equal(s.performance.getPart(0).selectedKey, a);
+    assert.equal(s.performance.getPart(0).sustain, true);
+    assert.ok(Math.abs(frequency(audio(s.opm, 2048)) - 261.626) < 0.5);
+    s.performance.noteOff(0, a, { force: true });
+    assert.equal(s.performance.getPart(0).selectedKey, null);
+    audio(s.opm, 512);
+    assert.ok(audio(s.opm, 128).every(value => value === 0));
+  } finally { await s.close(); }
+});
 function frequency(samples: Float32Array): number {
   const crossings: number[] = [];
   for (let index = 100; index < samples.length; index++) if (samples[index - 1]! <= 0 && samples[index]! > 0) {

@@ -27,6 +27,7 @@ export interface PerformancePartOptions extends PerformancePartControls {
   voicePriority?: number;
 }
 export interface PerformanceNoteOptions { velocity?: number }
+export interface PerformanceNoteOffOptions { force?: boolean }
 export interface PerformanceKeySnapshot {
   readonly key: number;
   readonly note: number;
@@ -58,10 +59,12 @@ export interface Performance {
   updatePartNotes(part: number, controls: NoteControls): void;
   /** Independent key identity, not an OPM admission receipt. OPM must already be started. */
   noteOn(part: number, note: number, options?: PerformanceNoteOptions): number;
-  noteOff(part: number, key: number): boolean;
+  noteOff(part: number, key: number, options?: PerformanceNoteOffOptions): boolean;
   sustain(part: number, on: boolean): void;
   allNotesOff(part?: number): void;
   getPart(part: number): PerformancePartSnapshot;
+  /** Detached effective part defaults, including resolved voice operator controls (not per-key overrides). */
+  getPartControls(part: number): Readonly<NoteControls>;
   dispose(): void;
 }
 interface Key { key: number; note: number; velocity: number; held: boolean; gateId: number | null; controls: NoteControls }
@@ -150,9 +153,9 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
   function baseline(p: Part): NoteControls {
     const voice = typeof p.config.voice === 'string' ? opm.voices.get(p.config.voice)! : p.config.voice;
     return {
-      pitch: 0, glide: 0, expression: p.config.expression, pan: p.config.pan, modulation: 1, ramp: 0,
+      pitch: 0, glide: 0, expression: p.config.expression, gain: 1, pan: p.config.pan, modulation: 1, ramp: 0,
       feedback: voice.feedback, lfoRate: voice.lfo.rate, amDepth: voice.lfo.amDepth, pmDepth: voice.lfo.pmDepth,
-      operatorLevels: voice.ops.map(op => op.level) as [number, number, number, number],
+      operatorLevels: [1, 1, 1, 1],
       operatorRatios: voice.ops.map(op => op.ratio) as [number, number, number, number],
       operatorFrequencies: voice.ops.map(op => op.frequency ?? null) as [number | null, number | null, number | null, number | null],
       operatorADSR: voice.ops.map(op => op.adsr) as unknown as NoteControls['operatorADSR'],
@@ -392,13 +395,16 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       } catch (error) { removeKey(p, key.key); throw error; }
       return key.key;
     },
-    noteOff(index, id) {
+    noteOff(index, id, input = {}) {
       const p = part(index);
       number(id, 1, Number.MAX_SAFE_INTEGER, 'key', true);
+      const options = sequenceOwnData(input, ['force'], [], 'performance note-off options');
+      if (options.force !== undefined && typeof options.force !== 'boolean') throw new TypeError('force must be boolean');
+      const force = options.force === true;
       const key = p.keys.get(id);
-      if (!key || !key.held) return false;
+      if (!key || !key.held && !force) return false;
       key.held = false;
-      if (p.sustain) {
+      if (p.sustain && !force) {
         if (p.config.mode === 'mono') retarget(p);
         return true;
       }
@@ -443,6 +449,10 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       return Object.freeze({ ...p.config, sustain: p.sustain, selectedKey: p.selected,
         keys: Object.freeze(Array.from(p.keys.values(), key => Object.freeze({
           key: key.key, note: key.note, velocity: key.velocity, held: key.held, gateId: key.gateId }))) });
+    },
+    getPartControls(index) {
+      const p = part(index);
+      return validateNoteControls({ ...baseline(p), ...p.controls });
     },
     dispose() {
       if (disposed) return;

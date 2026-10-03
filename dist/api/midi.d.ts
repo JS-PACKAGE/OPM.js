@@ -1,4 +1,24 @@
 import type { Performance } from './performance.js';
+export type MidiScalarControl = 'pitch' | 'expression' | 'gain' | 'pan' | 'modulation' | 'feedback' | 'lfoRate' | 'amDepth' | 'pmDepth';
+export type MidiOperatorControl = 'operatorLevels' | 'operatorRatios' | 'operatorFrequencies';
+interface MidiControllerRange {
+    /** CC number 0..127, excluding pedal/reset/panic CC64/120/121/123. */
+    controller: number;
+    /** CC0 maps to min and CC127 to max; both endpoints must be valid engine controls. */
+    min: number;
+    max: number;
+    /** Seconds 0..10; pitch uses glide, other fields use the engine control ramp. */
+    ramp: number;
+}
+/** One CC targets one scalar or one operator element; no executable callbacks are accepted. */
+export type MidiControllerMapping = MidiControllerRange & ({
+    field: MidiScalarControl;
+    reset?: number;
+} | {
+    field: MidiOperatorControl;
+    operator: 0 | 1 | 2 | 3;
+    reset?: number | null;
+});
 /** Structural subset of Web MIDI, so hosts and tests can inject a real or simulated access object. */
 export interface MidiMessageEventLike {
     readonly data: Uint8Array | null;
@@ -30,6 +50,8 @@ export interface MidiAdapterOptions {
     pitchBendRange?: number;
     /** Restrict to these stable port IDs; default every currently and subsequently connected input. */
     inputIds?: readonly string[];
+    /** At most 128 own-data mappings. Ordinary CC defaults are overridden only for listed CCs. */
+    controllerMap?: readonly MidiControllerMapping[];
     onError?: (error: Error) => void;
 }
 export interface MidiAdapterSnapshot {
@@ -59,3 +81,4 @@ export declare function requestMidiAccess(host?: MidiNavigatorLike | undefined):
  * CC64 is sustain, CC120/123 release only this adapter's keys for the channel, and CC121 resets its controllers.
  */
 export declare function createMidiAdapter(performance: Performance, access: MidiAccessLike, options?: MidiAdapterOptions): MidiAdapter;
+export {};

@@ -34,11 +34,18 @@
       <input id="bend" type="range" min="-2" max="2" step="0.01" value="0">
       <label for="wheel">Modulation multiplier</label>
       <input id="wheel" type="range" min="0" max="2" step="0.01" value="1">
-      <label for="ratio">Operator 1 ratio</label>
+      <label for="ratio">Operator 1 ratio (MIDI CC17)</label>
       <input id="ratio" type="range" min="0.5" max="6" step="0.01" value="2">
+      <label for="feedback">Feedback (MIDI CC16)</label>
+      <input id="feedback" type="range" min="0" max="7" step="0.01" value="0">
+      <label for="level">Operator 2 level (MIDI CC18)</label>
+      <input id="level" type="range" min="0" max="2" step="0.01" value="1">
+      <label for="lfo-rate">LFO rate Hz (MIDI CC19)</label>
+      <input id="lfo-rate" type="range" min="0" max="20" step="0.01" value="0">
       <label for="glide">Lead glide seconds</label>
       <input id="glide" type="range" min="0" max="1" step="0.01" value="0.08">
     </fieldset>
+    <p class="hint">The four FM sliders and hardware knobs CC16–19 target the selected part or incoming MIDI channel respectively, with a 50 ms ramp. Operator controls preserve the other three operators. CC121 restores the FM values captured when Connect Web MIDI was clicked; pedal and panic CCs cannot be remapped. MIDI knob movements do not move the browser sliders.</p>
     <pre id="readout" aria-live="off">No audio created.</pre>
     <p class="hint">Web MIDI is optional, requires a secure context and an explicit click, and is unavailable in some browsers. The adapter handles channel-voice notes, sustain, pitch bend, wheel, volume/expression, pan, aftertouch and all-notes-off; it is not a MIDI driver and ignores SysEx. Touch pressure, where supported, drives per-key modulation.</p>
     <output id="status" role="status" aria-live="polite">Loading example…</output>

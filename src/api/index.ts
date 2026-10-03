@@ -17,14 +17,14 @@ export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions
 export { createArrangement } from './arrangement.js';
 export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementGainOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
 export { createMidiAdapter, requestMidiAccess } from './midi.js';
-export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike } from './midi.js';
+export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike, MidiControllerMapping, MidiScalarControl, MidiOperatorControl } from './midi.js';
 export { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRACKS, MAX_MIDI_FILE_EVENTS } from '../core/midi-file.js';
 export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions } from '../core/midi-file.js';
 export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES } from '../core/project.js';
 export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions } from '../core/project.js';
 export { VERSION } from '../version.js';
 export { createPerformance } from './performance.js';
-export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
+export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceNoteOffOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
 export { renderSequenceInWorker } from './render-worker.js';
 export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult, WorkerRenderPhase, WorkerRenderPhaseStatus, WorkerRenderPhaseDiagnostics } from './render-worker.js';
 

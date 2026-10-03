@@ -1,15 +1,17 @@
 import { CommandRejectedError, OPM, createLookaheadScheduler, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker, createArrangement, createMidiAdapter, requestMidiAccess, quantizeBeat, swingBeat, swingBeatEvents, VERSION } from 'opm.js';
-import type { Arrangement, ArrangementLayer, MidiAdapter, MidiAccessLike, WorkerRenderPhaseStatus, TempoPoint } from 'opm.js';
+import type { Arrangement, ArrangementLayer, ArrangementGainOptions, MidiAdapter, MidiAccessLike, MidiControllerMapping, WorkerRenderPhaseStatus, TempoPoint } from 'opm.js';
 import { copyAssets, checkDeployment } from 'opm.js/tools/assets.js';
-import type { CommandEvent, CommandWaitOptions, NoteControls, OPMEvent, PitchEnvelope, VoiceInput, SequenceEvent, TuningOptions, SequenceStream, MusicalTransport, Performance } from 'opm.js';
-import { Synth, renderNote, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, normalizeTuning, tuningFrequency, lfoValue, encodeWav, createWavEncoder, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice } from 'opm.js/core';
-import type { PreparedVoice, SequenceCapacity, ChunkedSequenceOptions, ChunkedSequenceRender, SequenceChunk, QualityProfile, WavFormat, WavEncoder } from 'opm.js/core';
+import type { CommandEvent, CommandWaitOptions, NoteControls, OPMEvent, PitchEnvelope, VoiceInput, SequenceEvent, TuningOptions, SequenceStream, MusicalTransport, Performance, PerformanceNoteOffOptions } from 'opm.js';
+import { Synth, renderNote, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, normalizeTuning, tuningFrequency, lfoValue, encodeWav, createWavEncoder, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice, parseScoreProject, serializeScoreProject, compileBeatSequence } from 'opm.js/core';
+import type { PreparedVoice, SequenceCapacity, ChunkedSequenceOptions, ChunkedSequenceRender, SequenceChunk, QualityProfile, WavFormat, WavEncoder, ScoreProject, BeatSequenceOptions } from 'opm.js/core';
 import { brass } from 'opm.js/voices/brass.js';
 import { parseVoiceBank, validateVoice, bounded, LIMITS, MAX_BANK_BYTES, type FrozenVoice } from 'opm.js/voices/schema.js';
 import { normalizeVoice as normalizeModule } from 'opm.js/voices/normalize.js';
 import { importDX7, describeDX7, type DX7ImportDescription } from 'opm.js/voices/dx7.js';
 import { examples } from 'opm.js/voices/examples.js';
 import { voiceSchema } from 'opm.js/voices/voice.schema.js';
+import { importMidiFile, exportMidiFile } from 'opm.js/midi-file';
+import type { MidiImportResult, MidiExportOptions } from 'opm.js/midi-file';
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
@@ -30,7 +32,7 @@ synth.onVoiceEnded = (id, reason) => {
 const id: number = synth.noteOn(complete, 60.5, undefined, { velocity: 0.5, pan: -0.5 });
 const prepared: PreparedVoice = prepareVoice(patch);
 const controlledId = synth.noteOn(prepared, 60);
-const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, pan: 1, modulation: 0.5, ramp: 0.02,
+const controls: NoteControls = { pitch: 7, glide: 0.1, expression: 0.7, gain: 0.5, pan: 1, modulation: 0.5, ramp: 0.02,
   operatorLevels: [1, 0.5, 0.5, 1] };
 const timbreControls: NoteControls = { feedback: 2.5, lfoRate: 4, amDepth: 0.2, pmDepth: 30,
   operatorRatios: [1, 2, 3, 4], operatorFrequencies: [null, 200, null, 400],
@@ -129,7 +131,7 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
   stream.stop();
   stream.dispose();
   const transport: MusicalTransport = createTransport(opm, [{ type: 'note', id: 1, beat: 0, duration: 4, note: 60 }],
-    { bpm: 120, tempoMap: [{ beat: 0, bpm: 120 }, { beat: 4, bpm: 90 }], timeSignature: { numerator: 4, denominator: 4 } });
+    { bpm: 120, startupLead: 0.05, tempoMap: [{ beat: 0, bpm: 120 }, { beat: 4, bpm: 90 }], timeSignature: { numerator: 4, denominator: 4 } });
   await transport.start();
   transport.pause();
   transport.seek(2);
@@ -221,10 +223,10 @@ void [frequency, lfo, sequenceAudio, pitchEnvelope];
 const prioritized = new OPM({ maxVoices: 32 }).playNote({ note: 60, voicePriority: 100 });
 const wideSynth = new Synth(48000, 32);
 wideSynth.noteOn(complete, 60, undefined, { voicePriority: 5 });
-const adaptiveLayer: ArrangementLayer = { name: 'pad', length: 16, voicePriority: 10, events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 48, voicePriority: 3 }] };
+const adaptiveLayer: ArrangementLayer = { name: 'pad', length: 16, gain: 0.5, voicePriority: 10, events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 48, voicePriority: 3 }] };
 declare const adaptiveOPM: OPM;
 const adaptive: Arrangement = createArrangement(adaptiveOPM, { layers: [adaptiveLayer], sections: [{ name: 'explore', layers: ['pad'] }], initialSection: 'explore' });
-const boundary: number = adaptive.switchSection('explore', { quantize: 'bar', preserveNotes: true });
+const boundary: number = adaptive.switchSection('explore', { quantize: 'bar', preserveNotes: true, fade: 0.25 });
 const rampMap: TempoPoint[] = [{ beat: 0, bpm: 90, curve: 'linear', endBpm: 110 }, { beat: 8, bpm: 120 }];
 const gridded: number = quantizeBeat(1.2, 0.5, 'next') + swingBeat(0.5, 0.5, 0.6) + beatsToSeconds(4, rampMap);
 declare const performanceHost: ReturnType<typeof createPerformance>;
@@ -239,6 +241,25 @@ const workerOptions = { sink: { write() {} }, startupTimeoutMs: 5000, phaseDiagn
 const assetResult = copyAssets({ destination: 'public/opm-1.8.0' }).then(deployment => deployment.reused);
 const assetCheck = checkDeployment('https://example.test/opm/', { timeoutMs: 5000 }).then(check => check.files);
 void [prioritized, wideSynth, adaptive, boundary, gridded, keyUpdated, midiAdapter, midiPromise, workerOptions, renderSequenceInWorker, assetResult, assetCheck, swingBeatEvents, VERSION];
+
+// Unreleased checkout: exact layer gain, explicit controller mapping and independent SMF adapter.
+const fadeOptions: ArrangementGainOptions = { quantize: 'beat', fade: 0.1 };
+const gainBoundary: number = adaptive.setLayerGain('pad', 0.2, fadeOptions);
+const controllerMapping: MidiControllerMapping = { controller: 74, field: 'feedback', min: 0, max: 7, ramp: 0.02 };
+const mappedMidi: MidiAdapter = createMidiAdapter(performanceHost, midiAccess, { controllerMap: [controllerMapping] });
+const partControls: Readonly<NoteControls> = performanceHost.getPartControls(0);
+const midiExportOptions: MidiExportOptions = { format: 1, ppqn: 480, tempoMap: [{ beat: 0, bpm: 120 }] };
+const midiFile: Uint8Array = exportMidiFile([{ type: 'note', id: 1, beat: 0, duration: 1, note: 60, voice: 'brass' }], midiExportOptions);
+const importedMidi: MidiImportResult = importMidiFile(midiFile, { channelVoices: { '0': 'brass' }, unsupported: 'warn' });
+void [gainBoundary, mappedMidi, partControls, importedMidi];
+const scoreProject: ScoreProject = parseScoreProject({ version: 1, voices: { brass }, events: [{ type: 'note', id: 1, beat: 0, duration: 1, note: 60, voice: 'brass' }] });
+const projectJson: string = serializeScoreProject(scoreProject);
+const beatOptions: BeatSequenceOptions = { tempoMap: scoreProject.tempoMap, voices: new Map(Object.entries(scoreProject.voices)) };
+const compiledBeats: SequenceEvent[] = compileBeatSequence(scoreProject.events, beatOptions);
+void [projectJson, compiledBeats];
+const forceRelease: PerformanceNoteOffOptions = { force: true };
+const forcedKeyReleased: boolean = performanceHost.noteOff(0, 1, forceRelease);
+void forcedKeyReleased;
 // @ts-expect-error voice priority is numeric
 new OPM().playNote({ note: 60, voicePriority: 'high' });
 // @ts-expect-error ramp curves are limited to step and linear

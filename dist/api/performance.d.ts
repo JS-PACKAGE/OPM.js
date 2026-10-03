@@ -29,6 +29,9 @@ export interface PerformancePartOptions extends PerformancePartControls {
 export interface PerformanceNoteOptions {
     velocity?: number;
 }
+export interface PerformanceNoteOffOptions {
+    force?: boolean;
+}
 export interface PerformanceKeySnapshot {
     readonly key: number;
     readonly note: number;
@@ -60,10 +63,12 @@ export interface Performance {
     updatePartNotes(part: number, controls: NoteControls): void;
     /** Independent key identity, not an OPM admission receipt. OPM must already be started. */
     noteOn(part: number, note: number, options?: PerformanceNoteOptions): number;
-    noteOff(part: number, key: number): boolean;
+    noteOff(part: number, key: number, options?: PerformanceNoteOffOptions): boolean;
     sustain(part: number, on: boolean): void;
     allNotesOff(part?: number): void;
     getPart(part: number): PerformancePartSnapshot;
+    /** Detached effective part defaults, including resolved voice operator controls (not per-key overrides). */
+    getPartControls(part: number): Readonly<NoteControls>;
     dispose(): void;
 }
 /** Device-agnostic key policy. No context, timers, MIDI driver or global panic is created. */

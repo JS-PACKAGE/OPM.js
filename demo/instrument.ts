@@ -1,5 +1,6 @@
 import { OPM, createPerformance, createMidiAdapter, requestMidiAccess } from '../src/api/index.js';
 import type { MidiAdapter, Performance } from '../src/api/index.js';
+import type { MidiControllerMapping } from '../src/api/midi.js';
 import { examples } from '../src/voices/examples.js';
 
 const $ = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
@@ -8,6 +9,13 @@ const readout = $<HTMLElement>('readout');
 const keyboard = $<HTMLElement>('keyboard');
 const KEYS = 'awsedftgyhujk';
 const BASE = 60;
+// Browser sliders and MIDI knobs use the same bounded FM ranges.
+const FM_CONTROLLERS: readonly MidiControllerMapping[] = [
+  { controller: 16, field: 'feedback', min: 0, max: 7, ramp: 0.05 },
+  { controller: 17, field: 'operatorRatios', operator: 0, min: 0.5, max: 6, ramp: 0.05 },
+  { controller: 18, field: 'operatorLevels', operator: 1, min: 0, max: 2, ramp: 0.05 },
+  { controller: 19, field: 'lfoRate', min: 0, max: 20, ramp: 0.05 },
+];
 let opm: OPM | null = null;
 let performance: Performance | null = null;
 let midi: MidiAdapter | null = null;
@@ -111,7 +119,26 @@ wheelInput.addEventListener('input', () => {
 });
 const ratioInput = $<HTMLInputElement>('ratio');
 ratioInput.addEventListener('input', () => {
-  try { performance?.updatePartNotes(part(), { operatorRatios: [Number(ratioInput.value), 1, 2, 1], ramp: 0.05 }); } catch (error) { status.textContent = describe(error); }
+  try {
+    if (!performance) return;
+    const ratios = [...performance.getPartControls(part()).operatorRatios!] as [number, number, number, number];
+    ratios[0] = Number(ratioInput.value);
+    performance.updatePartNotes(part(), { operatorRatios: ratios, ramp: 0.05 });
+  } catch (error) { status.textContent = describe(error); }
+});
+for (const [id, field] of [['feedback', 'feedback'], ['lfo-rate', 'lfoRate']] as const) {
+  $<HTMLInputElement>(id).addEventListener('input', event => {
+    try { performance?.updatePartNotes(part(), { [field]: Number((event.target as HTMLInputElement).value), ramp: 0.05 }); }
+    catch (error) { status.textContent = describe(error); }
+  });
+}
+$<HTMLInputElement>('level').addEventListener('input', event => {
+  try {
+    if (!performance) return;
+    const levels = [...performance.getPartControls(part()).operatorLevels!] as [number, number, number, number];
+    levels[1] = Number((event.target as HTMLInputElement).value);
+    performance.updatePartNotes(part(), { operatorLevels: levels, ramp: 0.05 });
+  } catch (error) { status.textContent = describe(error); }
 });
 $<HTMLInputElement>('glide').addEventListener('change', configure);
 const sustainInput = $<HTMLInputElement>('sustain');
@@ -146,8 +173,11 @@ $<HTMLButtonElement>('midi').addEventListener('click', async () => {
   try {
     const access = await requestMidiAccess();
     if (!performance) { return; }
-    midi = createMidiAdapter(performance, access, { parts: 2, pitchBendRange: 2, onError: error => { status.textContent = `MIDI: ${error.message}`; } });
-    status.textContent = midi.snapshot.inputs.length ? 'MIDI connected. Channel 1 plays part 0; channel 2 plays part 1.' : 'MIDI access granted, but no input is connected.';
+    midi = createMidiAdapter(performance, access, {
+      parts: 2, pitchBendRange: 2, controllerMap: FM_CONTROLLERS,
+      onError: error => { status.textContent = `MIDI: ${error.message}`; },
+    });
+    status.textContent = midi.snapshot.inputs.length ? 'MIDI connected. Channels 1/2 play parts 0/1; CC16 feedback, CC17 operator 1 ratio, CC18 operator 2 level, CC19 LFO rate.' : 'MIDI access granted, but no input is connected.';
   } catch (error) { status.textContent = `MIDI unavailable or denied: ${describe(error)}`; }
   refresh();
 });
