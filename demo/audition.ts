@@ -162,6 +162,7 @@ try {
 }
 for (const input of [sourceA, sourceB, noteSelector, velocitySelector, modeSelector, gainSelector, qualitySelector, seedInput]) input.addEventListener('change', () => {
   stopNotes();
+  element<HTMLInputElement>('listen-confirm').checked = false;
   clearDownload();
   report.textContent = 'Settings changed. Measure A/B again.';
   describeSelection();
@@ -267,19 +268,26 @@ function field(id: string): HTMLInputElement | HTMLTextAreaElement { return elem
 action('listen-record', async () => {
   if (findings.length >= MAX_FINDINGS) throw new RangeError(`Export or clear findings first; at most ${MAX_FINDINGS} are retained in memory.`);
   const options = settings();
+  const selectedSources = { sourceA: sourceA.value, sourceB: sourceB.value, material: modeSelector.value };
   const criteria = {} as Record<typeof LISTENING_CRITERIA[number], ListeningVerdict>;
   for (const criterion of LISTENING_CRITERIA) criteria[criterion] = element<HTMLSelectElement>(`criterion-${criterion}`).value as ListeningVerdict;
   const checked = listeningInput({ listener: field('listen-listener').value, device: field('listen-device').value,
-    output: field('listen-output').value, notes: field('listen-notes').value, criteria });
+    output: field('listen-output').value, notes: field('listen-notes').value, gainNotes: field('listen-gain-notes').value,
+    listened: element<HTMLInputElement>('listen-confirm').checked, criteria });
   const [identityA, identityB] = await Promise.all([patchIdentity(options.a.voice), patchIdentity(options.b.voice)]);
+  const pair = renderPair(options);
   findings.push({
     schema: 'opm-listening-finding-1', packageVersion: VERSION, recordedAt: new Date().toISOString(),
-    selection: { sourceA: sourceA.value, sourceB: sourceB.value, patchA: identityA.id, patchB: identityB.id, quality: options.quality,
-      material: modeSelector.value, phraseRevision: AUDITION_PHRASE_REVISION, controlRevision: AUDITION_CONTROL_REVISION,
+    selection: { ...selectedSources, patchA: identityA.id, patchB: identityB.id, quality: options.quality,
+      phraseRevision: AUDITION_PHRASE_REVISION, controlRevision: AUDITION_CONTROL_REVISION,
       seed: options.seed, note: options.note, velocity: options.velocity, gainMode: options.matched ? 'energy-matched' : 'dry' },
-    listener: checked.listener, device: checked.device, output: checked.output, notes: checked.notes, criteria: checked.criteria,
+    listener: checked.listener, device: checked.device, output: checked.output, notes: checked.notes, gainNotes: checked.gainNotes,
+    listened: checked.listened, criteria: checked.criteria,
+    playback: { renderedSampleRate: 48000, contextSampleRate: opm.context?.sampleRate ?? null,
+      masterGain: AUDITION_GAIN, sourceGains: pair.gains },
     evidence: 'Human subjective entries only. Numerical reports are separate and are not listening findings.',
   });
+  element<HTMLInputElement>('listen-confirm').checked = false;
   listenCount.textContent = `${findings.length} local finding${findings.length === 1 ? '' : 's'} in memory.`;
   status.textContent = 'Finding recorded locally; nothing was uploaded.';
 });

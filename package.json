@@ -70,6 +70,7 @@
     "browser-stress": "npm run compile && node .dev/scripts/browser-stress.js",
     "vite-smoke": "npm run compile && node .dev/scripts/vite-smoke.js",
     "device-evidence": "npm run compile && node .dev/scripts/device-evidence.js",
+    "listening-evidence": "npm run compile && node .dev/scripts/listening-evidence.js",
     "registry-verify": "npm run compile && node .dev/scripts/registry-verify.js",
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",

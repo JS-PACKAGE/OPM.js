@@ -79,6 +79,7 @@
       <label for="listen-listener">Anonymous listener label</label><input id="listen-listener" maxlength="80" autocomplete="off">
       <label for="listen-device">Device / browser / OS</label><input id="listen-device" maxlength="160" autocomplete="off">
       <label for="listen-output">Output route, headphones, device volume</label><input id="listen-output" maxlength="160" autocomplete="off">
+      <label><input id="listen-confirm" type="checkbox"> I actually listened to both A and B at these selected settings.</label>
     </fieldset>
     <fieldset>
       <legend>Preference per criterion</legend>
@@ -90,6 +91,7 @@
       <label for="criterion-controlTransition">Control transitions (ratio, feedback, ADSR)</label><select id="criterion-controlTransition"><option>not-assessed</option><option>A</option><option>B</option><option>no-preference</option></select>
       <label for="criterion-gainComfort">Gain comfort</label><select id="criterion-gainComfort"><option>not-assessed</option><option>A</option><option>B</option><option>no-preference</option></select>
       <label for="listen-notes">Notes (up to 1024 characters)</label><textarea id="listen-notes" maxlength="1024"></textarea>
+      <label for="listen-gain-notes">Subjective gain notes for this matched or dry comparison (no assumed volume units)</label><textarea id="listen-gain-notes" maxlength="1024" placeholder="For example: matched A felt louder at my unchanged headphone volume; dry B needed attenuation. Describe actual device settings, not invented dB or LUFS."></textarea>
     </fieldset>
     <div class="actions">
       <button id="listen-record" type="button" data-audition disabled>Record finding</button>

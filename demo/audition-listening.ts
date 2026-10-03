@@ -3,7 +3,7 @@ import type { FrozenVoice, Voice } from '../src/voices/schema.js';
 export const LISTENING_CRITERIA = ['attack', 'body', 'brightness', 'decay', 'release', 'controlTransition', 'gainComfort'] as const;
 export type ListeningVerdict = 'A' | 'B' | 'no-preference' | 'not-assessed';
 export interface ListeningInput {
-  listener: string; device: string; output: string; notes: string;
+  listener: string; device: string; output: string; notes: string; gainNotes: string; listened: boolean;
   criteria: Record<typeof LISTENING_CRITERIA[number], ListeningVerdict>;
 }
 
@@ -21,6 +21,7 @@ export async function patchIdentity(voice: Voice | FrozenVoice): Promise<{ id: s
 }
 
 export function listeningInput(input: ListeningInput): ListeningInput {
+  if (input.listened !== true) throw new RangeError('Confirm that you actually listened to A and B at these selected settings');
   const criteria = {} as ListeningInput['criteria'];
   for (const criterion of LISTENING_CRITERIA) {
     const value = input.criteria[criterion];
@@ -29,5 +30,6 @@ export function listeningInput(input: ListeningInput): ListeningInput {
   }
   if (Object.values(criteria).every(value => value === 'not-assessed')) throw new RangeError('Assess at least one subjective criterion; automated measurements are not listening findings');
   return { listener: text(input.listener, 80, 'Anonymous listener label'), device: text(input.device, 160, 'Device / browser / OS'),
-    output: text(input.output, 160, 'Output route / headphones / device volume'), notes: text(input.notes, 1024, 'Notes', false), criteria };
+    output: text(input.output, 160, 'Output route / headphones / device volume'), notes: text(input.notes, 1024, 'Notes', false),
+    gainNotes: text(input.gainNotes, 1024, 'Subjective gain notes', false), listened: true, criteria };
 }

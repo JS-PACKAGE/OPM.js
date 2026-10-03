@@ -90,9 +90,29 @@ The JSON report compares every source's middle-register seeded phrase against `w
 
 ### Recording a human finding
 
-The audition page has a **Record a human listening finding** panel. After you have actually listened, enter an anonymous listener label, your device/browser/OS and output route (headphones, speakers, device volume), choose A, B, no-preference or not-assessed for attack, body, brightness, decay, release, control transitions and gain comfort, and optionally add notes. At least one criterion must be assessed. A record stores the package version, the exact A/B source names **and SHA-256 identities of the normalized patches**, the DSP profile, material (single / phrase / control phrase), seed, register, velocity, gain mode and the phrase revision (`isolated-six-v2`, controls `ratio-feedback-adsr-v1`). Records live in page memory (at most 50) until **Export findings JSON** downloads them; nothing is uploaded and no audio is stored. Numerical reports are separate and are never copied into a finding.
+The audition page has a **Record a human listening finding** panel. After actually listening to both selected sources, enter an anonymous listener label, exact device/browser/OS and output route, then check the explicit listening confirmation. Choose A, B, no-preference or not-assessed for each criterion; at least one must be assessed. Changing settings clears confirmation, and recording requires a fresh declaration. Add subjective gain notes separately for the selected matched or dry comparison: describe what felt loud/comfortable and actual device settings, without inventing dB, LUFS or a calibration for a volume slider.
+
+A record stores the exact package version, A/B source names and SHA-256 normalized-patch identities, profile, material, seed, register, velocity, gain mode and phrase/control revisions. New records also store rendered/context sample rates, common master gain and actual A/B source-gain factors, separately from subjective notes. These are host gain factors, not perceptual loudness measurements. Records remain in page memory (at most 50) until **Export findings JSON**; no audio/finding is uploaded, and numerical reports never become human criteria.
 
 This repository ships no recorded findings. Until someone records and reviews them, every recipe's `listeningStatus` stays `unverified`.
+
+### Reviewing findings and host-trim decisions
+
+```sh
+npm run listening-evidence -- listener-one.json listener-two.json
+npm run --silent listening-evidence -- listener-one.json listener-two.json > listening-review.json
+```
+
+The Node 22+ checkout-only CLI validates the existing `opm-listening-findings-1` / `opm-listening-finding-1` exports. Limits are 16 regular files, 2 MiB/file, 1–50 findings/file, bounded listener/device/output/notes, exact semantic package versions, UTC timestamps, typed selection fields, SHA-256 patch identities and all seven known criteria. Empty exports, all-unassessed entries, malformed bounds/hashes and conflicting content for the same timestamp/listener/conditions are rejected. Existing exports without explicit confirmation or applied gains remain readable with provenance warnings; unknown gains stay unknown, never filled from today's metadata.
+
+The separate stdout review preserves filenames/finding indices, declared listener/device/output, notes and exact conditions. Groups require the same **ordered patch hashes**, package version, DSP profile, material, register, velocity, seed, phrase/control revisions, gain mode and recorded playback gains/sample rates. Source aliases do not substitute for hashes; swapping A/B is a different group. Matched and dry findings never merge. Duplicate copies contribute source references only. Per-criterion assessed/A/B/no-preference/not-assessed counts reflect actual entries; declared listener labels are not authenticated unique people. A successful parse is not a musical-quality pass and the command never rewrites `listeningStatus`, `hostTrimDb` or patches.
+
+Hash strings are declared identities: the current export does not embed patch snapshots, so the reviewer cannot recompute them or authenticate the listener. Correlate them with retained normalized patches or the exact versioned source when reviewing a trim proposal; a valid 64-digit hash alone is not proof of provenance.
+
+For a host-trim decision, inspect exact matched **and** dry groups and original gain-comfort notes for the same hashes/profiles/registers/velocities. Keep energy matching and safety trims separate from perceptual judgments, document the intended register and polyphony/headroom, and retain current starting trims until a maintainer can justify a change under stated conditions. Preference for A alone does not establish a numeric trim. If testing a proposed trim, record the actual applied host gain and new findings, not an inferred device-volume unit; rerun numerical safety verification after an approved metadata change. Review artifacts support a human decision, never auto-green artistic acceptance or hardware fidelity.
+
+Use the audition's reproducible isolated notes, seeded phrases and live-control phrases for controlled comparisons, then listen in the original short songs [Harbor at First Light and Lanterns on the Stair (checkout-only showcase)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/showcase.html) for arrangement context. Save the exact score project and route/profile/gain notes; short-song observations are supplemental and must not be mislabeled as the audition's single/phrase/control material. A maintainer may graduate a recipe's listening metadata only after real listeners supply reviewed originals tied to exact patch hashes and conditions, with the scope and artifact reference documented. No human findings or physical captures were supplied here; the existing unverified metadata is intentionally unchanged.
+
 
 ## Original synthetic DX7 recipes
 
