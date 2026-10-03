@@ -1,10 +1,10 @@
 # Preset and conversion acceptance
 
-The checkout-only maintenance command `npm run voice-quality` produces a fresh JSON report for the eighteen bank voices and five original synthetic DX7 fixtures, each rendered under the `eco`, `standard` and `high` DSP profiles (69 accepted rows in the historical 1.8.0 run). Serve [the current audition page (checkout-only)](../examples/audition.html) through the project's HTTP demo server for seeded A/B playback, profile selection, a held ratio/feedback/ADSR control phrase, local PCM16 WAV downloads and local human finding capture. Playback requires a user gesture and AudioWorklet support to start the owned OPM audio session; audition audio itself is an offline dry DSP buffer, not a real-time worklet stress test.
+The checkout-only maintenance command `npm run voice-quality` produces a fresh JSON report for the twenty-one bank voices and five original synthetic DX7 fixtures, each rendered under the `eco`, `standard` and `high` DSP profiles (69 accepted rows in the historical 1.8.0 run). Serve [the current audition page (checkout-only)](../examples/audition.html) through the project's HTTP demo server for seeded A/B playback, profile selection, a held ratio/feedback/ADSR control phrase, local PCM16 WAV downloads and raw/matched numerical comparisons. No human acceptance is implied.
 
 ## Bank, provenance and host trim
 
-The existing seven recipes remain in `examples`; their synthesis parameters are unchanged, with current v6 format labels. All presets leave the optional `amTargets`/`pmTargets` tuples absent, retaining implicit all-operator LFO modulation. Explicit legacy v1–v5 inputs retain their old field restrictions and normalize to v6; they reject these new targets. See the [voice v6 guide](./expressive-voices.md#lfo) for selective modulation and immutable target snapshots. Eight additions are authored specifically as four-operator parameter recipes, not converted emulator patches, downloaded SysEx, sampled recordings or claims of acoustic/hardware fidelity:
+The existing seven recipes remain in `examples`; their synthesis parameters are unchanged, with current v7 format labels. Legacy v1–v6 inputs retain their original restrictions and normalize to v7; v1–v5 reject selective LFO targets and v1–v6 reject operator waveforms/noise rate. See the [voice v7 guide](./expressive-voices.md) for modulation, oscillator shapes and immutable snapshots. These original four-operator recipes are not converted emulator patches, downloaded SysEx, sampled recordings or claims of acoustic/hardware fidelity:
 
 | Addition | Intended MIDI register | Timbral design |
 | --- | --- | --- |
@@ -16,10 +16,13 @@ The existing seven recipes remain in `examples`; their synthesis parameters are 
 | `membrane_tom` | 36–60 | Short body with a downward pitch-envelope transient. |
 | `fixed_hz_chime` | 48–84 | Additive 317/523/829/1237 Hz partials independent of key pitch. |
 | `wire_kalimba` | 48–84 | Key-tracking plucked body and fixed-Hz transient modulator. |
+| `noise-snare` | 36–84 | Short noise burst with fixed-Hz body tones. |
+| `noise-hihat` | 36–84 | High hold-rate noise and a brief quiet square partial. |
+| `explosion` | 36–84 | Low hold-rate noise, sub body and bright transient. |
 
 All intended base velocities are 0.25–1. Phrase articulation reaches 0.1625; the numerical safety sweep also includes that soft boundary. Register labels express intended musical use, not a promise that notes outside them are invalid. Fixed-Hz operators ignore MIDI/tuning frequency but still respond to detune, pitch controls/envelope and LFO pitch modulation. Ratios remain present in the strict schema. Rate key scaling changes envelope times; none of these fields implement chip register behavior.
 
-Machine-readable `presetMetadata` in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/src/voices/preset-metadata.ts) records every bank recipe's provenance kind, source, Apache-2.0 license, non-emulator status, family, intended register/velocity, purpose and host trim. `defaultBrassMetadata` covers the separate default `brass.js` recipe, which differs from bank brass. Existing repository recipes are marked `repository-recipe`; additions are `original-recipe`. Metadata is deliberately **outside** strict voice objects: do not merge it into a patch submitted to validation.
+Machine-readable `presetMetadata` in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/src/voices/preset-metadata.ts) records every bank recipe's provenance kind, source, Apache-2.0 license, non-emulator status, family, intended register/velocity, purpose and host trim. `defaultBrassMetadata` covers the separate default `brass.js` recipe, which differs from bank brass. Existing repository recipes are marked `repository-recipe`; additions are `original-recipe`. Metadata is deliberately **outside** strict voice objects: do not merge it into a patch submitted to validation.
 
 Package wildcard exports expose the banks and metadata without additional runtime dependencies:
 
@@ -63,6 +66,9 @@ Usage metadata for every bank voice (`presetMetadata`, outside the strict voice 
 | `tide_keys` | keys | 48–84 | 0.25–0.9 | 4 | −9 | original.ts |
 | `ember_bass` | bass | 36–60 | 0.35–0.9 | 1 | −9 | original.ts |
 | `orbit_pad` | pad | 48–76 | 0.25–0.8 | 3 | −12 | original.ts |
+| `noise-snare` | percussion | 36–84 | 0.25–1 | 4 | −6 | original.ts |
+| `noise-hihat` | percussion | 36–84 | 0.25–1 | 4 | −6 | original.ts |
+| `explosion` | percussion | 36–84 | 0.25–1 | 4 | −6 | original.ts |
 
 These numbers come from authoring intent plus the numerical sweeps below. Every metadata record has `listeningStatus: 'unverified'`: no listener has endorsed a recipe.
 
@@ -76,7 +82,7 @@ Reports render centered stereo at 48 kHz with a 0.8-second gate plus note-scaled
 
 Every measured cell must be finite, error-free, peak ≤ `HEADROOM` + 0.000001 and gate RMS > 0.000001. Report safety trims are attenuation-only, bounded −24..0 dB, with single-note targets peak ≤ −12 dBFS and gate RMS ≤ −24 dBFS. A bounded safety suggestion cannot guarantee those targets for arbitrary future patches. The command exits unsuccessfully on rejection and validates synthetic Yamaha checksums and equivalent packed/single conversion.
 
-[`test/preset-quality.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/test/preset-quality.test.ts) covers finite/headroom/non-silence across every semitone of the eight additions' intended registers at 22.05 kHz and soft/medium/hard velocities. It also checks fixed-Hz partial localization/key invariance and held-gate mallet decay versus pad buildup. These are behavioral numerical regressions, not object snapshots or artistic verdicts. The 48 kHz report samples register cells; neither report nor sweep certifies every velocity, sample rate, polyphonic combination or live control transition.
+[`test/preset-quality.test.ts` (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/test/preset-quality.test.ts) covers finite/headroom/non-silence across every semitone of the eight additions' intended registers at 22.05 kHz and soft/medium/hard velocities. It also checks fixed-Hz partial localization/key invariance and held-gate mallet decay versus pad buildup. These are behavioral numerical regressions, not object snapshots or artistic verdicts. The 48 kHz report samples register cells; neither report nor sweep certifies every velocity, sample rate, polyphonic combination or live control transition.
 
 ## Repeatable listening workflow
 
@@ -139,6 +145,6 @@ Host-trim proposals require reviewed originals under matching hashes and stated 
 
 ## Original synthetic DX7 recipes
 
-[`demo/audition-fixtures.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/demo/audition-fixtures.ts) generates valid-checksum VCED singles and a VMEM bank from original recipes, using Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. The fixtures exercise three paired carriers, six additive carriers, a fixed-frequency carrier, velocity-sensitive modulation and equivalent packed-bank conversion. The fixed carrier retains its approximately 263 Hz frequency in canonical v6 instead of a MIDI-60 ratio approximation; imports leave LFO operator targets absent to preserve the established conversion sound.
+[`demo/audition-fixtures.ts` (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/demo/audition-fixtures.ts) generates valid-checksum VCED singles and a VMEM bank from original recipes, using Yamaha DX7 manual pp. 30–31 and DX7II Add-11 layout tables. The fixtures exercise three paired carriers, six additive carriers, a fixed-frequency carrier, velocity-sensitive modulation and equivalent packed-bank conversion. The fixed carrier retains its approximately 263 Hz frequency in canonical v7 instead of a MIDI-60 ratio approximation; imports leave LFO operator targets and operator waveforms absent to preserve the established conversion sound.
 
 The page and report include `describeDX7()` routing/loss warnings. Four slots cannot preserve all six-operator topologies; retained/dropped operators and approximate envelopes, levels, feedback, LFO, keyboard scaling and velocity transfer functions still matter. See the converter's current warnings for supported mappings rather than inferring that every source parameter is exact. There is **no original six-operator DX7 reference renderer** here: A/B compares OPM recipes and converted synthetic sources, not lossless conversion or DX7 hardware fidelity.

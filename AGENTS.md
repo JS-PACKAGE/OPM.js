@@ -6,7 +6,7 @@ Instructions for AI coding agents working in this repository. Read this before t
 
 OPM.js is a **4-operator FM synthesis engine for the browser**, inspired by the Yamaha YM2151 (OPM) sound chip. Its strict TypeScript implementation ships as plain JavaScript ES modules powered by the Web Audio API, designed to be embedded in games and creative web apps.
 
-- **Status:** v1.10 GitHub release (package 1.10.0): portable score and Arrangement projects, opt-in expressive Standard MIDI exchange with loss summaries, scoped capacity guidance and bounded local MIDI/physical/listening campaign preparation. Voice format remains v6; physical-device/MIDI and human-listening acceptance remain unverified. Keep public APIs, voice format and README synchronized; GitHub distribution and npm publication are separate.
+- **Status:** v1.10 is the latest GitHub release (package 1.10.0, voice format v6); the checkout is package 1.11.0 (unreleased, voice format v7): per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program maps with RPN bend sensitivity and approximate `.opm` patch import. Physical-device/MIDI and human-listening acceptance remain unverified. Keep public APIs, voice format and README synchronized; GitHub distribution and npm publication are separate.
 - **License:** Apache-2.0. All contributions must be Apache-2.0 compatible. Never add GPL/AGPL code.
 - **Usage:** Start with [README: Getting started](./README.md#getting-started); the [English](./doc/usage.en.md) and [繁體中文](./doc/usage.zh-TW.md) guides cover installation, deployment, and executable examples.
 
@@ -32,8 +32,8 @@ OPM (public API)                     processor
                                        LFO (AM / PM) → stereo out
 ```
 
-- `src/core/` — pure DSP, offline sequence rendering, incremental WAV, beat conversion, versioned score projects and the independent MIDI-file adapter. **No Web Audio imports, including core declaration dependencies.**
-- `src/worklet/` — AudioWorkletProcessor and strict bounded message protocol.
+- `src/core/` — pure DSP (including the optional stereo chorus/reverb in `fx.ts`), offline sequence rendering, incremental WAV, beat conversion, versioned score projects and the independent MIDI-file adapter. **No Web Audio imports, including core declaration dependencies.**
+- `src/worklet/` — AudioWorkletProcessors (synth and the optional effects insert) and strict bounded message protocols.
 - `src/worker/` — static module Worker for encoded offline chunks with sink acknowledgements.
 - `src/api/` — public facade (`OPM`), atomic voice banks, schedulers, musical Transport/arrangements, performance policies, optional Web MIDI adapter and Worker host.
 - `src/voices/` — typed voice assets and versioned JSON parsing (format below).
@@ -44,7 +44,7 @@ LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
 ## Voice format
 
-A voice is JSON: four operators × (required ratio, optional `frequency` override, level, detune, ADSR, optional level/rate key scaling) + algorithm + feedback + LFO with optional per-operator targets + optional pitch envelope. Canonical v6 accepts legacy v1–v5 original shapes. See README "Voice format"; format changes must bump `version` and update README.
+A voice is JSON: four operators × (required ratio, optional `frequency` override, level, detune, ADSR, optional level/rate key scaling, optional `waveform`/`noiseRate`) + algorithm + feedback + LFO with optional per-operator targets + optional pitch envelope. Canonical v7 accepts legacy v1–v6 original shapes. See README "Voice format"; format changes must bump `version` and update README.
 
 ## DSP correctness rules
 

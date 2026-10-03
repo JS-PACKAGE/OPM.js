@@ -62,4 +62,4 @@ Acquire the handle from a trusted gesture, keep the cancellation signal alive ac
 
 ## Verified behavior
 
-[`test/render-worker.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/test/render-worker.test.ts) runs the real Worker module in a thread. It checks the phase sequence, that diagnostics do not change the bytes, that `startupTimeoutMs` rejects a Worker that never answers (no score is sent and the sink is aborted once) while a 30 ms-per-write sink succeeds under a 1 s watchdog, rejection of invalid or premature `ready` messages, and that a throwing observer fails the render once.
+[`test/render-worker.test.ts` (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.8/test/render-worker.test.ts) runs the real Worker module in a thread. It checks the phase sequence, that diagnostics do not change the bytes, that `startupTimeoutMs` rejects a Worker that never answers (no score is sent and the sink is aborted once) while a 30 ms-per-write sink succeeds under a 1 s watchdog, rejection of invalid or premature `ready` messages, and that a throwing observer fails the render once.

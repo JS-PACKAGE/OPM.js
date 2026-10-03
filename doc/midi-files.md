@@ -1,6 +1,6 @@
 # Standard MIDI files
 
-`importMidiFile` and `exportMidiFile` are dependency-free binary adapters, available from `opm.js/midi-file`, `opm.js/core`, and the main API. They do not open MIDI devices, transmit SysEx, emulate a chip, or implement General MIDI instrument/percussion selection.
+`importMidiFile` and `exportMidiFile` are dependency-free binary adapters, available from `opm.js/midi-file`, `opm.js/core`, and the main API. They do not open MIDI devices, transmit SysEx, emulate a chip, or claim a General MIDI sound set.
 
 Expression conversion below is available since v1.10 in package 1.10.0. Controls remain opt-in, with default omission and explicit `lossSummary`; interactive examples are checkout-only and require the matching v1.10 source checkout.
 
@@ -14,7 +14,7 @@ const score = importMidiFile(bytes, {
   unclosedNotes: 'reject',
   sustain: 'apply',
   controls: 'preserve',     // explicit; default 'omit' retains legacy note-only conversion
-  pitchBendRange: 2,        // caller policy in semitones, finite 0..48
+  pitchBendRange: 2,        // initial semitones, finite 0..48; RPN 0 may change it
 });
 // score.events: BeatSequenceEvent[] (positive unique note IDs plus per-note controls)
 // score.tempoMap: normalized quarter-note BPM steps, beginning at beat zero
@@ -25,7 +25,9 @@ const score = importMidiFile(bytes, {
 
 Supported input is SMF format 0 (one track) or format 1 (simultaneous tracks), with positive integer PPQN timing. All tracks are merged by absolute tick, then file track number, then event order. Channel state is shared across tracks. Repeated note-ons at the same channel/pitch are owned FIFO, independently of sustain; note-on velocity zero is a note-off. CC64 values 64..127 hold released keys until pedal-up. Sustain becomes longer note durations and produces `sustain-applied` warnings. `sustain: 'reject'` rejects any CC64 rather than approximating it.
 
-Voice names are explicit synthesis mappings, not MIDI programs. Unmapped channels use `defaultVoice` (`brass` by default) and produce `default-voice` warnings, including channel 9 percussion. The caller supplies the corresponding voice registry to compilation/rendering. Input MIDI channel numbers are not additional fields on beat notes; preserve routing on export by using distinct mapped voice names and a matching `voiceChannels` mapping.
+Voice selection is opt-in: `programVoices?: MidiVoiceMap` maps program numbers 0–127 to FM voice names, and `drumVoices?: MidiVoiceMap` maps drum notes 0–127 on zero-based channel 9. Each channel starts at program 0; Program Change updates it in merged tick/track/event order. Each note stores its onset voice, so changes never retarget held notes. Drum entries take precedence, then program entries, then `channelVoices[channel]`, then `defaultVoice` (`brass`). Only the final default fallback warns. Omitting the new maps preserves legacy note output. Bank CC0/32 stays ignored with warnings. The caller supplies the corresponding voice registry to compilation/rendering; missing names produce the normal unknown-voice error. Preserve routing on export using distinct voice names and `voiceChannels`.
+
+`MidiVoiceMap = Readonly<Record<number, string>> | ReadonlyMap<number, string>` accepts plain own-data objects or native Maps, copied before use, at most 128 entries. Keys must be canonical integers 0–127; names match `[a-zA-Z0-9_-]{1,64}`. Accessors, inherited entries, symbols and custom Map properties/prototypes reject. `gmProgramVoices` and `gmDrumVoices` are frozen root/core exports: all 128 programs map by GM family to bundled FM names, with a partial percussion map. They are artistic starters, not a GM sound-set claim. Load the bank containing those names, including `noise-snare`/`noise-hihat` for the starter drum map, or edit the map for your bank.
 
 Tempo defaults to 120 BPM until the first tempo event. Conflicting tempo events at the same tick use the last event in the documented merge order and warn. MIDI microseconds-per-quarter must produce BPM in 1..1000. Only one meter is representable: conflicting meters at beat zero or any actual meter change later reject. Repeating the same meter is accepted. Numerators are 1..32; denominators are 1, 2, 4, 8, 16 or 32.
 
@@ -33,7 +35,7 @@ The default `controls: 'omit'` is compatibility mode: bend, pressure and control
 
 | MIDI source | Beat control meaning |
 | --- | --- |
-| Pitch bend | `pitch`, signed semitones using the explicit `pitchBendRange` (default 2) |
+| Pitch bend | `pitch`, signed semitones using channel sensitivity, initially `pitchBendRange` (default 2) |
 | CC7 and CC11 | `expression = (CC7 / 127) * (CC11 / 127)`; initial values are both 127 |
 | CC10 | `pan = max(-1, (value - 64) / 63)`; initial center is 64 |
 | CC1 or channel pressure | Channel-default `modulation = 1 + value / 127`; last channel message wins, initial value is 1 |
@@ -43,7 +45,9 @@ Channel updates visit **every held or sustain-held gate** in onset order, includ
 
 The adapter does not know synthesis patches' release-tail duration. Once a gate closes it is no longer a channel-owned control target. A subsequent channel-expression message on that channel produces the conservative `release-tail-controls` approximation warning, even if the unknown tail might already have ended. It still updates held/sustained gates and future-note defaults. `unsupported: 'reject'` rejects this possible loss. This is not complete live-performance/release-tail fidelity.
 
-Programs, bank selection, RPN/NRPN (including pitch-range data-entry), other controllers/channel-mode messages, release velocity, text, key signatures, port/channel metadata, sequencer-specific metadata, SMPTE offsets, framed SysEx/escaped data, and header extensions remain omitted **with warnings**. RPN never changes `pitchBendRange`: choose that policy yourself and use the same policy on export/reception. Non-default MIDI metronome/thirty-second-note meter fields also warn. No SysEx is executed. `unsupported: 'reject'` rejects omissions, conflicting tempos, unmapped channels and possible release-tail-control loss; explicit `sustain: 'apply'` and `unclosedNotes: 'close-at-end'` remain accepted approximations.
+Preserve-mode import decodes RPN 0 sensitivity: CC101=0 and CC100=0 select it, CC6 supplies semitones (clamped to 48), and optional CC38 supplies cents (clamped to 99). Their sum is clamped to 48 semitones; each channel starts from `pitchBendRange`. Only later bend messages use the changed scale. CC101=127/CC100=127 deselect; other RPN numbers and NRPN selection CC98/99 also disable sensitivity data entry. Selection messages are recognized; unselected CC6/38 remain omitted with warnings. Omit mode does not interpret RPN.
+
+Unmapped programs, bank selection, NRPN, unselected data-entry, other controllers/channel-mode messages, release velocity, text, key signatures, port/channel metadata, sequencer-specific metadata, SMPTE offsets, framed SysEx/escaped data, and header extensions remain omitted **with warnings**. Non-default MIDI metronome/thirty-second-note meter fields also warn. No SysEx is executed. `unsupported: 'reject'` rejects omissions, conflicting tempos, default voice substitution and possible release-tail-control loss; explicit `sustain: 'apply'` and `unclosedNotes: 'close-at-end'` remain accepted approximations.
 
 ### Inspect losses, not just success
 
@@ -51,7 +55,7 @@ Programs, bank selection, RPN/NRPN (including pitch-range data-entry), other con
 
 - `omissions`: ignored metadata/channel/SysEx/header data, release velocity and meter-detail warnings.
 - `approximations`: default voice substitution, flattened sustain, conflicting tempo choice, explicit end-of-file closure and possible release-tail-control loss.
-- `preservedControls`: `{ kind, count }` for `pitch-bend`, `expression`, `pan`, `modulation`, `channel-pressure`, `poly-pressure`. Counts are accepted **source messages**, not generated per-note control events. CC7 and CC11 both count toward expression; initial snapshots do not count. Neutral/no-op messages and poly pressure without a pressed target count as recognized semantics, not archived bytes.
+- `preservedControls`: `{ kind, count }` for `pitch-bend`, `expression`, `pan`, `modulation`, `channel-pressure`, `poly-pressure`, `program-change` and `pitch-bend-range`. Counts are accepted **source messages**, not generated per-note controls. A program change counts when its number has a program-map entry (even without a later note); otherwise `ignored-program` counts in omissions. `pitch-bend-range` counts CC100/101 selection and selected RPN-0 CC6/38. CC7/11 both count toward expression; initial snapshots do not count. Neutral/no-op messages count as recognized semantics, not archived bytes.
 
 Warning counts retain their original units: CC64 messages, closed gates for `unclosed-notes`, note onsets using a fallback voice, or source warnings/messages for other codes. Arrays, entries and summary are frozen and bounded by the fixed code/kind vocabularies. Expose both loss categories before rendering or saving an imported project. Sustain is an explicit gate-duration approximation, not a pedal-performance recording.
 
@@ -88,7 +92,7 @@ Pitch rounds to 14-bit bend within the explicit range; pan and modulation round 
 
 Channel pitch/expression/pan changes must agree for **every overlapping gate** on that channel. Contiguous equal-valued fanout controls can establish that agreement; a private per-note change that would alter another gate rejects. Poly-pressure modulation can address only the newest sounding repeated-pitch gate. Put onset controls directly after their owned note at the same rounded tick. Incompatible overlapping initial states, older repeated-pitch pressure changes, unknown/before-onset controls, controls outside the gate, and controls rounded onto release reject. After-gate controls accepted by the synthesis core cannot be exported: patch-dependent release tails have no finite gate representation in this adapter. Use distinct voice/channel mappings for independent parts rather than letting export guess a channel allocation.
 
-Thus file → score → file preserves representable **gate/control meaning under the same explicit policy and quantization**, not complete General MIDI playback, exact message identity or release-tail behavior. No program, RPN, sustain-controller or SysEx output is synthesized.
+Thus file → score → file preserves representable **gate/control meaning under the explicit export policy and quantization**, not complete General MIDI playback, exact message identity or release-tail behavior. No program, RPN, sustain-controller or SysEx output is synthesized. If imported RPN changes sensitivity, choose an explicit export range containing every decoded pitch; the exporter never reconstructs source RPN or program routing.
 
 ## Hard bounds
 
@@ -98,7 +102,7 @@ Thus file → score → file preserves representable **gate/control meaning unde
 - Expressive fanout plus notes is separately limited to 65,536 generated beat events; a small wire file with many held notes and controllers can hit this bound. Export also checks its generated wire budget before growing musical tracks.
 - At most 1,024 normalized tempo points and 86,400 quarter-note beats.
 - Delta times must fit four-byte VLQ (0..268,435,455). Export rejects excessive silent gaps instead of inserting hidden events.
-- Beat event/options/mappings must be dense own-data arrays/plain objects; accessors and unknown fields reject. Import mappings allow 16 channels; export mappings allow 256 names.
+- Beat event/options/mappings must be dense own-data arrays/plain objects; accessors and unknown fields reject. Import channel mappings allow 16 channels; export mappings allow 256 names. Program/drum maps additionally accept native Maps, bounded to 128 entries each.
 
 The beat horizon is not a guarantee of renderability: `compileBeatSequence` and offline/live renderers apply their separate elapsed-time, polyphony, memory and scheduling limits. A dense file may need chunked offline rendering or live transport streaming rather than one worklet batch.
 

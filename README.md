@@ -4,13 +4,23 @@
 
 OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis with a default eight-voice budget (configurable up to 32), multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** [v1.10 GitHub release](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.10) (package 1.10.0): portable Arrangement projects, opt-in expressive MIDI files with loss summaries, workload-scoped capacity candidates and bounded local MIDI capture/campaign readiness. Voice format remains v6; runtime dependencies remain empty.
+> **Status:** the current checkout is package 1.11.0 (unreleased): voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. The latest published [v1.10 GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6; runtime dependencies remain empty. Voice v1–v6 inputs remain accepted.
 >
 > GitHub release distribution and npm registry publication are separate. Use the release tarball or a source checkout; no npm publication is implied. See the [compatibility policy](./doc/compatibility.md).
 
 Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.md).
 
 **Online demos (HTTPS): [opm.js-package.xyz](https://opm.js-package.xyz/).** Click a playback button to grant audio startup; physical-device and listening acceptance remain separate from a working web page.
+
+## New in v1.11
+
+These APIs are in the current checkout and are not part of the published v1.10 archive. Physical-device, MIDI-hardware and human-listening acceptance remain unverified.
+
+- Voice format v7: per-operator `waveform` (`sine`, `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`) and `noiseRate`; see [Voice format](#voice-format) and the [expressive voice reference](./doc/expressive-voices.md).
+- Three original noise-based percussion recipes (`noise-snare`, `noise-hihat`, `explosion`) in the bundled bank.
+- Optional stereo chorus and reverb, usable offline (`createStereoEffects`, `applyEffects`) and live (`createEffects`): [audio buses](./doc/audio-buses.md).
+- MIDI `programVoices`/`drumVoices` maps, GM-family starter maps and RPN 0 bend sensitivity for files and the live adapter: [MIDI files](./doc/midi-files.md), [MIDI performance](./doc/midi-performance.md).
+- `importOPM`/`describeOPM` for approximate conversion of VOPM/MXDRV-family `.opm` text patches: [expressive voices](./doc/expressive-voices.md).
 
 ## New in v1.10
 
@@ -48,6 +58,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 - **Atomic voice-bank replacement, removal and JSON export** preserving queued/sounding patch snapshots
 - **TypeScript declarations** for browser, core, and voice-module exports
 - **AudioWorklet-based DSP** — synthesis runs off the main thread
+- **Optional stereo chorus and reverb** — the same pure DSP offline and in a separate opt-in AudioWorklet; no built-in mixer
 - **Zero runtime dependencies**, built on the Web Audio API
 - Works in the browser and Node.js (offline rendering)
 
@@ -60,7 +71,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 ### Try the checkout
 
-Obtain the [v1.10 source archive or checkout](https://github.com/YueyuHoshizora/OPM.js/tree/v1.10) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
+Obtain the [v1.10 source archive or checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.10) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
 
 The committed `dist/` is ready to use; trying the demos needs no npm installation or build. With Python 3 available, run from that repository root:
 
@@ -72,18 +83,18 @@ Open **http://localhost:8000/index.html** for the English example catalog:
 
 | Example | Demonstrates |
 | --- | --- |
-| [Basic notes and voices](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
-| [Melody and chord scheduling](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
-| [Live expression and per-voice LFO](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
-| [Shared AudioContext and routing](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
-| [Offline synthesis and WAV](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
-| [Advanced playground](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
-| [Preset and DX7 audition](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
-| [Scores, Transport and performance](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
-| [Adaptive game music](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
-| [Playable instrument and Web MIDI](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
-| [Independent buses and stems](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
-| [FM sound designer](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
+| [Basic notes and voices](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
+| [Melody and chord scheduling](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
+| [Live expression and per-voice LFO](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
+| [Shared AudioContext and routing](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
+| [Offline synthesis and WAV](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
+| [Advanced playground](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
+| [Preset and DX7 audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
+| [Scores, Transport and performance](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
+| [Adaptive game music](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
+| [Playable instrument and Web MIDI](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
+| [Independent buses and stems](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
+| [FM sound designer](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
 
 Click a playback button to start audio. Stop the server with Ctrl+C when finished. Do not open the HTML through `file://`. Pages and runtime messages are English; TypeScript helpers live in `demo/`.
 
@@ -91,7 +102,7 @@ If `dist/` is missing or you have changed `src/` or `demo/` TypeScript, regenera
 
 ### Install into an npm project
 
-Download [opm.js-1.10.0.tgz from the v1.10 release](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz), then install it from your application's root:
+Download [opm.js-1.10.0.tgz from the v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz), then install it from your application's root:
 
 ```sh
 npm install /actual/path/to/opm.js-1.10.0.tgz
@@ -118,7 +129,7 @@ npm install ../OPM.js/opm.js-1.10.0.tgz
 
 For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.
 
-For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
+For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
 
 ### Use in a browser
 
@@ -226,6 +237,7 @@ All times are in seconds unless stated otherwise. Browser and Node examples inte
 | `brass` | `opm.js/voices/brass.js` | `./opm/voices/brass.js` |
 | `parseVoiceBank`, `validateVoice`, schema helpers | `opm.js/voices/schema.js` | `./opm/voices/schema.js` |
 | `importDX7`, `describeDX7` | `opm.js/voices/dx7.js` | `./opm/voices/dx7.js` |
+| `importOPM`, `describeOPM` | `opm.js/voices/opm.js` | `./opm/voices/opm.js` |
 
 ### Browser: OPM
 
@@ -259,7 +271,7 @@ At most `maxVoices` logical voices (default 8, opt-in up to 32, including releas
 
 Since v1.9: `gain` is an independent 0–1 multiplier, default 1, using the same `ramp` range. It composes with expression rather than replacing it and does not restart phase or envelopes.
 
-`createLookaheadScheduler(opm, callback, { onError, horizon = 0.2, interval = 0.025, maxNotes = 32 })` returns `{ running, start(), stop(), dispose() }`. Its callback receives the half-open absolute window `{ from, to, maxNotes }` and returns at most `maxNotes` notes with `at` in that window and a numeric duration. Horizon is 0.02–10 seconds; interval is 0.005–1 second and less than horizon; maxNotes is an integer 1–128. At most 128 gates remain outstanding. Call `start()` from a gesture and handle its rejected promise; callback/admission errors stop the scheduler and reach required `onError`. Timer stalls skip missed windows rather than bursting old notes. Stop/dispose cancel only its notes and never close OPM. See the checkout-only [song demo](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/song.html) and both usage guides for executable recipes.
+`createLookaheadScheduler(opm, callback, { onError, horizon = 0.2, interval = 0.025, maxNotes = 32 })` returns `{ running, start(), stop(), dispose() }`. Its callback receives the half-open absolute window `{ from, to, maxNotes }` and returns at most `maxNotes` notes with `at` in that window and a numeric duration. Horizon is 0.02–10 seconds; interval is 0.005–1 second and less than horizon; maxNotes is an integer 1–128. At most 128 gates remain outstanding. Call `start()` from a gesture and handle its rejected promise; callback/admission errors stop the scheduler and reach required `onError`. Timer stalls skip missed windows rather than bursting old notes. Stop/dispose cancel only its notes and never close OPM. See the checkout-only [song demo](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/song.html) and both usage guides for executable recipes.
 
 Any non-running context stops lookahead scheduling, as does a reset; `onError` reports it and restarting is explicit. Default `interruption: 'cancel'` clears existing notes and automation on suspension/interruption, preventing replay on resume. Opt-in `'preserve'` retains direct-note gates/queued events across suspension, but does not automatically restart lookahead. Resume from a fresh user gesture. A closed borrowed context must be replaced by its host.
 
@@ -288,6 +300,12 @@ Any non-running context stops lookahead scheduling, as does a reset; `onError` r
 Pan uses a center-normalized constant-power law: left/right gains are `sqrt(2) * cos/sin((pan + 1) * pi / 4)` before saturation. Center preserves the previous per-channel gain; hard sides mute the opposite channel and boost the selected channel by `sqrt(2)`. This does not promise constant loudness after polyphonic saturation.
 
 Other core exports: `normalizeVoice(voice)` makes a strict detached copy; `envelopeAt(time, gate, adsr)` evaluates the dB-domain envelope; `ALGORITHMS` contains eight immutable routing graphs; `HEADROOM` is 0.7, `OVERSAMPLE` is 4, and `MAX_RENDER_SAMPLES` is 4,000,000. `sampleRateValue(value)` validates an integer rate of 8000–96000. Schema helpers are described below.
+
+### Optional stereo effects
+
+`createEffects(context: BaseAudioContext, options?: EffectsOptions): Promise<OpmEffects>` creates an unconnected stereo insert with `input`, `output`, `ready`, `update(params)`, `reset()` and `dispose()`. It never resumes or closes the host context. Route `opm.node` after `await opm.start()` into `fx.input`, then connect `fx.output` to your host graph.
+
+`createStereoEffects(sampleRate, options?)` and `applyEffects(left, right, sampleRate, params)` are exported at root and `opm.js/core`. The engine processes native Float32 buffers in place with bounded preallocated delay state; the helper returns copies with a conservative tail and enforces the 4,000,000-frame budget. Options are `{ chorus?: { rate, depth, mix, feedback?, voices? }, reverb?: { size, damping, mix, preDelay?, width? }, order? }`. Updates replace the configuration with smooth ramps; omitted sections and mix 0 preserve finite dry input bit-for-bit. Wet paths reserve at least 3 dB headroom using a linear crossfade. [Ranges, gain law, memory bounds, routing and offline details](./doc/audio-buses.md#optional-stereo-chorus-and-reverb).
 
 ### Mix gain and tuning
 
@@ -337,7 +355,7 @@ for (const chunk of render) {
 console.log(frames, energy, render.diagnostics.errors);
 ```
 
-`streamSequence(opm, score, { at, horizon, interval, maxSlots, signal, onError })` returns `{ running, ids, start(), pump(), stop(), dispose() }`. It validates the whole bounded long score, then schedules note/control/stop windows using held gates and incremental releases, preserving cross-window ID mappings and only cancelling its own notes. Start from a gesture; context interruption/reset stops the stream and requires explicit restart. Shared worklet admission remains bounded and is not atomically reserved against unrelated callers. See [streaming contracts, capacity and browser recipe](./doc/streaming-sequences.md) and checkout-only [example 08](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html).
+`streamSequence(opm, score, { at, horizon, interval, maxSlots, signal, onError })` returns `{ running, ids, start(), pump(), stop(), dispose() }`. It validates the whole bounded long score, then schedules note/control/stop windows using held gates and incremental releases, preserving cross-window ID mappings and only cancelling its own notes. Start from a gesture; context interruption/reset stops the stream and requires explicit restart. Shared worklet admission remains bounded and is not atomically reserved against unrelated callers. See [streaming contracts, capacity and browser recipe](./doc/streaming-sequences.md) and checkout-only [example 08](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html).
 
 ### Portable score projects and MIDI files (introduced in v1.9)
 
@@ -360,7 +378,7 @@ const saved = serializeScoreProject(project);
 
 `compileBeatSequence(events, { tempoMap?, bpm?, voices? })` validates beat events and returns second-based `SequenceEvent[]` for existing full/chunked/Worker rendering. Live Transport uses the original beat events and tempo map; load the project's named voices into OPM first. Keep the project's synthesis settings when choosing the live/offline engine. See [score projects](./doc/score-projects.md) for complete recipes and bounds.
 
-`importMidiFile(bytes, options?)` / `exportMidiFile(events, options?)` are exported from root, core and `opm.js/midi-file`. Import returns `{ events, tempoMap, timeSignature, warnings, lossSummary }`; format 0/1 PPQN only, with strict byte/track/event budgets and malformed/truncated rejection. `channelVoices`/`defaultVoice` map channels to named FM voices; program changes do not select FM patches. Default import applies sustain to durations, warns about unsupported data and rejects unclosed notes; explicit policies may reject unsupported data or close notes at the end. Default `controls: 'omit'` keeps note-only import and rejects control events/nonzero pan on export. Opt-in expressive conversion is described below; export still rejects unsupported controls, fractional note pitches, nonzero priority, ambiguous channel ownership and linear tempo ramps rather than silently losing them. See [MIDI files](./doc/midi-files.md) for policy and loss details.
+`importMidiFile(bytes, options?)` / `exportMidiFile(events, options?)` are exported from root, core and `opm.js/midi-file`. Import returns `{ events, tempoMap, timeSignature, warnings, lossSummary }`; format 0/1 PPQN only, with strict byte/track/event budgets and malformed/truncated rejection. `channelVoices`/`defaultVoice` map channels to named FM voices; optional `programVoices` and `drumVoices` select voices at note onset. Default import applies sustain to durations, warns about unsupported data and rejects unclosed notes; explicit policies may reject unsupported data or close notes at the end. Default `controls: 'omit'` keeps note-only import and rejects control events/nonzero pan on export. Opt-in expressive conversion is described below; export still rejects unsupported controls, fractional note pitches, nonzero priority, ambiguous channel ownership and linear tempo ramps rather than silently losing them. See [MIDI files](./doc/midi-files.md) for policy and loss details.
 
 ### Portable Arrangement and expressive MIDI files (v1.10)
 
@@ -383,9 +401,13 @@ const arrangementJSON = serializeArrangementProject(arrangementProject);
 
 Load stored voices into an engine constructed with the saved settings, then pass the project's layers, sections, initial section, tempo and meter to `createArrangement`. Parsing/loading does not start playback or restore phases/envelopes, pending changes or external routing. The checkout adaptive page supports project save/load; see the complete [project replay recipes](./doc/score-projects.md).
 
-Both MIDI file adapters accept `controls: 'preserve' | 'omit'` (default `'omit'`, preserving the original note-only behavior) and an explicit `pitchBendRange` of 0–48 semitones (default 2). Preserve mode maps supported bend, volume/expression, pan, wheel and pressure to note controls. Export accepts only channel-representable controls under that policy; incompatible overlap, unsupported controls/ramps and other losses reject instead of being guessed. Import additionally returns frozen `lossSummary` groups: `omissions`, `approximations` and `preservedControls`; preserved counts refer to MIDI wire messages, not generated note-control fanout. Program/bank selection is not FM patch selection; bend range does not interpret RPN. See [expressive SMF policies and loss accounting](./doc/midi-files.md).
+Both MIDI file adapters accept `controls: 'preserve' | 'omit'` (default `'omit'`, preserving the original note-only behavior) and an initial `pitchBendRange` of 0–48 semitones (default 2). Preserve-mode import and live MIDI now decode channel-local RPN 0 sensitivity, including cents, clamped to 48 semitones. Export still uses the explicit range and emits no RPN or program changes. Export accepts only channel-representable controls; incompatible overlap, unsupported controls/ramps and other losses reject instead of being guessed. Import returns frozen `lossSummary` groups: `omissions`, `approximations` and `preservedControls`; preserved counts refer to MIDI wire messages, not generated note-control fanout. Bank selection remains omitted. See [expressive SMF policies and loss accounting](./doc/midi-files.md).
 
 Preservation is of representable gate/control meaning, not archived MIDI bytes or complete live-performance fidelity. Channel expression after a closed gate reports the conservative `release-tail-controls` approximation because patch-dependent tails are unknown; `unsupported: 'reject'` rejects it. Export rejects after-gate controls.
+
+`MidiVoiceMap = Readonly<Record<number, string>> | ReadonlyMap<number, string>` maps integer 0–127 keys to named voices (at most 128 own-data entries). File import accepts `programVoices?: MidiVoiceMap` and `drumVoices?: MidiVoiceMap`; live `createMidiAdapter(performance, access, options?)` accepts `programVoices?: MidiVoiceMap`, but no drum map. Program changes affect later onsets only; unmapped file programs fall back to channel/default voices, while unmapped live programs are ignored. `gmProgramVoices: Readonly<Record<number, string>>` and `gmDrumVoices: Readonly<Record<number, string>>`, exported from root/core, are frozen artistic starter maps, not a GM sound-set claim. Supply a voice bank containing those names; missing voices use the normal unknown-voice errors.
+
+`performance.configurePart(part, options, policy?: { preserveNotes?: boolean })` can retain existing gates on voice changes with `{ preserveNotes: true }`, as used by the live adapter. Default configuration still clears gates on voice/mode changes; mode changes always clear. RPN selectors CC100/101 cannot be custom-mapped; CC6/38 mappings apply only when RPN 0 is not selected. See [live MIDI policies](./doc/midi-performance.md).
 
 
 ### Musical Transport and performance policies
@@ -400,19 +422,19 @@ The root and core export `beatsToSeconds`, `secondsToBeats`, `normalizeTempoMap`
 
 ### Worker WAV export and quality profiles
 
-`renderSequenceInWorker(score, { ...chunkedOptions, format, sink, onProgress, signal, workerUrl, startupTimeoutMs, phaseDiagnostics, onPhase })` returns a promise for `{ capacity, format, bytesWritten, diagnostics }`. `sink.write(bytes)` may transfer ownership and return a promise: the static module Worker waits for acknowledgement before rendering the next encoded chunk. Optional `close()` runs on completion; `abort(reason)` handles rollback. Cancellation terminates/rejects without waiting for a hung sink; the host must invalidate its partial output. Progress reports `{ frames, totalFrames, bytesWritten, errors }`. This helper is browser-only; pure chunk rendering/encoding also works in Node. Deploy the entire `dist/` tree, including `worker/render.js` and its companions, with same-origin secure URLs and normal CSP/JavaScript MIME checks. See [incremental/Worker sink recipes](./doc/host-integration.md) and checkout-only [example 08](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html); long-file export uses a direct file sink, not an aggregate Blob fallback.
+`renderSequenceInWorker(score, { ...chunkedOptions, format, sink, onProgress, signal, workerUrl, startupTimeoutMs, phaseDiagnostics, onPhase })` returns a promise for `{ capacity, format, bytesWritten, diagnostics }`. `sink.write(bytes)` may transfer ownership and return a promise: the static module Worker waits for acknowledgement before rendering the next encoded chunk. Optional `close()` runs on completion; `abort(reason)` handles rollback. Cancellation terminates/rejects without waiting for a hung sink; the host must invalidate its partial output. Progress reports `{ frames, totalFrames, bytesWritten, errors }`. This helper is browser-only; pure chunk rendering/encoding also works in Node. Deploy the entire `dist/` tree, including `worker/render.js` and its companions, with same-origin secure URLs and normal CSP/JavaScript MIME checks. See [incremental/Worker sink recipes](./doc/host-integration.md) and checkout-only [example 08](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html); long-file export uses a direct file sink, not an aggregate Blob fallback.
 
 `quality` is accepted by OPM, Synth, `renderNote`, full/chunked sequence rendering and Worker options. `standard` preserves the existing 4×/eighth-order sound; `eco` uses 2×/fourth-order filtering with weaker alias rejection, while `high` uses 8×/eighth-order filtering at higher CPU cost. Profiles do not promise alias-free FM or universal realtime deadlines. See [measured quality tradeoffs](./doc/acoustic-quality.md).
 
 ### Adaptive music, tempo curves and grids
 
-`createArrangement(opm, { layers, sections, initialSection, bpm?, tempoMap?, timeSignature? })` loops named layers on one global beat grid and switches sections or toggles layers at the first beat/bar boundary that is not earlier than the notes already admitted. Shared layers are one continuous schedule, so their sounding notes are not retriggered. `TempoPoint` accepts `curve: 'linear'` (BPM changes linearly per beat; closed-form logarithmic integral) and `endBpm`; `quantizeBeat`, `swingBeat` and `swingBeatEvents` shape grids. `createTransport` and `createArrangement` are musical restarts, **not** DSP checkpoints. Details, formulas and the exact pause/seek contract: [adaptive music](./doc/adaptive-music.md); try checkout-only [example 09](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/adaptive.html).
+`createArrangement(opm, { layers, sections, initialSection, bpm?, tempoMap?, timeSignature? })` loops named layers on one global beat grid and switches sections or toggles layers at the first beat/bar boundary that is not earlier than the notes already admitted. Shared layers are one continuous schedule, so their sounding notes are not retriggered. `TempoPoint` accepts `curve: 'linear'` (BPM changes linearly per beat; closed-form logarithmic integral) and `endBpm`; `quantizeBeat`, `swingBeat` and `swingBeatEvents` shape grids. `createTransport` and `createArrangement` are musical restarts, **not** DSP checkpoints. Details, formulas and the exact pause/seek contract: [adaptive music](./doc/adaptive-music.md); try checkout-only [example 09](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/adaptive.html).
 
 Since v1.9: `ArrangementLayer.gain` is 0–1 (default 1). `switchSection` and `setLayer` accept `fade` in seconds (0–10, default 0), and `setLayerGain(name, gain, { quantize?, fade? })` returns the committed beat. Shared layers continue without retriggering; layer gain multiplies independent note expression and includes owned release tails. Arrangement reserves authored `gain` controls for layer envelopes; use `expression` inside layer scores.
 
 ### Expressive performance and Web MIDI
 
-`performance.updateKey(part, key, controls)` and `performance.updatePartNotes(part, controls)` apply any `NoteControls` to one key or to a whole part; `configurePart` accepts `voiceLimit` (1–32, release tails count) and `voicePriority`. `createMidiAdapter(performance, await requestMidiAccess(), options)` maps channel-voice MIDI (notes, sustain, bend, wheel, volume/expression, pan, pressure, all-notes-off) from user-granted inputs to parts. Importing never requests access, SysEx is never requested, and disconnect or `dispose()` releases only the keys the adapter owns. See [expressive performance and MIDI](./doc/midi-performance.md) and checkout-only [example 10](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/instrument.html).
+`performance.updateKey(part, key, controls)` and `performance.updatePartNotes(part, controls)` apply any `NoteControls` to one key or to a whole part; `configurePart` accepts `voiceLimit` (1–32, release tails count) and `voicePriority`. `createMidiAdapter(performance, await requestMidiAccess(), options)` maps channel-voice MIDI (notes, sustain, bend, wheel, volume/expression, pan, pressure, all-notes-off) from user-granted inputs to parts. Importing never requests access, SysEx is never requested, and disconnect or `dispose()` releases only the keys the adapter owns. See [expressive performance and MIDI](./doc/midi-performance.md) and checkout-only [example 10](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/instrument.html).
 
 Since v1.9: `MidiAdapterOptions.controllerMap` accepts at most 128 `MidiControllerMapping` entries. Each names `controller`, scalar `field` (including `gain`) or tuple `field` plus zero-based `operator`, explicit `min`, `max`, `ramp`, and optional `reset`. Reserved CC64/120/121/123 cannot be remapped; duplicates reject. A mapping overrides that CC's ordinary default only. CC121 restores captured effective part defaults or the supplied reset; fixed-Hz `reset:null` restores ratio mode. `performance.getPartControls(part)` returns a detached frozen snapshot of effective part controls, not per-key overrides. See the MIDI guide for field bounds and reset behavior.
 
@@ -423,7 +445,7 @@ Since v1.9: `MidiAdapterOptions.controllerMap` accepts at most 128 `MidiControll
 
 ### Physical-device recovery workflow
 
-Use checkout-only [example 08](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html) over HTTPS on physical iOS/Android devices, following the [acceptance workflow and support matrix](./doc/mobile-acceptance.md). Record device/OS/browser/rate/policy, scenario observations and manual pass/fail/unverified results. Exercise both policies through lock/unlock, app switching, calls, headset/Bluetooth routes, battery saving, prolonged playback and main-thread stalls. Reports stay local and never certify untested devices. Desktop/headless checks and analyser peaks do not prove audible continuity or physical-phone recovery.
+Use checkout-only [example 08](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html) over HTTPS on physical iOS/Android devices, following the [acceptance workflow and support matrix](./doc/mobile-acceptance.md). Record device/OS/browser/rate/policy, scenario observations and manual pass/fail/unverified results. Exercise both policies through lock/unlock, app switching, calls, headset/Bluetooth routes, battery saving, prolonged playback and main-thread stalls. Reports stay local and never certify untested devices. Desktop/headless checks and analyser peaks do not prove audible continuity or physical-phone recovery.
 
 ### WAV files and DX7 import
 
@@ -437,9 +459,11 @@ const audio = renderNote({ voice: brass, note: 60, duration: 0.7, velocity: 0.8,
 await writeFile('brass.wav', encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate }));
 ```
 
-`importDX7(bytes)` from `opm.js/voices/dx7.js` returns complete normalized version 6 voices. It accepts exactly one standard framed/checksummed 163-byte single-voice or 4104-byte 32-voice bank SysEx message (`Uint8Array`), rejecting invalid framing, length, checksum, or non-7-bit data. `describeDX7(bytes)` returns per-voice `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; selected/dropped numbers refer to DX7 operators 1–6, source algorithms to 1–32, and converted algorithms to 0–7.
+`importDX7(bytes)` from `opm.js/voices/dx7.js` returns complete normalized version 7 voices. It accepts exactly one standard framed/checksummed 163-byte single-voice or 4104-byte 32-voice bank SysEx message (`Uint8Array`), rejecting invalid framing, length, checksum, or non-7-bit data. `describeDX7(bytes)` returns per-voice `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; selected/dropped numbers refer to DX7 operators 1–6, source algorithms to 1–32, and converted algorithms to 0–7.
 
-This remains an **approximate six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained; operator velocity/rate scaling, pitch envelopes and LFO delay/sync are musical heuristics. Pitch-envelope stages are reduced; unsupported descending saw/sample-and-hold waveforms are substituted with warnings. Dropped operators/routing, oscillator sync, transpose, per-operator AM and envelope details still differ; the converter reduces selected operators' AM sensitivity to one shared depth, not selective v6 targets. Inspect descriptions and [expressive conversion limits](./doc/expressive-voices.md) before loading. The checkout-only [audition](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/audition.html) uses original synthetic fixtures, not copied patches or a six-operator reference engine.
+This remains an **approximate six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained; operator velocity/rate scaling, pitch envelopes and LFO delay/sync are musical heuristics. Pitch-envelope stages are reduced; unsupported descending saw/sample-and-hold waveforms are substituted with warnings. Dropped operators/routing, oscillator sync, transpose, per-operator AM and envelope details still differ; the converter reduces selected operators' AM sensitivity to one shared depth, not selective v6 targets. Inspect descriptions and [expressive conversion limits](./doc/expressive-voices.md) before loading. The checkout-only [audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/audition.html) uses original synthetic fixtures, not copied patches or a six-operator reference engine.
+
+`importOPM(source)` from `opm.js/voices/opm.js` accepts decimal VOPM/MXDRV-family `.opm` text (`string` or Latin-1 `Uint8Array`) and returns complete normalized v7 voices. `describeOPM(source)` returns `{name,program,algorithm,operators,warnings}` for each patch. Names are sanitized and deterministically de-duplicated; source program numbers are metadata, not an automatic MIDI map. Input is bounded to 262144 bytes, 128 patches and 512 bytes per line, with strict integer ranges and complete unique sections. This is an **approximate conversion, not register-level YM2151 emulation**: held decay, rate scaling, detune, feedback and LFO differ, PAN is ignored, and C2 noise is an OPM.js extension. See [OPM conversion formulas and limits](./doc/expressive-voices.md#opm-text-import).
 
 ## Optimized distribution
 
@@ -484,11 +508,11 @@ Independent references cover Bessel-series high-index PM, contractive delayed fe
 
 ## Voice format
 
-A voice has four operators, an algorithm (0–7), and integer patch feedback (0–7). This is a canonical version 6 entry. Single objects may omit `version`, `name`, `modIndex` (4), and `lfo` (off/sine). Explicit versions 1–5 retain their original shapes and normalize to 6: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude expressive v5 fields, and v1–5 exclude v6 LFO targets.
+A voice has four operators, an algorithm (0–7), and integer patch feedback (0–7). This is a canonical version 7 entry. Single objects may omit `version`, `name`, `modIndex` (4), and `lfo` (off/sine). Explicit versions 1–6 retain their original shapes and normalize to 7: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude LFO waveform, v1–4 exclude expressive v5 fields, v1–5 exclude v6 LFO targets, and v1–6 exclude operator waveform/noise rate.
 
 ```json
 {
-  "version": 6,
+  "version": 7,
   "name": "brass",
   "algorithm": 4,
   "feedback": 3,
@@ -512,7 +536,7 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 
 | Voice field | Allowed values |
 | --- | --- |
-| `version`, `name` | Version 6; legacy 1–5 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |
+| `version`, `name` | Version 7; legacy 1–6 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |
 | `algorithm`, `feedback` | Integers 0–7 |
 | `ratio`, `level`, `detune` | 0.125–32, 0–1, −1200–1200 cents |
 | `adsr.a`, `adsr.d`, `adsr.s`, `adsr.r` | Attack/decay/release: 0–10 seconds; sustain: 0–1 |
@@ -523,11 +547,16 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 | `ops[i].velocitySensitivity` | Optional since v3: 0–48 dB attenuation at velocity zero; omitted is 0 |
 | `ops[i].frequency` | Optional v5 fixed frequency 1–20000 Hz; overrides note-derived ratio frequency, with detune/live pitch/PM still applied |
 | `ops[i].rateKeyScale` | Optional v5 0–4: ADSR times multiply by `2 ** (-rateKeyScale * (note - 60) / 12)`, clamped to 10 seconds; default 0 |
+| `ops[i].waveform` | Optional v7 `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise` |
+| `ops[i].noiseRate` | Optional v7 20–20000 Hz, default 8000; ignored unless waveform is `noise` |
 | `pitchEnvelope` | Optional v5 `{a,d,r,initial,peak,sustain,final}`; times 0–10 seconds, levels −4800..4800 cents, continuous linear-cents release |
 | `lfo.delay`, `lfo.sync`, `lfo.phase` | Optional v5 0–10 seconds, `'note'`/`'global'` (default note), 0–1 turns (default 0); delay gates depth, not the phase clock |
 | `lfo.amTargets`, `lfo.pmTargets` | Optional v6 four-element depth factors 0–1; input booleans normalize to 0/1; absent targets mean all 1 |
 
 See the [expressive voice reference](./doc/expressive-voices.md) for pitch composition, fixed-frequency behavior and synchronization. Ratio remains required even when frequency is supplied. Preserve the source patch version when importing older banks; changing a version number alone does not add unsupported fields to its legacy shape.
+
+Periodic shapes use phase plus modulation; sine retains the unchanged legacy fast path. Noise uses a deterministic 17-bit bipolar sample-and-hold sequence reset at every admission/slot reuse. Ratio, fixed Hz, detune, pitch and PM do not pitch noise; live ratio/frequency controls remain valid but have no audible pitch effect. Envelope, velocity, level, key scaling, AM and graph roles still apply. Noise on any operator is an OPM.js extension, not hardware-fidelity emulation. Square/saw/noise can alias despite oversampling; see [shape formulas and noise details](./doc/expressive-voices.md#oscillator-shapes-and-noise). Original presets include `noise-snare`, `noise-hihat` and `explosion`.
+
 
 Key scaling attenuates operator level by `10 ** (-slope * abs(note - breakpoint) / 12 / 20)` on the corresponding side; omitted scaling is flat. Velocity sensitivity additionally multiplies it by `10 ** (-sensitivity * (1 - velocity) / 20)`, changing carrier loudness and modulator brightness. Final note velocity still multiplies the output; default sensitivity 0 preserves legacy sound. Pan belongs to the note, not the voice.
 
@@ -579,6 +608,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 
 - [x] v1.0 — 4-operator FM engine, eight algorithms, feedback, ADSR, LFO, detune, browser API, and offline rendering
 - [x] v1.2 — key scaling, approximate DX7 SysEx voice import, and WAV export (regression tests and actual browser demo/import/download verified; see CHANGELOG for evidence and limits)
+- [ ] v1.11 — voice v7 waveforms and noise, stereo chorus/reverb, MIDI program maps and RPN, `.opm` import (implemented with regression tests, a real-browser audio smoke and demo coverage; not yet released, and physical-device and human-listening acceptance are unverified)
 
 ## Limitations
 

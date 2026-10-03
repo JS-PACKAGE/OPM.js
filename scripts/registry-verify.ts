@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 const REGISTRY = 'https://registry.npmjs.org';
 const MAX_TARBALL_BYTES = 16 * 1024 * 1024;
 const MAX_JSON_BYTES = 2 * 1024 * 1024;
-const REPOSITORY = 'https://github.com/YueyuHoshizora/OPM.js';
+const REPOSITORY = 'https://github.com/JS-PACKAGE/OPM.js';
 
 function command(binary: string, args: string[], cwd?: string): string {
   const result = spawnSync(binary, args, { cwd, encoding: 'utf8', timeout: 120000, maxBuffer: 4 * 1024 * 1024 });

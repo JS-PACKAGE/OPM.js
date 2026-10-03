@@ -1,6 +1,6 @@
 # Polyphony budgets, voice priority and independent buses
 
-OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (v1.10 source, checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/buses.html) demonstrates independent buses; run `examples/buses.html` locally from the matching checkout.
+OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (v1.10 source, checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/buses.html) demonstrates independent buses; run `examples/buses.html` locally from the matching checkout.
 
 ## One engine, more voices
 
@@ -56,13 +56,55 @@ await Promise.all([lead.start(), pad.start()]);   // from a user gesture
 - Each engine has its own voice budget, `mixGain`, quality profile and saturation. Web Audio then adds the buses **linearly**.
 - OPM disconnects only its own node and never closes or suspends a borrowed context. Close the context yourself after disposing every engine.
 - Each engine is a separate AudioWorklet processor; more buses mean more per-block overhead and more CPU (see the table). Share a `Transport` or `Arrangement` per engine; they own only their own notes.
-- Effects, sidechains and per-bus metering are plain Web Audio nodes in the host graph. The package ships no reverb, chorus or mixer.
+- Optional `createEffects()` supplies stereo chorus/reverb as a separate AudioWorklet insert; sidechains, metering and mixing remain host-owned. The package still ships no mixer.
 
 ### Stems are not a monolithic mix
 
 A single engine saturates the sum of all its voices once. Several engines saturate each stem and then add them, so their sum is a different, equally valid mix. It is not bit-identical to rendering all notes in one engine, and it can exceed full scale if each stem is near its limit. The example's offline "linear bus mix" clips to ±1 and reports its peak; lower the stem gains for dense material.
 
 For offline stems render each bus separately with `renderSequence` (or the Worker renderer), keeping the same `sampleRate`, `maxVoices` and `mixGain` you use live. A shared start frame keeps stems aligned.
+
+## Optional stereo chorus and reverb
+
+```ts
+import { OPM, createEffects } from 'opm.js';
+const context = new AudioContext();
+const opm = new OPM({ context, destination: null });
+const fx = await createEffects(context, {
+  params: {
+    chorus: { rate: 0.8, depth: 0.6, mix: 0.3 },
+    reverb: { size: 0.6, damping: 0.5, mix: 0.25 },
+  },
+  onEvent: event => console.error(event.error),
+});
+await opm.start(); // user gesture; starts/resumes synthesis
+opm.node!.connect(fx.input);
+fx.output.connect(context.destination);
+// Replaces the complete configuration, smoothly fading omitted sections to bypass:
+fx.update({ reverb: { size: 0.5, damping: 0.7, mix: 0.2 } });
+// On teardown: fx.dispose(); await opm.dispose(); then close your own context.
+```
+
+`createEffects(context, { workletUrl?, params?, onEvent? })` never starts, suspends or closes the borrowed `BaseAudioContext`, and never automatically connects its output. `input` and `output` are the same stereo-in/stereo-out node; `ready: Promise<void>` resolves at creation, not playback. `reset()` clears state; `dispose()` is idempotent and stops the processor. Module URLs follow OPM's secure same-origin relocation rules; default is `../worklet/fx-processor.js` relative to the API module. Deploy the entire matching module tree, with JavaScript MIME, CSP and `nosniff` intact.
+
+Offline, import `createStereoEffects(sampleRate, options?)` or `applyEffects(left, right, sampleRate, params)` from `opm.js/core` (also exported at root). The engine accepts integer **8000–192000 Hz**. `process(left, right, offset?, length?)` edits native Float32 buffers in place with no temporary DSP allocation. `applyEffects` returns new stereo copies extended by `ceil(tailSeconds * sampleRate)`; source stereo lengths must match and the resulting length must not exceed **4,000,000 frames per channel**.
+
+| Section | Parameters |
+| --- | --- |
+| `chorus` | Required `rate` 0.05–10 Hz, `depth` 0–1, `mix` 0–1; optional `feedback` 0–0.7 (default 0), integer `voices` 1–4 (default 2) |
+| `reverb` | Required `size`, `damping`, `mix` 0–1; optional `preDelay` 0–0.1 seconds (default 0), `width` 0–1 (default 1) |
+| `order` | `chorus-reverb` (default) or `reverb-chorus` |
+
+Options must be strict plain own-data objects: unknown fields, accessors, missing required fields and non-finite/out-of-range numbers reject. `params` and its sections are frozen snapshots. `update()` replaces all options with a 20 ms linear parameter ramp; order changes fade to dry before switching and fade back. `reset()` deterministically clears all delay lines, filters and LFO state and applies the target parameters immediately.
+
+The original fractional-delay chorus uses a 10 ms base delay with up to ±8 ms sine modulation and phase-spread voices. The original seconds-scaled Schroeder network uses four parallel damped combs and two series all-pass diffusers per channel; it makes no Yamaha/YM2151 or other hardware-fidelity claim. `size` sets nominal comb T60 to `0.2 + 3 * size` seconds; damping low-passes feedback. Width crossfades mono and stereo wet sound.
+
+The gain law is **linear dry/wet crossfade**, `dry * (1 - mix) + wet * mix`, not equal-power summation. In steady state the wet output has a **0.7 ceiling for unity-bounded input** (at least 3 dB headroom): chorus averages voices and compensates feedback by `1 - feedback`; comb injection uses `1 - loopGain`, and each all-pass is normalized by its worst-case gain of 3. The ceiling is a steady-state property: lowering chorus `feedback` through `update()` ramps over 20 ms while the delay line still holds content written at the old, higher feedback, so a resonant input can briefly exceed 0.7 (output stays finite and clamped). Dry output is not attenuated at mix 0. Omitted sections and exact zero mix are bit-transparent for finite input, including signed zero. Host sums can still clip; arbitrary over-unity input is not a mastering limiter, and float32 WAV export of effected audio should be checked or limited by the host.
+
+All delay state is preallocated: delay samples are at most `ceil(0.563 * sampleRate) + 32` Float64 values (plus 52 control/filter values), under 866 KiB at 192 kHz. Processing clamps internal values to ±1,000,000, replaces NaN/Infinity input with zero and flushes magnitudes below `1e-20`; malformed PCM cannot permanently poison state. Finite dry bypass remains untouched. Output and reset are deterministic and processing is block-size independent.
+
+`tailSeconds` is a conservative −80 dB audible-tail bound, not a hard truncation: reverb reserves `0.3 + 3 * T60` seconds and chorus reserves a feedback-dependent bound based on its maximum delay. Cascaded bounds add; updates retain the largest previous bound until reset so old tails remain covered. The bounded worklet accepts at most 32 commands per audio frame boundary, stores no command queue, reports validation/rate failures and keeps close available during flooding. Pace host updates; do not flood the MessagePort.
+
 
 ## Choosing
 

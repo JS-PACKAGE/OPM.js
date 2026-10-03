@@ -77,6 +77,8 @@ Envelope-transition references compare the waveform through the actual voice-end
 
 ## Conservative host capacity candidates
 
+**Scope note (v1.11):** the benchmark patches use sine operators only. Non-sine operator waveforms (`half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`) add a per-sample waveform evaluation and `noise` adds a bounded LFSR step, so patches that use them cost more per voice than the measured candidates indicate; the work stays bounded by the voice limit, but the capacity candidates below were not re-measured for those voices.
+
 The v1.10 checkout adds this matrix/candidate output through the **checkout-only** maintenance command; it is not a packaged API or command. From the matching 1.10.0 source checkout, run:
 
 ```sh

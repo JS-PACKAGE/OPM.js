@@ -2,6 +2,40 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## v1.11 (unreleased)
+
+Package version 1.11.0 (unreleased). Voice format v7 (per-operator waveforms and held noise; v1–v6 inputs still accepted), optional stereo effects, MIDI program maps with RPN bend sensitivity and approximate `.opm` import. Not published: physical-device, MIDI-hardware and human-listening acceptance remain unverified, and GitHub distribution is separate from npm publication. The repository now lives at `JS-PACKAGE/OPM.js`; links to historical CI runs and review issues keep their originally recorded addresses.
+
+### Approximate OPM text import
+
+- Add bounded dependency-free `importOPM`/`describeOPM` for decimal VOPM/MXDRV-family text patches, returning normalized v7 voices and separate deterministic metadata/loss warnings.
+- Preserve all eight named operator graphs, raw key-on SLOT masking, TL attenuation, coarse detune and per-operator AM enable. Document musical envelope/DT1/key-scaling/LFO approximations, omitted second decay, ignored pan and extension-only C2 noise; no register-level emulation or fidelity claim.
+- Add original recipe, finite deterministic render, topology, parameter-table, naming and hostile-input regression tests.
+
+### MIDI voice selection and bend sensitivity
+
+- Add opt-in bounded program-to-named-FM voice maps to file and live adapters, plus file-only drum-note maps and frozen artistic GM-family/percussion starter maps. Note-on voice selection leaves sounding gates untouched; unmapped programs retain fallback/ignore policies. File loss summaries distinguish honored program changes from omissions.
+- Behavior change: preserve-mode file import and live MIDI now decode channel-local RPN 0 pitch-bend sensitivity, including cents, clamped to 48 semitones. Null/NRPN selection disables data entry; live reset restores the initial range. CC100/101 are reserved; CC6/38 custom mappings still apply when RPN 0 is inactive. Export emits neither program changes nor RPN.
+- Add optional `configurePart` preservation policy for future-onset patch changes without changing default clear-on-configuration behavior.
+
+### Voice v7 waveforms and held noise
+
+- Canonicalize legacy v1–v6 voices to v7 while preserving their original field restrictions and unchanged sine rendering.
+- Add per-operator sine/half/abs/quarter/alternating/camel/square/saw and deterministic 17-bit held-noise oscillators, with 20–20000 Hz noise clocks and pooled admission resets. Noise on any operator is an OPM.js extension, not a chip-fidelity claim; discontinuous shapes are not alias-free.
+- Preserve waveform/noise fields through immutable preparation, bank JSON and worklet registration; add original `noise-snare`, `noise-hihat` and `explosion` recipes with percussion metadata and designer controls.
+
+### Optional stereo effects
+
+- Add original pure-DSP fractional-delay chorus and damped-comb/all-pass stereo reverb, shared by offline `createStereoEffects`/tail-extending `applyEffects` and an opt-in dedicated `createEffects` AudioWorklet insert.
+- Preserve existing synthesis and dry PCM; validate bounded own-data parameters, smooth complete configuration replacements, normalize wet gain for headroom and sanitize malformed PCM without poisoning delay state.
+- Extend the independent-buses demo with live chorus/reverb toggles and matching offline stem effects; document routing, gain law, bounded memory/tails and the separate worklet security surface.
+
+### Release hygiene and verification
+
+- The deployment inventory now requires `worklet/fx-processor.js`; the independent review record is in [SECURITY.md](./SECURITY.md#4-review-record) (A/B approved; C/D low and informational findings addressed: deployment inventory, steady-state effects headroom wording, v7/`.opm` input table, sine-only capacity scope).
+- Repository links now point at `JS-PACKAGE/OPM.js`; historical CI-run and review-issue links keep their recorded addresses.
+- Integration owner observed: strict typecheck (source, tests, demos, generated public and DOM-free core types), **438 passing behavioral tests**, the zero-dependency/dynamic-code security gate, and a real Chromium AudioWorklet smoke in which `noise-snare`, `explosion` and a `camel`-waveform voice produced non-silent output through the effects insert while the context stayed running; the sound designer, buses and audition pages loaded without console errors. Not run: Firefox/WebKit, physical devices, MIDI hardware, human listening, benchmark capacity for non-sine voices, installed-package/Vite smoke and npm publication.
+
 ## v1.10
 
 Package version 1.10.0. Portable arrangements, expressive MIDI exchange and scoped acceptance tooling; voice format remains v6. Historical tags and archives remain immutable. GitHub distribution is separate from npm publication and site deployment.
@@ -125,7 +159,7 @@ Package version 1.8.0. GitHub release distribution and npm registry publication 
 ### GitHub release package and post-release documentation
 
 - The unchanged v1.8 tag points to `d793d69056c68a971ede1af988338412687227fd`. Its [remote quality run](https://github.com/YueyuHoshizora/OPM.js/actions/runs/37061483772) passed Node.js 22/24/26 and Chromium/Firefox/WebKit; this later evidence does not turn the missing local Playwright binary above into a local command PASS.
-- Attach the previously missing [opm.js-1.8.0.tgz](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8/opm.js-1.8.0.tgz), built in an isolated checkout of that exact tag. The 491,851-byte archive has SHA-256 `bee862d5b3ccaa7c4e8ff959583873c78a8ca8a9f56f4d8b039e490e498e2587`; build/type/security/local-artifact gates and exact installed-package rendering/asset CLI passed, and a downloaded copy matched byte-for-byte. The [review issue](https://github.com/YueyuHoshizora/OPM.js/issues/1) is closed as a review record, not npm-publication certification.
+- Attach the previously missing [opm.js-1.8.0.tgz](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.8/opm.js-1.8.0.tgz), built in an isolated checkout of that exact tag. The 491,851-byte archive has SHA-256 `bee862d5b3ccaa7c4e8ff959583873c78a8ca8a9f56f4d8b039e490e498e2587`; build/type/security/local-artifact gates and exact installed-package rendering/asset CLI passed, and a downloaded copy matched byte-for-byte. The [review issue](https://github.com/YueyuHoshizora/OPM.js/issues/1) is closed as a review record, not npm-publication certification.
 - Deep audit of the attached archive verified all eleven public import specifiers, 44 JS/map/declaration triplets, embedded sources, runtime/type import closure and the actual CLI's served asset bytes/MIME/`nosniff`. Native Chromium observed finite nonzero AudioWorklet output with zero errors in eco/standard/high at `maxVoices:32`; native static Worker output matched core WAV bytes in all three formats with transferred sink buffers and zero errors. These checks are not physical polyphony-budget, device/MIDI or listening acceptance.
 - Synchronize README, both usage guides, all topical guides, Vite guidance, project guidance and current publication/security instructions to v1.8 contracts. Document direct release-tarball installation, twelve checkout-only HTML examples, 1–32 logical voices/default eight, priority-aware admission, tempo/arrangement, expressive/MIDI and Worker diagnostics; make shipped-document links independent of excluded HTML/source/tooling.
 - Keep historical verification records and the original tag/tarball unchanged. Registry publication/provenance, physical-device/MIDI behavior and human listening remain separate unverified prerequisites.

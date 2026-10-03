@@ -30,6 +30,7 @@ performance.configurePart(1, { voice: 'strings', voiceLimit: 8, voicePriority: 1
 - `voicePriority` (0–127, default 0) is sent with every note the part admits. With a full engine a note can only displace voices of **equal or lower** priority, lowest first (then the engine's stealing policy). If every sounding voice has higher priority the note is refused, nothing else changes, and the part removes the key so no phantom held key remains.
 - This is unrelated to the key-selection `priority: 'last' | 'high' | 'low'`.
 - `getPart()` snapshots include `voiceLimit` and `voicePriority`.
+- `configurePart(part, options, policy?: { preserveNotes?: boolean })` normally clears gates on voice/mode changes. `{ preserveNotes: true }` retains sounding gates on voice-only changes, selecting the new patch for later admissions; mono legato restarts rather than reusing a gate with a different patch. Mode changes always clear keys.
 
 ## Web MIDI adapter
 
@@ -43,7 +44,7 @@ button.onclick = async () => {                       // an explicit user action
 };
 ```
 
-Importing the module never requests access. The adapter accepts any object that provides `inputs` and `statechange` events (`MidiAccessLike`), so tests and hosts can inject their own. It is **not** a MIDI driver: no SysEx, clock, program change or device-specific behavior.
+Importing the module never requests access. The adapter accepts any object that provides `inputs` and `statechange` events (`MidiAccessLike`), so tests and hosts can inject their own. It is **not** a MIDI driver: no SysEx, clock or device-specific behavior. Optional `programVoices?: MidiVoiceMap` maps programs 0–127 to named FM voices via `configurePart` with preserved notes; only later onsets use the new voice, unmapped programs are ignored. The map accepts a plain own-data object or native Map, at most 128 entries; keys are integers 0–127 and names match `[a-zA-Z0-9_-]{1,64}`. It is copied/validated before ports open. Unknown bank names report the normal performance unknown-voice error to `onError`. `gmProgramVoices` (root/core export) is an artistic family starter, not a GM sound set. No live `drumVoices` option is provided; configure percussion parts explicitly. Bank select remains ignored.
 
 | Message (channel 1–16 → part 0–15) | Effect |
 | --- | --- |
@@ -52,12 +53,15 @@ Importing the module never requests access. The adapter accepts any object that 
 | CC1, channel pressure, polyphonic pressure | LFO depth multiplier `1 + v/127` (1×–2×): never below the patch default. Polyphonic pressure uses `updateKey`; the others `updatePartNotes`. |
 | CC7, CC11 | Multiply into the part's expression. |
 | CC10 | Pan. |
-| Pitch bend | ± `pitchBendRange` semitones (default 2, at most 48). |
+| Pitch bend | ± channel sensitivity, initially `pitchBendRange` (default 2, at most 48). |
+| CC101/100, then CC6/38 | RPN 0 selection and sensitivity in semitones/cents for this channel; affects later bends only. |
 | CC120 | Force-release all owned keys (including pedal-latched keys) for this input/channel; no global panic or changes to other inputs/host keys. |
 | CC123 | Pedal-aware note-off for physically held keys of this input/channel; latched keys remain owned for later forced cleanup. |
 | CC121 | Reset the adapter's controllers for the channel and release its pedal. |
 
 Everything else is counted in `snapshot.ignoredMessages`. Malformed packets (wrong length, data bytes above 127, unknown status) are ignored, never thrown into the page.
+
+RPN 0 requires CC101=0/CC100=0. CC6 semitones clamp to 48, optional CC38 cents clamp to 99, and the total clamps to 48 semitones. Each channel starts with the explicit range (default 2); state is shared across adapter inputs for that channel, like other part controllers. RPN null (CC101=127/CC100=127), other RPN numbers, or NRPN selectors CC98/99 deselect sensitivity data entry. CC121 restores the explicit range and null selection; dispose clears internal RPN state and removes listeners, without resetting host part controls. No SysEx is accepted.
 
 Lifecycle: the adapter attaches to current and later inputs (optionally restricted with `inputIds`) and calls `open()` where needed. `releaseAll()` force-releases only adapter-owned keys, including earlier pedal-latched note-offs, without changing the pedal. Disconnect and `dispose()` force-release the affected input's owned keys and remove listeners, then remove its contribution to the shared pedal union. If the last adapter pedal contribution disappears, the part pedal turns off and may release host-played pedal-latched keys too: pedal/controller state is shared per part, not key-owned. Another input's pedal contribution remains effective.
 
@@ -96,7 +100,7 @@ Each entry requires `controller`, `field`, `min`, `max` and `ramp`. Operator fie
 
 `ramp` is an explicit duration 0–10 seconds (0 is immediate); pitch uses glide, other fields use the engine's control ramp. `glide`, `ramp` and `operatorADSR` are not mapping targets. Mappings update part defaults, sounding gates (including release tails) and future notes. A tuple mapping preserves the other three effective **part** operator elements; per-key tuple overrides retain the Performance merge policy and may override the whole tuple.
 
-A listed CC replaces that controller's ordinary action: mapping CC1 to feedback disables CC1's default modulation action, but channel/poly pressure still control modulation. Unlisted controllers keep their existing behavior; omitting `controllerMap` or passing `[]` is unchanged. CC64/120/121/123 cannot be remapped. Controllers must be integers 0–127; at most 128 entries are accepted, with no duplicate controller or target (same field/operator).
+A listed CC replaces that controller's ordinary action: mapping CC1 to feedback disables CC1's default modulation action, but channel/poly pressure still control modulation. CC64/100/101/120/121/123 cannot be remapped. RPN 0 data-entry CC6/38 takes precedence over custom mappings **only while selected**; otherwise mappings work normally, or unmapped data entry is ignored. NRPN selectors deselect RPN before any ordinary/custom action. Controllers must be integers 0–127; at most 128 entries are accepted, with no duplicate controller or target (same field/operator). Omitting `controllerMap` preserves ordinary CC behavior, except the newly supported RPN sensitivity.
 
 CC121 restores every mapped target for the channel. Optional `reset` defines that target's baseline and must be inside the field's engine bounds (not necessarily inside `min`/`max`). Only `operatorFrequencies` accepts `reset: null`, which restores ratio mode. Without `reset`, the baseline is captured from `getPartControls` **when the adapter is created**, so later patch/configuration changes do not change that reset value. Reset retains unrelated tuple elements and uses each mapping's ramp. Ordinary reset behavior and input-pedal ownership remain intact.
 
@@ -107,7 +111,7 @@ Example 10 connects hardware knobs CC16–19 to feedback, operator 1 ratio, oper
 
 ## Support and verification
 
-Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). [`test/midi.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/test/midi.test.ts) drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.
+Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). [`test/midi.test.ts` (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/test/midi.test.ts) drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.
 
 ## Original physical MIDI campaign (current 1.10.0 checkout)
 
