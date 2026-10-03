@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OPM.js — Original compositions</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main>
+    <h1>Original compositions</h1>
+    <p>Two original short pieces for four-operator FM. Start quietly: monitoring uses a separate 16% host gain. No copyrighted melody is copied.</p>
+    <label>Composition
+      <select id="song">
+        <option value="0">Harbor at First Light — 4/4</option>
+        <option value="1">Lanterns on the Stair — 3/4</option>
+      </select>
+    </label>
+    <p id="description"></p>
+    <div class="controls">
+      <button id="play" type="button">Play</button>
+      <button id="stop" type="button" disabled>Stop / cancel WAV</button>
+      <button id="export" type="button">Render WAV</button>
+      <a id="download" hidden>Download WAV</a>
+    </div>
+    <div class="controls">
+      <button id="save" type="button">Save project</button>
+      <label>Load project <input id="load" type="file" accept=".json,application/json"></label>
+    </div>
+    <p><output id="status" role="status" aria-live="polite">Choose a composition and press Play.</output></p>
+    <p>Tempo ramps, dynamics, patch definitions and synthesis settings are saved together in versioned <code>.opm.json</code>. Playback uses Transport; WAV export compiles the same beat gates and streams PCM16 chunks from a Worker.</p>
+    <p>The demo WAV download is limited to 90 seconds and 32 MiB. Offline synthesis preserves project mixGain; the separate low monitoring gain is not baked into the WAV. Invalid loaded projects are rejected without replacing the current project.</p>
+    <p><a href="../doc/score-projects.html">Score project guide</a> · <a href="../index.html">All examples</a></p>
+  </main>
+  <script type="module" src="../dist/demo/showcase.js"></script>
+</body>
+</html>

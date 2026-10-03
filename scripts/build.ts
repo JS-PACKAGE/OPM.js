@@ -15,7 +15,7 @@ const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
 const demoEntries = [
   'demo/main.ts', 'demo/song.ts', 'demo/basic.ts', 'demo/modulation.ts',
   'demo/context.ts', 'demo/wav.ts', 'demo/audition.ts', 'demo/sequence.ts',
-  'demo/adaptive.ts', 'demo/instrument.ts', 'demo/buses.ts', 'demo/sound-design.ts',
+  'demo/adaptive.ts', 'demo/instrument.ts', 'demo/buses.ts', 'demo/sound-design.ts', 'demo/showcase.ts',
 ];
 const demoDeclarations = new Set(demoEntries.map(path => path.replace(/\.ts$/, '.d.ts')));
 const program = ts.createProgram(
