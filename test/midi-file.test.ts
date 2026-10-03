@@ -234,3 +234,218 @@ test('byte, track, all-wire-event, tempo and beat/VLQ budgets are hard bounds', 
   const many = Array.from({ length: 32767 }, (_, index) => note(index + 1, 0, 1, index % 128));
   assert.throws(() => exportMidiFile(many, { format: 0 }), /event budget/);
 });
+
+const midiPolicy = { controls: 'preserve' as const, pitchBendRange: 2 };
+const expressive = { ...mapped, ...midiPolicy };
+function control(id: number, beat: number, controls: Extract<BeatSequenceEvent, { type: 'control' }>['controls']): BeatSequenceEvent {
+  return { type: 'control', id, beat, controls };
+}
+function controlRows(events: readonly BeatSequenceEvent[]) {
+  return events.flatMap(event => event.type === 'control' ? [[event.id, event.beat, event.controls]] : []);
+}
+
+test('expressive import snapshots pre-onset state, including silent expression, without changing legacy defaults', () => {
+  const bytes = smf([[
+    0, 0xe0, 127, 127, 0, 0xb0, 7, 100, 0, 0xb0, 11, 0,
+    0, 0xb0, 10, 127, 0, 0xb0, 1, 64, 0, 0x90, 60, 96,
+    120, 0x80, 60, 0, ...end,
+  ]]);
+  const legacy = importMidiFile(bytes, mapped);
+  assert.equal(legacy.events.length, 1);
+  assert.equal(legacy.warnings.find(warning => warning.code === 'ignored-channel')?.count, 5);
+  const result = importMidiFile(bytes, { ...expressive, unsupported: 'reject' });
+  assert.deepEqual(result.events, [
+    { ...note(), duration: 0.25, velocity: 96 / 127 },
+    control(1, 0, { pitch: 2, expression: 0, pan: 1, modulation: 1 + 64 / 127 }),
+  ]);
+  const compiled = compileBeatSequence(result.events);
+  assert.equal(compiled[1].type === 'control' && compiled[1].controls.expression, 0);
+  assert.deepEqual(result.lossSummary.omissions, []);
+  assert.deepEqual(result.lossSummary.approximations, []);
+  assert.deepEqual(result.lossSummary.preservedControls, [
+    { kind: 'pitch-bend', count: 1 }, { kind: 'expression', count: 2 },
+    { kind: 'pan', count: 1 }, { kind: 'modulation', count: 1 },
+  ]);
+  assert.ok(Object.isFrozen(result.lossSummary));
+  assert.ok(Object.isFrozen(result.lossSummary.preservedControls[0]));
+});
+
+test('held and sustained channel gates receive updates, while poly pressure addresses the newest pressed duplicate', () => {
+  const bytes = smf([[
+    0, 0x90, 60, 127, 0, 0x90, 60, 96,
+    120, 0xb0, 64, 127, 0, 0x80, 60, 0,
+    0, 0xa0, 60, 127, 0, 0xd0, 32, 0, 0xb0, 1, 64,
+    0, 0xb0, 7, 100, 0, 0xb0, 11, 80, 0, 0xe0, 0, 0,
+    120, 0x80, 60, 0, 120, 0xb0, 10, 0,
+    120, 0xb0, 64, 0, ...end,
+  ]]);
+  const result = importMidiFile(bytes, expressive);
+  assert.deepEqual(result.events.filter(event => event.type === 'note').map(event => event.duration), [1, 1]);
+  assert.deepEqual(controlRows(result.events).slice(2), [
+    [2, 0.25, { modulation: 2 }],
+    [1, 0.25, { modulation: 1 + 32 / 127 }], [2, 0.25, { modulation: 2 }],
+    [1, 0.25, { modulation: 1 + 64 / 127 }], [2, 0.25, { modulation: 2 }],
+    [1, 0.25, { expression: 100 / 127 }], [2, 0.25, { expression: 100 / 127 }],
+    [1, 0.25, { expression: 100 / 127 * (80 / 127) }], [2, 0.25, { expression: 100 / 127 * (80 / 127) }],
+    [1, 0.25, { pitch: -2 }], [2, 0.25, { pitch: -2 }],
+    [1, 0.75, { pan: -1 }], [2, 0.75, { pan: -1 }],
+  ]);
+  assert.equal(result.lossSummary.approximations[0].code, 'sustain-applied');
+  assert.equal(result.lossSummary.preservedControls.find(entry => entry.kind === 'expression')?.count, 2);
+  assert.equal(result.lossSummary.preservedControls.find(entry => entry.kind === 'channel-pressure')?.count, 1);
+});
+
+test('format 1 channel state and control order follow tick, track, then wire order', () => {
+  const bytes = smf([
+    [0, 0xe0, 0, 0, 120, 0xb0, 10, 127, 0, 0xd0, 127, 120, 0xff, 0x2f, 0],
+    [0, 0x90, 60, 127, 120, 0xe0, 0, 64, 120, 0x80, 60, 0, ...end],
+  ]);
+  const result = importMidiFile(bytes, expressive);
+  assert.deepEqual(controlRows(result.events), [
+    [1, 0, { pitch: -2, expression: 1, pan: 0, modulation: 1 }],
+    [1, 0.25, { pan: 1 }], [1, 0.25, { modulation: 2 }], [1, 0.25, { pitch: 0 }],
+  ]);
+});
+
+test('loss summary separates omissions, approximations and recognized source controls', () => {
+  const bytes = smf([[
+    0, 0xc0, 7, 0, 0xb0, 0, 1, 0, 0xb0, 101, 0, 0, 0xb0, 6, 12,
+    0, 0xb0, 64, 127, 0, 0xe0, 0, 64, 0, 0x90, 60, 127,
+    120, 0x80, 60, 0, 120, 0xb0, 64, 0, ...end,
+  ]]);
+  const result = importMidiFile(bytes, expressive);
+  assert.deepEqual(result.lossSummary.omissions.map(entry => [entry.code, entry.count]), [['ignored-channel', 4]]);
+  assert.deepEqual(result.lossSummary.approximations.map(entry => [entry.code, entry.count]), [['sustain-applied', 2]]);
+  assert.deepEqual(result.lossSummary.preservedControls, [{ kind: 'pitch-bend', count: 1 }]);
+  for (const message of [[0xc0, 7], [0xb0, 0, 1], [0xb0, 101, 0], [0xb0, 6, 12], [0xb0, 121, 0]]) {
+    assert.throws(() => importMidiFile(smf([[0, ...message, ...end]]), { ...expressive, unsupported: 'reject' }), /Unsupported/);
+  }
+});
+
+test('post-release channel updates report unknown-tail approximation and do not resurrect owned gates', () => {
+  const bytes = smf([[
+    0, 0x90, 60, 127, 120, 0x80, 60, 0,
+    120, 0xe0, 127, 127, 120, 0x90, 62, 127, 120, 0x80, 62, 0, ...end,
+  ]]);
+  const result = importMidiFile(bytes, expressive);
+  assert.deepEqual(controlRows(result.events), [
+    [1, 0, { pitch: 0, expression: 1, pan: 0, modulation: 1 }],
+    [2, 0.75, { pitch: 2, expression: 1, pan: 0, modulation: 1 }],
+  ]);
+  assert.equal(result.lossSummary.approximations.find(entry => entry.code === 'release-tail-controls')?.count, 1);
+  assert.throws(() => importMidiFile(bytes, { ...expressive, unsupported: 'reject' }), /release tails/);
+  assert.throws(() => exportMidiFile([note(1, 0, 0.25), control(1, 0.5, { pitch: 1 })], midiPolicy), /release-tail/);
+});
+
+test('expressive export orders initial controllers before onset and release before reset/new onset', () => {
+  const events = [note(1, 0, 0.25), control(1, 0, { pitch: 2, expression: 0, pan: 1, modulation: 2 }), note(2, 0.25, 0.25)];
+  const bytes = exportMidiFile(events, { controls: 'preserve', format: 0 });
+  assert.deepEqual(bytes, smf([[
+    0, 0xff, 0x58, 4, 4, 2, 24, 8, 0, 0xff, 0x51, 3, 7, 0xa1, 0x20,
+    0, 0xe0, 127, 127, 0, 0xb0, 7, 127, 0, 0xb0, 11, 0,
+    0, 0xb0, 10, 127, 0, 0xb0, 1, 127, 0, 0x90, 60, 127,
+    120, 0x80, 60, 0,
+    0, 0xe0, 0, 64, 0, 0xb0, 7, 127, 0, 0xb0, 11, 127,
+    0, 0xb0, 10, 64, 0, 0xb0, 1, 0, 0, 0x90, 60, 127,
+    120, 0x80, 60, 0, ...end,
+  ]]));
+  assert.deepEqual(controlRows(importMidiFile(bytes, expressive).events), [
+    [1, 0, { pitch: 2, expression: 0, pan: 1, modulation: 2 }],
+    [2, 0.25, { pitch: 0, expression: 1, pan: 0, modulation: 1 }],
+  ]);
+});
+
+test('bend, CC7*CC11, pan and pressure meaning survives expressive file-score-file with overlapping gates', () => {
+  const bytes = smf([[
+    0, 0xb0, 7, 100, 0, 0xb0, 11, 80, 0, 0xe0, 0, 96, 0, 0xb0, 10, 32,
+    0, 0xd0, 40, 0, 0x90, 60, 127, 120, 0x90, 64, 96,
+    120, 0xa0, 64, 100, 120, 0xb0, 1, 0,
+    120, 0x80, 60, 0, 0, 0x80, 64, 0, ...end,
+  ]]);
+  const score = importMidiFile(bytes, expressive);
+  for (const format of [0, 1] as const) {
+    const exported = exportMidiFile(score.events, { format, controls: 'preserve' });
+    const reloaded = importMidiFile(exported, expressive);
+    assert.equal(reloaded.events.length, score.events.length);
+    for (let index = 0; index < score.events.length; index++) {
+      const before = score.events[index];
+      const after = reloaded.events[index];
+      if (before.type !== 'control' || after.type !== 'control') { assert.deepEqual(after, before); continue; }
+      assert.equal(after.id, before.id);
+      assert.equal(after.beat, before.beat);
+      assert.deepEqual(Object.keys(after.controls), Object.keys(before.controls));
+      for (const key of Object.keys(before.controls) as ('pitch' | 'expression' | 'pan' | 'modulation')[]) {
+        assert.ok(Math.abs(after.controls[key]! - before.controls[key]!) < 1e-12);
+      }
+    }
+    assert.deepEqual(exportMidiFile(score.events, { format, controls: 'preserve' }), exported);
+  }
+});
+
+test('expressive export rejects incompatible channel overlap and unaddressable repeated-pitch pressure', () => {
+  for (const field of ['pitch', 'expression', 'pan'] as const) {
+    const value = field === 'expression' ? 0.5 : 1;
+    assert.throws(() => exportMidiFile([note(1, 0, 2), note(2, 0, 2, 64), control(1, 1, { [field]: value })], midiPolicy), /conflicts/);
+  }
+  assert.throws(() => exportMidiFile([note(1, 0, 2), { ...note(2, 0.5, 2, 64), pan: 1 }], midiPolicy), /overlapping/);
+  assert.throws(() => exportMidiFile([note(1, 0, 2), note(2, 0.5, 2), control(1, 1, { modulation: 2 })], midiPolicy), /older repeated-pitch/);
+  assert.doesNotThrow(() => exportMidiFile([
+    note(1, 0, 2), note(2, 0.5, 2),
+    control(1, 1, { pitch: 1 }), control(2, 1, { pitch: 1 }),
+  ], midiPolicy));
+});
+
+test('explicit expressive export quantizes controls and rejects non-MIDI automation and ownership loss', () => {
+  const events = [note(), control(1, 0.11, { pitch: 0.123, expression: 0.317, pan: 0.123, modulation: 1.123 })];
+  const result = importMidiFile(exportMidiFile(events, { ...midiPolicy, ppqn: 10 }), expressive);
+  const update = result.events.find(event => event.type === 'control' && event.beat === 0.1);
+  assert.ok(update && update.type === 'control');
+  if (update?.type === 'control') {
+    // Export can use separate wire events; inspect the final state instead.
+    const state = Object.assign({}, ...result.events.flatMap(event => event.type === 'control' ? [event.controls] : []));
+    assert.ok(Math.abs(state.pitch - 0.123) <= 2 / 8191);
+    assert.ok(Math.abs(state.expression - 0.317) <= 1 / 127);
+    assert.ok(Math.abs(state.pan - 0.123) <= 1 / 63);
+    assert.ok(Math.abs(state.modulation - 1.123) <= 1 / 127);
+  }
+  for (const controls of [{ ramp: 0 }, { glide: 0 }, { gain: 1 }, { operatorLevels: [1, 1, 1, 1] }, { modulation: 0.5 }, { pitch: 3 }]) {
+    assert.throws(() => exportMidiFile([note(), control(1, 0.25, controls as Extract<BeatSequenceEvent, { type: 'control' }>['controls'])], midiPolicy));
+  }
+  assert.throws(() => exportMidiFile([note(), control(1, 0.99, { pitch: 1 })], { ...midiPolicy, ppqn: 10 }), /inside/);
+  assert.throws(() => exportMidiFile([note(), control(2, 0.5, { pitch: 1 })], midiPolicy), /owned note/);
+});
+
+test('expression policies reject malicious options/accessors and bound generated fanout separately from wire input', () => {
+  let reads = 0;
+  const bytes = smf([[0, 0x90, 60, 127, 120, 0x80, 60, 0, ...end]]);
+  for (const pitchBendRange of [-1, 49, NaN, Infinity, null, '2']) {
+    assert.throws(() => importMidiFile(bytes, { ...expressive, pitchBendRange: pitchBendRange as number }));
+    assert.throws(() => exportMidiFile([note()], { ...midiPolicy, pitchBendRange: pitchBendRange as number }));
+  }
+  assert.throws(() => importMidiFile(bytes, { controls: 'guess' as 'preserve' }));
+  assert.throws(() => exportMidiFile([note()], { controls: 'guess' as 'preserve' }));
+  assert.throws(() => importMidiFile(bytes, { get controls() { reads++; return 'preserve' as const; } }), /data/);
+  assert.throws(() => exportMidiFile([note(), control(1, 0, { get pitch() { reads++; return 1; } })], midiPolicy), /data/);
+  assert.equal(reads, 0);
+  const onsets = Array.from({ length: 128 }, (_, pitch) => [0, 0x90, pitch, 127]).flat();
+  const bends = Array.from({ length: 512 }, () => [1, 0xe0, 0, 64]).flat();
+  const releases = Array.from({ length: 128 }, (_, pitch) => [0, 0x80, pitch, 0]).flat();
+  assert.throws(() => importMidiFile(smf([[...onsets, ...bends, ...releases, ...end]]), expressive), /generated beat events/);
+  assert.equal(importMidiFile(bytes, { ...expressive, pitchBendRange: 0 }).events.length, 2);
+});
+
+test('poly overrides persist through sustain and channel pressure while new keys inherit channel defaults', () => {
+  const bytes = smf([[
+    0, 0x90, 60, 127, 0, 0xb0, 64, 127, 120, 0xa0, 60, 127,
+    120, 0x80, 60, 0, 0, 0xa0, 60, 0, 0, 0xd0, 32,
+    0, 0x90, 64, 127, 120, 0x80, 64, 0, 120, 0xb0, 64, 0, ...end,
+  ]]);
+  const result = importMidiFile(bytes, expressive);
+  assert.deepEqual(controlRows(result.events), [
+    [1, 0, { pitch: 0, expression: 1, pan: 0, modulation: 1 }],
+    [1, 0.25, { modulation: 2 }],
+    [1, 0.5, { modulation: 2 }],
+    [2, 0.5, { pitch: 0, expression: 1, pan: 0, modulation: 1 + 32 / 127 }],
+  ]);
+  assert.equal(result.lossSummary.preservedControls.find(entry => entry.kind === 'poly-pressure')?.count, 2);
+});

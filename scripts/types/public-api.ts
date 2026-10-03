@@ -13,7 +13,7 @@ import { voiceSchema } from 'opm.js/voices/voice.schema.js';
 import { importMidiFile, exportMidiFile } from 'opm.js/midi-file';
 import type { MidiImportResult, MidiExportOptions } from 'opm.js/midi-file';
 import { parseArrangementProject, serializeArrangementProject } from 'opm.js';
-import type { ArrangementProject, ArrangementDefinition } from 'opm.js';
+import type { ArrangementProject, ArrangementDefinition, MidiFileLossSummary, MidiFileControlKind, MidiFilePreservedControl } from 'opm.js';
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
@@ -281,4 +281,9 @@ const restoredDefinition = {
   tempoMap: portableArrangement.tempoMap, timeSignature: portableArrangement.timeSignature,
 };
 const restoredArrangement: Arrangement = createArrangement(adaptiveOPM, restoredDefinition);
-void [arrangementJSON, restoredArrangement];
+const expressiveFile: Uint8Array = exportMidiFile(importedMidi.events, { controls: 'preserve', pitchBendRange: 2 });
+const expressiveImport: MidiImportResult = importMidiFile(expressiveFile, { controls: 'preserve', pitchBendRange: 2 });
+const lossSummary: Readonly<MidiFileLossSummary> = expressiveImport.lossSummary;
+const preservedKind: MidiFileControlKind = 'pitch-bend';
+const preservedControl: MidiFilePreservedControl = { kind: preservedKind, count: 1 };
+void [arrangementJSON, restoredArrangement, lossSummary, preservedControl];

@@ -11,7 +11,7 @@ export type { WavOptions, WavFormat, WavEncoderOptions, WavEncoder, WavChunk } f
 export type { TempoPoint, TimeSignature, BarBeat } from './transport.js';
 export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from './transport.js';
 export { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRACKS, MAX_MIDI_FILE_EVENTS } from './midi-file.js';
-export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions } from './midi-file.js';
+export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions, MidiFileControlKind, MidiFilePreservedControl, MidiFileLossSummary } from './midi-file.js';
 export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES, parseArrangementProject, serializeArrangementProject, MAX_ARRANGEMENT_PROJECT_BYTES, MAX_ARRANGEMENT_PROJECT_VOICES } from './project.js';
 export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions, ArrangementProject } from './project.js';
 export type { ArrangementLayer, ArrangementSection, ArrangementDefinition } from './arrangement-definition.js';
