@@ -21,6 +21,10 @@
       "types": "./dist/core/index.d.ts",
       "import": "./dist/core/index.js"
     },
+    "./midi-file": {
+      "types": "./dist/core/midi-file.d.ts",
+      "import": "./dist/core/midi-file.js"
+    },
     "./voices/schema.js": {
       "types": "./dist/voices/schema.d.ts",
       "import": "./dist/voices/schema.js"
@@ -70,7 +74,7 @@
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",
     "browser-smoke": "npm run compile && node .dev/scripts/browser-smoke.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit && tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM scripts/types/public-api.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit && tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM scripts/types/public-api.ts && tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022 --types node scripts/types/core-only.ts",
     "prepack": "npm run build"
   },
   "engines": {

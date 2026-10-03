@@ -196,6 +196,17 @@ if (process.argv.includes('--package-smoke')) {
     if (types.error) throw types.error;
     assert.equal(types.status, 0, `installed package declaration smoke failed\n${types.stdout}\n${types.stderr}`);
     console.log(JSON.stringify({ gate: 'installed-package-types', passed: true }));
+    const coreFixture = join(directory, 'core-only.ts');
+    await writeFile(coreFixture, await readFile(join(root, 'scripts/types/core-only.ts'), 'utf8'));
+    const coreTypes = spawnSync(process.execPath, [
+      join(root, 'node_modules/typescript/bin/tsc'),
+      '--noEmit', '--strict', '--module', 'NodeNext', '--moduleResolution', 'NodeNext',
+      '--target', 'ES2022', '--lib', 'ES2022', '--types', 'node',
+      '--typeRoots', join(root, 'node_modules/@types'), coreFixture,
+    ], { cwd: directory, encoding: 'utf8', timeout: 30000 });
+    if (coreTypes.error) throw coreTypes.error;
+    assert.equal(coreTypes.status, 0, `installed pure Node core declaration smoke failed\n${coreTypes.stdout}\n${coreTypes.stderr}`);
+    console.log(JSON.stringify({ gate: 'installed-package-node-core-types', passed: true }));
   } finally {
     await rm(directory, { recursive: true, force: true });
   }
