@@ -1,10 +1,13 @@
 import type { PreparedVoice } from '../voices/schema.js';
 import type { BeatSequenceEvent, SequenceEvent, SequenceVoices } from './sequence.js';
+import type { ArrangementDefinition, ArrangementLayer, ArrangementSection } from './arrangement-definition.js';
 import type { QualityProfile, SynthOptions } from './synth.js';
 import type { NormalizedTuning } from './tuning.js';
 import type { TempoPoint, TimeSignature } from './transport.js';
 export declare const MAX_SCORE_PROJECT_BYTES: number;
 export declare const MAX_SCORE_PROJECT_VOICES = 128;
+export declare const MAX_ARRANGEMENT_PROJECT_BYTES: number;
+export declare const MAX_ARRANGEMENT_PROJECT_VOICES = 128;
 export interface BeatSequenceOptions {
     tempoMap?: readonly TempoPoint[];
     bpm?: number;
@@ -27,9 +30,23 @@ export interface ScoreProject {
     readonly voices: Readonly<Record<string, PreparedVoice>>;
     readonly settings: ScoreProjectSettings;
 }
+/** Version 1 stores a replayable definition; no live cursor, pending commands or DSP state. */
+export interface ArrangementProject extends ArrangementDefinition {
+    readonly version: 1;
+    readonly layers: readonly Readonly<Required<ArrangementLayer>>[];
+    readonly sections: readonly Readonly<ArrangementSection>[];
+    readonly tempoMap: readonly Readonly<TempoPoint>[];
+    readonly timeSignature: Readonly<TimeSignature>;
+    readonly voices: Readonly<Record<string, PreparedVoice>>;
+    readonly settings: ScoreProjectSettings;
+}
 /** Compile musical gates by integrating both endpoints; control ramp/glide remain seconds. */
 export declare function compileBeatSequence(events: readonly BeatSequenceEvent[], options?: BeatSequenceOptions): SequenceEvent[];
 /** Parse strict versioned own-data input, detach all nested data and freeze the snapshot. */
 export declare function parseScoreProject(source: string | object): ScoreProject;
 /** Canonical compact JSON: stable field order, sorted patch names, normalized defaults. */
 export declare function serializeScoreProject(project: ScoreProject): string;
+/** Parse a self-contained arrangement using the same definition boundary as createArrangement. */
+export declare function parseArrangementProject(source: string | object): ArrangementProject;
+/** Canonical compact JSON for a definition, never a live Arrangement object. */
+export declare function serializeArrangementProject(project: ArrangementProject): string;

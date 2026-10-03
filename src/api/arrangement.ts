@@ -1,34 +1,18 @@
 import type { OPM, OPMEvent } from './index.js';
-import { prepareBeatEvents } from './transport.js';
-import type { BeatSequenceEvent } from './transport.js';
+import { MAX_ARRANGEMENT_LAYER_LENGTH as MAX_LAYER_LENGTH, arrangementName as name, prepareArrangementDefinition } from '../core/arrangement-definition.js';
+import type { ArrangementDefinition } from '../core/arrangement-definition.js';
+export type { ArrangementLayer, ArrangementSection } from '../core/arrangement-definition.js';
 import { MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, sequenceOwnData } from '../core/sequence.js';
 import type { PreparedSequenceEvent } from '../core/sequence.js';
 import type { NoteControls } from '../core/synth.js';
 import {
-  MAX_TRANSPORT_BEATS, normalizeTempoMap, normalizeTimeSignature, quantizeBeat, tempoBeat, tempoSeconds,
-  beatToBarBeat, replaceTempoFrom, transportArray, transportNumber,
+  MAX_TRANSPORT_BEATS, normalizeTempoMap, quantizeBeat, tempoBeat, tempoSeconds,
+  beatToBarBeat, replaceTempoFrom, transportNumber,
 } from '../core/transport.js';
-import type { BarBeat, TempoPoint, TimeSignature } from '../core/transport.js';
+import type { BarBeat, TempoPoint } from '../core/transport.js';
 
-export interface ArrangementLayer {
-  name: string;
-  /** Loop length in quarter notes, 0 < length <= 256. Layers stay aligned to the global beat grid. */
-  length: number;
-  /** Beat events inside [0, length). Note durations may exceed the loop length. */
-  events: readonly BeatSequenceEvent[];
-  /** Admission importance 0..127 applied to every note in this layer (maximum with a note's own value). */
-  voicePriority?: number;
-  /** Per-layer gain 0..1, default 1; independent of authored note expression. */
-  gain?: number;
-}
-export interface ArrangementSection { name: string; layers: readonly string[] }
-export interface ArrangementOptions {
-  layers: readonly ArrangementLayer[];
-  sections: readonly ArrangementSection[];
-  initialSection: string;
+export interface ArrangementOptions extends ArrangementDefinition {
   bpm?: number;
-  tempoMap?: readonly TempoPoint[];
-  timeSignature?: TimeSignature;
   horizon?: number;
   interval?: number;
   onError?: (error: Error) => void;
@@ -87,16 +71,8 @@ interface Command { beat: number; order: 0 | 1 | 2; gate: Gate; controls?: NoteC
 interface Change { beat: number; section: string; layers: ReadonlySet<string> }
 interface GainChange { beat: number; layer: string; target: number; fade: number; from: number; at?: number; applied: boolean; forcedFrom?: number; activation?: boolean }
 
-const MAX_LAYERS = 16;
-const MAX_SECTIONS = 32;
-const MAX_LAYER_LENGTH = 256;
-const NAME = /^[A-Za-z0-9_-]{1,64}$/;
 const EPSILON = 1e-9;
 
-function name(value: unknown, label: string): string {
-  if (typeof value !== 'string' || !NAME.test(value)) throw new TypeError(`${label} must match [A-Za-z0-9_-]{1,64}`);
-  return value;
-}
 
 /**
  * Looping, quantized adaptive music for one OPM instance. Layers are aligned to the global beat grid, so a layer
@@ -106,37 +82,29 @@ function name(value: unknown, label: string): string {
 export function createArrangement(opm: OPM, options: ArrangementOptions): Arrangement {
   const config = sequenceOwnData(options, ['layers', 'sections', 'initialSection', 'bpm', 'tempoMap', 'timeSignature', 'horizon', 'interval', 'onError'],
     ['layers', 'sections', 'initialSection'], 'arrangement options');
-  let map = normalizeTempoMap(config.tempoMap as readonly TempoPoint[] | undefined, config.bpm === undefined ? 120 : config.bpm as number);
-  const signature = normalizeTimeSignature(config.timeSignature as TimeSignature | undefined);
+  const { definition, scores } = prepareArrangementDefinition({
+    layers: config.layers, sections: config.sections, initialSection: config.initialSection,
+    bpm: config.bpm, tempoMap: config.tempoMap, timeSignature: config.timeSignature,
+  }, opm.voices);
+  let map = definition.tempoMap;
+  const signature = definition.timeSignature;
   const horizon = transportNumber(config.horizon === undefined ? 0.2 : config.horizon, 0.01, 10, 'horizon');
   const interval = transportNumber(config.interval === undefined ? Math.min(0.025, horizon / 2) : config.interval, 0.001, horizon / 2, 'interval');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
   const onError = config.onError as ((error: Error) => void) | undefined;
 
   const patterns = new Map<string, Pattern>();
-  let totalEvents = 0;
-  for (const raw of transportArray(config.layers, MAX_LAYERS, 'layers')) {
-    const layer = sequenceOwnData(raw, ['name', 'length', 'events', 'voicePriority', 'gain'], ['name', 'length', 'events'], 'arrangement layer');
-    const layerName = name(layer.name, 'layer name');
-    if (patterns.has(layerName)) throw new TypeError('Duplicate arrangement layer');
-    const length = transportNumber(layer.length, 1 / 1024, MAX_LAYER_LENGTH, 'layer length');
-    const priority = layer.voicePriority === undefined ? 0 : transportNumber(layer.voicePriority, 0, 127, 'voicePriority');
-    const gain = layer.gain === undefined ? 1 : transportNumber(layer.gain, 0, 1, 'layer gain');
-    if (!Number.isInteger(priority)) throw new RangeError('voicePriority must be an integer in 0..127');
-    const events = layer.events as readonly BeatSequenceEvent[];
-    const score = prepareBeatEvents(opm, events);
-    totalEvents += score.events.length;
-    if (totalEvents > 65536) throw new RangeError('Arrangement exceeds its event budget');
+  for (let index = 0; index < definition.layers.length; index++) {
+    const layer = definition.layers[index]!;
+    const score = scores[index]!;
     const tracks = new Map<number, Track>();
     for (const event of score.events) if (event.type === 'note') {
-      if (event.time >= length) throw new RangeError('Layer notes must start inside the loop length');
       tracks.set(event.id, { note: event, end: event.time + event.duration, controls: [] });
     }
     for (const event of score.events) {
       const track = tracks.get(event.id)!;
       if (event.type === 'stop') track.end = Math.min(track.end, event.time);
       else if (event.type === 'control') {
-        if (event.controls.gain !== undefined) throw new TypeError('Arrangement reserves note gain for the layer; use expression in layer events');
         track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
       }
     }
@@ -144,24 +112,11 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       track.controls = track.controls.filter(control => control.beat >= track.note.time);
       track.controls.sort((a, b) => a.beat - b.beat);
     }
-    patterns.set(layerName, { name: layerName, length, priority, gain, notes: [...tracks.values()].sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id) });
+    patterns.set(layer.name, { name: layer.name, length: layer.length, priority: layer.voicePriority, gain: layer.gain,
+      notes: [...tracks.values()].sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id) });
   }
-  if (patterns.size === 0) throw new RangeError('An arrangement requires at least one layer');
-  const sections = new Map<string, ReadonlySet<string>>();
-  for (const raw of transportArray(config.sections, MAX_SECTIONS, 'sections')) {
-    const section = sequenceOwnData(raw, ['name', 'layers'], ['name', 'layers'], 'arrangement section');
-    const sectionName = name(section.name, 'section name');
-    if (sections.has(sectionName)) throw new TypeError('Duplicate arrangement section');
-    const members = new Set<string>();
-    for (const member of transportArray(section.layers, MAX_LAYERS, 'section layers')) {
-      const layerName = name(member, 'section layer');
-      if (!patterns.has(layerName)) throw new RangeError('Section references an unknown layer');
-      members.add(layerName);
-    }
-    sections.set(sectionName, members);
-  }
-  const initial = name(config.initialSection, 'initialSection');
-  if (!sections.has(initial)) throw new RangeError('Unknown initial section');
+  const sections = new Map<string, ReadonlySet<string>>(definition.sections.map(section => [section.name, new Set(section.layers)]));
+  const initial = definition.initialSection;
 
   let state: ArrangementState = 'stopped';
   let position = 0;

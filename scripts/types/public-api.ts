@@ -12,6 +12,8 @@ import { examples } from 'opm.js/voices/examples.js';
 import { voiceSchema } from 'opm.js/voices/voice.schema.js';
 import { importMidiFile, exportMidiFile } from 'opm.js/midi-file';
 import type { MidiImportResult, MidiExportOptions } from 'opm.js/midi-file';
+import { parseArrangementProject, serializeArrangementProject } from 'opm.js';
+import type { ArrangementProject, ArrangementDefinition } from 'opm.js';
 
 const patch: VoiceInput = {
   algorithm: 7, feedback: 0,
@@ -267,3 +269,16 @@ const badCurve: TempoPoint = { beat: 0, bpm: 90, curve: 'smooth' };
 // @ts-expect-error per-key controls cannot use string values
 performanceHost.updateKey(0, 1, { feedback: 'strong' });
 void badCurve;
+
+const arrangementDefinition: ArrangementDefinition = {
+  layers: [{ name: 'lead', length: 4, gain: 0.5, events: [{ type: 'note', id: 1, beat: 0, duration: 1, voice: 'brass', note: 60 }] }],
+  sections: [{ name: 'intro', layers: ['lead'] }], initialSection: 'intro',
+};
+const portableArrangement: ArrangementProject = parseArrangementProject({ version: 1, voices: { brass }, ...arrangementDefinition });
+const arrangementJSON: string = serializeArrangementProject(portableArrangement);
+const restoredDefinition = {
+  layers: portableArrangement.layers, sections: portableArrangement.sections, initialSection: portableArrangement.initialSection,
+  tempoMap: portableArrangement.tempoMap, timeSignature: portableArrangement.timeSignature,
+};
+const restoredArrangement: Arrangement = createArrangement(adaptiveOPM, restoredDefinition);
+void [arrangementJSON, restoredArrangement];

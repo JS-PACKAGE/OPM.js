@@ -8,6 +8,8 @@ import type { Arrangement, ArrangementLayer } from '../src/api/arrangement.js';
 import type { VoiceInput } from '../src/voices/schema.js';
 import { renderSequence } from '../src/core/index.js';
 import type { NoteControls } from '../src/core/synth.js';
+import { parseArrangementProject, serializeArrangementProject } from '../src/core/project.js';
+import type { ArrangementProject } from '../src/core/project.js';
 
 interface Port { postMessage(message: unknown): void; close(): void; onmessage?: ((event: { data: unknown }) => void) | null }
 interface ProcessorInstance {
@@ -206,8 +208,15 @@ test('invalid arrangements reject without scheduling anything', async () => {
       { ...base, layers: [{ ...drums, voicePriority: 1.5 }] },
       { ...base, layers: [{ ...drums, events: [{ type: 'note', id: 1, beat: 1, duration: 1, note: 60, voice }] }] },
       { ...base, unknown: true },
+      { ...base, layers: [{ ...drums, events: [...drums.events,
+        { type: 'control', id: 1, beat: 0.1, controls: { gain: 0.5 } }] }] },
     ]) assert.throws(() => createArrangement(opm, bad as never));
     assert.equal(calls.length, 0);
+    const repeated = createArrangement(opm, { ...base, sections: [{ name: 's', layers: ['drums', 'drums'] }] });
+    try {
+      assert.deepEqual(repeated.snapshot.layers, ['drums']);
+      assert.equal(calls.length, 0);
+    } finally { repeated.dispose(); }
   } finally { await opm.dispose(); }
 });
 
@@ -417,4 +426,48 @@ test('preserved removed gates fade to silence without receiving an early stop', 
     assert.ok(updates.some(update => update.id === id && update.controls.gain === 0 && update.controls.ramp === 0.2));
     assert.ok(audio(opm, arrangement, 1024).every(value => value === 0));
   } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+test('saved arrangement reconstructs named layers, meter, gains and voices with identical live switch/fade PCM', async () => {
+  const original = parseArrangementProject({
+    version: 1, voices: { tone: voice },
+    settings: { sampleRate, maxVoices: 4, mixGain: 0.2, stealing: 'release-first' },
+    layers: [
+      { name: 'bed', length: 12, gain: 0.7, voicePriority: 20,
+        events: [{ type: 'note', id: 1, beat: 0, duration: 12, note: 36, voice: 'tone' }] },
+      { name: 'melody', length: 3, gain: 0.6, voicePriority: 100, events: [
+        { type: 'note', id: 1, beat: 0, duration: 2, note: 72, voice: 'tone' },
+        { type: 'control', id: 1, beat: 0.5, controls: { expression: 0.4, ramp: 0.2 } },
+      ] },
+    ],
+    sections: [{ name: 'calm', layers: ['bed'] }, { name: 'battle', layers: ['bed', 'melody'] }],
+    initialSection: 'calm', timeSignature: { numerator: 3, denominator: 4 },
+    tempoMap: [{ beat: 0, bpm: 120, curve: 'linear' }, { beat: 8, bpm: 180 }],
+  });
+  const loaded = parseArrangementProject(serializeArrangementProject(original));
+  async function replay(project: ArrangementProject) {
+    const { opm, calls, stops, updates } = await host(project.settings);
+    opm.replaceVoiceBank([]);
+    for (const [name, patch] of Object.entries(project.voices)) opm.loadVoice(name, patch);
+    const arrangement = createArrangement(opm, { layers: project.layers, sections: project.sections,
+      initialSection: project.initialSection, tempoMap: project.tempoMap, timeSignature: project.timeSignature });
+    try {
+      assert.equal(arrangement.state, 'stopped');
+      assert.equal(calls.length, 0, 'loading a definition cannot admit playback');
+      await arrangement.start();
+      const before = audio(opm, arrangement, 4800);
+      const boundary = arrangement.switchSection('battle', { quantize: 'bar', fade: 0.4 });
+      assert.equal(boundary, 3, 'loaded meter defines the bar boundary');
+      assert.equal(arrangement.setLayerGain('bed', 0.45, { quantize: 'beat', fade: 0.25 }), 3);
+      const after = audio(opm, arrangement, 40000);
+      assert.equal(arrangement.snapshot.section, 'battle');
+      assert.deepEqual(arrangement.snapshot.layers, ['bed', 'melody']);
+      assert.equal(calls.filter(call => call.note === 36).length, 1, 'shared layer stays continuous after load');
+      assert.ok(calls.some(call => call.note === 72 && call.voicePriority === 100));
+      assert.ok(updates.some(update => update.controls.gain === 0.45 && update.controls.ramp === 0.25));
+      assert.ok(after.some(value => value !== 0));
+      return { before, after, calls: [...calls], stops: [...stops], updates: [...updates] };
+    } finally { arrangement.dispose(); await opm.dispose(); }
+  }
+  assert.deepEqual(await replay(loaded), await replay(original));
 });

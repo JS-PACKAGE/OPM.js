@@ -32,6 +32,69 @@ Returned objects, arrays, voices, controls and settings are detached and frozen.
 
 Budgets: 8 MiB total serialized project, 128 stored voices with a 256 KiB normalized bank budget, 65,536 events and 86,400 quarter-note beats. Compiled seconds must fit the existing 24-hour long-sequence horizon. Array holes/extra properties are rejected. These budgets do not enlarge worklet queues or full-buffer rendering limits.
 
+## Portable Arrangement projects (Unreleased checkout)
+
+`ArrangementProject` is a separate **version 1 definition**, not an extension of `ScoreProject` v1. Existing score files keep their schema and replay behavior. The APIs `parseArrangementProject(source: string | object)` and `serializeArrangementProject(project)` are exported from both `opm.js` and `opm.js/core`; core parsing needs no DOM or Web Audio declarations. These additions are in the current checkout, not the immutable published v1.9 example archive.
+
+```ts
+import { parseArrangementProject, serializeArrangementProject } from 'opm.js/core';
+import { brass } from 'opm.js/voices/brass.js';
+
+const adaptive = parseArrangementProject({
+  version: 1,
+  voices: { pad: brass, lead: brass },
+  settings: { sampleRate: 44100, maxVoices: 8, mixGain: 0.2 },
+  tempoMap: [{ beat: 0, bpm: 96 }],
+  timeSignature: { numerator: 3, denominator: 4 },
+  layers: [
+    { name: 'bed', length: 12, gain: 0.6, voicePriority: 20,
+      events: [{ type: 'note', id: 1, beat: 0, duration: 12, note: 48, voice: 'pad' }] },
+    { name: 'melody', length: 3, gain: 0.8, voicePriority: 100, events: [
+      { type: 'note', id: 1, beat: 0, duration: 2, note: 72, voice: 'lead' },
+      { type: 'control', id: 1, beat: 1, controls: { expression: 0.5, ramp: 0.2 } },
+    ] },
+  ],
+  sections: [{ name: 'calm', layers: ['bed'] }, { name: 'battle', layers: ['bed', 'melody'] }],
+  initialSection: 'calm',
+});
+const saved = serializeArrangementProject(adaptive);
+const restored = parseArrangementProject(saved);
+```
+
+Required fields are `version`, `voices`, `layers`, `sections` and `initialSection`. Tempo, meter and synthesis settings use exactly the score-project defaults; each layer normalizes `gain` to 1 and `voicePriority` to 0. Named voices, control-property order and all defaults are canonical; layer, section, member and event array order is retained. Every note references a stored voice; note IDs are unique **within each layer**, so separate layers may reuse IDs. Notes must start inside the layer's loop; durations and owned controls may extend beyond its end. Authored control `gain` is reserved for the layer and rejects; use `expression`.
+
+Both live `createArrangement` and portable parsing use the same pure definition validator. They reject duplicate layer/section names, unknown references/fields, sparse arrays, accessors, invalid controls and out-of-range values. Repeated section members normalize to one membership in first-occurrence order, preserving existing live semantics. The returned layers, sections, events, voices, tempo/meter and settings are detached and deeply frozen. Projects allow 1–16 layers, at most 32 sections, 65,536 events **in total**, loop lengths 1/1024–256 quarter notes, priorities 0–127 and gains 0–1. The required initial section must exist (it may have no active layers). The 8-MiB project / 128-voice / 256-KiB normalized-bank budgets and beat/compiled-second horizons above also apply; the corresponding exported constants are `MAX_ARRANGEMENT_PROJECT_BYTES` and `MAX_ARRANGEMENT_PROJECT_VOICES`. Hosts must check upload/download bytes before buffering.
+
+### Load into the live API
+
+```ts
+import { OPM, createArrangement } from 'opm.js';
+
+// Inside a browser click handler; dispose the previous owned arrangement/synth first.
+const synth = new OPM({ ...restored.settings });
+synth.replaceVoiceBank([]); // Remove implicit brass: a project may already store 128 names.
+for (const [name, voice] of Object.entries(restored.voices)) synth.loadVoice(name, voice);
+const music = createArrangement(synth, {
+  layers: restored.layers, sections: restored.sections, initialSection: restored.initialSection,
+  tempoMap: restored.tempoMap, timeSignature: restored.timeSignature,
+  onError: error => console.error(error),
+});
+await music.start(); // Parsing/loading alone never starts audio.
+music.switchSection('battle', { quantize: 'bar', fade: 0.8 });
+music.setLayerGain('bed', 0.4, { quantize: 'beat', fade: 0.5 });
+// When this host is finished:
+music.dispose();
+await synth.dispose();
+```
+
+Use the complete current built distribution for this example. A browser may choose a different actual sample rate, or reject a requested context/rate; surface that failure rather than silently substituting settings. On host teardown, dispose the old arrangement before replacing its owned synth; do not close a context borrowed from another component.
+
+The saved object is an **authored replay definition**. It does not store the current musical cursor, scheduled changes, in-progress fades, note IDs, oscillator/envelope/LFO/filter history, or a DSP checkpoint. Loading starts the definition at beat 0 and its `initialSection` only after a user gesture. There is no serializer for live `Arrangement` objects; keep the authored definition separately and explicitly commit host edits into it.
+
+In the current checkout, build and serve `examples/adaptive.html`: switch sections, toggle a layer, change a gain target or accelerate, then **Save definition → Load arrangement JSON → Start**. The page saves requested targets and the edited section definition (including edits whose musical boundary is still pending), not the pending transition itself. Loading disposes prior owned playback, rebuilds controls for arbitrary valid layer/section names, and stays stopped. Reset demo intentionally replaces the loaded definition and applies the selected swing without playing. Playback, subsequent switches and fades reuse the saved voices/settings; no code edits are needed.
+
+The adaptive page owns its context and attenuates monitoring to 16% separately from the saved synthesis `mixGain`; saved settings are not weakened or silently rewritten for playback. Context/rate initialization failures remain visible.
+
 ## Replay with Transport
 
 ```ts

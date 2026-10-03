@@ -1,6 +1,6 @@
 // A Node offline consumer must not require Web Audio or any DOM declarations.
-import { parseScoreProject, serializeScoreProject, compileBeatSequence, renderSequence, encodeWav } from 'opm.js/core';
-import type { BeatSequenceEvent, SequenceEvent, ScoreProject } from 'opm.js/core';
+import { parseScoreProject, serializeScoreProject, compileBeatSequence, renderSequence, encodeWav, parseArrangementProject, serializeArrangementProject } from 'opm.js/core';
+import type { BeatSequenceEvent, SequenceEvent, ScoreProject, ArrangementProject, ArrangementDefinition, ArrangementLayer } from 'opm.js/core';
 import { importMidiFile, exportMidiFile } from 'opm.js/midi-file';
 import { brass } from 'opm.js/voices/brass.js';
 
@@ -17,3 +17,9 @@ const audio = renderSequence(events, { ...project.settings, voices });
 const wav: Uint8Array = encodeWav({ left: audio.left, right: audio.right, sampleRate: project.settings.sampleRate, format: 'pcm16' });
 const saved: string = serializeScoreProject(project);
 console.log(wav.byteLength, saved);
+
+const layer: ArrangementLayer = { name: 'lead', length: 4, gain: 0.7, events: beats };
+const definition: ArrangementDefinition = { layers: [layer], sections: [{ name: 'intro', layers: ['lead'] }], initialSection: 'intro' };
+const arrangementProject: ArrangementProject = parseArrangementProject({ version: 1, voices: { brass }, ...definition });
+const arrangementJSON: string = serializeArrangementProject(arrangementProject);
+void arrangementJSON;

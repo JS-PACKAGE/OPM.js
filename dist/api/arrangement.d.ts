@@ -1,28 +1,9 @@
 import type { OPM } from './index.js';
-import type { BeatSequenceEvent } from './transport.js';
-import type { BarBeat, TempoPoint, TimeSignature } from '../core/transport.js';
-export interface ArrangementLayer {
-    name: string;
-    /** Loop length in quarter notes, 0 < length <= 256. Layers stay aligned to the global beat grid. */
-    length: number;
-    /** Beat events inside [0, length). Note durations may exceed the loop length. */
-    events: readonly BeatSequenceEvent[];
-    /** Admission importance 0..127 applied to every note in this layer (maximum with a note's own value). */
-    voicePriority?: number;
-    /** Per-layer gain 0..1, default 1; independent of authored note expression. */
-    gain?: number;
-}
-export interface ArrangementSection {
-    name: string;
-    layers: readonly string[];
-}
-export interface ArrangementOptions {
-    layers: readonly ArrangementLayer[];
-    sections: readonly ArrangementSection[];
-    initialSection: string;
+import type { ArrangementDefinition } from '../core/arrangement-definition.js';
+export type { ArrangementLayer, ArrangementSection } from '../core/arrangement-definition.js';
+import type { BarBeat, TempoPoint } from '../core/transport.js';
+export interface ArrangementOptions extends ArrangementDefinition {
     bpm?: number;
-    tempoMap?: readonly TempoPoint[];
-    timeSignature?: TimeSignature;
     horizon?: number;
     interval?: number;
     onError?: (error: Error) => void;
