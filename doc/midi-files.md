@@ -2,7 +2,7 @@
 
 `importMidiFile` and `exportMidiFile` are dependency-free binary adapters, available from `opm.js/midi-file`, `opm.js/core`, and the main API. They do not open MIDI devices, transmit SysEx, emulate a chip, or implement General MIDI instrument/percussion selection.
 
-Expression conversion below is an **Unreleased checkout capability**; package version remains 1.9.0. Build this checkout to use it. Do not assume the immutable published v1.9 examples contain these additions.
+Expression conversion below is available since v1.10 in package 1.10.0. Controls remain opt-in, with default omission and explicit `lossSummary`; interactive examples are checkout-only and require the matching v1.10 source checkout.
 
 ## Import
 

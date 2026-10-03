@@ -2,11 +2,11 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-GitHub Release **v1.9（套件 1.9.0）**加入可攜樂譜專案、Standard MIDI files、Arrangement 淡入淡出、自訂 MIDI CC 映射、Transport startupLead、兩首原創曲與可搜尋 HTML／完整 API 文件。保留 canonical v6 音色、表情控制、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
+GitHub Release **v1.10（套件 1.10.0）**加入可攜 Arrangement 專案、選用的 MIDI 檔案表情保留與損失摘要、依工作負載限定的容量候選，以及有界本機 MIDI 擷取／驗收活動準備。保留 canonical v6 音色、表情控制、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
 
-音色格式版本與套件版本獨立：v1.9 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
+音色格式版本與套件版本獨立：v1.10 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
 
-**尚未發佈的 checkout 新增功能：**[可攜 Arrangement 定義](./score-projects.md)、選用的 [MIDI 檔案表情保留與損失摘要](./midi-files.md)、[實測容量候選](./acoustic-quality.md)及[跨功能契約總覽](./host-integration.md#cross-feature-contracts)需使用目前 checkout 建置，不包含在不可變的 v1.9 tarball。實體手機／MIDI 與人工聽感仍須真正的原始觀察才能完成驗收，不能用自動播放冒充通過。
+**本次 Release 範圍：**[可攜 Arrangement 專案](./score-projects.md#portable-arrangement-projects)、選用的 [MIDI 檔案表情保留與損失摘要](./midi-files.md)、[實測容量候選](./acoustic-quality.md)及[跨功能契約總覽](./host-integration.md#cross-feature-contracts)包含於 v1.10。實體手機／MIDI 與人工聽感仍須真正的原始觀察才能完成驗收，不能用自動播放冒充通過。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -16,16 +16,23 @@ GitHub Release **v1.9（套件 1.9.0）**加入可攜樂譜專案、Standard MID
 - [壓縮部署](#壓縮部署)
 - [疑難排解](#疑難排解)
 
-## v1.9 新功能
+## v1.10 新功能
 
-**[HTTPS 線上範例](https://opm.js-package.xyz/)**需點擊播放按鈕才能啟動音訊。以下功能包含於 v1.9；歷史 Release 保持不變。GitHub Release 不表示 npm 上架或網站部署。使用端可直接安裝 Release tarball；原始碼貢獻者執行 `npm ci`、`npm run build`。
+**[HTTPS 線上範例](https://opm.js-package.xyz/)**需點擊播放按鈕才能啟動音訊。以下功能包含於 v1.10；歷史 Release 保持不變。GitHub Release 不表示 npm 上架或網站部署。使用端可直接安裝 Release tarball；原始碼貢獻者執行 `npm ci`、`npm run build`。
+
+- `parseArrangementProject(source: string | object)`／`serializeArrangementProject(project)`由 root／core 匯出，讀寫獨立的 `ArrangementProject` version 1。嚴格 own-data 驗證回傳獨立且深度 frozen 的定義，儲存 voices／settings、tempo／meter、layers、sections 與必要的 initialSection。解析／載入不啟動音訊；上限 8 MiB、1–16 layers、32 sections、合計 65,536 events、128 voices／256 KiB 正規化音色 JSON。重播從 beat 0 開始，不儲存即時游標、待執行轉換、淡入淡出或 DSP 狀態。詳見[可攜 Arrangement 專案](./score-projects.md#portable-arrangement-projects)。
+- `importMidiFile(Uint8Array, options?)`回傳 `{ events, tempoMap, timeSignature, warnings, lossSummary }`；`exportMidiFile(events, options?)`回傳 `Uint8Array`，由 root、core 與 `opm.js/midi-file`匯出。僅支援 format 0／1 PPQN。預設 `controls: 'omit'`維持 note-only 匯入，匯出仍拒絕 control events／非零 pan；選用 `controls: 'preserve'`可依明確 pitchBendRange 與 channel ownership 政策保留 pitch、expression、pan、modulation。`lossSummary`區分遺漏、近似與已保留的來源控制訊息計數；sustain 仍是音符長度近似。匯出仍拒絕 ramp／glide、gain／音色控制、非整數音高、非零 priority、channel ownership 歧義與 linear tempo ramp。無 program-to-FM 轉換或 SysEx 傳送。詳見[MIDI 檔案](./midi-files.md)。
+- [實測容量候選](./acoustic-quality.md)僅適用於所測工作負載、瀏覽器與機器，不是所有裝置的通用容量保證。
+- [有界本機 MIDI 擷取](./midi-performance.md)與實體裝置／聽感活動準備協助收集真正原始觀察，不代表已完成實體或人工驗收。
+- [跨功能契約總覽](./host-integration.md#cross-feature-contracts)整理重播、表情控制、渲染與 host 邊界。
+
+### 既有 API 與範例（於 v1.9 引入）
 
 - `parseScoreProject(source: string | object)`／`serializeScoreProject(project)`讀寫 canonical version 1 專案：拍點 events、正規化 tempoMap／timeSignature、具名完整 voices 與 synthesis settings。預設為 120 BPM、4/4、44100 Hz、standard、8 聲部、mixGain 1、A4 440 Hz、oldest；嚴格 own-data 驗證且回傳 frozen snapshot。上限 8 MiB、65,536 events、128 voices／256 KiB 音色 JSON。`compileBeatSequence(events, { tempoMap?, bpm?, voices? })`轉為驗證過的秒制 `SequenceEvent[]`，供離線／Worker 渲染；Transport 直接使用拍點 events，先將具名音色載入 OPM。詳見[樂譜專案](./score-projects.md)。
-- `importMidiFile(Uint8Array, options?)`回傳 `{ events, tempoMap, timeSignature, warnings }`；`exportMidiFile(events, options?)`回傳 `Uint8Array`，由 root、core 與 `opm.js/midi-file`匯出。僅支援 format 0／1 PPQN，嚴格拒絕截斷／損毀及超額資料。匯入預設將 sustain 納入音符長度、警告不支援的資料並拒絕未閉合音符；使用 channelVoices／defaultVoice 與匯出的 voiceChannels 明確映射 FM 音色。匯出拒絕 controls、非整數音高、非零 pan／priority、同音高配對歧義與 linear tempo ramp，不默默遺失表情。無 program-to-FM 轉換或 SysEx 傳送。詳見[MIDI 檔案](./midi-files.md)。
 - `TransportOptions.startupLead`為 0–10 秒，預設 `min(0.05, horizon / 2)`：啟動／恢復／重建以未來時刻為原點，提前量期間維持音樂位置；0 可取消提前量。這修正歷史 beat-0 冷啟動缺陷，但不保證主執行緒停頓下的 deadline。
 - Arrangement layer `gain`為 0–1（預設 1），`switchSection`／`setLayer`可指定 fade 0–10 秒；`setLayerGain(name, gain, { quantize?, fade? })`回傳提交拍點。共用 layer 不重新起音，gain 獨立乘上 expression，涵蓋自行擁有的 release tails 與新音符；layer score 的 gain controls 保留給 Arrangement，音樂力度請用 expression。詳見[自適應音樂](./adaptive-music.md)。
 - `MidiAdapterOptions.controllerMap`至多 128 項，指定 controller、field、明確 min／max／ramp、選用 reset；operator tuple field 另需零起算 operator。重複 CC／target 與 CC64／120／121／123 拒絕。Scalar field 包含獨立 `NoteControls.gain`（0–1、預設 1）；CC121 恢復建立 adapter 時擷取的有效預設或 explicit reset，fixed-Hz 的 reset:null 回到 ratio mode。`performance.getPartControls(part)`回傳 frozen 有效聲部控制，不含個別 key override。詳見[MIDI 表情控制](./midi-performance.md)。
-- 目前 checkout 建置 13 個 demo scripts，新增兩首原創歌曲的播放／停止、專案存取與 WAV 匯出；demo HTML 仍僅供 checkout／網站使用。
+- 套件建置 13 個 demo scripts，包含兩首原創歌曲的播放／停止、專案存取與 WAV 匯出；demo HTML 仍僅供 checkout／網站使用。
 
 建置在 dist 輸出後產生 [HTML 文件](./index.html)與完整[編譯器產生的 API 參考](./api.html)，本機新建套件將它們放在 doc/；歷史套件不變。可直接開啟 doc/index.html，或連同頂層 Markdown／法律檔案部署整個 doc/。本機搜尋支援鍵盤，不需伺服器、遠端搜尋服務或 runtime dependencies；Markdown 仍是唯一文件來源。
 
@@ -37,24 +44,24 @@ GitHub Release **v1.9（套件 1.9.0）**加入可攜樂譜專案、Standard MID
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.9/opm.js-1.9.0.tgz
+npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz
 ```
 
-v1.9 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
+v1.10 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
 
 ```sh
 npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.9.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
+此 checkout 的套件版本產生 `opm.js-1.10.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.9.0.tgz
+npm install ../OPM.js/opm.js-1.10.0.tgz
 ```
 
 既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、13 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、13 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。
@@ -65,7 +72,7 @@ npm install ../OPM.js/opm.js-1.9.0.tgz
 python3 -m http.server 8000
 ```
 
-開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
+開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
 
 ## 瀏覽器靜態部署
 
@@ -129,16 +136,16 @@ public/opm/
 
 Worker 為同源 HTTP(S) 靜態 module，不使用 blob／data／eval；正式 CSP 的 `worker-src`／`script-src` 應允許 `'self'`，資產須有正確 JavaScript MIME。不要把 worker 請求改寫為 SPA HTML。
 
-使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
+使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
 
 已安裝套件也提供 `opm-assets`，可取代手動複製。從 `opm-app` 根目錄使用**尚不存在**的目的目錄：
 
 ```sh
-npx --no-install opm-assets copy public/opm-1.9.0
-npx --no-install opm-assets check https://your-host.example/opm-1.9.0/
+npx --no-install opm-assets copy public/opm-1.10.0
+npx --no-install opm-assets check https://your-host.example/opm-1.10.0/
 ```
 
-第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.9.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
+第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.10.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
 
 ## 瀏覽器 API 與自訂音色
 
@@ -343,7 +350,7 @@ mixGain 是有限 0–1（預設 1），在 **tanh 前**縮放；下游 GainNode
 
 樂譜使用相對秒數；note 為唯一正 ID 與有限 duration，stop／control 指向同一樂譜音符。整份驗證後才派送；限 128 notes、256 保留槽（每音符兩槽加命令）、含 gate 的 60 秒及離線 4,000,000 影格。playSequence 回傳防禦性 scoreId→noteId Map 與冪等 stop，不會對其他 caller 原子保留 worklet 容量。renderSequence 包含尾音；相同 PCM 須設定／取樣率／相對影格原點一致且無其他競爭音符。WAV 僅傳 left／right／sampleRate。
 
-以 HTTPS 在實體 iOS／Android 使用[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html)，依[行動裝置驗收流程與支援矩陣](./mobile-acceptance.md)記錄裝置／OS／瀏覽器／取樣率／政策、觀察與手動 pass／fail／unverified 判定。涵蓋鎖屏、切換 app、來電、耳機／Bluetooth、節電、長播放與主執行緒停頓。報告僅留本機；桌面、headless 與 analyser 訊號不代表實機恢復或聽感不中斷。恢復須手勢；借用 context 由宿主管理。
+以 HTTPS 在實體 iOS／Android 使用[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html)，依[行動裝置驗收流程與支援矩陣](./mobile-acceptance.md)記錄裝置／OS／瀏覽器／取樣率／政策、觀察與手動 pass／fail／unverified 判定。涵蓋鎖屏、切換 app、來電、耳機／Bluetooth、節電、長播放與主執行緒停頓。報告僅留本機；桌面、headless 與 analyser 訊號不代表實機恢復或聽感不中斷。恢復須手勢；借用 context 由宿主管理。
 
 ### 有界長樂譜
 
@@ -377,13 +384,13 @@ bpm 預設 120、範圍 1–1000；tempoMap 從 beat 0 開始嚴格遞增，最�
 
 v1.8 的 `updateKey(part,key,controls)` 對單一實體按鍵套用 NoteControls；未選取的 mono key 保留控制，不改動目前 gate。`updatePartNotes(part,controls)` 更新整個聲部的自有音符（含 release 尾音）與未來音符預設。configurePart 的 `voiceLimit` 為 1–32，自有 release 尾音也佔額度，滿額 noteOn 拋出 RangeError；它不增加引擎聲部數。`voicePriority` 為 0–127（預設 0），與 last／high／low 的按鍵選擇 priority 不同。
 
-選用的 `createMidiAdapter(performance,await requestMidiAccess(),options)` 將使用者授權的 MIDI inputs 映射到聲部，支援 note、sustain、bend、wheel、volume／expression、pan、pressure 與 all-notes-off。匯入模組不會要求權限，永不要求 SysEx；disconnect／dispose 只釋放 adapter 自有按鍵。詳細配方與限制見[表情演奏與 MIDI](./midi-performance.md)及[第 10 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/instrument.html)。
+選用的 `createMidiAdapter(performance,await requestMidiAccess(),options)` 將使用者授權的 MIDI inputs 映射到聲部，支援 note、sustain、bend、wheel、volume／expression、pan、pressure 與 all-notes-off。匯入模組不會要求權限，永不要求 SysEx；disconnect／dispose 只釋放 adapter 自有按鍵。詳細配方與限制見[表情演奏與 MIDI](./midi-performance.md)及[第 10 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/instrument.html)。
 
 ### 速度曲線、網格與分層編曲
 
 `TempoPoint` 為 `{beat,bpm,curve?,endBpm?}`；省略 curve 或 `'step'` 為定速段，`'linear'` 使 BPM 隨拍點線性變化至下一點 bpm 或指定 endBpm（僅 linear 可用；末點不可 linear）。beatsToSeconds／secondsToBeats 使用閉式對數積分與反函式。`quantizeBeat`、`swingBeat`、`swingBeatEvents` 從根入口 `opm.js` 匯入（純瀏覽器使用部署的 `./opm/api/index.js`），不是 `opm.js/core` 匯出；後者連同音符起點與終點一起套用 swing。
 
-`createArrangement(opm,{layers,sections,initialSection,bpm?,tempoMap?,timeSignature?})` 在共用拍點網格上循環具名 layers；`switchSection`／`setLayer` 在不早於已接收音符的第一個量化邊界提交（預設 bar，也可 beat／拍數），回傳提交拍點。共用 layer 保持連續，不重觸發；移除 layer 預設在邊界 release，`preserveNotes:true` 可讓它自然結束。layer 與 note 的 voicePriority 取較大值，優先權拒絕計入 `snapshot.priorityDrops` 而不停止編曲，其他拒絕會停止並通知 onError。至多 16 layers、32 sections、65,536 events，每層循環長度至多 256 拍；只清理自有音符。Arrangement pause／resume 不還原跨越恢復點的持續音，只從後續 onset 繼續；它和 Transport 都不是 DSP checkpoint。公式、密度上限及可執行配方見[自適應音樂](./adaptive-music.md)與[第 09 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/adaptive.html)。
+`createArrangement(opm,{layers,sections,initialSection,bpm?,tempoMap?,timeSignature?})` 在共用拍點網格上循環具名 layers；`switchSection`／`setLayer` 在不早於已接收音符的第一個量化邊界提交（預設 bar，也可 beat／拍數），回傳提交拍點。共用 layer 保持連續，不重觸發；移除 layer 預設在邊界 release，`preserveNotes:true` 可讓它自然結束。layer 與 note 的 voicePriority 取較大值，優先權拒絕計入 `snapshot.priorityDrops` 而不停止編曲，其他拒絕會停止並通知 onError。至多 16 layers、32 sections、65,536 events，每層循環長度至多 256 拍；只清理自有音符。Arrangement pause／resume 不還原跨越恢復點的持續音，只從後續 onset 繼續；它和 Transport 都不是 DSP checkpoint。公式、密度上限及可執行配方見[自適應音樂](./adaptive-music.md)與[第 09 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/adaptive.html)。
 
 保留 quick-start 的按鈕／輸出並替換 module script，可直接試用兩種 helper：
 
@@ -577,7 +584,7 @@ Worker 在模組載入／解析／求值後送出 `{type:'ready',protocol:1}`，
 
 **沒有內建整體期限或自動重試**；可用 `signal:AbortSignal.timeout(300000)` 對整份工作設五分鐘政策。取消不等待卡住的 write／abort；sink 仍須失效化已寫入的部分輸出。完整診斷、deadline 與回滾配方見[Worker 診斷](./worker-diagnostics.md)。
 
-[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html) 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。
+[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/sequence.html) 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。
 
 `importDX7(Uint8Array)` 只接受單個框架／checksum 正確的 **163-byte 單音色**或 **4104-byte／32 音色銀行**；拒絕原始、串接或非 7-bit payload，輸出完整版本 6 音色。describeDX7 回傳 name／sourceAlgorithm／algorithm／selectedOperators／droppedOperators／warnings；原 algorithm 1–32、轉換後 0–7，operator 編號依 DX7 的 1–6。
 

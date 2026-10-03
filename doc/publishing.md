@@ -1,6 +1,6 @@
 # Publication and package verification
 
-The [GitHub v1.9 release](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.9) distributes package **1.9.0** with score projects, MIDI files, arrangement fades and searchable documentation; it does **not** publish to npm. Download its [installable `opm.js-1.9.0.tgz`](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.9/opm.js-1.9.0.tgz) and install it from an application with `npm install /actual/path/to/opm.js-1.9.0.tgz`, without building or installing development tools. The release notes record the exact reviewed commit, CI run and archive digest.
+GitHub v1.10 distribution targets package **1.10.0** with portable Arrangement projects, opt-in MIDI expression conversion and checkout-only capacity/campaign tooling; it does **not** publish to npm. The [release location](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.10) and [installable `opm.js-1.10.0.tgz`](https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz) are the publication targets, not proof that remote publication has completed. Once uploaded, install the downloaded archive from an application with `npm install /actual/path/to/opm.js-1.10.0.tgz`, without building or installing development tools. The release record must retain the actual reviewed commit, CI run and archive digest.
 
 The historical v1.8 tag points to `d793d69056c68a971ede1af988338412687227fd`. Its 1.8.0 archive is 491,851 bytes, with SHA-256 `bee862d5b3ccaa7c4e8ff959583873c78a8ca8a9f56f4d8b039e490e498e2587`; it was built from that tag, installed/exercised, and downloaded back byte-for-byte. Its original documentation remains unchanged. The separately versioned 1.8.1 package includes the synchronized guides and its own regenerated version assets; do not confuse the two artifacts or their digests. Preserve existing tags and assets.
 
@@ -17,7 +17,7 @@ Trusted publishing, npm ownership/2FA, environment reviewers and protected tags 
 From a source checkout, validate a reviewed artifact without contacting npm or claiming registry availability:
 
 ```sh
-npm run registry-verify -- --local /absolute/path/opm.js-1.9.0.tgz 1.9.0
+npm run registry-verify -- --local /absolute/path/opm.js-1.10.0.tgz 1.10.0
 ```
 
 After publication, replace the SHA below with the actual reviewed release commit:

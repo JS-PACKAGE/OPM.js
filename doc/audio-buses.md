@@ -1,6 +1,6 @@
 # Polyphony budgets, voice priority and independent buses
 
-OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (v1.9 source)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/buses.html) demonstrates independent buses; run `examples/buses.html` locally from the current checkout for current code.
+OPM.js has two ways to get more than eight simultaneous sounds, and they cost and sound different. [Example 11 (v1.10 source, checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/examples/buses.html) demonstrates independent buses; run `examples/buses.html` locally from the matching checkout.
 
 ## One engine, more voices
 
@@ -24,7 +24,7 @@ Use it for protected melodies, bass lines and stingers; do not use it to hide an
 
 ### What it costs
 
-The checkout-only maintenance command `npm run benchmark` renders 128-frame blocks of the real DSP. The **Unreleased checkout** (package version remains 1.9.0) adds exact workload metadata and conservative **candidate configurations**, using observed p99 ≤ half the block deadline by default, zero measured misses and clean diagnostics ([criteria and report fields](./acoustic-quality.md#conservative-host-capacity-candidates)). Run the current local checkout; the immutable published v1.9 archive does not include this new output. The full matrix covers 1/4/8/16/32 held voices for every quality profile; raw/prepared eight-start-per-block bursts and two/four independent eight-voice engines remain separate measured workloads. This does not measure browser effects graphs or AudioWorklet underruns.
+The checkout-only maintenance command `npm run benchmark` renders 128-frame blocks of the real DSP. The v1.10 checkout adds exact workload metadata and conservative **candidate configurations**, using observed p99 ≤ half the block deadline by default, zero measured misses and clean diagnostics ([criteria and report fields](./acoustic-quality.md#conservative-host-capacity-candidates)). Run the matching 1.10.0 source checkout; this command and its reports are not packaged APIs. The full matrix covers 1/4/8/16/32 held voices for every quality profile; raw/prepared eight-start-per-block bursts and two/four independent eight-voice engines remain separate measured workloads. This does not measure browser effects graphs or AudioWorklet underruns.
 
 The **historical 1.8.0** scaling run below was taken on an Apple M5 (Node 26.7.0, 48 kHz, 2.667 ms block deadline) on a laptop whose load average was about 24 from unrelated processes, so **it is not a capacity recommendation and the CI budget gate was not applied**. It illustrates how cost grows with sounding voices; these relative medians are not portable scaling constants.
 

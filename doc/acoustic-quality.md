@@ -77,7 +77,7 @@ Envelope-transition references compare the waveform through the actual voice-end
 
 ## Conservative host capacity candidates
 
-This matrix/candidate output is **Unreleased checkout** functionality; the package version remains 1.9.0. The immutable published v1.9 archive does not contain it. From the current local development checkout, run:
+The v1.10 checkout adds this matrix/candidate output through the **checkout-only** maintenance command; it is not a packaged API or command. From the matching 1.10.0 source checkout, run:
 
 ```sh
 OPM_BENCH_CAPACITY_P99_RATIO=0.5 npm run benchmark
@@ -102,7 +102,7 @@ Treat eligible rows as **candidate host configurations requiring browser and phy
 
 ### Observed checkout measurement
 
-On Apple M5 / darwin arm64, Node v26.7.0, the Unreleased package-1.9.0 checkout was measured at 48000 Hz, 128 frames (**2.667 ms** deadline), 300 warmup blocks excluded and 2000 measured blocks per row. No build, test suite or browser scenario ran concurrently; surrounding OS load was not controlled. This is one observation, not thermal/host-contention acceptance. All 29 rows retained clean diagnostics and zero observed misses. Matrix results:
+On Apple M5 / darwin arm64, Node v26.7.0, the pre-release package-1.9.0 checkout was measured at 48000 Hz, 128 frames (**2.667 ms** deadline), 300 warmup blocks excluded and 2000 measured blocks per row. No build, test suite or browser scenario ran concurrently; surrounding OS load was not controlled. This is one observation, not a measurement of package 1.10.0 or thermal/host-contention acceptance. All 29 rows retained clean diagnostics and zero observed misses. Matrix results:
 
 | Quality | Held voices / configured limit | p99 ms | Worst ms | Observed p99 reserve | Candidate |
 | --- | ---: | ---: | ---: | ---: | --- |

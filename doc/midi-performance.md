@@ -107,15 +107,15 @@ Example 10 connects hardware knobs CC16–19 to feedback, operator 1 ratio, oper
 
 ## Support and verification
 
-Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). [`test/midi.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/test/midi.test.ts) drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.
+Web MIDI exists in some browsers only and needs a secure context and user permission; feature-detect and handle rejection (`requestMidiAccess` rejects when unavailable). [`test/midi.test.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/test/midi.test.ts) drives the adapter with an injected access object against the real worklet processor: channel routing, repeated pitches, pedal deferral, malformed packets, bend/wheel/volume ranges, hot-unplug releasing only one input's keys, and dispose. No physical keyboard or browser permission flow was exercised by the automated tests.
 
-## Original physical MIDI campaign (current 1.9.0 checkout)
+## Original physical MIDI campaign (current 1.10.0 checkout)
 
 No physical controller, permission-dialog result or human listening original is supplied here. Permission, connection, hot-unplug, sustain, CC and bend acceptance all remain **unverified**. Injected adapter tests and automated browser clicks do not change that status.
 
-The local observation export below is an **Unreleased checkout change**, with package version still 1.9.0. Build and serve this checkout; the immutable published v1.9 archive/example does not contain the new capture panel. No public export/protocol API was added.
+The bounded local observation export below is available in the **v1.10 checkout-only example**, not the installed engine archive. Build and serve the matching 1.10.0 source checkout to use the capture panel. No public export/protocol API was added.
 
-1. Build and serve the matching current checkout over HTTPS or localhost. Use a browser that actually exposes Web MIDI; unsupported browsers remain unverified for controller operation, not a fabricated pass. Start at comfortable low output volume and click **Start / restart audio**.
+1. Build and serve the matching 1.10.0 checkout over HTTPS or localhost. Use a browser that actually exposes Web MIDI; unsupported browsers remain unverified for controller operation, not a fabricated pass. Start at comfortable low output volume and click **Start / restart audio**.
 2. In **Local physical MIDI campaign**, select the actual environment and enter device model/OS, exact browser version, controller model/firmware/USB or Bluetooth connection, and output route/device volume. Avoid serial numbers or personal identifiers. For desktop UI smoke choose **Desktop / automation**, even when exercising synthetic messages.
 3. Select a scenario and **Begin local scenario capture**. For permission, begin before **Connect Web MIDI**. Test a fresh real prompt's grant and denial as separate runs, using the browser's permission settings between runs when necessary. If permission was already granted or no prompt appeared, say so: that is not original grant/denial-dialog coverage.
 4. Follow the on-page instructions and the criteria below. Record observed behavior and unexercised steps, not only “works.” Check the physical-action and listening declarations only after actually doing both. Choose manual pass/fail/unverified, then **Finish capture / release keys**. Confirm silence after release tails. Repeat every scenario under the same exact declared conditions, exporting before changing browser/device/route.

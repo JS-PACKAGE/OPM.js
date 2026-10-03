@@ -28,7 +28,7 @@ OPM.js follows semantic versioning for the surfaces below. Within 1.x:
 - Version 6 is canonical. Exported banks are always version 6.
 - Legacy versions 1–5 are accepted for the whole 1.x line with their original shapes: v1 excludes key scaling, v1/2 velocity sensitivity, v1–3 waveform, v1–4 expressive fields and v1–5 per-operator LFO targets.
 - A new voice field requires a new version. Validation rejects unknown fields, so a voice written for a newer minor version may **fail to load** in an older runtime. Forward compatibility is not promised; backward compatibility is.
-- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/src/voices/preset-metadata.ts), outside the voice schema, and is never part of the exported voice JSON.
+- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.10/src/voices/preset-metadata.ts), outside the voice schema, and is never part of the exported voice JSON.
 
 ## Sound compatibility
 

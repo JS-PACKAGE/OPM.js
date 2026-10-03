@@ -32,9 +32,9 @@ Returned objects, arrays, voices, controls and settings are detached and frozen.
 
 Budgets: 8 MiB total serialized project, 128 stored voices with a 256 KiB normalized bank budget, 65,536 events and 86,400 quarter-note beats. Compiled seconds must fit the existing 24-hour long-sequence horizon. Array holes/extra properties are rejected. These budgets do not enlarge worklet queues or full-buffer rendering limits.
 
-## Portable Arrangement projects (Unreleased checkout)
+## Portable Arrangement projects
 
-`ArrangementProject` is a separate **version 1 definition**, not an extension of `ScoreProject` v1. Existing score files keep their schema and replay behavior. The APIs `parseArrangementProject(source: string | object)` and `serializeArrangementProject(project)` are exported from both `opm.js` and `opm.js/core`; core parsing needs no DOM or Web Audio declarations. These additions are in the current checkout, not the immutable published v1.9 example archive.
+Available since v1.10, `ArrangementProject` is a separate **version 1 definition**, not an extension of `ScoreProject` v1. Existing score files keep their schema and replay behavior. The APIs `parseArrangementProject(source: string | object)` and `serializeArrangementProject(project)` ship in package 1.10.0 and are exported from both `opm.js` and `opm.js/core`; core parsing needs no DOM or Web Audio declarations. Interactive save/load examples remain checkout-only.
 
 ```ts
 import { parseArrangementProject, serializeArrangementProject } from 'opm.js/core';

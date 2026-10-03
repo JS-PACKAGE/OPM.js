@@ -2,22 +2,24 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.10
+
+Package version 1.10.0. Portable arrangements, expressive MIDI exchange and scoped acceptance tooling; voice format remains v6. Historical tags and archives remain immutable. GitHub distribution is separate from npm publication and site deployment.
 
 ### Portable music and expressive file exchange
 
 - Add a separate bounded version-1 Arrangement project format for named looping layers, sections, initial section, tempo/meter, validated voices and synthesis settings. Share definition validation with live Arrangement playback; save/load reconstructs music, never DSP state or pending live commands.
 - Add opt-in MIDI-file expressive controls while preserving the default note-only conversion policy. Preserve supported channel/key expression under explicit bend-range policy and expose grouped omissions, approximations and preserved wire-message counts; reject unrepresentable export semantics.
 - Add host/workload-scoped benchmark capacity candidates across quality and fully occupied voice limits. Require explicit p99 reserve, zero observed misses and clean diagnostics; retain raw worst/misses and unchanged baseline CI budgets. Candidates do not certify browser/physical-device performance.
-- Consolidate public project/MIDI surfaces, ID/lifecycle/ownership contracts and the distinction between saved musical definitions, running sessions, numerical safety and human acceptance. Mark checkout-only additions separately from the immutable v1.9 release and synchronize current-release example links.
+- Consolidate public project/MIDI surfaces, ID/lifecycle/ownership contracts and the distinction between saved musical definitions, running sessions, numerical safety and human acceptance. Synchronize current-release resources while keeping maintenance tools and HTML examples checkout-only.
 - Reuse the mobile and audition harnesses for explicit current-version acceptance campaigns. Add bounded local physical-MIDI observation downloads to the instrument page, recording exact submitted/observed settings, text-only identifiers and separate manual judgments; desktop, active, stale-scope, abandoned and truncated runs remain unverified.
 
 ### Acceptance boundaries
 
 - Physical iOS/Android interruption/route/long-play acceptance, real MIDI hardware/permission/hot-unplug behavior and the eighteen presets' genuine human listening findings remain blocked pending original physical/listener observations. Local UI, numerical rendering and injected MIDI checks must not promote those results or trim metadata.
-- Package version remains 1.9.0 during checkout development. No release tag, push, deployment or npm publication is performed by these changes.
+- This release does not certify physical devices, human listening, npm publication or deployment. Genuine original observations are required before support or trim metadata can be promoted.
 
-### Observed checkout verification
+### Pre-release checkout verification
 
 - Integration owner: build, **403 behavioral tests**, strict generated public and DOM-free core types, security AST/dependency gates, isolated installed package/asset CLI/type smoke, and development/runtime audits (zero reported vulnerabilities) passed.
 - **108 stereo renders** (all eighteen bundled presets × eco/standard/high × 44100/48000 Hz, fixed note/velocity/pan/gate) remained bit-identical to the published checkout's committed distribution. This establishes those exercised defaults, not every possible score.
@@ -28,6 +30,15 @@ For installation and executable examples, see the [README](./README.md#getting-s
 - The 29-row Apple M5 / darwin arm64 / Node v26.7.0 benchmark used 48000 Hz, 128 frames, 300 excluded warmup blocks and 2000 measured blocks per row. All rows retained clean diagnostics and zero observed misses. The fully occupied held-brass matrix selected eco/32, standard/32 and high/16 as highest sampled candidates under 50% p99 reserve; high/32 was ineligible. The complete matrix and its scope are in [acoustic-quality](./doc/acoustic-quality.md#observed-checkout-measurement).
 - ExpressionSecurity approved scoped static **A/B**, and ArrangementCaptureSecurity scoped **A/C/D**, with no evidence-backed findings. Reviewers ran no runtime gates. These reviews do not approve publication or certify hardware/listeners.
 - The pinned Playwright Chromium launcher initially failed because its cached macOS Framework was missing; forced reinstallation downloaded but timed out during installation. Managed browser sessions also detached. Native Edge supplied the observed UI checks; these are not successful runs of the pinned Chromium binary.
+
+### Release-candidate verification
+
+- Package 1.10.0 passes 403 behavioral tests, the 144-asset build and strict public/DOM-free core type checks. Development, runtime and standalone Vite tooling audits report zero vulnerabilities; the runtime dependency tree is empty.
+- An isolated canonical candidate passes parsed source/generated-code, installed-package, asset CLI and installed public/DOM-free Node type gates. The local archive verifier validates matching version, bounded safe paths and complete JS/map/declaration triplets; registry publication/provenance is not claimed.
+- An installed consumer exports an 83-byte expressive SMF, imports it with no reported omissions/approximations, saves/reloads an inert Arrangement project, renders 10,560 finite deterministic stereo frames and writes a 42,284-byte WAV. Default note-only conversion and after-gate control rejection are also exercised.
+- Numerical sound/preset quality commands pass. A separate isolated 29-row benchmark passes the unchanged p99 deadline ratio 1; host measurements do not certify physical-device continuity. The earlier concurrent report-only run is not a new capacity recommendation.
+- The live-tree package gate correctly rejects unexpected numbered generated copies that reappeared during verification. They are preserved and excluded: release artifacts must be rebuilt from the exact committed canonical tree in isolation.
+- Release110Inputs approved scoped static **A/B**, and Release110DspSupply scoped static **C/D**, for the immutable canonical 1.10.0 candidate without evidence-backed blockers. Both also approved the final documentation delta, including generated HTML and the Map-based score compilation recipe. Reviewers executed no runtime gates; passing remote Node/browser CI remains mandatory before tagging.
 
 
 ## v1.9
