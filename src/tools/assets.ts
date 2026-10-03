@@ -103,7 +103,7 @@ async function inventory(root: string): Promise<Manifest> {
   }
   await visit(join(root, 'dist'));
   const paths = new Set(assets.map(asset => asset.path));
-  for (const path of ['api/index.js', 'core/index.js', 'worklet/processor.js', 'worker/render.js']) {
+  for (const path of ['api/index.js', 'core/index.js', 'worklet/processor.js', 'worklet/fx-processor.js', 'worker/render.js']) {
     if (!paths.has(path)) throw new Error(`Incomplete distribution: ${path}`);
   }
   for (const path of paths) if (path.endsWith('.js') && (!paths.has(`${path}.map`) || !paths.has(path.replace(/\.js$/, '.d.ts')))) {

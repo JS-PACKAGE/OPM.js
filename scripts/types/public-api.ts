@@ -1,5 +1,7 @@
 import { CommandRejectedError, OPM, createLookaheadScheduler, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker, createArrangement, createMidiAdapter, requestMidiAccess, quantizeBeat, swingBeat, swingBeatEvents, VERSION } from 'opm.js';
 import type { Arrangement, ArrangementLayer, ArrangementGainOptions, MidiAdapter, MidiAccessLike, MidiControllerMapping, WorkerRenderPhaseStatus, TempoPoint } from 'opm.js';
+import { createEffects, createStereoEffects, applyEffects } from 'opm.js';
+import type { OpmEffects, EffectsOptions, EffectsEvent, StereoEffectsOptions, ChorusOptions, ReverbOptions } from 'opm.js';
 import { copyAssets, checkDeployment } from 'opm.js/tools/assets.js';
 import type { CommandEvent, CommandWaitOptions, NoteControls, OPMEvent, PitchEnvelope, VoiceInput, SequenceEvent, TuningOptions, SequenceStream, MusicalTransport, Performance, PerformanceNoteOffOptions } from 'opm.js';
 import { Synth, renderNote, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, normalizeTuning, tuningFrequency, lfoValue, encodeWav, createWavEncoder, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, envelopeAt, ALGORITHMS, normalizeVoice, prepareVoice, parseScoreProject, serializeScoreProject, compileBeatSequence } from 'opm.js/core';
@@ -287,3 +289,21 @@ const lossSummary: Readonly<MidiFileLossSummary> = expressiveImport.lossSummary;
 const preservedKind: MidiFileControlKind = 'pitch-bend';
 const preservedControl: MidiFilePreservedControl = { kind: preservedKind, count: 1 };
 void [arrangementJSON, restoredArrangement, lossSummary, preservedControl];
+
+const chorusParams: ChorusOptions = { rate: 1, depth: .5, mix: .3 };
+const reverbParams: ReverbOptions = { size: .5, damping: .5, mix: .2 };
+const stereoParams: StereoEffectsOptions = { chorus: chorusParams, reverb: reverbParams };
+const insertOptions: EffectsOptions = { params: stereoParams, onEvent(event: EffectsEvent) { console.error(event.error); } };
+async function insertEffects(context: BaseAudioContext): Promise<OpmEffects> {
+  const insert = await createEffects(context, insertOptions);
+  await insert.ready;
+  insert.output.connect(context.destination);
+  insert.update({});
+  insert.reset();
+  insert.dispose();
+  return insert;
+}
+const offlineEffects = createStereoEffects(48000, stereoParams);
+offlineEffects.process(left, right);
+const wetAudio = applyEffects(left, right, 48000, stereoParams);
+void [insertEffects, wetAudio];

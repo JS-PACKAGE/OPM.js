@@ -1,6 +1,6 @@
-import { OPM, createTransport } from '../src/api/index.js';
-import type { BeatSequenceEvent, MusicalTransport, SequenceEvent } from '../src/api/index.js';
-import { encodeWav, renderSequence } from '../src/core/index.js';
+import { OPM, createTransport, createEffects } from '../src/api/index.js';
+import type { BeatSequenceEvent, MusicalTransport, SequenceEvent, OpmEffects, StereoEffectsOptions } from '../src/api/index.js';
+import { encodeWav, renderSequence, applyEffects } from '../src/core/index.js';
 import { examples } from '../src/voices/examples.js';
 
 const $ = <T extends HTMLElement>(id: string) => document.querySelector<T>(`#${id}`)!;
@@ -15,14 +15,18 @@ const buses: Bus[] = [
 ];
 let context: AudioContext | null = null;
 let master: GainNode | null = null;
-let filter: BiquadFilterNode | null = null;
-let delay: DelayNode | null = null;
-let feedback: GainNode | null = null;
+let effects: OpmEffects | null = null;
 let starting = false;
 let leaving = false;
 let wavUrls: string[] = [];
 
 function describe(error: unknown): string { return error instanceof Error ? error.message : String(error); }
+function effectsParams(): StereoEffectsOptions {
+  const params: StereoEffectsOptions = {};
+  if ($<HTMLInputElement>('chorus').checked) params.chorus = { rate: .8, depth: .6, mix: .3 };
+  if ($<HTMLInputElement>('reverb').checked) params.reverb = { size: .6, damping: .5, mix: .25 };
+  return params;
+}
 function controls(): void {
   $<HTMLButtonElement>('start').disabled = starting || leaving;
   $<HTMLButtonElement>('stop').disabled = !context;
@@ -36,8 +40,8 @@ async function teardown(): Promise<void> {
     await item.instance?.dispose();
     item.gain?.disconnect();
   }
-  filter?.disconnect(); delay?.disconnect(); feedback?.disconnect(); master?.disconnect();
-  filter = delay = feedback = master = null;
+  effects?.dispose(); master?.disconnect();
+  effects = null; master = null;
   const host = context;
   context = null;
   if (host && host.state !== 'closed') await host.close();
@@ -54,23 +58,13 @@ $<HTMLButtonElement>('start').addEventListener('click', async () => {
     master = host.createGain();
     master.gain.value = Number($<HTMLInputElement>('master').value);
     master.connect(host.destination);
-    // Accompaniment-only effect chain: lowpass -> feedback delay -> master. Melody/percussion stay dry.
-    filter = host.createBiquadFilter();
-    filter.type = 'lowpass';
-    filter.frequency.value = Number($<HTMLInputElement>('cutoff').value);
-    delay = host.createDelay(1);
-    delay.delayTime.value = 0.375;
-    feedback = host.createGain();
-    feedback.gain.value = Number($<HTMLInputElement>('echo').value);
-    filter.connect(delay);
-    delay.connect(feedback);
-    feedback.connect(delay);
-    delay.connect(master);
+    // The same optional DSP is available live and in offline stems.
+    effects = await createEffects(host, { params: effectsParams(), onEvent: event => { status.textContent = event.error.message; } });
+    effects.output.connect(master);
     for (const bus of buses) {
       bus.gain = host.createGain();
       bus.gain.gain.value = Number($<HTMLInputElement>(`gain-${bus.name}`).value);
-      bus.gain.connect(bus.name === 'accompaniment' ? filter : master);
-      if (bus.name === 'accompaniment') bus.gain.connect(master);
+      bus.gain.connect(bus.name === 'accompaniment' ? effects.input : master);
       bus.instance = new OPM({ context: host, destination: bus.gain, maxVoices: bus.name === 'accompaniment' ? 12 : 6, mixGain: 0.5 });
       bus.instance.replaceVoiceBank(examples);
       bus.transport = createTransport(bus.instance, bus.events.map(event => event.type === 'note' ? { ...event, voicePriority: bus.priority } : event),
@@ -78,7 +72,7 @@ $<HTMLButtonElement>('start').addEventListener('click', async () => {
     }
     await host.resume();
     await Promise.all(buses.map(bus => bus.transport!.start()));
-    status.textContent = 'Playing. Each bus has its own OPM instance, polyphony budget, saturation and gain; only the accompaniment feeds the filter/echo.';
+    status.textContent = 'Playing. Each bus has its own OPM instance, polyphony budget, saturation and gain; only accompaniment uses the optional chorus/reverb.';
   } catch (error) {
     status.textContent = `Start failed: ${describe(error)}`;
     await teardown().catch(() => {});
@@ -90,11 +84,12 @@ for (const bus of buses) {
     if (bus.gain && context && event.currentTarget instanceof HTMLInputElement) bus.gain.gain.setTargetAtTime(Number(event.currentTarget.value), context.currentTime, 0.02);
   });
 }
-const levelInputs: [string, () => AudioParam | undefined][] = [['master', () => master?.gain], ['cutoff', () => filter?.frequency], ['echo', () => feedback?.gain]];
+const levelInputs: [string, () => AudioParam | undefined][] = [['master', () => master?.gain]];
 for (const [id, param] of levelInputs) {
   const input = $<HTMLInputElement>(id);
   input.addEventListener('input', () => { const target = param(); if (target && context) target.setTargetAtTime(Number(input.value), context.currentTime, 0.02); });
 }
+for (const id of ['chorus', 'reverb']) $<HTMLInputElement>(id).addEventListener('change', () => effects?.update(effectsParams()));
 $<HTMLButtonElement>('render').addEventListener('click', () => {
   try {
     for (const url of wavUrls) URL.revokeObjectURL(url);
@@ -107,7 +102,9 @@ $<HTMLButtonElement>('render').addEventListener('click', () => {
       const score: SequenceEvent[] = bus.events.map(event => event.type === 'note'
         ? { type: 'note', id: event.id, time: event.beat * 0.6, duration: event.duration * 0.6, note: event.note, voice, velocity: event.velocity, voicePriority: bus.priority }
         : { type: 'stop', id: event.id, time: event.beat * 0.6 });
-      return { bus, result: renderSequence(score, { sampleRate, maxVoices: bus.name === 'accompaniment' ? 12 : 6, mixGain: 0.5 }) };
+      const rendered = renderSequence(score, { sampleRate, maxVoices: bus.name === 'accompaniment' ? 12 : 6, mixGain: 0.5 });
+      const result = bus.name === 'accompaniment' ? applyEffects(rendered.left, rendered.right, sampleRate, effectsParams()) : rendered;
+      return { bus, result };
     });
     const frames = Math.max(...stems.map(stem => stem.result.left.length));
     const left = new Float32Array(frames), right = new Float32Array(frames);

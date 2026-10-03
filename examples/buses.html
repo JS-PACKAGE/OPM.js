@@ -11,7 +11,7 @@
   <main>
     <a href="../index.html">Back to the example index</a>
     <h1>Independent buses, effects and stems</h1>
-    <p>Three OPM instances share one AudioContext. Each owns its voice budget and output saturation; the host routes them through separate gain nodes and applies a filter and echo only to the accompaniment. Begin with a low device volume.</p>
+    <p>Three OPM instances share one AudioContext. Each owns its voice budget and output saturation; the host routes them through separate gains and optional chorus/reverb on the accompaniment. The same effects process offline stems. Begin with a low device volume.</p>
     <div class="actions">
       <button id="start" type="button">Start / restart audio</button>
       <button id="stop" type="button" disabled>Stop and close this page's context</button>
@@ -21,10 +21,10 @@
       <legend>Mixer</legend>
       <label for="master">Master</label><input id="master" type="range" min="0" max="0.5" step="0.01" value="0.25">
       <label for="gain-melody">Melody bus (priority 100)</label><input id="gain-melody" type="range" min="0" max="1" step="0.01" value="0.8">
-      <label for="gain-accompaniment">Accompaniment bus (filter + echo)</label><input id="gain-accompaniment" type="range" min="0" max="1" step="0.01" value="0.7">
+      <label for="gain-accompaniment">Accompaniment bus (optional effects)</label><input id="gain-accompaniment" type="range" min="0" max="1" step="0.01" value="0.7">
       <label for="gain-percussion">Percussion bus</label><input id="gain-percussion" type="range" min="0" max="1" step="0.01" value="0.7">
-      <label for="cutoff">Accompaniment lowpass Hz</label><input id="cutoff" type="range" min="300" max="8000" step="10" value="2400">
-      <label for="echo">Echo feedback</label><input id="echo" type="range" min="0" max="0.7" step="0.01" value="0.35">
+      <label for="chorus">Accompaniment chorus</label><input id="chorus" type="checkbox" checked>
+      <label for="reverb">Accompaniment reverb</label><input id="reverb" type="checkbox" checked>
     </fieldset>
     <h2>Offline stems</h2>
     <ul id="stems"></ul>

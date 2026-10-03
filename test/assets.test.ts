@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { checkDeployment, copyAssets } from '../src/tools/assets.js';
 import { main } from '../src/tools/cli.js';
 
-const REQUIRED = ['api/index', 'core/index', 'worklet/processor', 'worker/render'];
+const REQUIRED = ['api/index', 'core/index', 'worklet/processor', 'worklet/fx-processor', 'worker/render'];
 async function fixture(): Promise<{ root: string; temp: string }> {
   const temp = await mkdtemp(join(tmpdir(), 'opm-assets-test-'));
   const root = join(temp, 'package');
@@ -75,6 +75,16 @@ test('copyAssets atomically creates a complete verified tree and never overwrite
     }
     await assert.rejects(copyAssets(Object.defineProperty({}, 'destination', { enumerable: true, get() { throw new Error('getter ran'); } }) as never), TypeError);
   } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
+test('a distribution missing any entry point, including the effects worklet, is rejected before copying', async () => {
+  for (const missing of REQUIRED) {
+    const { root, temp } = await fixture();
+    try {
+      for (const suffix of ['.js', '.js.map', '.d.ts']) await rm(join(root, 'dist', `${missing}${suffix}`));
+      await assert.rejects(copyAssets({ destination: join(temp, 'public', 'opm'), packageRoot: root }), new RegExp(`Incomplete distribution: ${missing}\\.js`));
+    } finally { await rm(temp, { recursive: true, force: true }); }
+  }
 });
 
 test('symlinked destination ancestors cannot deploy inside the source package', async () => {

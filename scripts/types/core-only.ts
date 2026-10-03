@@ -3,6 +3,8 @@ import { parseScoreProject, serializeScoreProject, compileBeatSequence, renderSe
 import type { BeatSequenceEvent, SequenceEvent, ScoreProject, ArrangementProject, ArrangementDefinition, ArrangementLayer, MidiFileLossSummary } from 'opm.js/core';
 import { importMidiFile, exportMidiFile } from 'opm.js/midi-file';
 import { brass } from 'opm.js/voices/brass.js';
+import { createStereoEffects, applyEffects } from 'opm.js/core';
+import type { StereoEffects, StereoEffectsOptions } from 'opm.js/core';
 
 const beats: BeatSequenceEvent[] = [{ type: 'note', id: 1, voice: 'brass', note: 60, beat: 0, duration: 1 }];
 const midi: Uint8Array = exportMidiFile(beats, { voiceChannels: { brass: 0 } });
@@ -25,3 +27,11 @@ const arrangementJSON: string = serializeArrangementProject(arrangementProject);
 const expressiveMidi = importMidiFile(exportMidiFile(beats, { controls: 'preserve', pitchBendRange: 2 }), { controls: 'preserve', pitchBendRange: 2 });
 const losses: Readonly<MidiFileLossSummary> = expressiveMidi.lossSummary;
 void [arrangementJSON, losses];
+
+const effectsParams: StereoEffectsOptions = { reverb: { size: .5, damping: .5, mix: .3 } };
+const effects: StereoEffects = createStereoEffects(48000, effectsParams);
+effects.process(audio.left, audio.right);
+effects.update({});
+effects.reset();
+const effected = applyEffects(audio.left, audio.right, 48000, effectsParams);
+void [effected, effects.tailSeconds, effects.params];
