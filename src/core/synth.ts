@@ -182,7 +182,7 @@ interface MutableCounters {
 
 import { ALGORITHMS } from './algorithms.js';
 import { FLOOR_DB } from './envelope.js';
-import { TAU, waveformCode, periodicWaveform, NOISE_SEED, advanceNoise } from './operator.js';
+import { TAU, waveformCode, periodicWaveform, fastSin, NOISE_SEED, advanceNoise } from './operator.js';
 import { preparedVoiceValue } from '../voices/normalize.js';
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 
@@ -965,7 +965,12 @@ export class Synth {
     const operatorRamping = (active.controlRamps & OPERATOR_RAMP) !== 0;
     if (!finished) prepareGains(active, time, this.subTimes);
     let output = 0;
-    for (let sub = 0; sub < this.oversample; sub++) {
+    const oversample = this.oversample, modIndex = active.modIndex, feedbackScale = active.feedbackScale;
+    const operatorLevels = active.operatorLevels, waveforms = active.waveforms;
+    // All-sine voices with static operator levels and shared AM take the branch-light path below.
+    const simple = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 &&
+      !operatorRamping && !lfo.amTargets;
+    for (let sub = 0; sub < oversample; sub++) {
       const frame = active.elapsed + sub / this.oversample;
       if (dynamicPitch) {
         const factor = 2 ** (pitchAt(active, frame) / 12 + pitchEnvelopeAt(active, time + this.subTimes[sub]) / 1200);
@@ -982,36 +987,52 @@ export class Synth {
       }
       let sample = 0;
       if (!finished) {
-        for (let op = 0; op < 4; op++) {
-          let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
-          const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
-          if (first >= 0) modulation += values[first] * active.modIndex;
-          if (second >= 0) modulation += values[second] * active.modIndex;
-          const operatorLevel = operatorRamping ?
-            rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
-          const am = lfo.amTargets ? active.amGains[op] : amGain;
-          const code = active.waveforms[op];
-          let oscillator: number;
-          if (code === 0) oscillator = Math.sin(phases[op] + modulation);
-          else if (code === 8) {
-            oscillator = (active.noiseStates[op] & 1) === 0 ? -1 : 1;
-            const turns = active.noiseTurns[op] + active.noiseSteps[op];
-            // At the minimum clock a 20 kHz hold rate needs at most two ticks.
-            const ticks = Math.floor(turns);
-            for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
-            active.noiseTurns[op] = turns - ticks;
-          } else oscillator = periodicWaveform(phases[op] + modulation, code);
-          const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
-          values[op] = value;
-          const phase = phases[op] + steps[op];
-          const wrapped = phase < TAU ? phase : phase - TAU;
-          phases[op] = wrapped;
-          if (!Number.isFinite(value) || !Number.isFinite(wrapped)) return NaN;
+        if (simple) {
+          const base = sub * 4;
+          for (let op = 0; op < 4; op++) {
+            let modulation = op === 0 ? (active.previous + active.older) * feedbackScale : 0;
+            const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
+            if (first >= 0) modulation += values[first] * modIndex;
+            if (second >= 0) modulation += values[second] * modIndex;
+            const phase = phases[op];
+            values[op] = fastSin(phase + modulation) * gains[base + op] * levels[op] * operatorLevels[op] * amGain;
+            const next = phase + steps[op];
+            phases[op] = next < TAU ? next : next - TAU;
+          }
+        } else {
+          for (let op = 0; op < 4; op++) {
+            let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
+            const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
+            if (first >= 0) modulation += values[first] * active.modIndex;
+            if (second >= 0) modulation += values[second] * active.modIndex;
+            const operatorLevel = operatorRamping ?
+              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
+            const am = lfo.amTargets ? active.amGains[op] : amGain;
+            const code = active.waveforms[op];
+            let oscillator: number;
+            if (code === 0) oscillator = fastSin(phases[op] + modulation);
+            else if (code === 8) {
+              oscillator = (active.noiseStates[op] & 1) === 0 ? -1 : 1;
+              const turns = active.noiseTurns[op] + active.noiseSteps[op];
+              // At the minimum clock a 20 kHz hold rate needs at most two ticks.
+              const ticks = Math.floor(turns);
+              for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
+              active.noiseTurns[op] = turns - ticks;
+            } else oscillator = periodicWaveform(phases[op] + modulation, code);
+            const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
+            values[op] = value;
+            const phase = phases[op] + steps[op];
+            const wrapped = phase < TAU ? phase : phase - TAU;
+            phases[op] = wrapped;
+            if (!Number.isFinite(value) || !Number.isFinite(wrapped)) return NaN;
+          }
         }
         active.older = active.previous;
         active.previous = values[0];
         for (let j = 0; j < graph.carriers.length; j++) sample += values[carrierIndices[j]];
         sample *= active.carrierGain;
+        // Non-finite operator state always reaches a carrier through modulation or the mix.
+        if (!Number.isFinite(sample)) return NaN;
       }
       output = decimateSample(sample, filters, this.decimatorCoefficients);
       if (!Number.isFinite(output)) return NaN;

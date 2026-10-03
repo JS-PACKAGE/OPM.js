@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth } from '../src/core/synth.js';
 import { renderNote } from '../src/core/index.js';
-import { advanceNoise, NOISE_SEED, periodicWaveform, TAU, waveformCode } from '../src/core/operator.js';
+import { advanceNoise, fastSin, NOISE_SEED, periodicWaveform, TAU, waveformCode } from '../src/core/operator.js';
 import { normalizeVoice, prepareVoice } from '../src/voices/normalize.js';
 import { parseVoiceBank, validateVoice } from '../src/voices/schema.js';
 import type { OperatorWaveform, Voice, VoiceInput } from '../src/voices/schema.js';
@@ -59,6 +59,41 @@ test('periodic shapes stay finite and bounded for negative, huge and modulated p
   for (const code of [4, 5]) for (const angle of [Math.PI * 1.1, Math.PI * 1.5, Math.PI * 1.9]) assert.equal(periodicWaveform(angle, code), 0);
   assert.ok(Math.abs(periodicWaveform(Math.PI / 4, 4) - 1) < 1e-15);
   assert.ok(Math.abs(periodicWaveform(Math.PI * 1.25, 3) - Math.SQRT1_2) < 1e-15);
+});
+
+test('fastSin is bounded, accurate and odd across reduction boundaries', () => {
+  let random = 987654321;
+  let worst = 0;
+  const samples = [0, Math.PI / 2, Math.PI, -Math.PI / 2, 1e6, -1e6, 3e9];
+  for (let i = 0; i < 20000; i++) {
+    random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+    samples.push((random / 0xffffffff - 0.5) * 400);
+  }
+  for (const x of samples) {
+    const value = fastSin(x);
+    assert.ok(Math.abs(value) <= 1, `bounded at ${x}`);
+    // Reduction by a double-precision pi adds ~|x|*1e-16, so accuracy is asserted for realistic phases only.
+    if (Math.abs(x) <= 1000) worst = Math.max(worst, Math.abs(value - Math.sin(x)));
+    assert.ok(fastSin(-x) + value === 0, `odd at ${x}`);
+  }
+  assert.ok(worst < 3e-10, `max error ${worst}`);
+  for (const bad of [NaN, Infinity, -Infinity]) assert.ok(Number.isNaN(fastSin(bad)));
+});
+
+test('all-sine fast path renders identically to the generic path', () => {
+  const base: VoiceInput = { ...tone(), algorithm: 4, feedback: 3, modIndex: 4,
+    lfo: { rate: 5, amDepth: 0.4, pmDepth: 20, waveform: 'sine' },
+    ops: [0, 1, 2, 3].map(i => ({ ratio: i + 1, level: 0.5, detune: i, adsr: { a: 0.01, d: 0.1, s: 0.6, r: 0.05 } })) as unknown as Voice['ops'] };
+  // Explicit unit AM targets select the generic loop with mathematically identical gains.
+  const generic: VoiceInput = { ...base, lfo: { rate: 5, amDepth: 0.4, pmDepth: 20, waveform: 'sine', amTargets: [1, 1, 1, 1] } };
+  const render = (voice: VoiceInput): Float32Array => {
+    const synth = new Synth(48000, 4);
+    synth.noteOn(voice, 57);
+    return audio(synth, 4800);
+  };
+  const fast = render(base), slow = render(generic);
+  assert.ok(energy(fast) > 1e-4);
+  assert.deepEqual(fast, slow);
 });
 
 test('legacy versions retain restrictions and canonicalize to v7 with identical sine samples', () => {
