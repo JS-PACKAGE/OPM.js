@@ -15,7 +15,7 @@ export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceContr
 export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat, swingBeatEvents } from './transport.js';
 export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat, BeatQuantization } from './transport.js';
 export { createArrangement } from './arrangement.js';
-export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
+export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementGainOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
 export { createMidiAdapter, requestMidiAccess } from './midi.js';
 export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike } from './midi.js';
 export { VERSION } from '../version.js';

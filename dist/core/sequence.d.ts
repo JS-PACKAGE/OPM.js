@@ -24,6 +24,9 @@ export interface SequenceControlEvent {
     controls: NoteControls;
 }
 export type SequenceEvent = SequenceNoteEvent | SequenceStopEvent | SequenceControlEvent;
+export type BeatSequenceEvent = SequenceEvent extends infer E ? E extends SequenceEvent ? Omit<E, 'time'> & {
+    beat: number;
+} : never : never;
 export type SequenceVoices = ReadonlyMap<string, VoiceInput>;
 export interface SequenceOptions extends SynthOptions {
     voices?: SequenceVoices;

@@ -1,11 +1,9 @@
 import type { OPM } from './index.js';
-import type { SequenceEvent } from '../core/sequence.js';
+import type { BeatSequenceEvent } from '../core/sequence.js';
 import type { TempoPoint, TimeSignature, BarBeat } from '../core/transport.js';
 export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat } from '../core/transport.js';
 export type { TempoPoint, TimeSignature, BarBeat, BeatQuantization } from '../core/transport.js';
-export type BeatSequenceEvent = SequenceEvent extends infer E ? E extends SequenceEvent ? Omit<E, 'time'> & {
-    beat: number;
-} : never : never;
+export type { BeatSequenceEvent } from '../core/sequence.js';
 export interface TransportLoop {
     enabled: boolean;
     from: number;
@@ -19,6 +17,8 @@ export interface TransportOptions {
     loop?: TransportLoop;
     horizon?: number;
     interval?: number;
+    /** Future audio anchor in seconds for start and reconstruction; default min(0.05, horizon / 2), range 0..10. */
+    startupLead?: number;
     maxSlots?: number;
     onError?: (error: Error) => void;
 }

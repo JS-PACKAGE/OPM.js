@@ -17,6 +17,7 @@ const sampleRate = 16000;
 let Processor: new (options?: AudioWorkletNodeOptions) => ProcessorInstance;
 let resumeGate: Promise<void> | undefined;
 let enteredResume: (() => void) | undefined;
+let deliveryDelayed = false;
 class Context extends EventTarget {
   currentTime = 0;
   sampleRate = sampleRate;
@@ -36,15 +37,20 @@ class Context extends EventTarget {
 class Node {
   processor: ProcessorInstance;
   port: Port;
+  deferred: unknown[] = [];
   constructor(_context: Context, _name: string, options: AudioWorkletNodeOptions) {
     this.processor = new Processor(options);
     this.port = {
-      postMessage: message => this.processor.receive(structuredClone(message)),
+      postMessage: message => {
+        const copy = structuredClone(message);
+        if (deliveryDelayed) this.deferred.push(copy); else this.processor.receive(copy);
+      },
       close: () => { this.port.onmessage = null; }, onmessage: null,
     };
     this.processor.port.postMessage = message => this.port.onmessage?.({ data: structuredClone(message) });
     this.processor.port.close = () => {};
   }
+  flush() { for (const message of this.deferred.splice(0)) this.processor.receive(message); }
   connect() {}
   disconnect() {}
 }
@@ -121,7 +127,7 @@ test('piecewise tempo integral and inverse cross exact boundaries; meter uses qu
 test('actual worklet audio follows tempo-boundary gate conversion', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);
-  const transport = createTransport(opm, [note(3)], { tempoMap: [{ beat: 0, bpm: 120 }, { beat: 1, bpm: 240 }] });
+  const transport = createTransport(opm, [note(3)], { startupLead: 0, tempoMap: [{ beat: 0, bpm: 120 }, { beat: 1, bpm: 240 }] });
   try {
     await transport.start();
     const expected = renderSequence([{ type: 'note', id: 1, time: 0, duration: 1, note: 69, voice }], { sampleRate });
@@ -152,7 +158,7 @@ test('release-tied expression, late ADSR edits and a final-endpoint control matc
     { type: 'control', id: 1, beat: 0.02, controls: { expression: 0.5 } },
     { type: 'control', id: 1, beat: 0.08, controls: { operatorADSR: adsr } },
     { type: 'control', id: 1, beat: 0.12, controls: { expression: 0.25, ramp: 0.01 } },
-  ]);
+  ], { startupLead: 0 });
   try {
     await transport.start();
     const expected = renderSequence([
@@ -179,7 +185,7 @@ test('loop release-tail controls apply before the seam but endpoint controls do 
     { type: 'note', id: 1, beat: 0, duration: 0.0625, note: 69, voice: tailVoice },
     { type: 'control', id: 1, beat: 0.125, controls: { expression: 0 } },
     { type: 'control', id: 1, beat: 0.25, controls: { expression: 1 } },
-  ], { loop: { enabled: true, from: 0, to: 0.25 } });
+  ], { startupLead: 0, loop: { enabled: true, from: 0, to: 0.25 } });
   try {
     await transport.start();
     const expected = renderSequence([0, 0.125, 0.25].flatMap((time, index) => [
@@ -196,7 +202,7 @@ test('loop release-tail controls apply before the seam but endpoint controls do 
 test('pause preserves musical cursor; resume restarts held gates with offset durations', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);
-  const transport = createTransport(opm, [note(2)]);
+  const transport = createTransport(opm, [note(2)], { startupLead: 0 });
   try {
     await transport.start();
     advance(opm, transport, 4000);
@@ -222,7 +228,7 @@ test('seeking into ramped automation reconstructs current values and remaining r
   const opm = await engine();
   const transport = createTransport(opm, [note(4),
     { type: 'control', id: 1, beat: 0, controls: { pitch: 12, glide: 1, expression: 0, pan: 1, ramp: 1 } },
-  ]);
+  ], { startupLead: 0 });
   try {
     transport.seek(1);
     await transport.start();
@@ -251,7 +257,7 @@ for (const destination of [1, 2]) {
       { type: 'control', id: 1, beat: 0.25, controls: { operatorFrequencies: [330, null, null, null], ramp: 1 } },
       { type: 'control', id: 1, beat: 0.5, controls: { operatorADSR: adsr } },
       { type: 'control', id: 1, beat: 1.5, controls: { operatorFrequencies: [null, null, null, null] } },
-    ]);
+    ], { startupLead: 0 });
     try {
       transport.seek(destination);
       await transport.start();
@@ -289,7 +295,7 @@ test('expanded seek reconstruction rejects density before altering a running sco
       lfoRate: 8, amDepth: 0.6, pmDepth: 600, operatorRatios: [2, 2, 2, 2], ramp: 1,
     } });
   }
-  const transport = createTransport(opm, score);
+  const transport = createTransport(opm, score, { startupLead: 0 });
   try {
     await transport.start();
     const before = [...transport.ids];
@@ -305,7 +311,7 @@ test('loop wraps reconstruct crossing gates without carrying previous iteration 
   const events: OPMEvent[] = [];
   const opm = await engine(events);
   const transport = createTransport(opm, [note(2), { type: 'control', id: 1, beat: 0.125, controls: { pan: 1 } }],
-    { loop: { enabled: true, from: 0, to: 0.25 } });
+    { startupLead: 0, loop: { enabled: true, from: 0, to: 0.25 } });
   try {
     await transport.start();
     const audio = advance(opm, transport, 6400);
@@ -324,7 +330,7 @@ test('tempo edits preserve position and cancel only owned future notes and autom
   const events: OPMEvent[] = [];
   const opm = await engine(events);
   const unrelated = opm.playNote({ voice, note: 48, duration: null });
-  const transport = createTransport(opm, [note(4), { type: 'control', id: 1, beat: 0.6, controls: { expression: 0 } }]);
+  const transport = createTransport(opm, [note(4), { type: 'control', id: 1, beat: 0.6, controls: { expression: 0 } }], { startupLead: 0 });
   try {
     await transport.start();
     advance(opm, transport, 4000);
@@ -369,7 +375,7 @@ test('preserved-context interruption and engine reset stop transport until expli
 test('changing loop bounds preserves current beat and rebuilds future wraps', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);
-  const transport = createTransport(opm, [note(2)]);
+  const transport = createTransport(opm, [note(2)], { startupLead: 0 });
   try {
     await transport.start();
     advance(opm, transport, 800);
@@ -516,4 +522,90 @@ test('quantization and swing keep beat grids monotonic', () => {
   }
   assert.throws(() => quantizeBeat(1, 0), /quantum/);
   assert.throws(() => swingBeat(1, 0.5, 1), /ratio/);
+});
+
+test('cold beat-zero onset survives worklet message delivery delay within startup lead', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const events: OPMEvent[] = [];
+  const opm = new OPM({ sampleRate, onEvent: event => events.push(event) });
+  const transport = createTransport(opm, [note(1)]);
+  deliveryDelayed = true;
+  try {
+    await transport.start();
+    assert.equal(transport.position, 0);
+    assert.ok(render(opm, 128).left.every(value => value === 0));
+    (opm.node as unknown as Node).flush();
+    deliveryDelayed = false;
+    const audio = advance(opm, transport, 1000);
+    assert.ok(audio.left.subarray(0, 672).every(value => value === 0));
+    assert.ok(audio.left.subarray(673).some(value => Math.abs(value) > 1e-6));
+    const onset = events.find(event => event.type === 'note' && event.state === 'started');
+    assert.ok(onset && onset.type === 'note');
+    assert.equal(onset.frame, 800);
+    assert.equal(transport.state, 'running');
+  } finally { deliveryDelayed = false; transport.dispose(); await opm.dispose(); }
+});
+
+test('delivery beyond startup lead remains a visible late/drop failure', async () => {
+  const failures: Error[] = [];
+  const opm = await engine();
+  const transport = createTransport(opm, [note(1)], { onError: error => failures.push(error) });
+  deliveryDelayed = true;
+  try {
+    await transport.start();
+    render(opm, 1024);
+    (opm.node as unknown as Node).flush();
+    deliveryDelayed = false;
+    render(opm, 128);
+    assert.equal(transport.state, 'stopped');
+    assert.match(failures[0]!.message, /rejected/);
+  } finally { deliveryDelayed = false; transport.dispose(); await opm.dispose(); }
+});
+
+for (const edit of ['seek', 'tempo', 'map', 'loop', 'resume'] as const) {
+  test(`${edit} reconstruction uses future anchor and holds the destination during count-in`, async () => {
+    const events: OPMEvent[] = [];
+    const opm = await engine(events);
+    const transport = createTransport(opm, [note(8)], { startupLead: 0.05 });
+    try {
+      await transport.start();
+      advance(opm, transport, 1600);
+      events.length = 0;
+      const context = opm.context as unknown as Context;
+      if (edit === 'seek') transport.seek(1);
+      else if (edit === 'tempo') transport.setTempo(60);
+      else if (edit === 'map') transport.setTempoMap([{ beat: 0, bpm: 240 }]);
+      else if (edit === 'loop') transport.setLoop({ enabled: true, from: 0, to: 4 });
+      else { transport.pause(); await transport.resume(); }
+      const destination = transport.position;
+      const anchor = context.currentTime + 0.05;
+      advance(opm, transport, 400);
+      assert.equal(transport.position, destination);
+      assert.equal(events.some(event => event.type === 'note' && event.state === 'started'), false);
+      advance(opm, transport, 600);
+      assert.ok(transport.position > destination);
+      const starts = events.filter(event => event.type === 'note' && event.state === 'started');
+      const last = starts.at(-1)!;
+      assert.equal(last.type === 'note' ? last.frame : -1, Math.round(anchor * sampleRate));
+    } finally { transport.dispose(); await opm.dispose(); }
+  });
+}
+
+test('seek reconstructs independent gain and expression ramps without disturbing tuple indices', async () => {
+  const opm = await engine();
+  const transport = createTransport(opm, [note(4),
+    { type: 'control', id: 1, beat: 0, controls: { expression: 0.2, gain: 0, ramp: 1 } },
+  ], { startupLead: 0 });
+  try {
+    transport.seek(1);
+    await transport.start();
+    const expected = renderSequence([
+      { type: 'note', id: 1, time: 0, duration: 1.5, note: 69, voice },
+      { type: 'control', id: 1, time: 0, controls: { expression: 0.6, gain: 0.5 } },
+      { type: 'control', id: 1, time: 0, controls: { expression: 0.2, gain: 0, ramp: 0.5 } },
+    ], { sampleRate });
+    assert.deepEqual(advance(opm, transport, 8000).left, expected.left.subarray(0, 8000));
+    assert.throws(() => createTransport(opm, [note()], { startupLead: NaN }), /startupLead/);
+    assert.throws(() => createTransport(opm, [note()], { startupLead: 11 }), /startupLead/);
+  } finally { transport.dispose(); await opm.dispose(); }
 });

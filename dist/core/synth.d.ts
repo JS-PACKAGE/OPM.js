@@ -15,6 +15,8 @@ export interface NoteControls {
     pan?: number;
     modulation?: number;
     ramp?: number;
+    /** Independent per-note amplitude, 0..1 (default 1), multiplied with expression before mix saturation. */
+    gain?: number;
     operatorLevels?: readonly [number, number, number, number];
     feedback?: number;
     lfoRate?: number;

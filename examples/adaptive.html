@@ -27,7 +27,9 @@
       <select id="quantize"><option value="bar" selected>Next bar</option><option value="beat">Next beat</option><option value="1">Next 1.0 grid</option></select>
       <label for="swing">Swing for arp and lead (applies on the next Start)</label>
       <select id="swing"><option value="0">Straight</option><option value="0.58">Light</option><option value="0.66">Triplet</option></select>
-      <label><input id="preserve" type="checkbox"> Let removed layers finish their current notes (otherwise they release at the boundary)</label>
+      <label for="fade">Crossfade / layer gain fade (seconds)</label>
+      <select id="fade"><option value="0">No fade</option><option value="0.4">0.4 seconds</option><option value="0.8" selected>0.8 seconds</option><option value="2">2 seconds</option></select>
+      <label><input id="preserve" type="checkbox"> Let removed layers finish their current gates (otherwise release after the fade; positive fades still mute them)</label>
     </fieldset>
     <fieldset>
       <legend>Layers (effective at the current beat)</legend>
@@ -37,9 +39,17 @@
       <label><input id="layer-arp" type="checkbox" disabled> Arpeggio</label>
       <label><input id="layer-lead" type="checkbox" disabled> Lead (voice priority 100)</label>
       <label><input id="layer-drums" type="checkbox" disabled> Percussion</label>
+      <label for="gain-layer">Layer gain target</label>
+      <select id="gain-layer" disabled>
+        <option value="pad">Shared pad</option><option value="bass-explore">Exploration bass</option>
+        <option value="bass-combat">Combat bass</option><option value="arp">Arpeggio</option>
+        <option value="lead">Lead</option><option value="drums">Percussion</option>
+      </select>
+      <label for="layer-gain">Gain 0..1 (release slider to commit on the selected boundary)</label>
+      <input id="layer-gain" type="range" min="0" max="1" step="0.01" value="1" disabled>
     </fieldset>
     <pre id="readout" aria-live="off">No audio created.</pre>
-    <p class="hint">Layers are aligned to the global beat grid, so a layer shared by two sections is one continuous schedule. A change is committed no earlier than the notes already admitted to the audio clock. Pause releases owned notes; Resume restarts musically from that beat and is not an exact DSP-state restore. Tempo ramps are linear in BPM across beats.</p>
+    <p class="hint">Positive fades crossfade removed and incoming layers; shared layers stay continuous. Try lowering the shared pad gain while switching sections. Layer gain multiplies note expression without changing global engine gain. A change commits no earlier than the notes already admitted to the audio clock. Pause releases owned notes; Resume restarts musically from that beat, not an exact DSP-state restore. Tempo ramps are linear in BPM across beats.</p>
     <output id="status" role="status" aria-live="polite">Loading example…</output>
   </main>
   <script type="module" src="../dist/demo/adaptive.js"></script>

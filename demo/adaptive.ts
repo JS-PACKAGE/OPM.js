@@ -8,6 +8,10 @@ const readout = $<HTMLElement>('readout');
 const quantize = $<HTMLSelectElement>('quantize');
 const swing = $<HTMLSelectElement>('swing');
 const preserve = $<HTMLInputElement>('preserve');
+const fade = $<HTMLSelectElement>('fade');
+const gainLayer = $<HTMLSelectElement>('gain-layer');
+const layerGain = $<HTMLInputElement>('layer-gain');
+const gainTargets = new Map<string, number>();
 const layerNames = ['pad', 'bass-explore', 'bass-combat', 'arp', 'lead', 'drums'] as const;
 const sectionLayers = {
   explore: ['pad', 'bass-explore', 'arp'],
@@ -55,6 +59,8 @@ function controls(): void {
   for (const id of ['explore', 'combat', 'accelerate', 'pause']) $<HTMLButtonElement>(id).disabled = !ready;
   $<HTMLButtonElement>('stop').disabled = !ready && arrangement?.state !== 'paused';
   for (const name of layerNames) $<HTMLInputElement>(`layer-${name}`).disabled = !ready;
+  gainLayer.disabled = !ready;
+  layerGain.disabled = !ready;
 }
 function update(): void {
   if (!arrangement) { readout.textContent = 'No audio created.'; return; }
@@ -70,7 +76,10 @@ function change(action: () => number, label: string): void {
   } catch (error) { status.textContent = `Rejected: ${error instanceof Error ? error.message : String(error)}`; }
   update();
 }
-const options = (): ArrangementChangeOptions => ({ quantize: quantize.value === 'bar' || quantize.value === 'beat' ? quantize.value : 1, preserveNotes: preserve.checked });
+const options = (): ArrangementChangeOptions => ({
+  quantize: quantize.value === 'bar' || quantize.value === 'beat' ? quantize.value : 1,
+  preserveNotes: preserve.checked, fade: Number(fade.value),
+});
 async function teardown(): Promise<void> {
   clearInterval(refresh);
   refresh = undefined;
@@ -92,6 +101,8 @@ $<HTMLButtonElement>('start').addEventListener('click', async () => {
     opm = new OPM({ maxVoices: 16, mixGain: 0.35 });
     opm.replaceVoiceBank(examples);
     arrangement = build(opm, Number(swing.value));
+    gainTargets.clear();
+    layerGain.value = '1';
     await arrangement.start();
     refresh = setInterval(update, 120);
     status.textContent = 'Playing exploration. Switch sections or toggle layers; changes snap to the selected boundary.';
@@ -109,6 +120,17 @@ for (const name of layerNames) {
     change(() => arrangement!.setLayer(name, enabled, options()), `${name} ${enabled ? 'on' : 'off'}`);
   });
 }
+gainLayer.addEventListener('change', () => { layerGain.value = String(gainTargets.get(gainLayer.value) ?? 1); });
+layerGain.addEventListener('change', () => {
+  const name = gainLayer.value;
+  const gain = Number(layerGain.value);
+  const { quantize, fade } = options();
+  change(() => {
+    const beat = arrangement!.setLayerGain(name, gain, { quantize, fade });
+    gainTargets.set(name, gain);
+    return beat;
+  }, `${name} gain ${gain.toFixed(2)}`);
+});
 $<HTMLButtonElement>('accelerate').addEventListener('click', () => {
   try {
     const beat = Math.ceil(arrangement!.snapshot.position);

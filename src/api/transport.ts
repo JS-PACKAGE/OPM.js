@@ -1,6 +1,6 @@
 import type { OPM, OPMEvent } from './index.js';
 import { prepareLongSequence, sequenceOwnData, MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_NOTES } from '../core/sequence.js';
-import type { SequenceEvent, PreparedSequenceEvent } from '../core/sequence.js';
+import type { BeatSequenceEvent, SequenceEvent, PreparedSequenceEvent } from '../core/sequence.js';
 import type { NoteControls } from '../core/synth.js';
 import {
   MAX_TRANSPORT_BEATS, transportArray, transportNumber, normalizeTempoMap, normalizeTimeSignature,
@@ -10,7 +10,7 @@ import type { TempoPoint, TimeSignature, BarBeat } from '../core/transport.js';
 export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat } from '../core/transport.js';
 export type { TempoPoint, TimeSignature, BarBeat, BeatQuantization } from '../core/transport.js';
 
-export type BeatSequenceEvent = SequenceEvent extends infer E ? E extends SequenceEvent ? Omit<E, 'time'> & { beat: number } : never : never;
+export type { BeatSequenceEvent } from '../core/sequence.js';
 export interface TransportLoop { enabled: boolean; from: number; to: number }
 export type TransportState = 'stopped' | 'starting' | 'running' | 'paused' | 'disposed';
 export interface TransportOptions {
@@ -20,6 +20,8 @@ export interface TransportOptions {
   loop?: TransportLoop;
   horizon?: number;
   interval?: number;
+  /** Future audio anchor in seconds for start and reconstruction; default min(0.05, horizon / 2), range 0..10. */
+  startupLead?: number;
   maxSlots?: number;
   onError?: (error: Error) => void;
 }
@@ -72,7 +74,7 @@ function readLoop(input: TransportLoop | undefined): Readonly<TransportLoop> {
 function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoPoint>[]): NoteControls[] {
   const voice = track.note.voice;
   const values = [0, 1, track.note.pan, 1, voice.feedback, voice.lfo.rate, voice.lfo.amDepth, voice.lfo.pmDepth,
-    1, 1, 1, 1, ...voice.ops.map(op => op.ratio)];
+    1, 1, 1, 1, ...voice.ops.map(op => op.ratio), 1];
   const ramps = values.map(value => ({ from: value, target: value, at: 0, duration: 0 }));
   const edited = values.map(() => false);
   let frequencies: NoteControls['operatorFrequencies'];
@@ -88,7 +90,8 @@ function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoP
     const at = tempoSeconds(atBeat, map) - onset;
     for (let index = 0; index < values.length; index++) {
       const target = index < 8 ? event.controls[fields[index]]
-        : index < 12 ? event.controls.operatorLevels?.[index - 8] : event.controls.operatorRatios?.[index - 12];
+        : index < 12 ? event.controls.operatorLevels?.[index - 8]
+        : index < 16 ? event.controls.operatorRatios?.[index - 12] : event.controls.gain;
       if (target === undefined) continue;
       edited[index] = true;
       ramps[index] = { from: sample(index, at), target, at, duration: index === 0 ? event.controls.glide ?? 0 : event.controls.ramp ?? 0 };
@@ -103,6 +106,7 @@ function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoP
   };
   for (let index = 4; index < 8; index++) if (edited[index]) initial[fields[index]] = sample(index, elapsed);
   if (edited[12]) initial.operatorRatios = [sample(12, elapsed), sample(13, elapsed), sample(14, elapsed), sample(15, elapsed)];
+  if (edited[16]) initial.gain = sample(16, elapsed);
   // null resolves against the reconstructed live ratio and the engine's current tuning.
   // The latest fixed/ratio policy wins immediately, rather than fabricating intermediate Hz.
   if (frequencies !== undefined) initial.operatorFrequencies = frequencies;
@@ -116,6 +120,9 @@ function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoP
       result.push(index === 0 ? { pitch: ramp.target, glide: remaining } : { [fields[index]]: ramp.target, ramp: remaining });
     }
   }
+  const gain = ramps[16];
+  const gainRemaining = gain.at + gain.duration - elapsed;
+  if (gainRemaining > 0 && gain.target !== sample(16, elapsed)) result.push({ gain: gain.target, ramp: gainRemaining });
   for (const index of [8, 12]) {
     const remaining = ramps[index].at + ramps[index].duration - elapsed;
     if (remaining <= 0) continue;
@@ -161,12 +168,13 @@ export function swingBeatEvents(events: readonly BeatSequenceEvent[], subdivisio
 
 /** Restartable beat transport. Only owned IDs are ever stopped; the shared engine is not closed. */
 export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent[], options: TransportOptions = {}): MusicalTransport {
-  const config = sequenceOwnData(options, ['bpm', 'tempoMap', 'timeSignature', 'loop', 'horizon', 'interval', 'maxSlots', 'onError'], [], 'transport options');
+  const config = sequenceOwnData(options, ['bpm', 'tempoMap', 'timeSignature', 'loop', 'horizon', 'interval', 'startupLead', 'maxSlots', 'onError'], [], 'transport options');
   let map = normalizeTempoMap(config.tempoMap as readonly TempoPoint[] | undefined, config.bpm === undefined ? 120 : config.bpm as number);
   const signature = normalizeTimeSignature(config.timeSignature as TimeSignature | undefined);
   let loop = readLoop(config.loop as TransportLoop | undefined);
   const horizon = transportNumber(config.horizon === undefined ? 0.2 : config.horizon, 0.01, 10, 'horizon');
   const interval = transportNumber(config.interval === undefined ? Math.min(0.025, horizon / 2) : config.interval, 0.001, horizon / 2, 'interval');
+  const startupLead = transportNumber(config.startupLead === undefined ? Math.min(0.05, horizon / 2) : config.startupLead, 0, 10, 'startupLead');
   const maxSlots = transportNumber(config.maxSlots === undefined ? 256 : config.maxSlots, 1, 256, 'maxSlots');
   if (!Number.isInteger(maxSlots)) throw new RangeError('maxSlots must be an integer');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
@@ -183,6 +191,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
   let state: TransportState = 'stopped';
   let position = 0;
   let origin = 0;
+  let anchor = 0;
   let context: AudioContext | null = null;
   let node: AudioWorkletNode | null = null;
   let generation = 0;
@@ -256,6 +265,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
 
   function current(): number {
     if (state !== 'running' || !context) return position;
+    if (context.currentTime <= anchor) return position;
     let seconds = Math.max(0, context.currentTime - origin);
     if (loop.enabled) {
       const to = tempoSeconds(loop.to, map);
@@ -320,8 +330,9 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     if (!loop.enabled) position = Math.min(position, endBeat);
     lastError = undefined;
     lastPump = context.currentTime;
-    origin = context.currentTime - tempoSeconds(position, map);
-    segment(position, context.currentTime);
+    anchor = context.currentTime + startupLead;
+    origin = anchor - tempoSeconds(position, map);
+    segment(position, anchor);
     state = 'running';
     pump();
     if (state !== 'running' && lastError) throw lastError;

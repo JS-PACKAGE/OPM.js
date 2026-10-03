@@ -16,6 +16,8 @@ export type VoiceEndReason = 'stolen' | 'ended' | 'error' | 'cancelled';
 export interface NoteOptions { velocity?: number; pan?: number; voicePriority?: number }
 export interface NoteControls {
   pitch?: number; glide?: number; expression?: number; pan?: number; modulation?: number; ramp?: number;
+  /** Independent per-note amplitude, 0..1 (default 1), multiplied with expression before mix saturation. */
+  gain?: number;
   operatorLevels?: readonly [number, number, number, number];
   feedback?: number; lfoRate?: number; amDepth?: number; pmDepth?: number;
   operatorRatios?: readonly [number, number, number, number];
@@ -78,7 +80,7 @@ function readNoteOptions(input: NoteOptions): Required<NoteOptions> {
 
 const CONTROL_LIMITS = Object.freeze({
   pitch: [-48, 48], glide: [0, 10], expression: [0, 1], pan: [-1, 1], modulation: [0, 2], ramp: [0, 10],
-  feedback: [0, 7], lfoRate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200],
+  feedback: [0, 7], lfoRate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200], gain: [0, 1],
 } as const);
 
 /** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
@@ -196,7 +198,7 @@ const OPERATOR_RAMP = 8;
 const ENGINE_RAMP = 16;
 const RATIO_RAMP = 32;
 const FREQUENCY_RAMP = 64;
-const SCALAR_FIELDS = ['feedback', 'lfoRate', 'amDepth', 'pmDepth'] as const;
+const SCALAR_FIELDS = ['feedback', 'lfoRate', 'amDepth', 'pmDepth', 'gain'] as const;
 
 function feedbackGain(value: number): number {
   return value <= 1 ? value * 0.5 * 2 ** -6 * Math.PI : 0.5 * 2 ** (value - 7) * Math.PI;
@@ -261,7 +263,8 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     modulation: 1, modulationFrom: 1, modulationTarget: 1, modulationStart: 0, modulationFrames: 0,
     controlRamps: 0,
     modIndex: 0, amDepth: 0, pmDepth: 0, pitchFrom: 0, pitchTarget: 0, pitchStart: 0, pitchFrames: 0,
-    scalarValues: new Float64Array(4), scalarFrom: new Float64Array(4), scalarTargets: new Float64Array(4), scalarStarts: new Float64Array(4), scalarFrames: new Float64Array(4),
+    scalarValues: new Float64Array(SCALAR_FIELDS.length), scalarFrom: new Float64Array(SCALAR_FIELDS.length),
+    scalarTargets: new Float64Array(SCALAR_FIELDS.length), scalarStarts: new Float64Array(SCALAR_FIELDS.length), scalarFrames: new Float64Array(SCALAR_FIELDS.length),
     ratios: new Float64Array(4), ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
     frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
     envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
@@ -327,13 +330,13 @@ function advanceControls(active: ActiveVoice): void {
   }
   if (ramps & ENGINE_RAMP) {
     let pending = false, modulationChanged = false;
-    for (let field = 0; field < 4; field++) {
+    for (let field = 0; field < SCALAR_FIELDS.length; field++) {
       if (active.scalarFrames[field] === 0) continue;
       active.scalarValues[field] = rampAt(active.scalarFrom[field], active.scalarTargets[field], active.scalarStarts[field], active.scalarFrames[field], frame);
       if (frame < active.scalarStarts[field] + active.scalarFrames[field]) pending = true;
       else active.scalarFrames[field] = 0;
       if (field === 0) active.feedbackScale = feedbackGain(active.scalarValues[0]);
-      if (field >= 2) modulationChanged = true;
+      if (field === 2 || field === 3) modulationChanged = true;
     }
     if (modulationChanged) updateModulation(active);
     if (!pending) active.controlRamps &= ~ENGINE_RAMP;
@@ -449,7 +452,8 @@ function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
   const expression = active.controlRamps & EXPRESSION_RAMP ?
     rampAt(active.expressionFrom, active.expressionTarget, active.expressionStart, active.expressionFrames, active.elapsed) :
     active.expression;
-  return gain * active.carrierGain * active.velocity * expression;
+  const layerGain = rampAt(active.scalarFrom[4], active.scalarTargets[4], active.scalarStarts[4], active.scalarFrames[4], active.elapsed);
+  return gain * active.carrierGain * active.velocity * expression * layerGain;
 }
 
 
@@ -658,6 +662,7 @@ export class Synth {
     active.scalarValues[1] = voice.lfo.rate;
     active.scalarValues[2] = voice.lfo.amDepth;
     active.scalarValues[3] = voice.lfo.pmDepth;
+    active.scalarValues[4] = 1;
     active.scalarFrom.set(active.scalarValues);
     active.scalarTargets.set(active.scalarValues);
     active.scalarStarts.fill(0);
@@ -787,7 +792,7 @@ export class Synth {
       if (active.scalarFrames[field] === 0) {
         active.scalarValues[field] = value;
         if (field === 0) active.feedbackScale = feedbackGain(value);
-        if (field >= 2) updateModulation(active);
+        if (field === 2 || field === 3) updateModulation(active);
       }
       active.controlRamps |= ENGINE_RAMP;
     }
@@ -1003,7 +1008,7 @@ export class Synth {
       }
       if (active.ratioFrames === 0 && active.frequencyFrames === 0) this.retuneVoice(active);
     }
-    active.lastSample = output;
+    active.lastSample = output * active.scalarValues[4];
     return active.lastSample;
   }
 

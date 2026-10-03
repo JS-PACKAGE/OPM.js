@@ -5,7 +5,7 @@ export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions, QualityPr
 export type { TuningOptions, NormalizedTuning } from './tuning.js';
 export { normalizeTuning, tuningFrequency } from './tuning.js';
 export { lfoValue } from './lfo.js';
-export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent, SequenceVoices, SequenceOptions, PreparedSequenceEvent, SequenceSnapshot, SequenceCapacity, ChunkedSequenceOptions, SequenceChunk, ChunkedSequenceRender } from './sequence.js';
+export type { BeatSequenceEvent, SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent, SequenceVoices, SequenceOptions, PreparedSequenceEvent, SequenceSnapshot, SequenceCapacity, ChunkedSequenceOptions, SequenceChunk, ChunkedSequenceRender } from './sequence.js';
 export { prepareSequence, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, MAX_SEQUENCE_SECONDS, MAX_RENDER_SAMPLES, MAX_LONG_SEQUENCE_SECONDS, MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_CHUNK_FRAMES, sampleRateValue } from './sequence.js';
 export type { WavOptions, WavFormat, WavEncoderOptions, WavEncoder, WavChunk } from './wav.js';
 export type { TempoPoint, TimeSignature, BarBeat } from './transport.js';

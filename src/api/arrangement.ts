@@ -18,6 +18,8 @@ export interface ArrangementLayer {
   events: readonly BeatSequenceEvent[];
   /** Admission importance 0..127 applied to every note in this layer (maximum with a note's own value). */
   voicePriority?: number;
+  /** Per-layer gain 0..1, default 1; independent of authored note expression. */
+  gain?: number;
 }
 export interface ArrangementSection { name: string; layers: readonly string[] }
 export interface ArrangementOptions {
@@ -36,6 +38,12 @@ export interface ArrangementChangeOptions {
   quantize?: 'beat' | 'bar' | number;
   /** Removed layers may finish naturally instead of being released at the boundary. Default false. */
   preserveNotes?: boolean;
+  /** Linear gain fade in seconds, 0..10; default 0. Shared layers remain continuous. */
+  fade?: number;
+}
+export interface ArrangementGainOptions {
+  quantize?: 'beat' | 'bar' | number;
+  fade?: number;
 }
 export type ArrangementState = 'stopped' | 'starting' | 'running' | 'paused' | 'disposed';
 export interface ArrangementSnapshot {
@@ -63,6 +71,7 @@ export interface Arrangement {
   stop(): void;
   switchSection(name: string, options?: ArrangementChangeOptions): number;
   setLayer(name: string, enabled: boolean, options?: ArrangementChangeOptions): number;
+  setLayerGain(name: string, gain: number, options?: ArrangementGainOptions): number;
   /** Replaces tempo from the current beat onward; notes already admitted keep their admitted audio times. */
   setTempo(bpm: number): void;
   setTempoMap(map: readonly TempoPoint[]): void;
@@ -71,11 +80,12 @@ export interface Arrangement {
 }
 
 type Note = Extract<PreparedSequenceEvent, { type: 'note' }>;
-interface Pattern { name: string; length: number; priority: number; notes: Track[] }
+interface Pattern { name: string; length: number; priority: number; gain: number; notes: Track[] }
 interface Track { note: Note; end: number; controls: { beat: number; controls: NoteControls }[] }
-interface Gate { pattern: Pattern; track: Track; start: number; end: number; nextControl: number; id?: number; offAt?: number }
-interface Command { beat: number; order: 0 | 1 | 2; gate: Gate; controls?: NoteControls }
+interface Gate { pattern: Pattern; track: Track; start: number; end: number; nextControl: number; id?: number; offAt?: number; cutAt?: number; cutBeat?: number }
+interface Command { beat: number; order: 0 | 1 | 2; gate: Gate; controls?: NoteControls; at?: number }
 interface Change { beat: number; section: string; layers: ReadonlySet<string> }
+interface GainChange { beat: number; layer: string; target: number; fade: number; from: number; at?: number; applied: boolean; forcedFrom?: number; activation?: boolean }
 
 const MAX_LAYERS = 16;
 const MAX_SECTIONS = 32;
@@ -106,11 +116,12 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   const patterns = new Map<string, Pattern>();
   let totalEvents = 0;
   for (const raw of transportArray(config.layers, MAX_LAYERS, 'layers')) {
-    const layer = sequenceOwnData(raw, ['name', 'length', 'events', 'voicePriority'], ['name', 'length', 'events'], 'arrangement layer');
+    const layer = sequenceOwnData(raw, ['name', 'length', 'events', 'voicePriority', 'gain'], ['name', 'length', 'events'], 'arrangement layer');
     const layerName = name(layer.name, 'layer name');
     if (patterns.has(layerName)) throw new TypeError('Duplicate arrangement layer');
     const length = transportNumber(layer.length, 1 / 1024, MAX_LAYER_LENGTH, 'layer length');
     const priority = layer.voicePriority === undefined ? 0 : transportNumber(layer.voicePriority, 0, 127, 'voicePriority');
+    const gain = layer.gain === undefined ? 1 : transportNumber(layer.gain, 0, 1, 'layer gain');
     if (!Number.isInteger(priority)) throw new RangeError('voicePriority must be an integer in 0..127');
     const events = layer.events as readonly BeatSequenceEvent[];
     const score = prepareBeatEvents(opm, events);
@@ -124,13 +135,16 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     for (const event of score.events) {
       const track = tracks.get(event.id)!;
       if (event.type === 'stop') track.end = Math.min(track.end, event.time);
-      else if (event.type === 'control') track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
+      else if (event.type === 'control') {
+        if (event.controls.gain !== undefined) throw new TypeError('Arrangement reserves note gain for the layer; use expression in layer events');
+        track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
+      }
     }
     for (const track of tracks.values()) {
-      track.controls = track.controls.filter(control => control.beat > track.note.time && control.beat < track.end);
+      track.controls = track.controls.filter(control => control.beat >= track.note.time);
       track.controls.sort((a, b) => a.beat - b.beat);
     }
-    patterns.set(layerName, { name: layerName, length, priority, notes: [...tracks.values()].sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id) });
+    patterns.set(layerName, { name: layerName, length, priority, gain, notes: [...tracks.values()].sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id) });
   }
   if (patterns.size === 0) throw new RangeError('An arrangement requires at least one layer');
   const sections = new Map<string, ReadonlySet<string>>();
@@ -167,11 +181,47 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   let priorityDrops = 0;
   const owned = new Map<number, Gate>();
   const lead = Math.min(0.05, horizon / 2);
+  let anchor = 0;
+  let gains: GainChange[] = initialGains();
+
+  function initialGains(): GainChange[] {
+    return [...patterns.values()].map(pattern => ({ beat: 0, layer: pattern.name,
+      target: sections.get(initial)!.has(pattern.name) ? pattern.gain : 0, fade: 0, from: 0, applied: true }));
+  }
+  function gainAt(layer: string, at: number, before?: GainChange): { value: number; target: number; remaining: number } {
+    let value = 0;
+    let target = 0;
+    let remaining = 0;
+    for (const change of gains) {
+      if (change === before) break;
+      if (change.layer !== layer) continue;
+      const begin = change.at ?? audioTime(change.beat);
+      if (begin > at + EPSILON) break;
+      const progress = change.fade === 0 ? 1 : Math.max(0, Math.min(1, (at - begin) / change.fade));
+      value = change.from + (change.target - change.from) * progress;
+      target = change.target;
+      remaining = Math.max(0, begin + change.fade - at);
+    }
+    return { value, target, remaining };
+  }
+  function addGain(layer: string, target: number, beat: number, fade: number, activation = false): void {
+    if (gains.length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds pending gain capacity');
+    const at = audioTime(beat);
+    const from = gainAt(layer, at).value;
+    gains.push({ beat, layer, target, fade, from, applied: false, activation });
+    gains.sort((a, b) => a.beat - b.beat);
+  }
+  function applyGain(id: number, value: number, target: number, remaining: number, at: number): number {
+    opm.updateNote(id, { gain: remaining > 0 ? value : target }, { at });
+    if (remaining > 0) opm.updateNote(id, { gain: target, ramp: remaining }, { at });
+    return remaining > 0 ? 2 : 1;
+  }
 
   const barBeats = signature.numerator * 4 / signature.denominator;
   function ensure(): void { if (state === 'disposed') throw new Error('Arrangement is disposed'); }
   function nowBeat(): number {
     if (state !== 'running' || !context) return position;
+    if (context.currentTime <= anchor) return position;
     return Math.min(MAX_TRANSPORT_BEATS, tempoBeat(Math.max(0, context.currentTime - origin), map));
   }
   function audioTime(beat: number): number { return origin + tempoSeconds(beat, map); }
@@ -185,7 +235,9 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     let index = queue.length;
     while (index > 0) {
       const previous = queue[index - 1]!;
-      if (previous.beat < command.beat || previous.beat === command.beat && previous.order <= command.order) break;
+      const before = previous.at ?? audioTime(previous.beat);
+      const after = command.at ?? audioTime(command.beat);
+      if (before < after || before === after && previous.order <= command.order) break;
       index--;
     }
     queue.splice(index, 0, command);
@@ -193,9 +245,9 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   function scheduleNext(gate: Gate): void {
     const control = gate.track.controls[gate.nextControl++];
     const beat = control ? gate.start - gate.track.note.time + control.beat : gate.end;
-    if (control && beat < gate.end) {
+    if (control && (gate.cutAt === undefined || audioTime(beat) < gate.cutAt)) {
       insert({ beat, order: 2, gate, controls: control.controls });
-    } else insert({ beat: gate.end, order: 0, gate });
+    }
   }
   function generate(from: number, to: number): void {
     if (to <= from) return;
@@ -229,6 +281,15 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     }
   }
   function cancel(next: ArrangementState, beat = nowBeat()): void {
+    if (state === 'running' && context) {
+      const at = Math.max(anchor, context.currentTime);
+      const future = gains.filter(change => change.beat > beat + EPSILON).map(change => ({ ...change, at: undefined, applied: false }));
+      gains = [...patterns.keys()].map(layer => {
+        const current = gainAt(layer, at);
+        return { beat, layer, from: current.value, target: current.target, fade: current.remaining, applied: true };
+      });
+      gains.push(...future);
+    }
     generation++;
     starting = undefined;
     state = next;
@@ -290,10 +351,27 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       const reach = Math.min(MAX_TRANSPORT_BEATS, tempoBeat(Math.max(0, limit - origin), map));
       if (reach > cursor) { generate(cursor, reach); cursor = reach; }
       let dispatched = 0;
+      const admitGains = (until: number): void => {
+        for (const change of gains) {
+          if (change.applied) continue;
+          const at = Math.round(audioTime(change.beat) * sampleRate) / sampleRate;
+          if (at > until || at >= limit) continue;
+          change.from = change.forcedFrom ?? gainAt(change.layer, at, change).value;
+          if (at < now - 0.5 / sampleRate) throw new Error('Arrangement lookahead missed a layer gain event');
+          change.at = at;
+          change.applied = true;
+          for (const [id, gate] of owned) if (gate.pattern.name === change.layer) {
+            const count = change.fade > 0 ? 2 : 1;
+            if (dispatched + count > MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds lookahead command density');
+            dispatched += applyGain(id, change.from, change.target, change.fade, at);
+          }
+        }
+      };
       while (queue.length > 0 && state === 'running') {
         const command = queue[0]!;
-        const at = Math.round(audioTime(command.beat) * sampleRate) / sampleRate;
+        const at = Math.round((command.at ?? audioTime(command.beat)) * sampleRate) / sampleRate;
         if (at >= limit) break;
+        admitGains(at);
         if (++dispatched > MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds lookahead command density');
         queue.shift();
         if (at < now - 0.5 / sampleRate) throw new Error('Arrangement lookahead missed a score event');
@@ -317,7 +395,14 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
           if (token !== generation || state !== 'running') { opm.stop(id); return; }
           gate.id = id;
           owned.set(id, gate);
+          const gain = gainAt(gate.pattern.name, at);
+          if (gain.value !== 1 || gain.remaining > 0) {
+            const count = gain.remaining > 0 ? 2 : 1;
+            if (dispatched + count > MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds lookahead command density');
+            dispatched += applyGain(id, gain.value, gain.target, gain.remaining, at);
+          }
           scheduleNext(gate);
+          insert({ beat: gate.end, order: 0, gate, at: gate.cutAt });
         } else if (gate.id !== undefined && owned.has(gate.id)) {
           if (command.order === 0) { gate.offAt = at; opm.stop(gate.id, { at }); }
           else {
@@ -326,8 +411,11 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
           }
         }
       }
-      const played = Math.min(MAX_TRANSPORT_BEATS, tempoBeat(Math.max(0, now - origin), map));
+      admitGains(limit);
+      const played = nowBeat();
       changes = changes.filter((change, index) => index === changes.length - 1 || changes[index + 1]!.beat > played + EPSILON);
+      gains = gains.filter((change, index) => !gains.slice(index + 1).some(next =>
+        next.layer === change.layer && next.beat <= played + EPSILON));
       if (state === 'running') timer = setTimeout(pump, interval * 1000);
     } catch (error) { fail(error); }
   }
@@ -336,7 +424,8 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     node = opm.node;
     if (!context || !node || context.state !== 'running') throw new Error('Arrangement requires a running AudioContext');
     lastPump = context.currentTime;
-    origin = context.currentTime + lead - tempoSeconds(position, map);
+    anchor = context.currentTime + lead;
+    origin = anchor - tempoSeconds(position, map);
     cursor = position;
     queue = [];
     // Resume with the effective layer set at the resume beat; later pending changes remain scheduled.
@@ -364,41 +453,79 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     pending.then(clear, clear);
     return pending;
   }
-  function boundary(options: ArrangementChangeOptions | undefined): { beat: number; preserve: boolean } {
-    const data = sequenceOwnData(options ?? {}, ['quantize', 'preserveNotes'], [], 'arrangement change options');
+  function boundary(options: ArrangementChangeOptions | undefined): { beat: number; preserve: boolean; fade: number } {
+    const data = sequenceOwnData(options ?? {}, ['quantize', 'preserveNotes', 'fade'], [], 'arrangement change options');
     if (data.preserveNotes !== undefined && typeof data.preserveNotes !== 'boolean') throw new TypeError('preserveNotes must be boolean');
+    const fade = data.fade === undefined ? 0 : transportNumber(data.fade, 0, 10, 'fade');
     const mode = data.quantize === undefined ? 'bar' : data.quantize;
     const quantum = mode === 'beat' ? 1 : mode === 'bar' ? barBeats : transportNumber(mode, 1 / 1024, MAX_LAYER_LENGTH, 'quantize');
     const last = changes[changes.length - 1]!;
-    const floor = state === 'running' ? Math.max(cursor, nowBeat(), last.beat) : position;
-    return { beat: state === 'running' ? quantizeBeat(floor, quantum, 'ceil') : position, preserve: data.preserveNotes === true };
+    const gainBeat = gains.reduce((maximum, change) => Math.max(maximum, change.beat), 0);
+    const floor = state === 'running' ? Math.max(cursor, nowBeat(), last.beat, gainBeat) : position;
+    return { beat: state === 'running' ? quantizeBeat(floor, quantum, 'ceil') : position, preserve: data.preserveNotes === true, fade };
   }
   function commit(section: string, layers: ReadonlySet<string>, options: ArrangementChangeOptions | undefined): number {
     ensure();
-    const { beat, preserve } = boundary(options);
+    const { beat, preserve, fade } = boundary(options);
     if (state !== 'running') {
       changes = [{ beat: 0, section, layers }];
+      gains = [...patterns.values()].map(pattern => ({ beat: position, layer: pattern.name, from: 0,
+        target: layers.has(pattern.name) ? pattern.gain : 0, fade: 0, applied: true }));
       return beat;
     }
     const previous = changes[changes.length - 1]!;
     let before = changes[0]!;
     for (const change of changes) if (change.beat < beat - EPSILON) before = change; else break;
+    if (changes.length >= MAX_SEQUENCE_SLOTS || gains.length + patterns.size > MAX_SEQUENCE_SLOTS) {
+      throw new RangeError('Arrangement exceeds pending change capacity');
+    }
+    if (previous.beat === beat) {
+      // An unadmitted boundary can be retargeted repeatedly without leaving an obsolete cut or fade behind.
+      gains = gains.filter(change => !change.activation || change.beat !== beat);
+      for (const gate of new Set([...queue.map(command => command.gate), ...owned.values()])) {
+        if (gate.cutBeat !== beat || gate.offAt !== undefined) continue;
+        gate.end = gate.start - gate.track.note.time + gate.track.end;
+        gate.cutAt = undefined;
+        gate.cutBeat = undefined;
+        queue = queue.filter(command => command.gate !== gate || command.order === 1 || command.order === 2 && command.beat < beat);
+        gate.nextControl = gate.track.controls.findIndex(control => gate.start - gate.track.note.time + control.beat >= beat);
+        if (gate.nextControl < 0) gate.nextControl = gate.track.controls.length;
+        if (gate.id !== undefined) {
+          insert({ beat: gate.end, order: 0, gate });
+          if (!queue.some(command => command.gate === gate && command.order === 2)) scheduleNext(gate);
+        }
+      }
+    }
     if (previous.beat === beat) changes[changes.length - 1] = { beat, section, layers };
     else changes.push({ beat, section, layers });
+    for (const pattern of patterns.values()) {
+      if (before.layers.has(pattern.name) !== layers.has(pattern.name) && (layers.has(pattern.name) || fade > 0)) {
+        addGain(pattern.name, layers.has(pattern.name) ? pattern.gain : 0, beat, fade, true);
+        if (layers.has(pattern.name) && fade > 0) {
+          const timeline = gains.filter(change => change.layer === pattern.name);
+          const latest = timeline.at(-1)!;
+          if (timeline.at(-2)?.target !== 0) { latest.from = 0; latest.forcedFrom = 0; }
+        }
+      }
+    }
     if (!preserve) {
       const truncated = [...patterns.keys()].filter(layer => before.layers.has(layer) && !layers.has(layer));
+      const stopAt = audioTime(beat) + fade;
+      const stopBeat = tempoBeat(Math.max(0, stopAt - origin), map);
       for (const gate of new Set([...queue.map(command => command.gate), ...owned.values()])) {
-        if (!truncated.includes(gate.pattern.name) || gate.end <= beat + EPSILON || gate.start >= beat) continue;
-        gate.end = beat;
+        if (!truncated.includes(gate.pattern.name) || gate.end <= stopBeat + EPSILON || gate.start >= beat) continue;
+        gate.end = stopBeat;
+        gate.cutAt = stopAt;
+        gate.cutBeat = beat;
         if (gate.offAt === undefined) {
-          // Keep controls that still occur before the boundary; the natural release is replaced.
-          queue = queue.filter(command => command.gate !== gate || command.order === 1 || command.order === 2 && command.beat < beat);
-          if (gate.id !== undefined && !queue.some(command => command.gate === gate && command.order === 2)) {
-            insert({ beat, order: 0, gate });
+          // Preserve independent controls throughout the fade; release after the seconds-based envelope.
+          queue = queue.filter(command => command.gate !== gate || command.order === 1 || command.order === 2 && command.beat < stopBeat);
+          if (gate.id !== undefined) {
+            insert({ beat: stopBeat, order: 0, gate, at: stopAt });
           }
         } else if (gate.id !== undefined && owned.has(gate.id)) {
           // The natural release was already admitted; an earlier explicit stop supersedes it.
-          gate.offAt = Math.max(context!.currentTime, Math.min(gate.offAt, audioTime(beat)));
+          gate.offAt = Math.max(context!.currentTime, Math.min(gate.offAt, stopAt));
           opm.stop(gate.id, { at: gate.offAt });
         }
       }
@@ -413,7 +540,8 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   function replaceTempo(next: readonly Readonly<TempoPoint>[]): void {
     const beat = nowBeat();
     map = next;
-    if (state === 'running' && context) origin = context.currentTime - tempoSeconds(beat, next);
+    if (state === 'running' && context) origin = Math.max(anchor, context.currentTime) - tempoSeconds(beat, next);
+    queue.sort((a, b) => (a.at ?? audioTime(a.beat)) - (b.at ?? audioTime(b.beat)) || a.order - b.order);
   }
   const api: Arrangement = {
     get state() { return state; },
@@ -430,7 +558,13 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     start,
     resume: start,
     pause() { ensure(); cancel('paused'); },
-    stop() { if (state !== 'disposed') { cancel('stopped', 0); changes = [{ beat: 0, section: initial, layers: sections.get(initial)! }]; } },
+    stop() {
+      if (state !== 'disposed') {
+        cancel('stopped', 0);
+        changes = [{ beat: 0, section: initial, layers: sections.get(initial)! }];
+        gains = initialGains();
+      }
+    },
     switchSection(sectionName, change) {
       const target = sections.get(name(sectionName, 'section'));
       if (!target) throw new RangeError('Unknown arrangement section');
@@ -444,6 +578,25 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       const next = layersAfter();
       if (enabled) next.layers.add(layerName); else next.layers.delete(layerName);
       return commit(next.section, next.layers, change);
+    },
+    setLayerGain(layerName, value, options) {
+      ensure();
+      name(layerName, 'layer');
+      const pattern = patterns.get(layerName);
+      if (!pattern) throw new RangeError('Unknown arrangement layer');
+      const gain = transportNumber(value, 0, 1, 'layer gain');
+      const data = sequenceOwnData(options ?? {}, ['quantize', 'fade'], [], 'arrangement gain options');
+      const { beat, fade } = boundary(data as ArrangementChangeOptions);
+      if (state === 'running') {
+        addGain(layerName, effective(beat).layers.has(layerName) ? gain : 0, beat, fade);
+      } else {
+        gains = gains.filter(change => change.layer !== layerName);
+        gains.push({ beat: position, layer: layerName, from: gain,
+          target: effective(position).layers.has(layerName) ? gain : 0, fade: 0, applied: true });
+        gains.sort((a, b) => a.beat - b.beat);
+      }
+      pattern.gain = gain;
+      return beat;
     },
     setTempo(bpm) {
       ensure();

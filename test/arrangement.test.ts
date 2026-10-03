@@ -6,6 +6,8 @@ import type { PlayNoteOptions } from '../src/api/index.js';
 import { createArrangement } from '../src/api/arrangement.js';
 import type { Arrangement, ArrangementLayer } from '../src/api/arrangement.js';
 import type { VoiceInput } from '../src/voices/schema.js';
+import { renderSequence } from '../src/core/index.js';
+import type { NoteControls } from '../src/core/synth.js';
 
 interface Port { postMessage(message: unknown): void; close(): void; onmessage?: ((event: { data: unknown }) => void) | null }
 interface ProcessorInstance {
@@ -67,21 +69,25 @@ const voice: VoiceInput = {
 };
 interface Call { id: number; note: number; at: number; voicePriority?: number }
 interface Stop { id: number; at: number | undefined }
-async function host(options: { maxVoices?: number } = {}): Promise<{ opm: OPM; context: Context; calls: Call[]; stops: Stop[] }> {
+interface Update { id: number; controls: NoteControls; at: number | undefined }
+async function host(options: { maxVoices?: number } = {}): Promise<{ opm: OPM; context: Context; calls: Call[]; stops: Stop[]; updates: Update[] }> {
   Object.assign(globalThis, { currentFrame: 0 });
   const opm = new OPM({ sampleRate, ...options });
   await opm.start();
   const calls: Call[] = [];
   const stops: Stop[] = [];
+  const updates: Update[] = [];
   const play = opm.playNote.bind(opm);
   const stop = opm.stop.bind(opm);
+  const update = opm.updateNote.bind(opm);
   opm.playNote = (input: PlayNoteOptions) => {
     const id = play(input);
     calls.push({ id, note: input.note, at: input.at!, voicePriority: input.voicePriority });
     return id;
   };
   opm.stop = (id, input) => { stops.push({ id, at: input?.at }); return stop(id, input); };
-  return { opm, context: opm.context as unknown as Context, calls, stops };
+  opm.updateNote = (id, controls, input) => { updates.push({ id, controls, at: input?.at }); return update(id, controls, input); };
+  return { opm, context: opm.context as unknown as Context, calls, stops, updates };
 }
 function run(opm: OPM, arrangement: Arrangement, seconds: number): void {
   const context = opm.context as unknown as Context;
@@ -244,5 +250,171 @@ test('long arrangement automation streams incrementally and stops at a removed-l
     assert.deepEqual(errors, []);
     assert.equal(stops.filter(stop => stop.at === 0.05 + boundary / 2).length, 1);
     assert.equal(arrangement.state, 'running');
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+function audio(opm: OPM, arrangement: Arrangement, frames: number): Float32Array {
+  const context = opm.context as unknown as Context;
+  const node = opm.node as unknown as Node;
+  const output = new Float32Array(frames);
+  for (let offset = 0; offset < frames; offset += 128) {
+    arrangement.pump();
+    Object.assign(globalThis, { currentFrame: context.frame });
+    const count = Math.min(128, frames - offset);
+    const left = new Float32Array(count);
+    node.processor.process([], [[left, new Float32Array(count)]]);
+    output.set(left, offset);
+    context.frame += count;
+    context.currentTime = context.frame / sampleRate;
+  }
+  Object.assign(globalThis, { currentFrame: context.frame });
+  arrangement.pump();
+  return output;
+}
+
+test('crossfades leave shared gates continuous and give newly admitted notes the remaining layer envelope', async () => {
+  const { opm, calls, stops, updates } = await host();
+  const old: ArrangementLayer = { name: 'old', length: 16,
+    events: [{ type: 'note', id: 1, beat: 0, duration: 16, note: 60, voice }] };
+  const incoming: ArrangementLayer = { name: 'new', length: 1,
+    events: [{ type: 'note', id: 1, beat: 0, duration: 0.75, note: 72, voice }] };
+  const arrangement = createArrangement(opm, { layers: [pad, old, incoming],
+    sections: [{ name: 'a', layers: ['pad', 'old'] }, { name: 'b', layers: ['pad', 'new'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    audio(opm, arrangement, 4800);
+    const beat = arrangement.switchSection('b', { quantize: 'beat', fade: 1 });
+    assert.equal(beat, 1);
+    audio(opm, arrangement, 32000);
+    const boundary = 0.05 + beat / 2;
+    const oldId = calls.find(call => call.note === 60)!.id;
+    const sharedId = calls.find(call => call.note === 36)!.id;
+    assert.equal(calls.filter(call => call.note === 36).length, 1);
+    assert.equal(updates.some(update => update.id === sharedId && update.controls.gain !== undefined), false);
+    assert.ok(updates.some(update => update.id === oldId && update.at === boundary && update.controls.gain === 0 && update.controls.ramp === 1));
+    assert.ok(stops.some(stop => stop.id === oldId && stop.at === boundary + 1));
+    const onsets = calls.filter(call => call.note === 72);
+    assert.equal(onsets[0]!.at, boundary);
+    assert.equal(onsets[1]!.at, boundary + 0.5);
+    assert.ok(updates.some(update => update.id === onsets[0]!.id && update.controls.gain === 0));
+    const midway = updates.find(update => update.id === onsets[1]!.id && update.controls.gain !== undefined)!;
+    assert.ok(Math.abs(midway.controls.gain! - 0.5) < 1e-9);
+    assert.ok(updates.some(update => update.id === onsets[1]!.id && update.controls.gain === 1 && Math.abs(update.controls.ramp! - 0.5) < 1e-9));
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+test('layer gain composes exact simultaneous expression ramps, interrupted retargets and scope ownership in PCM', async () => {
+  const { opm, calls, updates } = await host();
+  const outsider = opm.playNote({ voice, note: 48, velocity: 0.2, duration: null });
+  const layer: ArrangementLayer = { name: 'tone', gain: 0.8, length: 16, events: [
+    { type: 'note', id: 1, beat: 0, duration: 8, note: 69, voice },
+    { type: 'control', id: 1, beat: 0, controls: { expression: 0.5, ramp: 2 } },
+  ] };
+  const arrangement = createArrangement(opm, { layers: [layer], sections: [{ name: 'a', layers: ['tone'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    const chunks = [audio(opm, arrangement, 4800)];
+    const first = arrangement.setLayerGain('tone', 0.2, { quantize: 'beat', fade: 2 });
+    assert.equal(first, 1);
+    chunks.push(audio(opm, arrangement, 11200));
+    const second = arrangement.setLayerGain('tone', 1, { quantize: 'beat', fade: 0.5 });
+    assert.equal(second, 3);
+    chunks.push(audio(opm, arrangement, 24000));
+    const toneId = calls.find(call => call.note === 69)!.id;
+    assert.equal(updates.some(update => update.id === outsider), false);
+    const retarget = updates.find(update => update.id === toneId && update.at === 1.55 && update.controls.gain !== undefined)!;
+    assert.ok(Math.abs(retarget.controls.gain! - 0.5) < 1e-9);
+    assert.deepEqual(updates.filter(update => update.id === toneId && update.controls.expression !== undefined).map(update => update.controls), [{ expression: 0.5, ramp: 2 }]);
+    const actual = new Float32Array(40000);
+    let offset = 0;
+    for (const chunk of chunks) { actual.set(chunk, offset); offset += chunk.length; }
+    const expected = renderSequence([
+      { type: 'note', id: 1, time: 0, duration: 5, note: 48, velocity: 0.2, voice },
+      { type: 'note', id: 2, time: 0.05, duration: 4, note: 69, voice },
+      { type: 'control', id: 2, time: 0.05, controls: { gain: 0.8 } },
+      { type: 'control', id: 2, time: 0.05, controls: { expression: 0.5, ramp: 2 } },
+      { type: 'control', id: 2, time: 0.55, controls: { gain: 0.8 } },
+      { type: 'control', id: 2, time: 0.55, controls: { gain: 0.2, ramp: 2 } },
+      { type: 'control', id: 2, time: 1.55, controls: { gain: retarget.controls.gain } },
+      { type: 'control', id: 2, time: 1.55, controls: { gain: 1, ramp: 0.5 } },
+    ], { sampleRate });
+    assert.deepEqual(actual, expected.left.subarray(0, actual.length));
+  } finally { arrangement.dispose(); opm.stop(outsider); await opm.dispose(); }
+});
+
+test('owned release tails fade while authored tail expression remains independent', async () => {
+  const { opm, calls, updates, stops } = await host();
+  const tailVoice: VoiceInput = { ...voice, ops: voice.ops.map(op => ({ ...op, adsr: { ...op.adsr, r: 1 } })) as unknown as VoiceInput['ops'] };
+  const tail: ArrangementLayer = { name: 'tail', length: 8, events: [
+    { type: 'note', id: 1, beat: 0, duration: 0.5, note: 69, voice: tailVoice },
+    { type: 'control', id: 1, beat: 1.25, controls: { expression: 0.3, ramp: 0.2 } },
+  ] };
+  const arrangement = createArrangement(opm, { layers: [tail], sections: [{ name: 'a', layers: ['tail'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    audio(opm, arrangement, 4800);
+    arrangement.setLayer('tail', false, { quantize: 'beat', fade: 0.5 });
+    audio(opm, arrangement, 16000);
+    const id = calls[0]!.id;
+    assert.ok(stops.some(stop => stop.id === id && stop.at === 0.3));
+    assert.ok(updates.some(update => update.id === id && update.at === 0.55 && update.controls.gain === 0 && update.controls.ramp === 0.5));
+    assert.ok(updates.some(update => update.id === id && update.at === 0.675 && update.controls.expression === 0.3));
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+test('layer gain and fade reject invalid own-data options without affecting other engines', async () => {
+  const { opm } = await host();
+  const { opm: other } = await host();
+  const arrangement = createArrangement(opm, { layers: [pad], sections: [{ name: 'a', layers: ['pad'] }], initialSection: 'a' });
+  try {
+    assert.throws(() => arrangement.setLayerGain('pad', -1), /gain/);
+    assert.throws(() => arrangement.setLayerGain('pad', 1, { fade: 11 }), /fade/);
+    assert.throws(() => arrangement.setLayerGain('missing', 1), /unknown/i);
+    assert.throws(() => arrangement.setLayerGain('pad', 1, { preserveNotes: true } as never), /field/);
+    assert.throws(() => createArrangement(opm, { layers: [{ ...pad, gain: 2 }], sections: [{ name: 'a', layers: ['pad'] }], initialSection: 'a' }), /gain/);
+    await arrangement.start();
+    const otherId = other.playNote({ voice, note: 72, duration: null });
+    arrangement.setLayerGain('pad', 0, { quantize: 'beat', fade: 0.1 });
+    audio(opm, arrangement, 16000);
+    assert.equal((await other.getDiagnostics()).pendingEvents, 1);
+    other.stop(otherId);
+    arrangement.pause();
+    const paused = arrangement.snapshot.position;
+    await arrangement.resume();
+    audio(opm, arrangement, 400);
+    assert.equal(arrangement.snapshot.position, paused);
+  } finally { arrangement.dispose(); await opm.dispose(); await other.dispose(); }
+});
+
+test('retargeting a section repeatedly at one unadmitted boundary removes obsolete cuts and fades', async () => {
+  const { opm, calls, stops, updates } = await host();
+  const arrangement = createArrangement(opm, { layers: [pad, lead],
+    sections: [{ name: 'a', layers: ['pad'] }, { name: 'b', layers: ['lead'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    audio(opm, arrangement, 4800);
+    const beat = arrangement.switchSection('b', { quantize: 'beat', fade: 0.5 });
+    assert.equal(arrangement.switchSection('a', { quantize: 'beat', fade: 0.2 }), beat);
+    audio(opm, arrangement, 24000);
+    const padId = calls.find(call => call.note === 36)!.id;
+    assert.equal(calls.filter(call => call.note === 36).length, 1);
+    assert.equal(calls.some(call => call.note === 72), false);
+    assert.equal(stops.some(stop => stop.id === padId), false);
+    assert.equal(updates.some(update => update.id === padId && update.controls.gain !== undefined), false);
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+test('preserved removed gates fade to silence without receiving an early stop', async () => {
+  const { opm, calls, stops, updates } = await host();
+  const arrangement = createArrangement(opm, { layers: [pad], sections: [{ name: 'a', layers: ['pad'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    audio(opm, arrangement, 4800);
+    arrangement.setLayer('pad', false, { quantize: 'beat', fade: 0.2, preserveNotes: true });
+    audio(opm, arrangement, 16000);
+    const id = calls[0]!.id;
+    assert.equal(stops.some(stop => stop.id === id), false);
+    assert.ok(updates.some(update => update.id === id && update.controls.gain === 0 && update.controls.ramp === 0.2));
+    assert.ok(audio(opm, arrangement, 1024).every(value => value === 0));
   } finally { arrangement.dispose(); await opm.dispose(); }
 });

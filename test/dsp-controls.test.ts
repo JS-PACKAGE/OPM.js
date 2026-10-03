@@ -213,3 +213,52 @@ test('square-wave AM alternates real silent and audible half-cycles', () => {
   const secondHalf = audio(synth, 600).left;
   assert.ok(peak(secondHalf.subarray(150)) > 0.02);
 });
+
+test('independent note gain composes exact ramps with expression and survives mute and retarget', () => {
+  const synth = new Synth(16000), chunked = new Synth(16000), reference = new Synth(16000);
+  for (const instance of [synth, chunked, reference]) {
+    instance.noteOn(tone(), 69, 1);
+    audio(instance, 53);
+  }
+  for (const instance of [synth, chunked]) {
+    instance.updateNote(1, { gain: 0, ramp: 0.1 });
+    instance.updateNote(1, { expression: 0.5, ramp: 0.2 });
+  }
+  let elapsed = 0;
+  for (const frames of [400, 1200, 800]) {
+    if (elapsed === 400) {
+      for (const instance of [synth, chunked]) instance.updateNote(1, { gain: 0.25, ramp: 0.05 });
+    }
+    const actual = audio(synth, frames);
+    assert.deepEqual(actual, audio(chunked, frames, 37));
+    const dry = audio(reference, frames);
+    for (let frame = 0; frame < frames; frame++) {
+      const time = elapsed + frame;
+      const gain = time < 400 ? 1 - time / 1600 : time < 1200 ? 0.75 - 0.5 * (time - 400) / 800 : 0.25;
+      const expression = 1 - 0.5 * Math.min(time / 3200, 1);
+      const source = HEADROOM * Math.atanh(dry.left[frame] / HEADROOM);
+      const expected = HEADROOM * Math.tanh(source * gain * expression / HEADROOM);
+      assert.ok(Math.abs(actual.left[frame] - expected) < 2e-7, `gain × expression at ${time}`);
+    }
+    elapsed += frames;
+  }
+  synth.updateNote(1, { gain: 0 });
+  assert.ok(audio(synth, 128).left.every(sample => sample === 0));
+  audio(reference, 128);
+  synth.updateNote(1, { gain: 1, expression: 1 });
+  assert.deepEqual(audio(synth, 128), audio(reference, 128), 'mute does not reset oscillator or envelope state');
+});
+
+test('quietest stealing includes independent gain and rejects invalid gain without changing audio', () => {
+  const synth = new Synth(16000, 2, { stealing: 'quietest' });
+  synth.noteOn(tone(), 69, 1);
+  synth.noteOn(tone(), 72, 2);
+  audio(synth, 64);
+  for (const gain of [-1, 1.01, NaN, Infinity]) assert.throws(() => synth.updateNote(1, { gain }), RangeError);
+  synth.updateNote(2, { gain: 0 });
+  synth.noteOn(tone(), 76, 3);
+  assert.equal(synth.lastStolenId, 2, 'muted layer is the quietest eligible victim');
+  const output = audio(synth, 256);
+  assert.ok(peak(output.left) > 0.02);
+  assert.equal(synth.errorCount, 0);
+});
