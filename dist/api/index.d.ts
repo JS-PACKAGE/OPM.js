@@ -13,6 +13,8 @@ export { createArrangement } from './arrangement.js';
 export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementGainOptions, ArrangementState, ArrangementSnapshot } from './arrangement.js';
 export { createMidiAdapter, requestMidiAccess } from './midi.js';
 export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike } from './midi.js';
+export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES } from '../core/project.js';
+export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions } from '../core/project.js';
 export { VERSION } from '../version.js';
 export { createPerformance } from './performance.js';
 export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
