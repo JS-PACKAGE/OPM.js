@@ -18,6 +18,7 @@ interface Run {
   durationSeconds: number; environment: string; device: string; os: string; browser: string;
   userAgent: string; sampleRate: number | null; endSampleRate: number | null;
   endPolicy: Policy | null;
+  packageVersion: string; loadProfile: Record<string, unknown> | null;
   manualJudgment: Judgment; acceptanceStatus: Judgment; listened: boolean; notes: string;
   observations: Observation[]; droppedObservations: number; markers: Observation[];
 }
@@ -35,7 +36,7 @@ function safe(value: unknown, depth = 0): unknown {
 
 export function installAcceptanceHarness(host: {
   sampleRate: () => number | null; policy: () => Policy; ready: () => boolean;
-  begin: () => void; end: () => void;
+  packageVersion: string; begin: () => Record<string, unknown>; end: () => void;
 }): { record: (event: Observation) => Observation } {
   const field = (id: string) => document.querySelector<HTMLInputElement>(`#${id}`)!;
   const choice = (id: string) => document.querySelector<HTMLSelectElement>(`#${id}`)!;
@@ -78,6 +79,7 @@ export function installAcceptanceHarness(host: {
       startedAt: new Date().toISOString(), endedAt: null, durationSeconds: 0,
       environment: choice('device-environment').value, device: metadata[0]!, os: metadata[1]!, browser: metadata[2]!,
       userAgent: navigator.userAgent.slice(0, 240), sampleRate: host.sampleRate(), endSampleRate: null, endPolicy: null,
+      packageVersion: host.packageVersion, loadProfile: null,
       manualJudgment: 'unverified', acceptanceStatus: 'unverified', listened: false, notes: '',
       observations: [], droppedObservations: 0, markers: [] };
     runs.push(active);
@@ -85,7 +87,7 @@ export function installAcceptanceHarness(host: {
     choice('judgment').value = 'unverified'; field('listened').checked = false;
     field('scenario-notes').value = ''; field('marker-note').value = '';
     record({ type: 'scenario-begin', scenario: active.scenario, policy: active.policy });
-    try { host.begin(); output.textContent = `Recording #${active.id}. Held gate plus +5-second onset submitted. Follow the instructions, then record your manual judgment.`; }
+    try { active.loadProfile = host.begin(); output.textContent = `Recording #${active.id}. Held gate plus +5-second onset submitted. Follow the instructions, then record your manual judgment.`; }
     catch (error) { record({ type: 'scenario-setup-error', message: String(error) }); output.textContent = 'Setup failed; leave unverified or manually record a failure. See events.'; }
     display();
   });

@@ -1,4 +1,4 @@
-import { OPM, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker } from '../src/api/index.js';
+import { OPM, VERSION, playSequence, streamSequence, createTransport, createPerformance, renderSequenceInWorker } from '../src/api/index.js';
 import type { OPMEvent, SequenceEvent, SequenceStream, TuningOptions, MusicalTransport, Performance } from '../src/api/index.js';
 import { renderSequence, renderSequenceChunks, estimateSequenceCapacity, encodeWav } from '../src/core/index.js';
 import type { QualityProfile, WavFormat } from '../src/core/index.js';
@@ -30,6 +30,7 @@ let transport: MusicalTransport | null = null;
 let performance: Performance | null = null;
 const physicalKeys: number[] = [];
 let workerAbort: AbortController | null = null;
+let sessionSettings: { mixGain: number; tuning: TuningOptions; stealing: 'oldest' | 'release-first' | 'quietest' } | null = null;
 
 const beatScore = [
   { type: 'note' as const, id: 1, voice: 'lead', note: 60, beat: 0, duration: 3 },
@@ -63,14 +64,19 @@ const acceptance = installAcceptanceHarness({
   sampleRate: () => context?.sampleRate ?? null,
   policy: () => select('interruption').value as 'cancel' | 'preserve',
   ready: () => Boolean(opm?.node && context?.state === 'running' && !busy),
+  packageVersion: VERSION,
   begin: () => {
     stream?.dispose();
     stream = null;
+    stopOwnedPlayback();
     opm!.panic();
     opm!.loadVoice('lead', patch());
     const held = opm!.playNote({ voice: 'lead', note: 60.5 });
     const future = opm!.playNote({ voice: 'lead', note: 67, time: 5 });
     record({ type: 'acceptance-stimulus', held, future, futureDelaySeconds: 5 });
+    return { revision: 'held-plus-five-second-v1', patch: opm!.voices.get('lead'),
+      synth: { quality: opm!.quality, maxVoices: opm!.maxVoices, ...sessionSettings },
+      hostGain: gain!.gain.value, stimulus: { heldNote: 60.5, futureNote: 67, futureDelaySeconds: 5, velocity: 1 } };
   },
   end: () => { opm?.panic(); },
 });
@@ -83,6 +89,13 @@ function tuning(): TuningOptions {
   const offsets = Array<number>(128).fill(0);
   offsets[60] = input('cents').valueAsNumber;
   return { referenceHz: input('reference').valueAsNumber, offsets };
+}
+function applySessionSettings(): void {
+  const mixGain = input('mix-gain').valueAsNumber, currentTuning = tuning();
+  opm!.setMixGain(mixGain);
+  sessionSettings = { ...sessionSettings!, mixGain };
+  opm!.setTuning(currentTuning);
+  sessionSettings = { ...sessionSettings!, tuning: currentTuning };
 }
 function record(event: Record<string, unknown>): void {
   events.push(acceptance.record(event));
@@ -143,10 +156,13 @@ bind('start', async () => {
   }
   // Begin resume in the trusted handler; a timer must never bypass autoplay policy.
   const resume = context.resume();
-  if (!opm) opm = new OPM({ context, destination: analyser, mixGain: input('mix-gain').valueAsNumber,
-    tuning: tuning(), stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest',
-    interruption: select('interruption').value as 'cancel' | 'preserve',
-    quality: select('quality').value as QualityProfile, onEvent: receive });
+  if (!opm) {
+    sessionSettings = { mixGain: input('mix-gain').valueAsNumber, tuning: tuning(),
+      stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest' };
+    opm = new OPM({ context, destination: analyser, ...sessionSettings,
+      interruption: select('interruption').value as 'cancel' | 'preserve',
+      quality: select('quality').value as QualityProfile, onEvent: receive });
+  }
   await resume;
   await opm.start();
   record({ type: 'audio-ready', sampleRate: context.sampleRate, policy: select('interruption').value });
@@ -163,8 +179,7 @@ bind('play', () => {
   stream?.dispose();
   stream = null;
   opm!.loadVoice('lead', patch());
-  opm!.setTuning(tuning());
-  opm!.setMixGain(input('mix-gain').valueAsNumber);
+  applySessionSettings();
   const playback = playSequence(opm!, score, { at: context!.currentTime + 0.05 });
   status.textContent = `Shared score admitted: ${[...playback.ids.values()].join(', ')}. Watch command/note events for rejection.`;
 });
@@ -192,8 +207,7 @@ bind('hold', () => {
   status.textContent = `Held #${held}; future #${future} at +5 seconds. Try interruption, release all, or panic.`;
 });
 bind('controls', () => {
-  opm!.setMixGain(input('mix-gain').valueAsNumber);
-  opm!.setTuning(tuning());
+  applySessionSettings();
   for (const id of gates) opm!.updateNote(id, { expression: input('expression').valueAsNumber,
     pan: input('pan').valueAsNumber, modulation: input('modulation').valueAsNumber, ramp: input('ramp').valueAsNumber,
     feedback: input('feedback').valueAsNumber, lfoRate: input('lfo-rate').valueAsNumber,
