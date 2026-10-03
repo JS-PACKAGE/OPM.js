@@ -148,6 +148,7 @@ export function validateNoteControls(input: NoteControls): NoteControls {
 
 interface ActiveVoice {
   id: number; sequence: number; note: number; voicePriority: number; voice: PreparedVoice; graph: AlgorithmGraph;
+  inputIndices: Int8Array; carrierIndices: Uint8Array;
   baseIncrements: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
   attackStep: Float64Array; decayStep: Float64Array; releaseStep: Float64Array; gains: Float64Array;
   attackTimes: Float64Array; decayTimes: Float64Array; releaseTimes: Float64Array;
@@ -247,6 +248,7 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
 function createVoiceSlot(oversample: number): ActiveVoice {
   return {
     id: 0, sequence: 0, note: 0, voicePriority: 0, voice: null!, graph: ALGORITHMS[0],
+    inputIndices: new Int8Array(8), carrierIndices: new Uint8Array(4),
     baseIncrements: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
     sustainDb: new Float64Array(4), sustainGain: new Float64Array(4),
     attackStep: new Float64Array(4), decayStep: new Float64Array(4), releaseStep: new Float64Array(4),
@@ -639,6 +641,13 @@ export class Synth {
     active.sequence = this.sequence++;
     active.voice = voice;
     active.graph = ALGORITHMS[voice.algorithm];
+    // Cache the fixed topology in pooled typed storage; frozen graph-array
+    // indexing otherwise repeats for every operator at every oversampled frame.
+    for (let op = 0; op < 4; op++) {
+      active.inputIndices[op * 2] = active.graph.inputs[op][0] ?? -1;
+      active.inputIndices[op * 2 + 1] = active.graph.inputs[op][1] ?? -1;
+    }
+    active.carrierIndices.set(active.graph.carriers);
     active.velocity = velocity;
     active.expression = 1;
     active.pan = pan;
@@ -917,7 +926,7 @@ export class Synth {
   // One output frame, with no temporary arrays or objects in the hot path.
   /** @internal */
   renderVoice(active: ActiveVoice): number {
-    const { graph, phases, values, filters, increments, steps, gains, levels } = active;
+    const { graph, inputIndices, carrierIndices, phases, values, filters, increments, steps, gains, levels } = active;
     if (active.controlRamps !== 0) advanceControls(active);
     const time = active.elapsed / this.sampleRate;
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
@@ -969,19 +978,22 @@ export class Synth {
       if (!finished) {
         for (let op = 0; op < 4; op++) {
           let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
-          const inputs = graph.inputs[op];
-          for (let j = 0; j < inputs.length; j++) modulation += values[inputs[j]] * active.modIndex;
+          const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
+          if (first >= 0) modulation += values[first] * active.modIndex;
+          if (second >= 0) modulation += values[second] * active.modIndex;
           const operatorLevel = operatorRamping ?
             rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
           const am = lfo.amTargets ? active.amGains[op] : amGain;
-          values[op] = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * operatorLevel * am;
+          const value = Math.sin(phases[op] + modulation) * gains[op + sub * 4] * levels[op] * operatorLevel * am;
+          values[op] = value;
           const phase = phases[op] + steps[op];
-          phases[op] = phase < TAU ? phase : phase - TAU;
-          if (!Number.isFinite(values[op]) || !Number.isFinite(phases[op])) return NaN;
+          const wrapped = phase < TAU ? phase : phase - TAU;
+          phases[op] = wrapped;
+          if (!Number.isFinite(value) || !Number.isFinite(wrapped)) return NaN;
         }
         active.older = active.previous;
         active.previous = values[0];
-        for (let j = 0; j < graph.carriers.length; j++) sample += values[graph.carriers[j]];
+        for (let j = 0; j < graph.carriers.length; j++) sample += values[carrierIndices[j]];
         sample *= active.carrierGain;
       }
       output = decimateSample(sample, filters, this.decimatorCoefficients);

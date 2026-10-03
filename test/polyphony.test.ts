@@ -159,3 +159,28 @@ test('panic clears stolen tails and spill before reentrant cancellation callback
   fresh.noteOn(voice(), 57.5, 15);
   assert.deepEqual(render(synth, 512), render(fresh, 512), 'recycled DSP starts with fresh phase and filters');
 });
+
+test('recycled voices replace every modulation edge and carrier after topology changes', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const pooled = new Synth(16000, 1, { quality });
+    for (const previous of [7, 1, 5, 0, 2, 6, 3, 4] as const) {
+      const patch = voice();
+      patch.algorithm = previous;
+      patch.ops.forEach((op, index) => { op.level = 0.2 + index * 0.1; op.ratio = index + 1; });
+      for (let id = 1; id <= 12; id++) {
+        pooled.noteOn(patch, 60, id);
+        render(pooled, 1);
+      }
+      pooled.panic();
+      for (const algorithm of [0, 1, 2, 3, 4, 5, 6, 7] as const) {
+        patch.algorithm = algorithm;
+        const fresh = new Synth(16000, 1, { quality });
+        pooled.noteOn(patch, 63, 20);
+        fresh.noteOn(patch, 63, 20);
+        assert.deepEqual(render(pooled, 256), render(fresh, 256),
+          `${quality}: ${previous} to ${algorithm} must use only the new topology`);
+        pooled.panic();
+      }
+    }
+  }
+});

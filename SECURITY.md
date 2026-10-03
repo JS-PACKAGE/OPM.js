@@ -236,6 +236,8 @@ Unreleased integration-quality review: FinalImprovementInputs approved scoped st
 
 v1.9 release review: Release19Inputs approved scoped static **A/B** and Release19Supply scoped static **C/D** for an isolated canonical package 1.9.0 candidate, with no evidence-backed security findings. Reviewers ran no runtime gates. Numbered live-tree generated copies are not approved for packaging and must remain outside the candidate. GitHub publication requires exact clean-commit artifacts, passing remote Node/browser CI and an archive digest retained in the release record. Physical-device/MIDI, human listening and npm provenance remain unverified and are not claimed by this GitHub-only release.
 
+v1.9 deadline repair: Release19Supply rechecked and approved scoped static **C/D** topology-cache/pooling/render changes after the initial release candidate failed the Node 22 prepared-burst p99 gate. Fixed slot-local caches derive only from the existing validated graphs, overwrite all edges, preserve summation order and retain finite checks, bounded fades and reentrant callback behavior. The reviewer executed no checks; this is not a performance waiver. The repaired exact commit must pass the unchanged remote gates before tagging.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)
