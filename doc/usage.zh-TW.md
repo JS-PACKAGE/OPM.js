@@ -2,9 +2,9 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/YueyuHoshizora/OPM.js)
 
-GitHub Release **v1.8.1（套件 1.8.1）**同步文件與封裝，不改變 v1.8 runtime：canonical v6 音色、即時運算子控制、拍點 Transport、速度曲線／網格、分層 Arrangement、多聲部表情控制與選用 MIDI、1–32 個邏輯聲部與音符優先權、品質模式、原子音色銀行管理，以及 PCM16／PCM24／Float32 增量 WAV、Worker 啟動／階段診斷和資產部署 CLI。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
+GitHub Release **v1.9（套件 1.9.0）**加入可攜樂譜專案、Standard MIDI files、Arrangement 淡入淡出、自訂 MIDI CC 映射、Transport startupLead、兩首原創曲與可搜尋 HTML／完整 API 文件。保留 canonical v6 音色、表情控制、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
 
-音色格式版本與套件版本獨立：v1.8.1 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
+音色格式版本與套件版本獨立：v1.9 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
 
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
@@ -14,9 +14,9 @@ GitHub Release **v1.8.1（套件 1.8.1）**同步文件與封裝，不改變 v1.
 - [壓縮部署](#壓縮部署)
 - [疑難排解](#疑難排解)
 
-## 開發中功能（尚未發佈）
+## v1.9 新功能
 
-**[HTTPS 線上範例](https://opm.js-package.xyz/)**需點擊播放按鈕才能啟動音訊。以下新功能屬於目前 checkout，不在下方歷史 v1.8.1 tarball 中；工作樹保留套件版本 1.8.1，不表示新 Release、npm 上架或部署已完成。在目前原始碼根目錄執行 `npm ci`、`npm run build`，或以 `npm pack` 建立本機套件。
+**[HTTPS 線上範例](https://opm.js-package.xyz/)**需點擊播放按鈕才能啟動音訊。以下功能包含於 v1.9；歷史 Release 保持不變。GitHub Release 不表示 npm 上架或網站部署。使用端可直接安裝 Release tarball；原始碼貢獻者執行 `npm ci`、`npm run build`。
 
 - `parseScoreProject(source: string | object)`／`serializeScoreProject(project)`讀寫 canonical version 1 專案：拍點 events、正規化 tempoMap／timeSignature、具名完整 voices 與 synthesis settings。預設為 120 BPM、4/4、44100 Hz、standard、8 聲部、mixGain 1、A4 440 Hz、oldest；嚴格 own-data 驗證且回傳 frozen snapshot。上限 8 MiB、65,536 events、128 voices／256 KiB 音色 JSON。`compileBeatSequence(events, { tempoMap?, bpm?, voices? })`轉為驗證過的秒制 `SequenceEvent[]`，供離線／Worker 渲染；Transport 直接使用拍點 events，先將具名音色載入 OPM。詳見[樂譜專案](./score-projects.md)。
 - `importMidiFile(Uint8Array, options?)`回傳 `{ events, tempoMap, timeSignature, warnings }`；`exportMidiFile(events, options?)`回傳 `Uint8Array`，由 root、core 與 `opm.js/midi-file`匯出。僅支援 format 0／1 PPQN，嚴格拒絕截斷／損毀及超額資料。匯入預設將 sustain 納入音符長度、警告不支援的資料並拒絕未閉合音符；使用 channelVoices／defaultVoice 與匯出的 voiceChannels 明確映射 FM 音色。匯出拒絕 controls、非整數音高、非零 pan／priority、同音高配對歧義與 linear tempo ramp，不默默遺失表情。無 program-to-FM 轉換或 SysEx 傳送。詳見[MIDI 檔案](./midi-files.md)。
@@ -35,27 +35,27 @@ GitHub Release **v1.8.1（套件 1.8.1）**同步文件與封裝，不改變 v1.
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8.1/opm.js-1.8.1.tgz
+npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.9/opm.js-1.9.0.tgz
 ```
 
-v1.8.1 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
+v1.9 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
 
 ```sh
 npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.8.1.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
+此 checkout 的套件版本產生 `opm.js-1.9.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.8.1.tgz
+npm install ../OPM.js/opm.js-1.9.0.tgz
 ```
 
-既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、12 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、12 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。
+既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、13 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、13 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。
 
 要直接試用儲存庫的範例，請在 **OPM.js 儲存庫根目錄** 啟動伺服器：
 
@@ -127,16 +127,16 @@ public/opm/
 
 Worker 為同源 HTTP(S) 靜態 module，不使用 blob／data／eval；正式 CSP 的 `worker-src`／`script-src` 應允許 `'self'`，資產須有正確 JavaScript MIME。不要把 worker 請求改寫為 SPA HTML。
 
-使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
+使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
 
 已安裝套件也提供 `opm-assets`，可取代手動複製。從 `opm-app` 根目錄使用**尚不存在**的目的目錄：
 
 ```sh
-npx --no-install opm-assets copy public/opm-1.8.1
-npx --no-install opm-assets check https://your-host.example/opm-1.8.1/
+npx --no-install opm-assets copy public/opm-1.9.0
+npx --no-install opm-assets check https://your-host.example/opm-1.9.0/
 ```
 
-第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.8.1/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
+第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.9.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
 
 ## 瀏覽器 API 與自訂音色
 
@@ -165,7 +165,7 @@ npx --no-install opm-assets check https://your-host.example/opm-1.8.1/
 
 controls 為非空 own-data 物件：pitch −48..48 半音；glide 0..10 秒且須搭配 pitch；expression 0..1；pan −1..1；modulation 0..2（AM 上限 1、PM 1200 音分）；operatorLevels 是四個 0..2 的原音色 level 倍率。新增 feedback 0..7、lfoRate 0..20 Hz、amDepth 0..1、pmDepth 0..1200 音分；operatorRatios 為四個 0.125..32，operatorFrequencies 為四個 1..20000 Hz 或 null（恢復 ratio 模式），operatorADSR 為四個完整 `{a,d,s,r}`。ramp 0..10 秒獨立平滑指定的 scalar／level／ratio／frequency 欄位，省略／零立即生效；glide 獨立以半音線性滑動。phase／回授歷史保留，但 ADSR 從當前 dB 重新錨定：held 音重啟 attack，released 音開始新縮放 release（最多 10 秒），零 release 立即進入 filter drain。固定 Hz 仍跟隨 pitch 控制，忽略 tuning table 的移調。未知欄位、存取器、非有限／超界值拒絕。詳細控制語意見[表情音色](./expressive-voices.md)，宿主時鐘／生命週期見[宿主整合](./host-integration.md)。
 
-尚未發佈的 checkout 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平滑且不重啟 phase／包絡；Arrangement layer fade 使用這個獨立倍率。
+v1.9 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平滑且不重啟 phase／包絡；Arrangement layer fade 使用這個獨立倍率。
 
 最多 maxVoices 個邏輯聲部（1–32，預設 8），另有至多八個獨立約 5 ms 搶音淡出；增加 maxVoices 不增加淡出數。滿額時只能搶走 voicePriority 不高於新音符的聲部，先選最低優先權，再依 stealing 政策決定。全部較高時回報音符拒絕 `reason:'priority'`，不搶走既有音符。預設 oldest；release-first 優先最早 release，quietest 按 carrier 包絡 × 力度 × expression 比較，同分取最早，不以瞬間波形判定。事件／ID 各限 256，未來定時音符佔兩筆，控制／stop 也佔額度；終止會回收過期事件。預備音色採 128 槽 content-key LRU，重新驗證後替換／重用 ID，既有排程與聲部保留原快照。無 setLFO；速率／深度可用 updateNote，波形與目標屬於音色。
 

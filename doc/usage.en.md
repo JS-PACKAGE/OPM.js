@@ -2,15 +2,15 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-GitHub release **v1.8.1 (package 1.8.1)** synchronizes documentation and packaging without changing the v1.8 runtime: canonical voice v6, live operator controls, immutable quality/polyphony selection, priority-aware admission, atomic voice-bank management, tempo ramps/grids, layered arrangement, expressive multipart performance and optional non-SysEx MIDI, incremental/Worker WAV export with startup/phase diagnostics, and the `opm-assets` deployment CLI. GitHub distribution does not imply npm registry publication. Node.js 22+ is required; README is the canonical API reference.
+GitHub release **v1.9 (package 1.9.0)** adds portable score projects, Standard MIDI files, arrangement fades, configurable MIDI CC mappings, Transport startup lead, two original songs and searchable HTML/API documentation. Existing v6 voices, expressive performance, 32-voice polyphony and Worker export remain supported. GitHub distribution does not imply npm registry publication.
 
-Voice-format versions are independent of package versions: v1.8.1 uses canonical voice v6; the immutable v1.6 release used v5. Explicit legacy voice versions 1–5 retain their original input shapes.
+Voice-format versions are independent of package versions: v1.9 uses canonical voice v6; the immutable v1.6 release used v5. Explicit legacy voice versions 1–5 retain their original input shapes.
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
-## Development additions (unreleased)
+## New in v1.9
 
-**[Online demos over HTTPS](https://opm.js-package.xyz/)** need a playback click for audio startup. New features in this section belong to the current checkout, not the historical v1.8.1 archive linked below. The working-tree package version remains 1.8.1; no new release, npm publication or deployment is implied. In the current source checkout, run `npm ci` then `npm run build`, or `npm pack` to create a locally built archive.
+**[Online demos over HTTPS](https://opm.js-package.xyz/)** need a playback click for audio startup. The features below are included in v1.9; historical releases remain unchanged. A GitHub release does not imply npm publication or deployment. Consumers can install the release tarball; source contributors run `npm ci` then `npm run build`.
 
 - `parseScoreProject(source: string | object)` / `serializeScoreProject(project)` store canonical version-1 beat events, normalized tempo/meter, named complete voices and synthesis settings. Defaults are 120 BPM, 4/4, 44100 Hz, standard quality, eight voices, mix gain 1, A4 440 Hz and oldest stealing. Strict own-data snapshots reject unknown fields/accessors; limits are 8 MiB, 65,536 events and 128 voices/256 KiB voice JSON. `compileBeatSequence(events, { tempoMap?, bpm?, voices? })` returns validated second-based `SequenceEvent[]` for offline and Worker rendering. Load stored voices into OPM before using beat events with Transport. See [score projects](./score-projects.md).
 - `importMidiFile(Uint8Array, options?)` returns `{ events, tempoMap, timeSignature, warnings }`; `exportMidiFile(events, options?)` returns a `Uint8Array`. Root/core and `opm.js/midi-file` expose both. Format 0/1 PPQN only; defaults warn about unsupported metadata/controllers/programs, apply sustain to note durations and reject unclosed notes. Select `channelVoices`/`defaultVoice` on import and `voiceChannels` on export; no program-to-FM conversion or SysEx transmission occurs. Export rejects controls, fractional pitch, nonzero pan/priority, ambiguous same-pitch overlap and linear tempo ramps. See [MIDI files and explicit policies](./midi-files.md).
@@ -23,35 +23,35 @@ Voice-format versions are independent of package versions: v1.8.1 uses canonical
 
 ## Acquire and install
 
-No source checkout or consumer build toolchain is required. With Node.js 22+ and npm, create a new application and install the attached [GitHub v1.8.1 package](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8.1) directly:
+No source checkout or consumer build toolchain is required. With Node.js 22+ and npm, create a new application and install the attached [GitHub v1.9 package](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.9) directly:
 
 ```sh
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8.1/opm.js-1.8.1.tgz
+npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.9/opm.js-1.9.0.tgz
 ```
 
-For an existing app, run only the install command in its root. The v1.8.1 tarball includes these synchronized guides; the original v1.8 tag and archive remain immutable. The public npm registry is **not assumed** to have `opm.js`.
+For an existing app, run only the install command in its root. The v1.9 tarball includes these synchronized guides; the original v1.8 tag and archive remain immutable. The public npm registry is **not assumed** to have `opm.js`.
 
-Alternatively, build a tarball from a [repository checkout (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/tree/v1.8.1). From the **OPM.js repository root**, with Node.js 22+ and npm installed:
+Alternatively, build a tarball from a [repository checkout (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/tree/v1.9). From the **OPM.js repository root**, with Node.js 22+ and npm installed:
 
 ```sh
 npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.8.1.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.9.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.8.1.tgz
+npm install ../OPM.js/opm.js-1.9.0.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.8.1.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, 12 demo entry scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, HTML pages, or the Vite example. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.9.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, 13 demo entry scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, HTML pages, or the Vite example. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -69,7 +69,7 @@ To create an app page, from the **opm-app root** created above, use the installe
 npx --no-install opm-assets copy public/opm
 ```
 
-Use a fresh destination; the CLI never overwrites differing host files and reuses an identical existing deployment. For upgrades, use a release-specific path (for example `public/audio/opm-1.8.1`) and update page imports together. `--no-install` prevents automatic registry fetching. POSIX manual equivalent: create `public/opm`, copy `node_modules/opm.js/dist/.` into it, and copy `node_modules/opm.js/LICENSE` to `public/opm/LICENSE`.
+Use a fresh destination; the CLI never overwrites differing host files and reuses an identical existing deployment. For upgrades, use a release-specific path (for example `public/audio/opm-1.9.0`) and update page imports together. `--no-install` prevents automatic registry fetching. POSIX manual equivalent: create `public/opm`, copy `node_modules/opm.js/dist/.` into it, and copy `node_modules/opm.js/LICENSE` to `public/opm/LICENSE`.
 
 Save this complete page as **`opm-app/public/index.html`**:
 
@@ -118,7 +118,7 @@ Use your actual asset-base URL with its trailing slash; loopback HTTP is also su
 
 Without npm, instead copy the checkout's **complete** `dist/` contents to `site/opm/`, copy its `LICENSE` to `site/opm/LICENSE`, save the same page as `site/index.html`, then from the directory containing `site/` serve it with `python3 -m http.server 8000 --directory site`. Keep `api/`, `core/`, `worklet/`, `worker/`, and `voices/` together, including companion modules, maps and declarations. Do not relocate just one worklet/Worker file. Modules preserve source paths instead of using hashed chunks. The browser imports the served `./opm/api/index.js` URL, not the bare npm name. Static-copy deployment avoids relying on a bundler to discover either module graph.
 
-For an installed-package Vite app, follow [the standalone Vite guide (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md): install the release tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
+For an installed-package Vite app, follow [the standalone Vite guide (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/vite/README.md): install the release tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
 
 ## Browser API and lifecycle
 
@@ -146,7 +146,7 @@ Absolute `at` must be finite, nonnegative, safely representable in sample frames
 
 Controls are a nonempty own-data object: pitch −48..48 semitones; glide 0..10 seconds requiring pitch; expression 0..1; pan −1..1; modulation 0..2 (AM capped at 1/PM 1200 cents); operatorLevels is four multipliers 0..2 over patch levels. Current checkout also accepts feedback 0..7, lfoRate 0..20 Hz, amDepth 0..1, pmDepth 0..1200 cents, four operatorRatios 0.125..32, four operatorFrequencies 1..20000 Hz or `null` to restore ratio mode, and four complete operatorADSR `{a,d,s,r}` objects. Ramp 0..10 seconds independently retargets supplied scalar/ratio/frequency controls from current values; glide remains independent and linear in semitones. Oscillator phase and feedback history survive controls. ADSR changes instead reanchor at current dB: held attack restarts, released notes begin a newly scaled release capped at 10 seconds, and zero release drains the filter immediately. Fixed Hz follows pitch controls but ignores tuning-table transposition. Unknown fields/accessors/nonfinite/out-of-range values reject. See [expressive voices](./expressive-voices.md) and [host integration](./host-integration.md).
 
-Unreleased checkout addition: `gain` (0–1, default 1) is independent of expression and follows `ramp` without restarting phase/envelopes; arrangement layer fades use this separate multiplier.
+Since v1.9: `gain` (0–1, default 1) is independent of expression and follows `ramp` without restarting phase/envelopes; arrangement layer fades use this separate multiplier.
 
 The selected 1–32 logical voices (default 8) and at most eight independent short stealing fades are bounded separately. `voicePriority` is integer 0–127, default 0: stealing considers only voices whose priority is no higher than the incoming note, selects the lowest eligible priority first, then applies the stealing policy. Stealing defaults to oldest; release-first chooses oldest released before held, while quietest uses current carrier envelope × velocity × expression with oldest ties, not instantaneous sample amplitude. If all voices have higher priority, the browser reports note rejection reason `priority`; direct `Synth.noteOn` throws `VoiceAdmissionError`. Events/IDs each cap at 256. Future timed notes reserve two events; controls/stops also consume slots. Terminal states reclaim obsolete events. Prepared patches use 128 content-keyed LRU registrations; validated replacement reuses IDs safely while queued/active notes keep their original snapshot.
 

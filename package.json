@@ -1,6 +1,6 @@
 {
   "name": "opm.js",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "A zero-dependency four-operator FM synthesis engine",
   "homepage": "https://opm.js-package.xyz/",
   "type": "module",

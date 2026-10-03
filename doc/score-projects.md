@@ -1,6 +1,6 @@
 # Replayable score projects
 
-Current checkout / Unreleased. A version 1 `ScoreProject` stores musical events, a tempo map, meter, named complete voice snapshots and synthesis settings in one self-contained JSON file. The pure APIs import from `opm.js/core` in Node without an `AudioContext`, DOM or Worker.
+Available since v1.9. A version 1 `ScoreProject` stores musical events, a tempo map, meter, named complete voice snapshots and synthesis settings in one self-contained JSON file. The pure APIs import from `opm.js/core` in Node without an `AudioContext`, DOM or Worker.
 
 ## Create, save and load
 

@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.9
 
-These additions describe the working tree, not the immutable v1.8.1 release archive. Package metadata and `VERSION` remain 1.8.1; no npm publication is performed.
+Package version 1.9.0. Integration and musical workflows release; voice format remains v6. Historical releases remain immutable. GitHub distribution is separate from npm publication; no npm publication is performed.
 
 ### Integration and musical workflows
 
@@ -27,10 +27,11 @@ These additions describe the working tree, not the immutable v1.8.1 release arch
 - Local behavioral suite: 381 passing tests. Dependency audit: zero vulnerabilities; runtime dependency tree: empty. Numerical sound-quality checks cover 2,505 matrix rows and 24 live-control cases; preset-quality output is accepted.
 - Native Chromium AudioWorklet observations cover beat-0 startup, gain mute/resume without retrigger, pedal-owned MIDI cleanup, both original pieces and project round trips. The actual Arrangement UI produces signal → exact silence → signal for a solo pad layer and switches/fades sections across pause/resume. Project JSON and a valid Worker PCM16 WAV were downloaded to disk; the documented Node chunk-WAV recipe also produced a finite, correctly framed file.
 - Default-gain PCM remains bit-identical in 333 baseline comparison renders. Node CPU measurements are report-only host observations, not real-time or mobile support guarantees.
-- FinalImprovementInputs approved scoped static A/B; FinalImprovementDspSupply approved scoped static C/D for an isolated immutable canonical candidate after the pedal ownership, workload-recording, generated-link and DOM-free type-boundary fixes. Reviewers ran no runtime gates. Numbered generated-file copies unexpectedly reappeared; original/restored trees were preserved outside the checkout. Live-tree packaging remains blocked by those copies and is not covered by isolated-candidate approval.
+- FinalImprovementInputs approved scoped static A/B; FinalImprovementDspSupply approved scoped static C/D for an isolated immutable canonical candidate after the pedal ownership, workload-recording, generated-link and DOM-free type-boundary fixes. Reviewers ran no runtime gates. Earlier numbered generated-file copies were preserved outside the checkout; release artifacts must be built from the exact clean release commit.
 - The isolated candidate passes the 141-asset build, all behavioral/type checks and installed-package/runtime/asset/DOM-free-Node declaration gates. Native Chromium 150 smoke and the bounded 768-note stress gate pass with zero DSP errors; the intentional late/drop remains counted. HTML search and declaration-anchor navigation also work from `file://` at a 390-pixel viewport without page overflow.
 - Native matched/dry A/B previews produce finite signal, but numerical measurement leaves every human criterion unassessed and refuses unconfirmed/empty finding exports. The actual desktop device capture validates as 0/36 PASS and remains unverified; neither observation is physical iOS/Android, physical MIDI or human-listening evidence.
-- Physical-device captures and genuine human listening findings are still required before those acceptance statuses or trim recommendations can be promoted. No version bump, commit, deployment, release or npm publication is performed by this work.
+- Physical-device captures and genuine human listening findings are still required before those acceptance statuses or trim recommendations can be promoted. This GitHub release does not imply deployment, npm publication or physical-device/listening certification.
+- Release19Inputs approved scoped static A/B; Release19Supply approved scoped static C/D for an isolated canonical 1.9.0 candidate, with no evidence-backed security findings. Neither reviewer executed runtime gates. The GitHub release record retains the exact release commit, observed remote CI outcome and archive SHA-256; npm publication is excluded.
 
 ## v1.8.1
 
