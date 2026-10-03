@@ -39,7 +39,7 @@ The acknowledgement target is **72 hours**, on a best-effort basis, not a guaran
 ### Website deployment and browser permissions
 
 - Serve the complete, matching `dist/` tree over HTTPS or localhost, preserving worklet and imported-module paths. A configurable worklet URL must stay same-origin, use HTTPS/loopback HTTP, contain no credentials/fragment, and retain CSP/MIME enforcement. Do not load through `file://`, and retain `LICENSE`.
-- The root `index.html`, `examples/` pages, `favicon.ico` and this policy are public website assets. If publishing the linked guides, include `README.md` and `doc/` as well.
+- The root `index.html`, `examples/` pages, `favicon.ico` and this policy are public website assets. Publish the build-generated `doc/` HTML, stylesheet and search assets together with the matching documentation sources.
 - The Python development server is for local checks, not a hardened public host. A production server should not expose `.git/`, `.dev/`, `node_modules/`, development tooling, credentials or directory listings.
 - Serve JavaScript with a JavaScript MIME type. Use `X-Content-Type-Options: nosniff`; do not return an application's HTML fallback for a missing worklet/module URL.
 - Apply a host-specific Content Security Policy that allows only reviewed module origins, restricts framing and base URLs, and disables unnecessary object embedding. Check the script and worklet/worker directives applicable to each supported browser.
@@ -65,6 +65,14 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 Single-voice APIs reject out-of-range fields. Bank validation clamps finite numeric fields to documented bounds, but still rejects malformed types, non-finite numbers and invalid version/algorithm/feedback values. Clamping is not a substitute for validation.
 
 Keep allowlisted, own-data copying at trust boundaries. Do not merge untrusted objects into prototypes, invoke getters to inspect them, or treat a valid voice name as authorization to construct a URL or filesystem path. Engine bank parsing does not load paths or fetch voice URLs.
+
+Independent note `gain` and `expression` are both bounded to 0..1 and multiply before stereo mix saturation. Layer fades do not bypass control validation, note ownership, worklet queue limits or rejection reporting.
+
+### Score projects and Standard MIDI files
+
+Versioned score-project parsing accepts only the documented own-data schema, detached validated voices, bounded beat events and synthesis settings. Loading a project does not fetch assets, execute code or start playback. Compilation converts note gate endpoints through the complete tempo map; offline resource budgets still apply after conversion.
+
+The independent Standard MIDI file adapter validates native bytes, bounded chunks, PPQN timing and event framing. It does not provide a native MIDI driver, transmit SysEx or interpret uploaded bytes as executable content. Hosts must check file size before buffering, choose explicit channel-to-voice mappings, expose import warnings and reject unsupported export semantics instead of silently changing a score.
 
 ### External downloads and file uploads
 
@@ -131,6 +139,7 @@ Keep each deployment's JS, maps and declarations from the same build. Review exa
 | Host download/upload and DOM code | High | Pre-buffer limits, permitted sources, text-only presentation and host-page XSS defenses |
 | Raw AudioWorklet messages | High | Strict message validation, bounded IDs/events and observable failure handling |
 | DX7 binary input and WAV PCM arguments | Medium | Bounded lengths, framing/checksum or sample validation; no native decoder |
+| Score-project JSON and Standard MIDI files | High | Byte/event/schema/framing limits, own-data options, detached validated voices and explicit unsupported-semantics handling |
 | DSP and offline rendering | Medium | Finite output, bounded per-instance work, duration/sample-rate budgets and error diagnostics |
 | Public scheduling API | Medium | Argument validation, admission handling, cancellation and bounded scheduling batches |
 | Build and deployment supply chain | Medium | Exact development pins, reviewed CI actions, complete matching assets and zero runtime dependencies |
@@ -154,7 +163,7 @@ A security review is required before:
 ### 2. Review checklist
 
 **A. Untrusted data (voice banks, config)**
-- [ ] Voice JSON/key scaling, DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
+- [ ] Voice JSON/key scaling, score projects, SMF/DX7 binary input, and WAV arguments validate type, shape, length, numeric bounds, and own-data properties before use
 - [ ] Explicit allowlisted copying; no spreading/merging untrusted objects into prototypes; no accessor invocation
 - [ ] Numeric bounds cover ADSR/live reanchoring, ratio/fixed-Hz controls, rate scaling, pitch envelope, LFO waveform/delay/sync/phase/targets and independent depth/rate, feedback, velocity/pan, levels and ramps; tuning/score/Transport/performance/encoder limits remain bounded and legacy shapes exclude later fields
 - [ ] Prepared identity cannot be forged, trusted patches stay deeply immutable, and public map snapshots cannot change stored patches
@@ -222,6 +231,8 @@ v1.7 release review: Release17Data approved scoped static **A**, Release17Protoc
 v1.8 review record: InputProtocolReview approved scoped static **A/B** and DspAssetsReview scoped static **C/D** after the bounded arrangement, MIDI own-data, finite tempo-slope and canonical asset-overlap fixes. Their static approval does not certify runtime or external npm settings. The release commit `d793d69056c68a971ede1af988338412687227fd` has an observed successful [Node 22/24/26 and Chromium/Firefox/WebKit CI run](https://github.com/YueyuHoshizora/OPM.js/actions/runs/37061483772); the separate [review record](https://github.com/YueyuHoshizora/OPM.js/issues/1) and [release package record](https://github.com/YueyuHoshizora/OPM.js/releases/tag/v1.8) retain the evidence and tarball digest. This is not registry provenance, physical-device/MIDI or listening acceptance.
 
 v1.8.1 documentation/package patch review: Patch181Inputs approved scoped static **A/B** and Patch181DspSupply scoped static **C/D**, with no evidence-backed blockers. Reviewers were read-only and ran no build, tests or external actions. The integration owner confirmed the source diff against v1.8 changes only `src/version.ts`; runtime validation, protocols and DSP are unchanged. Final regenerated assets, package gates and remote CI are separate release prerequisites, recorded in CHANGELOG and the GitHub release notes. No npm provenance, physical-device/MIDI or listening certification is asserted.
+
+Unreleased integration-quality review: FinalImprovementInputs approved scoped static **A/B** after the pedal-ownership and applied-workload evidence fixes. FinalImprovementDspSupply approved scoped static **C/D** specifically for an isolated immutable canonical candidate (47 runtime modules with 141 matching distribution assets), after generated-link validation and the DOM-free core/project/MIDI type boundary were hardened. No surviving scoped findings remain. Both reviewers were read-only and executed no runtime gates or publication. The integration owner separately observed 381 passing behavioral tests, type checks including installed DOM-free Node consumers, numerical/dependency/package checks and native Chromium UI/smoke/stress checks. Unexpected numbered generated-file copies were preserved outside the checkout; live-tree packaging remains blocked by their reappearance and is not covered by the isolated-candidate approval. Desktop automation and numerical analysis do not certify physical devices, physical MIDI or human listening. No release approval, npm authentication/provenance/registry protection, physical-device or listening certification is asserted.
 
 ## Non-goals
 

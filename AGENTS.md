@@ -32,13 +32,13 @@ OPM (public API)                     processor
                                        LFO (AM / PM) → stereo out
 ```
 
-- `src/core/` — pure DSP, offline sequence rendering, incremental WAV and beat conversion. **No Web Audio imports.**
+- `src/core/` — pure DSP, offline sequence rendering, incremental WAV, beat conversion, versioned score projects and the independent MIDI-file adapter. **No Web Audio imports, including core declaration dependencies.**
 - `src/worklet/` — AudioWorkletProcessor and strict bounded message protocol.
 - `src/worker/` — static module Worker for encoded offline chunks with sink acknowledgements.
 - `src/api/` — public facade (`OPM`), atomic voice banks, schedulers, musical Transport/arrangements, performance policies, optional Web MIDI adapter and Worker host.
 - `src/voices/` — typed voice assets and versioned JSON parsing (format below).
 - `src/tools/` — Node-only dependency-free asset deployment/check CLI, separate from browser/DSP modules.
-- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` and a compiler-generated `.d.ts`; maps embed TypeScript wherever runtime source exists. Includes all twelve bundled browser example scripts, not their HTML pages. Deploy the complete tree. No hashed chunks are generated.
+- `dist/` — generated minified `.js` ES modules preserving the source layout, each accompanied by a `.js.map` and a compiler-generated `.d.ts`; maps embed TypeScript wherever runtime source exists. Includes all thirteen bundled browser example scripts, not their HTML pages. Deploy the complete tree. No hashed chunks are generated.
 
 LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 

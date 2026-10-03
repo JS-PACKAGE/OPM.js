@@ -1,0 +1,1587 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Generated API reference — OPM.js</title><link rel="stylesheet" href="site.css"><script src="search-data.js" defer></script><script src="site.js" defer></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">OPM.js documentation</a><a href="https://opm.js-package.xyz/">Online demos</a></header><div class="layout"><aside><form role="search"><label for="docs-search">Search guides and API exports</label><input id="docs-search" type="search" autocomplete="off" aria-controls="search-results"><p id="search-status" role="status" aria-live="polite"></p><ul id="search-results"></ul></form><nav aria-label="Documentation"><ul><li><a href="./index.html">OPM.js documentation</a></li><li><a href="./readme.html">OPM.js</a></li><li><a href="./security.html">SECURITY.md — OPM.js Security Policy &amp; Review Mechanism</a></li><li><a href="./changelog.html">Changelog</a></li><li><a href="./acoustic-quality.html">Acoustic references and decimation</a></li><li><a href="./adaptive-music.html">Adaptive music, tempo curves and the seek contract</a></li><li><a href="./audio-buses.html">Polyphony budgets, voice priority and independent buses</a></li><li><a href="./compatibility.html">Compatibility policy</a></li><li><a href="./expressive-voices.html">Voice v6 and expressive controls</a></li><li><a href="./host-integration.html">Host integration</a></li><li><a href="./midi-files.html">Standard MIDI files</a></li><li><a href="./midi-performance.html">Expressive performance and optional Web MIDI</a></li><li><a href="./mobile-acceptance.html">Physical-device audio recovery acceptance</a></li><li><a href="./publishing.html">Publication and package verification</a></li><li><a href="./score-projects.html">Replayable score projects</a></li><li><a href="./sound-design.html">Sound design workflow</a></li><li><a href="./streaming-sequences.html">Bounded sequences</a></li><li><a href="./usage.en.html">OPM.js usage guide (English)</a></li><li><a href="./usage.zh-TW.html">OPM.js 使用說明（繁體中文）</a></li><li><a href="./voice-quality.html">Preset and conversion acceptance</a></li><li><a href="./worker-diagnostics.html">Worker render diagnostics, deadlines and rollback</a></li><li><a href="./api.html" aria-current="page">Generated API reference</a></li></ul></nav><nav aria-label="On this page"><h2>On this page</h2><ul><li class="depth-1"><a href="#generated-api-reference">Generated API reference</a></li><li class="depth-2"><a href="#module-opmjs">opm.js</a></li><li class="depth-2"><a href="#module-opmjscore">opm.js/core</a></li><li class="depth-2"><a href="#module-opmjsmidi-file">opm.js/midi-file</a></li><li class="depth-2"><a href="#module-opmjsvoicesschemajs">opm.js/voices/schema.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesnormalizejs">opm.js/voices/normalize.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesbrassjs">opm.js/voices/brass.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesdx7js">opm.js/voices/dx7.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesexamplesjs">opm.js/voices/examples.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesoriginaljs">opm.js/voices/original.js</a></li><li class="depth-2"><a href="#module-opmjsvoicespreset-metadatajs">opm.js/voices/preset-metadata.js</a></li><li class="depth-2"><a href="#module-opmjsvoicesvoiceschemajs">opm.js/voices/voice.schema.js</a></li><li class="depth-2"><a href="#module-opmjstoolsassetsjs">opm.js/tools/assets.js</a></li><li class="depth-2"><a href="#declaration-apiarrangementdts">api/arrangement.d.ts</a></li><li class="depth-2"><a href="#declaration-apiindexdts">api/index.d.ts</a></li><li class="depth-2"><a href="#declaration-apimididts">api/midi.d.ts</a></li><li class="depth-2"><a href="#declaration-apiperformancedts">api/performance.d.ts</a></li><li class="depth-2"><a href="#declaration-apirender-workerdts">api/render-worker.d.ts</a></li><li class="depth-2"><a href="#declaration-apisequencedts">api/sequence.d.ts</a></li><li class="depth-2"><a href="#declaration-apitransportdts">api/transport.d.ts</a></li><li class="depth-2"><a href="#declaration-corealgorithmsdts">core/algorithms.d.ts</a></li><li class="depth-2"><a href="#declaration-coredecimatordts">core/decimator.d.ts</a></li><li class="depth-2"><a href="#declaration-coreenvelopedts">core/envelope.d.ts</a></li><li class="depth-2"><a href="#declaration-coreindexdts">core/index.d.ts</a></li><li class="depth-2"><a href="#declaration-corelfodts">core/lfo.d.ts</a></li><li class="depth-2"><a href="#declaration-coremidi-filedts">core/midi-file.d.ts</a></li><li class="depth-2"><a href="#declaration-coreprojectdts">core/project.d.ts</a></li><li class="depth-2"><a href="#declaration-coresequencedts">core/sequence.d.ts</a></li><li class="depth-2"><a href="#declaration-coresynthdts">core/synth.d.ts</a></li><li class="depth-2"><a href="#declaration-coretransportdts">core/transport.d.ts</a></li><li class="depth-2"><a href="#declaration-coretuningdts">core/tuning.d.ts</a></li><li class="depth-2"><a href="#declaration-corewavdts">core/wav.d.ts</a></li><li class="depth-2"><a href="#declaration-toolsassetsdts">tools/assets.d.ts</a></li><li class="depth-2"><a href="#declaration-versiondts">version.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesbrassdts">voices/brass.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesdx7dts">voices/dx7.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesexamplesdts">voices/examples.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesnormalizedts">voices/normalize.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesoriginaldts">voices/original.d.ts</a></li><li class="depth-2"><a href="#declaration-voicespreset-metadatadts">voices/preset-metadata.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesschemadts">voices/schema.d.ts</a></li><li class="depth-2"><a href="#declaration-voicesvoiceschemadts">voices/voice.schema.d.ts</a></li></ul></nav></aside><main id="content" tabindex="-1"><h1 id="generated-api-reference">Generated API reference</h1><p>This reference describes the current build, including unreleased checkout additions; it does not retroactively change historical release archives.</p><p>Generated from the compiler-emitted declarations for every package export. Export tables identify the public import surfaces; the complete declaration files below include their supporting types, comments, overloads and private-member markers. Supporting modules are not additional public import promises. No signatures are handwritten or abridged.</p><section><h2 id="module-opmjs">opm.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>ADSR</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>Arrangement</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementChangeOptions</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementGainOptions</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementLayer</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementOptions</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementSection</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementSnapshot</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>ArrangementState</code></a></th><td>type</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>BarBeat</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>barBeatToBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>BeatQuantization</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>BeatSequenceEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>BeatSequenceOptions</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>beatsToSeconds</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>beatToBarBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>CommandEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>CommandName</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>CommandRejectedError</code></a></th><td>value / type where applicable</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>CommandWaitOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>compileBeatSequence</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>ContextEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>ContextState</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiarrangementdts"><code>createArrangement</code></a></th><td>value / type where applicable</td><td><code>api/arrangement.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>createLookaheadScheduler</code></a></th><td>value / type where applicable</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>createMidiAdapter</code></a></th><td>value / type where applicable</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>createPerformance</code></a></th><td>value / type where applicable</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>createTransport</code></a></th><td>value / type where applicable</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>DiagnosticsEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>ErrorEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>exportMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FrozenOperator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FrozenVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>importMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>KeyScale</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFOV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV3</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV4</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargets</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargetsInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>LookaheadNote</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>LookaheadOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>LookaheadScheduler</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>LookaheadWindow</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_BYTES</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_EVENTS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_TRACKS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>MAX_SCORE_PROJECT_BYTES</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>MAX_SCORE_PROJECT_VOICES</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiAccessLike</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiAdapter</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiAdapterOptions</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiAdapterSnapshot</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiControllerMapping</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiExportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarning</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarningCode</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportResult</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiInputLike</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiMessageEventLike</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiNavigatorLike</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiOperatorControl</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>MidiScalarControl</code></a></th><td>type</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>MusicalTransport</code></a></th><td>type</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>NormalizedTuning</code></a></th><td>type</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>NormalizedVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>normalizeTempoMap</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>NoteControls</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>NoteEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>NoteState</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Operator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>OPM</code></a></th><td>value / type where applicable</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>OPMEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>OPMOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>parseScoreProject</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>Performance</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformanceKeySnapshot</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformanceNoteOffOptions</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformanceNoteOptions</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformanceOptions</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformancePartControls</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformancePartOptions</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiperformancedts"><code>PerformancePartSnapshot</code></a></th><td>type</td><td><code>api/performance.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PitchEnvelope</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>PlayNoteOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>playSequence</code></a></th><td>value / type where applicable</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>PlaySequenceOptions</code></a></th><td>type</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PreparedVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coredecimatordts"><code>QualityProfile</code></a></th><td>type</td><td><code>core/decimator.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>quantizeBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>renderSequenceInWorker</code></a></th><td>value / type where applicable</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apimididts"><code>requestMidiAccess</code></a></th><td>value / type where applicable</td><td><code>api/midi.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>ResetEvent</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>ScheduledNoteOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>ScoreProject</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>ScoreProjectSettings</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>secondsToBeats</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceControlEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceNoteEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>SequencePlayback</code></a></th><td>type</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceStopEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>SequenceStream</code></a></th><td>type</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>SequenceStreamOptions</code></a></th><td>type</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>serializeScoreProject</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apiindexdts"><code>StopOptions</code></a></th><td>type</td><td><code>api/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apisequencedts"><code>streamSequence</code></a></th><td>value / type where applicable</td><td><code>api/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>swingBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>swingBeatEvents</code></a></th><td>value / type where applicable</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>SynthOptions</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>TempoPoint</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>TimeSignature</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>TransportLoop</code></a></th><td>type</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>TransportOptions</code></a></th><td>type</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>TransportSnapshot</code></a></th><td>type</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apitransportdts"><code>TransportState</code></a></th><td>type</td><td><code>api/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>TuningOptions</code></a></th><td>type</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-versiondts"><code>VERSION</code></a></th><td>value / type where applicable</td><td><code>version.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Voice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>VoiceInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WavSink</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderOptions</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderPhase</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderPhaseDiagnostics</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderPhaseStatus</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderProgress</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-apirender-workerdts"><code>WorkerRenderResult</code></a></th><td>type</td><td><code>api/render-worker.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjscore">opm.js/core</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>ADSR</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corealgorithmsdts"><code>ALGORITHMS</code></a></th><td>value / type where applicable</td><td><code>core/algorithms.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>BarBeat</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>barBeatToBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>BeatSequenceEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>BeatSequenceOptions</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>beatsToSeconds</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>beatToBarBeat</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>ChunkedSequenceOptions</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>ChunkedSequenceRender</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>compileBeatSequence</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>createWavEncoder</code></a></th><td>value / type where applicable</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>encodeWav</code></a></th><td>value / type where applicable</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreenvelopedts"><code>envelopeAt</code></a></th><td>value / type where applicable</td><td><code>core/envelope.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>estimateSequenceCapacity</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>exportMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FrozenVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreindexdts"><code>HEADROOM</code></a></th><td>value / type where applicable</td><td><code>core/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>importMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>KeyScale</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFOV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV2</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV3</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV4</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargets</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargetsInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corelfodts"><code>lfoValue</code></a></th><td>value / type where applicable</td><td><code>core/lfo.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_LONG_SEQUENCE_EVENTS</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_LONG_SEQUENCE_SECONDS</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_BYTES</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_EVENTS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_TRACKS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_RENDER_SAMPLES</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>MAX_SCORE_PROJECT_BYTES</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>MAX_SCORE_PROJECT_VOICES</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_SEQUENCE_CHUNK_FRAMES</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_SEQUENCE_NOTES</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_SEQUENCE_SECONDS</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>MAX_SEQUENCE_SLOTS</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiExportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarning</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarningCode</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportResult</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>NormalizedTuning</code></a></th><td>type</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>normalizeTempoMap</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>normalizeTuning</code></a></th><td>value / type where applicable</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesnormalizedts"><code>normalizeVoice</code></a></th><td>value / type where applicable</td><td><code>voices/normalize.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>NoteControls</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>NoteOptions</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Operator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreindexdts"><code>OVERSAMPLE</code></a></th><td>value / type where applicable</td><td><code>core/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>parseScoreProject</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PitchEnvelope</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>PreparedSequenceEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PreparedVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>prepareLongSequence</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>prepareSequence</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesnormalizedts"><code>prepareVoice</code></a></th><td>value / type where applicable</td><td><code>voices/normalize.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coredecimatordts"><code>QualityProfile</code></a></th><td>type</td><td><code>core/decimator.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreindexdts"><code>renderNote</code></a></th><td>value / type where applicable</td><td><code>core/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreindexdts"><code>RenderNoteOptions</code></a></th><td>type</td><td><code>core/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreindexdts"><code>RenderResult</code></a></th><td>type</td><td><code>core/index.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>renderSequence</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>renderSequenceChunks</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>sampleRateValue</code></a></th><td>value / type where applicable</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>ScoreProject</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>ScoreProjectSettings</code></a></th><td>type</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>secondsToBeats</code></a></th><td>value / type where applicable</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceCapacity</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceChunk</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceControlEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceNoteEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceOptions</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceSnapshot</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceStopEvent</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresequencedts"><code>SequenceVoices</code></a></th><td>type</td><td><code>core/sequence.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coreprojectdts"><code>serializeScoreProject</code></a></th><td>value / type where applicable</td><td><code>core/project.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>Synth</code></a></th><td>value / type where applicable</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>SynthOptions</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>TempoPoint</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretransportdts"><code>TimeSignature</code></a></th><td>type</td><td><code>core/transport.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>tuningFrequency</code></a></th><td>value / type where applicable</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coretuningdts"><code>TuningOptions</code></a></th><td>type</td><td><code>core/tuning.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>validateMaxVoices</code></a></th><td>value / type where applicable</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>validateNoteControls</code></a></th><td>value / type where applicable</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>validateVoicePriority</code></a></th><td>value / type where applicable</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Voice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>VoiceAdmissionError</code></a></th><td>value / type where applicable</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coresynthdts"><code>VoiceEndReason</code></a></th><td>type</td><td><code>core/synth.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>VoiceInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>WavChunk</code></a></th><td>type</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>WavEncoder</code></a></th><td>type</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>WavEncoderOptions</code></a></th><td>type</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>WavFormat</code></a></th><td>type</td><td><code>core/wav.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-corewavdts"><code>WavOptions</code></a></th><td>type</td><td><code>core/wav.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsmidi-file">opm.js/midi-file</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>exportMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>importMidiFile</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_BYTES</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_EVENTS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MAX_MIDI_FILE_TRACKS</code></a></th><td>value / type where applicable</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiExportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarning</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiFileWarningCode</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportOptions</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-coremidi-filedts"><code>MidiImportResult</code></a></th><td>type</td><td><code>core/midi-file.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesschemajs">opm.js/voices/schema.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>ADSR</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Algorithm</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>bounded</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>CompleteVoiceInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FourOperators</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FrozenOperator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>FrozenVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>KeyScale</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFOV4</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyLFOV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyOperator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyOperatorV2</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyOperatorV3</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV2</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV3</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV4</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LegacyVoiceV5</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFO</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>lfoSync</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargets</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LFOTargetsInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>lfoWaveform</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>LIMITS</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>MAX_BANK_BYTES</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>MAX_BANK_VOICES</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>NormalizedVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Operator</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>parseVoiceBank</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PitchEnvelope</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>PreparedVoice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesnormalizedts"><code>prepareVoice</code></a></th><td>value / type where applicable</td><td><code>voices/normalize.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>validateVoice</code></a></th><td>value / type where applicable</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>Voice</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesschemadts"><code>VoiceInput</code></a></th><td>type</td><td><code>voices/schema.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesnormalizejs">opm.js/voices/normalize.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesnormalizedts"><code>normalizeVoice</code></a></th><td>value / type where applicable</td><td><code>voices/normalize.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesnormalizedts"><code>prepareVoice</code></a></th><td>value / type where applicable</td><td><code>voices/normalize.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesbrassjs">opm.js/voices/brass.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesbrassdts"><code>brass</code></a></th><td>value / type where applicable</td><td><code>voices/brass.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesdx7js">opm.js/voices/dx7.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesdx7dts"><code>describeDX7</code></a></th><td>value / type where applicable</td><td><code>voices/dx7.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesdx7dts"><code>DX7ImportDescription</code></a></th><td>type</td><td><code>voices/dx7.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicesdx7dts"><code>importDX7</code></a></th><td>value / type where applicable</td><td><code>voices/dx7.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesexamplesjs">opm.js/voices/examples.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesexamplesdts"><code>examples</code></a></th><td>value / type where applicable</td><td><code>voices/examples.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesoriginaljs">opm.js/voices/original.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesoriginaldts"><code>originalPresets</code></a></th><td>value / type where applicable</td><td><code>voices/original.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicespreset-metadatajs">opm.js/voices/preset-metadata.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicespreset-metadatadts"><code>defaultBrassMetadata</code></a></th><td>value / type where applicable</td><td><code>voices/preset-metadata.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicespreset-metadatadts"><code>presetMetadata</code></a></th><td>value / type where applicable</td><td><code>voices/preset-metadata.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-voicespreset-metadatadts"><code>PresetMetadata</code></a></th><td>type</td><td><code>voices/preset-metadata.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjsvoicesvoiceschemajs">opm.js/voices/voice.schema.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-voicesvoiceschemadts"><code>voiceSchema</code></a></th><td>value / type where applicable</td><td><code>voices/voice.schema.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="module-opmjstoolsassetsjs">opm.js/tools/assets.js</h2><table><thead><tr><th scope="col">Export</th><th scope="col">Kind</th><th scope="col">Declaration</th></tr></thead><tbody><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>AssetDeployment</code></a></th><td>type</td><td><code>tools/assets.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>checkDeployment</code></a></th><td>value / type where applicable</td><td><code>tools/assets.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>CheckDeploymentOptions</code></a></th><td>type</td><td><code>tools/assets.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>copyAssets</code></a></th><td>value / type where applicable</td><td><code>tools/assets.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>CopyAssetsOptions</code></a></th><td>type</td><td><code>tools/assets.d.ts</code></td></tr><tr><th scope="row"><a href="#declaration-toolsassetsdts"><code>DeploymentCheck</code></a></th><td>type</td><td><code>tools/assets.d.ts</code></td></tr></tbody></table></section>
+<section><h2 id="declaration-apiarrangementdts">api/arrangement.d.ts</h2><pre><code class="language-typescript">import type { OPM } from &#39;./index.js&#39;;
+import type { BeatSequenceEvent } from &#39;./transport.js&#39;;
+import type { BarBeat, TempoPoint, TimeSignature } from &#39;../core/transport.js&#39;;
+export interface ArrangementLayer {
+    name: string;
+    /** Loop length in quarter notes, 0 &lt; length &lt;= 256. Layers stay aligned to the global beat grid. */
+    length: number;
+    /** Beat events inside [0, length). Note durations may exceed the loop length. */
+    events: readonly BeatSequenceEvent[];
+    /** Admission importance 0..127 applied to every note in this layer (maximum with a note&#39;s own value). */
+    voicePriority?: number;
+    /** Per-layer gain 0..1, default 1; independent of authored note expression. */
+    gain?: number;
+}
+export interface ArrangementSection {
+    name: string;
+    layers: readonly string[];
+}
+export interface ArrangementOptions {
+    layers: readonly ArrangementLayer[];
+    sections: readonly ArrangementSection[];
+    initialSection: string;
+    bpm?: number;
+    tempoMap?: readonly TempoPoint[];
+    timeSignature?: TimeSignature;
+    horizon?: number;
+    interval?: number;
+    onError?: (error: Error) =&gt; void;
+}
+export interface ArrangementChangeOptions {
+    /** Boundary in quarter notes, or the meter-defined beat/bar; default bar. Never earlier than already admitted notes. */
+    quantize?: &#39;beat&#39; | &#39;bar&#39; | number;
+    /** Removed layers may finish naturally instead of being released at the boundary. Default false. */
+    preserveNotes?: boolean;
+    /** Linear gain fade in seconds, 0..10; default 0. Shared layers remain continuous. */
+    fade?: number;
+}
+export interface ArrangementGainOptions {
+    quantize?: &#39;beat&#39; | &#39;bar&#39; | number;
+    fade?: number;
+}
+export type ArrangementState = &#39;stopped&#39; | &#39;starting&#39; | &#39;running&#39; | &#39;paused&#39; | &#39;disposed&#39;;
+export interface ArrangementSnapshot {
+    readonly state: ArrangementState;
+    /** Global quarter-note position; a paused arrangement reports where it will resume. */
+    readonly position: number;
+    readonly musicalPosition: Readonly&lt;BarBeat&gt;;
+    readonly section: string;
+    /** Layers effective at position. */
+    readonly layers: readonly string[];
+    /** Committed changes after the current position. */
+    readonly pending: readonly Readonly&lt;{
+        beat: number;
+        section: string;
+        layers: readonly string[];
+    }&gt;[];
+    /** Notes refused by voice-priority admission; they are not an arrangement failure. */
+    readonly priorityDrops: number;
+    readonly tempoMap: readonly Readonly&lt;TempoPoint&gt;[];
+}
+export interface Arrangement {
+    readonly state: ArrangementState;
+    readonly snapshot: ArrangementSnapshot;
+    start(): Promise&lt;void&gt;;
+    resume(): Promise&lt;void&gt;;
+    /** Releases owned notes. Resume restarts musically at the paused beat; no DSP checkpoint is restored. */
+    pause(): void;
+    /** Releases owned notes and rewinds to beat 0. */
+    stop(): void;
+    switchSection(name: string, options?: ArrangementChangeOptions): number;
+    setLayer(name: string, enabled: boolean, options?: ArrangementChangeOptions): number;
+    setLayerGain(name: string, gain: number, options?: ArrangementGainOptions): number;
+    /** Replaces tempo from the current beat onward; notes already admitted keep their admitted audio times. */
+    setTempo(bpm: number): void;
+    setTempoMap(map: readonly TempoPoint[]): void;
+    pump(): void;
+    dispose(): void;
+}
+/**
+ * Looping, quantized adaptive music for one OPM instance. Layers are aligned to the global beat grid, so a layer
+ * shared by two sections is one continuous schedule: its sounding gates are neither retriggered nor stopped when
+ * unrelated layers change. Changes are committed at a boundary no earlier than the notes already admitted.
+ */
+export declare function createArrangement(opm: OPM, options: ArrangementOptions): Arrangement;
+</code></pre></section>
+<section><h2 id="declaration-apiindexdts">api/index.d.ts</h2><pre><code class="language-typescript">import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from &#39;../voices/schema.js&#39;;
+import type { NoteControls, QualityProfile, SynthOptions } from &#39;../core/synth.js&#39;;
+import type { TuningOptions } from &#39;../core/tuning.js&#39;;
+export type { ADSR, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5 } from &#39;../voices/schema.js&#39;;
+export type { NoteControls, SynthOptions, QualityProfile } from &#39;../core/synth.js&#39;;
+export type { TuningOptions, NormalizedTuning } from &#39;../core/tuning.js&#39;;
+export { playSequence, streamSequence } from &#39;./sequence.js&#39;;
+export type { PlaySequenceOptions, SequencePlayback, SequenceStreamOptions, SequenceStream } from &#39;./sequence.js&#39;;
+export type { SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent } from &#39;../core/sequence.js&#39;;
+export { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat, swingBeatEvents } from &#39;./transport.js&#39;;
+export type { BeatSequenceEvent, TransportLoop, TransportState, TransportOptions, TransportSnapshot, MusicalTransport, TempoPoint, TimeSignature, BarBeat, BeatQuantization } from &#39;./transport.js&#39;;
+export { createArrangement } from &#39;./arrangement.js&#39;;
+export type { Arrangement, ArrangementLayer, ArrangementSection, ArrangementOptions, ArrangementChangeOptions, ArrangementGainOptions, ArrangementState, ArrangementSnapshot } from &#39;./arrangement.js&#39;;
+export { createMidiAdapter, requestMidiAccess } from &#39;./midi.js&#39;;
+export type { MidiAdapter, MidiAdapterOptions, MidiAdapterSnapshot, MidiAccessLike, MidiInputLike, MidiMessageEventLike, MidiNavigatorLike, MidiControllerMapping, MidiScalarControl, MidiOperatorControl } from &#39;./midi.js&#39;;
+export { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRACKS, MAX_MIDI_FILE_EVENTS } from &#39;../core/midi-file.js&#39;;
+export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions } from &#39;../core/midi-file.js&#39;;
+export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES } from &#39;../core/project.js&#39;;
+export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions } from &#39;../core/project.js&#39;;
+export { VERSION } from &#39;../version.js&#39;;
+export { createPerformance } from &#39;./performance.js&#39;;
+export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceNoteOffOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from &#39;./performance.js&#39;;
+export { renderSequenceInWorker } from &#39;./render-worker.js&#39;;
+export type { WavSink, WorkerRenderOptions, WorkerRenderProgress, WorkerRenderResult, WorkerRenderPhase, WorkerRenderPhaseStatus, WorkerRenderPhaseDiagnostics } from &#39;./render-worker.js&#39;;
+export type NoteState = &#39;accepted&#39; | &#39;started&#39; | &#39;released&#39; | &#39;ended&#39; | &#39;stolen&#39; | &#39;cancelled&#39; | &#39;rejected&#39;;
+export interface NoteEvent {
+    type: &#39;note&#39;;
+    id: number;
+    state: NoteState;
+    reason?: string;
+    /** Actual AudioContext sample frame and seconds at admission, dispatch or completion. */
+    frame: number;
+    time: number;
+}
+export interface DiagnosticsEvent {
+    type: &#39;diagnostics&#39;;
+    requestId: number;
+    activeVoices: number;
+    pendingEvents: number;
+    errors: number;
+    rejectedNotes: number;
+}
+export interface ErrorEvent {
+    type: &#39;error&#39;;
+    error: Error;
+}
+export type CommandName = &#39;stop&#39; | &#39;updateNote&#39; | &#39;allNotesOff&#39; | &#39;panic&#39; | &#39;setMixGain&#39; | &#39;setTuning&#39;;
+export interface CommandEvent {
+    type: &#39;command&#39;;
+    command: CommandName;
+    commandId?: number;
+    id?: number;
+    /** Accepted means admitted or immediately applied, not a future execution guarantee. */
+    state: &#39;accepted&#39; | &#39;rejected&#39;;
+    reason?: string;
+    frame: number;
+    time: number;
+}
+export type ContextState = AudioContextState | &#39;interrupted&#39;;
+export interface ContextEvent {
+    type: &#39;context&#39;;
+    state: ContextState;
+    frame: number;
+    time: number;
+}
+export interface ResetEvent {
+    type: &#39;reset&#39;;
+    reason: &#39;close&#39; | &#39;failure&#39; | &#39;panic&#39; | &#39;interruption&#39;;
+    frame: number;
+    time: number;
+    /** Initiating panic command, when available; independent of receipt-cache eviction. */
+    commandId?: number;
+}
+export type OPMEvent = NoteEvent | DiagnosticsEvent | CommandEvent | ContextEvent | ResetEvent | ErrorEvent;
+export interface CommandWaitOptions {
+    /** Milliseconds, default 5000; an integer in 1..60000. */
+    timeout?: number;
+    signal?: AbortSignal;
+}
+/** Admission rejection, not an audio execution/completion result. */
+export declare class CommandRejectedError extends Error {
+    readonly event: Readonly&lt;CommandEvent&gt;;
+    constructor(event: CommandEvent);
+}
+export interface OPMOptions {
+    sampleRate?: number;
+    /** Borrowed context: OPM never closes or suspends it. */
+    context?: AudioContext;
+    /** Omit to connect to context.destination; null disables automatic connection. */
+    destination?: AudioNode | null;
+    /** Same-origin HTTPS (or secure loopback HTTP) module; default stays relative to this API module. */
+    workletUrl?: string | URL;
+    mixGain?: number;
+    tuning?: TuningOptions;
+    stealing?: SynthOptions[&#39;stealing&#39;];
+    /** Immutable synthesis profile; standard preserves the default sound. */
+    quality?: QualityProfile;
+    /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
+    maxVoices?: number;
+    /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
+    interruption?: &#39;cancel&#39; | &#39;preserve&#39;;
+    onEvent?: (event: OPMEvent) =&gt; void;
+}
+interface PlayNoteBase {
+    voice?: string | VoiceInput;
+    note: number;
+    /** A late start keeps its full duration; drop rejects even if processing is delayed. */
+    late?: &#39;start&#39; | &#39;drop&#39;;
+    /** null (the default) holds until stop; a number sets a duration before release. */
+    duration?: number | null;
+    velocity?: number;
+    pan?: number;
+    /** Admission importance, integer 0..127; larger values cannot be stolen by lower-priority notes. Default 0. */
+    voicePriority?: number;
+}
+export type PlayNoteOptions = PlayNoteBase &amp; (
+/** Relative delay in seconds; cannot be combined with at. */
+{
+    time?: number;
+    at?: never;
+} | 
+/** Absolute AudioContext seconds, at most 60 seconds ahead. Past times are allowed. */
+{
+    at: number;
+    time?: never;
+});
+export interface ScheduledNoteOptions {
+    /** Absolute AudioContext seconds. Stop without at is immediate, including cancellation. */
+    at?: number;
+}
+/** Explicit cancellation is immediate-only; ordinary stops preserve tail automation. */
+export type StopOptions = ScheduledNoteOptions &amp; {
+    cancelControls?: never;
+} | {
+    at?: never;
+    cancelControls?: boolean;
+};
+/** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
+export declare class OPM {
+    readonly sampleRate: number | undefined;
+    get quality(): QualityProfile;
+    get maxVoices(): number;
+    /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
+    get voices(): ReadonlyMap&lt;string, NormalizedVoice&gt;;
+    readonly context: AudioContext | null;
+    readonly node: AudioWorkletNode | null;
+    onEvent?: (event: OPMEvent) =&gt; void;
+    constructor(options?: OPMOptions);
+    loadVoice(name: string, voice: VoiceInput): void;
+    /** Atomically replaces the registry. Only an empty plain array (not JSON &quot;[]&quot;) clears it. */
+    replaceVoiceBank(source: string | readonly CompleteVoiceInput[]): void;
+    removeVoice(name: string): boolean;
+    /** Canonical versioned entries, detached from the immutable registry and UTF-8 bounded. */
+    exportVoiceBank(): string;
+    /** Independent subscription; close preserves it for restart, dispose removes it permanently. */
+    subscribe(listener: (event: OPMEvent) =&gt; void): () =&gt; void;
+    start(): Promise&lt;void&gt;;
+    resume(): Promise&lt;void&gt;;
+    connect(destination: AudioNode): this;
+    disconnect(destination?: AudioNode): this;
+    playNote(options: PlayNoteOptions): number;
+    stop(id: number, options?: StopOptions): number;
+    /** Pending updates apply at onset. At equal frames stop precedes onset, then controls. */
+    updateNote(id: number, controls: NoteControls, options?: ScheduledNoteOptions): number;
+    /** Cancel all pending events and release all active gates, preserving release tails. */
+    allNotesOff(): number;
+    /** Immediate silence, including release/stealing tails; routing and patch cache survive. */
+    panic(): number;
+    setMixGain(gain: number): number;
+    setTuning(tuning: TuningOptions): number;
+    /** Wait for admission only. At most 128 receipts and 64 live waits; live waits prevent eviction. */
+    waitForCommand(commandId: number, options?: CommandWaitOptions): Promise&lt;CommandEvent&gt;;
+    getDiagnostics(): Promise&lt;DiagnosticsEvent&gt;;
+    close(): Promise&lt;void&gt;;
+    /** Permanently closes OPM and releases host callbacks; never closes a borrowed context. */
+    dispose(): Promise&lt;void&gt;;
+}
+export interface LookaheadWindow {
+    /** Half-open absolute AudioContext time window. Missed windows are skipped after a stall. */
+    from: number;
+    to: number;
+    /** Maximum notes the callback may return in this batch. */
+    maxNotes: number;
+}
+export type LookaheadNote = PlayNoteOptions &amp; {
+    at: number;
+    duration: number;
+};
+export interface LookaheadOptions {
+    /** Seconds, default 0.2; bounded to 0.02..10 and greater than interval. */
+    horizon?: number;
+    /** Seconds between pumps, default 0.025; bounded to 0.005..1. */
+    interval?: number;
+    /** Maximum batch size, default 32; bounded to 1..128. */
+    maxNotes?: number;
+    /** Timer/callback failures stop scheduling and are delivered here. */
+    onError: (error: Error) =&gt; void;
+}
+export interface LookaheadScheduler {
+    readonly running: boolean;
+    /** Call from a user gesture; initializes/resumes OPM, then fills the first window. */
+    start(): Promise&lt;void&gt;;
+    /** Cancels pending notes and releases this scheduler&#39;s active gates, not other notes. */
+    stop(): void;
+    /** Stops and permanently prevents restart; does not close OPM. */
+    dispose(): void;
+}
+/** Bounded timer-driven admission, not timer-driven note release. Audio frames own all gates. */
+export declare function createLookaheadScheduler(opm: OPM, schedule: (window: LookaheadWindow) =&gt; readonly LookaheadNote[], options: LookaheadOptions): LookaheadScheduler;
+</code></pre></section>
+<section><h2 id="declaration-apimididts">api/midi.d.ts</h2><pre><code class="language-typescript">import type { Performance } from &#39;./performance.js&#39;;
+export type MidiScalarControl = &#39;pitch&#39; | &#39;expression&#39; | &#39;gain&#39; | &#39;pan&#39; | &#39;modulation&#39; | &#39;feedback&#39; | &#39;lfoRate&#39; | &#39;amDepth&#39; | &#39;pmDepth&#39;;
+export type MidiOperatorControl = &#39;operatorLevels&#39; | &#39;operatorRatios&#39; | &#39;operatorFrequencies&#39;;
+interface MidiControllerRange {
+    /** CC number 0..127, excluding pedal/reset/panic CC64/120/121/123. */
+    controller: number;
+    /** CC0 maps to min and CC127 to max; both endpoints must be valid engine controls. */
+    min: number;
+    max: number;
+    /** Seconds 0..10; pitch uses glide, other fields use the engine control ramp. */
+    ramp: number;
+}
+/** One CC targets one scalar or one operator element; no executable callbacks are accepted. */
+export type MidiControllerMapping = MidiControllerRange &amp; ({
+    field: MidiScalarControl;
+    reset?: number;
+} | {
+    field: MidiOperatorControl;
+    operator: 0 | 1 | 2 | 3;
+    reset?: number | null;
+});
+/** Structural subset of Web MIDI, so hosts and tests can inject a real or simulated access object. */
+export interface MidiMessageEventLike {
+    readonly data: Uint8Array | null;
+}
+export interface MidiInputLike {
+    readonly id: string;
+    readonly name?: string | null;
+    readonly state?: string;
+    readonly connection?: string;
+    open?(): Promise&lt;unknown&gt;;
+    addEventListener(type: &#39;midimessage&#39;, listener: (event: MidiMessageEventLike) =&gt; void): void;
+    removeEventListener(type: &#39;midimessage&#39;, listener: (event: MidiMessageEventLike) =&gt; void): void;
+}
+export interface MidiAccessLike {
+    readonly inputs: ReadonlyMap&lt;string, MidiInputLike&gt;;
+    addEventListener(type: &#39;statechange&#39;, listener: () =&gt; void): void;
+    removeEventListener(type: &#39;statechange&#39;, listener: () =&gt; void): void;
+}
+export interface MidiNavigatorLike {
+    requestMIDIAccess?(options?: {
+        sysex?: boolean;
+        software?: boolean;
+    }): Promise&lt;MidiAccessLike&gt;;
+}
+export interface MidiAdapterOptions {
+    /** Channels 1..16 map to zero-based Performance parts below this count; default 16. */
+    parts?: number;
+    /** Semitones for full pitch-bend deflection, 0..48; default 2. */
+    pitchBendRange?: number;
+    /** Restrict to these stable port IDs; default every currently and subsequently connected input. */
+    inputIds?: readonly string[];
+    /** At most 128 own-data mappings. Ordinary CC defaults are overridden only for listed CCs. */
+    controllerMap?: readonly MidiControllerMapping[];
+    onError?: (error: Error) =&gt; void;
+}
+export interface MidiAdapterSnapshot {
+    readonly inputs: readonly string[];
+    readonly heldKeys: number;
+    /** Messages outside the supported channel-voice subset or malformed packets. */
+    readonly ignoredMessages: number;
+    readonly disposed: boolean;
+}
+export interface MidiAdapter {
+    readonly snapshot: MidiAdapterSnapshot;
+    /** Releases only keys owned by this adapter; unrelated Performance parts and host notes stay untouched. */
+    releaseAll(): void;
+    dispose(): void;
+}
+/**
+ * Request MIDI access without SysEx. Call from an explicit user action; browsers may show a permission prompt.
+ * Importing this module never requests access.
+ */
+export declare function requestMidiAccess(host?: MidiNavigatorLike | undefined): Promise&lt;MidiAccessLike&gt;;
+/**
+ * Map channel-voice MIDI from user-granted inputs onto Performance parts. It is an adapter, not a MIDI driver:
+ * no SysEx, clock, program-change or hardware-specific behavior is implemented.
+ *
+ * Note-off releases the oldest still-held key of the same input/channel/pitch. CC1, channel pressure and polyphonic
+ * pressure all scale LFO depth 1x..2x (never below the patch default). CC7/CC11 multiply into part expression, CC10 pans,
+ * CC64 is sustain, CC120/123 release only this adapter&#39;s keys for the channel, and CC121 resets its controllers.
+ */
+export declare function createMidiAdapter(performance: Performance, access: MidiAccessLike, options?: MidiAdapterOptions): MidiAdapter;
+export {};
+</code></pre></section>
+<section><h2 id="declaration-apiperformancedts">api/performance.d.ts</h2><pre><code class="language-typescript">import type { OPM } from &#39;./index.js&#39;;
+import type { PreparedVoice, VoiceInput } from &#39;../voices/schema.js&#39;;
+import type { NoteControls } from &#39;../core/synth.js&#39;;
+export interface PerformanceOptions {
+    /** Zero-based part count, 1..16; default 16. */
+    parts?: number;
+    /** Total physical/pedal key records, 1..128; default 128. */
+    maxKeys?: number;
+    /** Per-part key records, 1..128; default 128, also subject to maxKeys. */
+    maxKeysPerPart?: number;
+    /** Event-driven cleanup failures; synchronous operation failures still throw. */
+    onError?: (error: Error) =&gt; void;
+}
+export interface PerformancePartControls {
+    glide?: number;
+    pan?: number;
+    expression?: number;
+}
+export interface PerformancePartOptions extends PerformancePartControls {
+    voice: string | VoiceInput;
+    mode: &#39;poly&#39; | &#39;mono&#39;;
+    legato: boolean;
+    priority: &#39;last&#39; | &#39;high&#39; | &#39;low&#39;;
+    /** Optional owned-voice budget, including audible release tails, 1..32. */
+    voiceLimit?: number;
+    /** Admission importance, 0..127; larger values protect against lower-priority notes. */
+    voicePriority?: number;
+}
+export interface PerformanceNoteOptions {
+    velocity?: number;
+}
+export interface PerformanceNoteOffOptions {
+    force?: boolean;
+}
+export interface PerformanceKeySnapshot {
+    readonly key: number;
+    readonly note: number;
+    readonly velocity: number;
+    readonly held: boolean;
+    /** Only the currently sounding mono key owns its shared gate. */
+    readonly gateId: number | null;
+}
+export interface PerformancePartSnapshot {
+    readonly voice: string | PreparedVoice;
+    readonly mode: &#39;poly&#39; | &#39;mono&#39;;
+    readonly legato: boolean;
+    readonly priority: &#39;last&#39; | &#39;high&#39; | &#39;low&#39;;
+    readonly glide: number;
+    readonly pan: number;
+    readonly expression: number;
+    readonly sustain: boolean;
+    readonly voiceLimit: number | undefined;
+    readonly voicePriority: number;
+    readonly selectedKey: number | null;
+    readonly keys: readonly PerformanceKeySnapshot[];
+}
+export interface Performance {
+    configurePart(part: number, options: Partial&lt;PerformancePartOptions&gt;): void;
+    updatePart(part: number, controls: PerformancePartControls): void;
+    /** Update one physical key; inactive mono keys store controls without touching the selected gate. */
+    updateKey(part: number, key: number, controls: NoteControls): boolean;
+    /** Update owned sounding notes and defaults for future notes, including release tails. */
+    updatePartNotes(part: number, controls: NoteControls): void;
+    /** Independent key identity, not an OPM admission receipt. OPM must already be started. */
+    noteOn(part: number, note: number, options?: PerformanceNoteOptions): number;
+    noteOff(part: number, key: number, options?: PerformanceNoteOffOptions): boolean;
+    sustain(part: number, on: boolean): void;
+    allNotesOff(part?: number): void;
+    getPart(part: number): PerformancePartSnapshot;
+    /** Detached effective part defaults, including resolved voice operator controls (not per-key overrides). */
+    getPartControls(part: number): Readonly&lt;NoteControls&gt;;
+    dispose(): void;
+}
+/** Device-agnostic key policy. No context, timers, MIDI driver or global panic is created. */
+export declare function createPerformance(opm: OPM, options?: PerformanceOptions): Performance;
+</code></pre></section>
+<section><h2 id="declaration-apirender-workerdts">api/render-worker.d.ts</h2><pre><code class="language-typescript">import type { ChunkedSequenceOptions, SequenceCapacity, SequenceEvent } from &#39;../core/sequence.js&#39;;
+import type { WavFormat } from &#39;../core/wav.js&#39;;
+export interface WavSink {
+    /** Takes ownership of bytes; transferring/detaching their buffer is supported. */
+    write(bytes: Uint8Array): Promise&lt;void&gt; | void;
+    close?(): Promise&lt;void&gt; | void;
+    /** Must invalidate outstanding writes. Called once on failure, without waiting for them. */
+    abort?(reason: unknown): Promise&lt;void&gt; | void;
+}
+export interface WorkerRenderProgress {
+    readonly frames: number;
+    readonly totalFrames: number;
+    readonly bytesWritten: number;
+    readonly errors: number;
+}
+export type WorkerRenderPhase = &#39;initializing&#39; | &#39;rendering&#39; | &#39;writing&#39; | &#39;closing&#39; | &#39;completed&#39; | &#39;cancelled&#39; | &#39;failed&#39;;
+export interface WorkerRenderPhaseStatus {
+    readonly phase: WorkerRenderPhase;
+    /** Host-local monotonic wall time, not a DSP benchmark or network trace. */
+    readonly elapsedMs: number;
+    readonly phaseElapsedMs: number;
+    readonly frames: number;
+    readonly totalFrames: number;
+    readonly bytesWritten: number;
+    readonly errors: number;
+}
+export interface WorkerRenderPhaseDiagnostics {
+    readonly status: &#39;completed&#39; | &#39;cancelled&#39; | &#39;failed&#39;;
+    readonly initializingMs: number;
+    readonly renderingMs: number;
+    readonly writingMs: number;
+    readonly closingMs: number;
+    readonly totalMs: number;
+}
+export interface WorkerRenderOptions extends ChunkedSequenceOptions {
+    format?: WavFormat;
+    sink: WavSink;
+    onProgress?: (progress: WorkerRenderProgress) =&gt; void;
+    /** Optional module-ready deadline only; integer milliseconds in 1..2147483647. */
+    startupTimeoutMs?: number;
+    /** Retain four bounded host-local phase totals in the successful result. */
+    phaseDiagnostics?: boolean;
+    /** Synchronous observer. Throwing fails the render and invalidates the sink. */
+    onPhase?: (status: WorkerRenderPhaseStatus) =&gt; void;
+    /** Reviewed same-origin secure HTTP(S) static module, never a blob/data URL. */
+    workerUrl?: string | URL;
+}
+export interface WorkerRenderResult {
+    readonly capacity: SequenceCapacity;
+    readonly format: WavFormat;
+    readonly bytesWritten: number;
+    readonly diagnostics: Readonly&lt;{
+        errors: number;
+        processedEvents: number;
+        renderedFrames: number;
+        phases?: WorkerRenderPhaseDiagnostics;
+    }&gt;;
+}
+/** Browser-only, backpressured offline rendering; importing this module allocates nothing. */
+export declare function renderSequenceInWorker(events: readonly SequenceEvent[], options: WorkerRenderOptions): Promise&lt;WorkerRenderResult&gt;;
+</code></pre></section>
+<section><h2 id="declaration-apisequencedts">api/sequence.d.ts</h2><pre><code class="language-typescript">import type { OPM } from &#39;./index.js&#39;;
+import type { SequenceEvent } from &#39;../core/sequence.js&#39;;
+export interface PlaySequenceOptions {
+    /** Absolute AudioContext origin; omitted means currentTime at submission. */
+    at?: number;
+}
+export interface SequencePlayback {
+    /** Score IDs mapped to submitted OPM IDs, not an acknowledgement of admission. */
+    readonly ids: ReadonlyMap&lt;number, number&gt;;
+    /** Release started notes and immediately cancel pending onsets. Idempotent. */
+    stop(): void;
+}
+/** Submit one bounded, wholly validated score; lifecycle acknowledgements remain OPM events. */
+export declare function playSequence(opm: OPM, events: readonly SequenceEvent[], options?: PlaySequenceOptions): SequencePlayback;
+export interface SequenceStreamOptions {
+    /** Absolute origin, at most60 seconds ahead; defaults to currentTime at start. */
+    at?: number;
+    /** Lookahead seconds in0.01..10, default0.2. */
+    horizon?: number;
+    /** Timer interval seconds in0.001..horizon/2, default0.025 (or horizon/2). */
+    interval?: number;
+    /** Maximum own queued commands, integer1..256; default256. */
+    maxSlots?: number;
+    signal?: AbortSignal;
+    onError?: (error: Error) =&gt; void;
+}
+export interface SequenceStream {
+    readonly running: boolean;
+    /** Live/pending owned score IDs only; terminal IDs are pruned. Detached snapshot. */
+    readonly ids: ReadonlyMap&lt;number, number&gt;;
+    /** One-shot start. stop/dispose/reset/interruption permanently cancel this score. */
+    start(): Promise&lt;void&gt;;
+    /** Optional explicit pump for hosts driving their own clock; timers still run. */
+    pump(): void;
+    stop(): void;
+    dispose(): void;
+}
+/**
+ * Stream a fully validated long score in bounded mixed-event windows.
+ * A missed onset/window or rejected command stops the stream instead of silently retiming.
+ */
+export declare function streamSequence(opm: OPM, events: readonly SequenceEvent[], options?: SequenceStreamOptions): SequenceStream;
+</code></pre></section>
+<section><h2 id="declaration-apitransportdts">api/transport.d.ts</h2><pre><code class="language-typescript">import type { OPM } from &#39;./index.js&#39;;
+import type { BeatSequenceEvent } from &#39;../core/sequence.js&#39;;
+import type { TempoPoint, TimeSignature, BarBeat } from &#39;../core/transport.js&#39;;
+export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap, quantizeBeat, swingBeat } from &#39;../core/transport.js&#39;;
+export type { TempoPoint, TimeSignature, BarBeat, BeatQuantization } from &#39;../core/transport.js&#39;;
+export type { BeatSequenceEvent } from &#39;../core/sequence.js&#39;;
+export interface TransportLoop {
+    enabled: boolean;
+    from: number;
+    to: number;
+}
+export type TransportState = &#39;stopped&#39; | &#39;starting&#39; | &#39;running&#39; | &#39;paused&#39; | &#39;disposed&#39;;
+export interface TransportOptions {
+    bpm?: number;
+    tempoMap?: readonly TempoPoint[];
+    timeSignature?: TimeSignature;
+    loop?: TransportLoop;
+    horizon?: number;
+    interval?: number;
+    /** Future audio anchor in seconds for start and reconstruction; default min(0.05, horizon / 2), range 0..10. */
+    startupLead?: number;
+    maxSlots?: number;
+    onError?: (error: Error) =&gt; void;
+}
+export interface TransportSnapshot {
+    readonly position: number;
+    readonly musicalPosition: Readonly&lt;BarBeat&gt;;
+    readonly state: TransportState;
+    readonly running: boolean;
+    readonly tempoMap: readonly Readonly&lt;TempoPoint&gt;[];
+    readonly timeSignature: Readonly&lt;TimeSignature&gt;;
+    readonly loop: Readonly&lt;TransportLoop&gt;;
+}
+export interface MusicalTransport {
+    readonly position: number;
+    readonly running: boolean;
+    readonly state: TransportState;
+    readonly snapshot: TransportSnapshot;
+    readonly ids: ReadonlyMap&lt;number, number&gt;;
+    start(): Promise&lt;void&gt;;
+    resume(): Promise&lt;void&gt;;
+    pause(): void;
+    stop(): void;
+    seek(beat: number): void;
+    /** Replace the tempo from the current musical position onward; retain preceding points. */
+    setTempo(bpm: number): void;
+    setTempoMap(map: readonly TempoPoint[]): void;
+    setLoop(loop: TransportLoop): void;
+    pump(): void;
+    dispose(): void;
+}
+/** Internal shared preparation: beat durations remain beats until admitted to the audio clock. */
+export declare function prepareBeatEvents(opm: OPM, beatEvents: readonly BeatSequenceEvent[]): import(&quot;../core/sequence.js&quot;).SequenceSnapshot;
+/** Swing note starts AND ends, so adjacent gates retain their musical ordering. */
+export declare function swingBeatEvents(events: readonly BeatSequenceEvent[], subdivision?: number, ratio?: number): BeatSequenceEvent[];
+/** Restartable beat transport. Only owned IDs are ever stopped; the shared engine is not closed. */
+export declare function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent[], options?: TransportOptions): MusicalTransport;
+</code></pre></section>
+<section><h2 id="declaration-corealgorithmsdts">core/algorithms.d.ts</h2><pre><code class="language-typescript">export interface AlgorithmGraph {
+    readonly inputs: readonly (readonly number[])[];
+    readonly carriers: readonly number[];
+}
+export declare const ALGORITHMS: readonly [AlgorithmGraph, AlgorithmGraph, AlgorithmGraph, AlgorithmGraph, AlgorithmGraph, AlgorithmGraph, AlgorithmGraph, AlgorithmGraph];
+export declare function feedbackPhase(previous: number, older: number, amount: number): number;
+</code></pre></section>
+<section><h2 id="declaration-coredecimatordts">core/decimator.d.ts</h2><pre><code class="language-typescript">export type QualityProfile = &#39;eco&#39; | &#39;standard&#39; | &#39;high&#39;;
+export declare const DECIMATOR_STATE_SIZE = 8;
+export declare function qualityOversample(quality: QualityProfile): number;
+export declare function createDecimatorCoefficients(sampleRate: number, quality?: QualityProfile): Float64Array;
+export declare function decimateSample(input: number, state: Float64Array, coefficients: Float64Array): number;
+</code></pre></section>
+<section><h2 id="declaration-coreenvelopedts">core/envelope.d.ts</h2><pre><code class="language-typescript">import type { ADSR } from &#39;../voices/schema.js&#39;;
+export interface PreparedEnvelope extends ADSR {
+    sustainDB: number;
+    sustainGain: number;
+    decayEnd: number;
+    releaseEnd: number;
+    releaseDB: number;
+    releaseSpanDB: number;
+}
+export declare const FLOOR_DB = -96;
+export declare function prepareEnvelope(a: number, d: number, s: number, r: number, gate: number): PreparedEnvelope;
+export declare function preparedEnvelopeAt(time: number, gate: number, envelope: PreparedEnvelope): number;
+export declare function envelopeAt(time: number, gate: number, adsr: ADSR): number;
+</code></pre></section>
+<section><h2 id="declaration-coreindexdts">core/index.d.ts</h2><pre><code class="language-typescript">import type { CompleteVoiceInput, FrozenVoice } from &#39;../voices/schema.js&#39;;
+import type { SynthOptions } from &#39;./synth.js&#39;;
+export type { ADSR, PitchEnvelope, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, Voice, LegacyVoice, LegacyVoiceV2, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5, VoiceInput, FrozenVoice, PreparedVoice } from &#39;../voices/schema.js&#39;;
+export type { NoteOptions, NoteControls, VoiceEndReason, SynthOptions, QualityProfile } from &#39;./synth.js&#39;;
+export type { TuningOptions, NormalizedTuning } from &#39;./tuning.js&#39;;
+export { normalizeTuning, tuningFrequency } from &#39;./tuning.js&#39;;
+export { lfoValue } from &#39;./lfo.js&#39;;
+export type { BeatSequenceEvent, SequenceEvent, SequenceNoteEvent, SequenceStopEvent, SequenceControlEvent, SequenceVoices, SequenceOptions, PreparedSequenceEvent, SequenceSnapshot, SequenceCapacity, ChunkedSequenceOptions, SequenceChunk, ChunkedSequenceRender } from &#39;./sequence.js&#39;;
+export { prepareSequence, renderSequence, prepareLongSequence, estimateSequenceCapacity, renderSequenceChunks, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, MAX_SEQUENCE_SECONDS, MAX_RENDER_SAMPLES, MAX_LONG_SEQUENCE_SECONDS, MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_CHUNK_FRAMES, sampleRateValue } from &#39;./sequence.js&#39;;
+export type { WavOptions, WavFormat, WavEncoderOptions, WavEncoder, WavChunk } from &#39;./wav.js&#39;;
+export type { TempoPoint, TimeSignature, BarBeat } from &#39;./transport.js&#39;;
+export { beatsToSeconds, secondsToBeats, beatToBarBeat, barBeatToBeat, normalizeTempoMap } from &#39;./transport.js&#39;;
+export { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRACKS, MAX_MIDI_FILE_EVENTS } from &#39;./midi-file.js&#39;;
+export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions } from &#39;./midi-file.js&#39;;
+export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES } from &#39;./project.js&#39;;
+export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions } from &#39;./project.js&#39;;
+export interface RenderNoteOptions extends SynthOptions {
+    voice: CompleteVoiceInput | FrozenVoice;
+    note?: number;
+    duration?: number;
+    velocity?: number;
+    pan?: number;
+    voicePriority?: number;
+    sampleRate?: number;
+}
+export interface RenderResult {
+    /** Same buffer as left, retained for compatibility. */
+    samples: Float32Array;
+    left: Float32Array;
+    right: Float32Array;
+    sampleRate: number;
+    diagnostics: {
+        errors: number;
+    };
+}
+export { envelopeAt } from &#39;./envelope.js&#39;;
+export { ALGORITHMS } from &#39;./algorithms.js&#39;;
+export { Synth, VoiceAdmissionError, normalizeVoice, prepareVoice, validateMaxVoices, validateNoteControls, validateVoicePriority } from &#39;./synth.js&#39;;
+export { encodeWav, createWavEncoder } from &#39;./wav.js&#39;;
+export declare const HEADROOM = 0.7;
+export declare const OVERSAMPLE = 4;
+export declare function renderNote(options: RenderNoteOptions): RenderResult;
+</code></pre></section>
+<section><h2 id="declaration-corelfodts">core/lfo.d.ts</h2><pre><code class="language-typescript">import type { LFO } from &#39;../voices/schema.js&#39;;
+/** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1. */
+export declare function lfoValue(phase: number, waveform: LFO[&#39;waveform&#39;]): number;
+</code></pre></section>
+<section><h2 id="declaration-coremidi-filedts">core/midi-file.d.ts</h2><pre><code class="language-typescript">import type { BeatSequenceEvent } from &#39;./sequence.js&#39;;
+import type { TempoPoint, TimeSignature } from &#39;./transport.js&#39;;
+export declare const MAX_MIDI_FILE_BYTES: number;
+export declare const MAX_MIDI_FILE_TRACKS = 128;
+/** Counts all wire events, including skipped messages and end-of-track markers. */
+export declare const MAX_MIDI_FILE_EVENTS = 65536;
+export type MidiFileWarningCode = &#39;header-extension&#39; | &#39;ignored-meta&#39; | &#39;ignored-sysex&#39; | &#39;ignored-channel&#39; | &#39;release-velocity&#39; | &#39;default-voice&#39; | &#39;sustain-applied&#39; | &#39;tempo-conflict&#39; | &#39;meter-detail&#39; | &#39;unclosed-notes&#39;;
+export interface MidiFileWarning {
+    code: MidiFileWarningCode;
+    message: string;
+    count: number;
+}
+export interface MidiImportOptions {
+    /** Zero-based MIDI channels, written as decimal object keys, to OPM voice names. */
+    channelVoices?: Readonly&lt;Record&lt;string, string&gt;&gt;;
+    defaultVoice?: string;
+    /** Unsupported musical/metadata content is reported, or rejects the entire file. */
+    unsupported?: &#39;warn&#39; | &#39;reject&#39;;
+    /** Includes keys held by sustain at the final end-of-track tick. */
+    unclosedNotes?: &#39;reject&#39; | &#39;close-at-end&#39;;
+    sustain?: &#39;apply&#39; | &#39;reject&#39;;
+}
+export interface MidiImportResult {
+    events: BeatSequenceEvent[];
+    tempoMap: readonly Readonly&lt;TempoPoint&gt;[];
+    timeSignature: Readonly&lt;TimeSignature&gt;;
+    warnings: readonly Readonly&lt;MidiFileWarning&gt;[];
+}
+export interface MidiExportOptions {
+    format?: 0 | 1;
+    ppqn?: number;
+    tempoMap?: readonly TempoPoint[];
+    bpm?: number;
+    timeSignature?: TimeSignature;
+    /** Named voices to zero-based MIDI channels. Only brass -&gt; channel 0 is implicit. */
+    voiceChannels?: Readonly&lt;Record&lt;string, number&gt;&gt;;
+}
+/** Strict SMF 0/1 PPQN adapter, not a General MIDI synthesizer or device driver. */
+export declare function importMidiFile(source: Uint8Array, options?: MidiImportOptions): MidiImportResult;
+/** Deterministic type 0/1 notes, stepped tempo and one meter; unsupported controls reject. */
+export declare function exportMidiFile(events: readonly BeatSequenceEvent[], options?: MidiExportOptions): Uint8Array;
+</code></pre></section>
+<section><h2 id="declaration-coreprojectdts">core/project.d.ts</h2><pre><code class="language-typescript">import type { PreparedVoice } from &#39;../voices/schema.js&#39;;
+import type { BeatSequenceEvent, SequenceEvent, SequenceVoices } from &#39;./sequence.js&#39;;
+import type { QualityProfile, SynthOptions } from &#39;./synth.js&#39;;
+import type { NormalizedTuning } from &#39;./tuning.js&#39;;
+import type { TempoPoint, TimeSignature } from &#39;./transport.js&#39;;
+export declare const MAX_SCORE_PROJECT_BYTES: number;
+export declare const MAX_SCORE_PROJECT_VOICES = 128;
+export interface BeatSequenceOptions {
+    tempoMap?: readonly TempoPoint[];
+    bpm?: number;
+    voices?: SequenceVoices;
+}
+export interface ScoreProjectSettings {
+    readonly sampleRate: number;
+    readonly quality: QualityProfile;
+    readonly maxVoices: number;
+    readonly mixGain: number;
+    readonly tuning: NormalizedTuning;
+    readonly stealing: NonNullable&lt;SynthOptions[&#39;stealing&#39;]&gt;;
+}
+/** Version 1 is self-contained: every note names a patch stored in voices. */
+export interface ScoreProject {
+    readonly version: 1;
+    readonly events: readonly BeatSequenceEvent[];
+    readonly tempoMap: readonly Readonly&lt;TempoPoint&gt;[];
+    readonly timeSignature: Readonly&lt;TimeSignature&gt;;
+    readonly voices: Readonly&lt;Record&lt;string, PreparedVoice&gt;&gt;;
+    readonly settings: ScoreProjectSettings;
+}
+/** Compile musical gates by integrating both endpoints; control ramp/glide remain seconds. */
+export declare function compileBeatSequence(events: readonly BeatSequenceEvent[], options?: BeatSequenceOptions): SequenceEvent[];
+/** Parse strict versioned own-data input, detach all nested data and freeze the snapshot. */
+export declare function parseScoreProject(source: string | object): ScoreProject;
+/** Canonical compact JSON: stable field order, sorted patch names, normalized defaults. */
+export declare function serializeScoreProject(project: ScoreProject): string;
+</code></pre></section>
+<section><h2 id="declaration-coresequencedts">core/sequence.d.ts</h2><pre><code class="language-typescript">import type { PreparedVoice, VoiceInput } from &#39;../voices/schema.js&#39;;
+import type { NoteControls, SynthOptions } from &#39;./synth.js&#39;;
+import type { RenderResult } from &#39;./index.js&#39;;
+export interface SequenceNoteEvent {
+    type: &#39;note&#39;;
+    id: number;
+    time: number;
+    duration: number;
+    voice?: string | VoiceInput;
+    note: number;
+    velocity?: number;
+    pan?: number;
+    voicePriority?: number;
+}
+export interface SequenceStopEvent {
+    type: &#39;stop&#39;;
+    id: number;
+    time: number;
+}
+export interface SequenceControlEvent {
+    type: &#39;control&#39;;
+    id: number;
+    time: number;
+    controls: NoteControls;
+}
+export type SequenceEvent = SequenceNoteEvent | SequenceStopEvent | SequenceControlEvent;
+export type BeatSequenceEvent = SequenceEvent extends infer E ? E extends SequenceEvent ? Omit&lt;E, &#39;time&#39;&gt; &amp; {
+    beat: number;
+} : never : never;
+export type SequenceVoices = ReadonlyMap&lt;string, VoiceInput&gt;;
+export interface SequenceOptions extends SynthOptions {
+    voices?: SequenceVoices;
+    sampleRate?: number;
+    /** Logical polyphony, integer1..32; default8. Stolen fades remain bounded to eight. */
+    maxVoices?: number;
+}
+export type PreparedSequenceEvent = Readonly&lt;Omit&lt;SequenceNoteEvent, &#39;voice&#39; | &#39;velocity&#39; | &#39;pan&#39; | &#39;voicePriority&#39;&gt; &amp; {
+    voice: PreparedVoice;
+    velocity: number;
+    pan: number;
+    voicePriority: number;
+}&gt; | Readonly&lt;SequenceStopEvent&gt; | Readonly&lt;Omit&lt;SequenceControlEvent, &#39;controls&#39;&gt; &amp; {
+    controls: Readonly&lt;NoteControls&gt;;
+}&gt;;
+export interface SequenceSnapshot {
+    readonly events: readonly PreparedSequenceEvent[];
+    readonly noteCount: number;
+    /** Notes reserve both onset and automatic release, even if explicitly cancelled. */
+    readonly reservedSlots: number;
+    readonly endTime: number;
+}
+export declare const MAX_SEQUENCE_NOTES = 128;
+export declare const MAX_SEQUENCE_SLOTS = 256;
+export declare const MAX_SEQUENCE_SECONDS = 60;
+export declare const MAX_RENDER_SAMPLES = 4000000;
+export declare const MAX_LONG_SEQUENCE_SECONDS: number;
+export declare const MAX_LONG_SEQUENCE_EVENTS = 65536;
+export declare const MAX_SEQUENCE_CHUNK_FRAMES = 65536;
+export declare function sampleRateValue(value: number): number;
+export declare function sequenceOwnData(input: unknown, allowed: readonly string[], required: readonly string[], label: string): Record&lt;string, unknown&gt;;
+/** Validate the entire score without invoking accessors, and detach every patch/control. */
+export declare function prepareSequence(events: readonly SequenceEvent[], options?: Pick&lt;SequenceOptions, &#39;voices&#39;&gt;): SequenceSnapshot;
+/** Long scores have a separate input budget; this does not enlarge worklet queues. */
+export declare function prepareLongSequence(events: readonly SequenceEvent[], options?: Pick&lt;SequenceOptions, &#39;voices&#39;&gt;): SequenceSnapshot;
+export type SequenceFrameEvent = {
+    frame: number;
+    order: number;
+    event: PreparedSequenceEvent;
+};
+/** Shared sample-frame ordering, including automatic releases and pending controls. */
+export declare function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin?: number): {
+    queue: SequenceFrameEvent[];
+    length: number;
+};
+/** Peak submissions in any half-open window; includes automatic releases. */
+export declare function sequenceWindowCapacity(queue: readonly SequenceFrameEvent[], sampleRate: number, horizon: number): {
+    peakWindowSlots: number;
+    peakWindowNotes: number;
+};
+export interface ChunkedSequenceOptions extends SequenceOptions {
+    /** Integer 1..65536; default4096. Two buffers are reused for the entire render. */
+    chunkFrames?: number;
+    /** Optional hard cumulative frame budget, checked before allocation/advancement. */
+    maxFrames?: number;
+    signal?: AbortSignal;
+}
+export interface SequenceCapacity {
+    readonly sampleRate: number;
+    readonly frames: number;
+    readonly pcmBytes: number;
+    readonly chunkFrames: number;
+    readonly chunkBytes: number;
+    readonly eventCount: number;
+    readonly noteCount: number;
+    readonly reservedSlots: number;
+    readonly fullBufferAllowed: boolean;
+    readonly singleBatchAllowed: boolean;
+    /** Default0.2s-window preflight eligibility, not guaranteed live worklet admission. */
+    readonly streamAllowed: boolean;
+    readonly peakWindowSlots: number;
+    readonly peakWindowNotes: number;
+    readonly limits: Readonly&lt;{
+        fullBufferFrames: number;
+        batchNotes: number;
+        batchSlots: number;
+        longEvents: number;
+        longSeconds: number;
+        chunkFrames: number;
+        streamHorizonSeconds: number;
+        streamSlots: number;
+        streamNotes: number;
+    }&gt;;
+}
+export interface SequenceChunk {
+    /** Borrowed arrays, overwritten by the next next(). Copy only if retention is required. */
+    readonly left: Float32Array;
+    readonly right: Float32Array;
+    readonly offset: number;
+    readonly frames: number;
+    readonly sampleRate: number;
+    readonly diagnostics: Readonly&lt;{
+        errors: number;
+        processedEvents: number;
+        renderedFrames: number;
+    }&gt;;
+}
+export interface ChunkedSequenceRender extends IterableIterator&lt;SequenceChunk&gt; {
+    readonly capacity: SequenceCapacity;
+    readonly diagnostics: Readonly&lt;{
+        errors: number;
+        processedEvents: number;
+        renderedFrames: number;
+    }&gt;;
+    /** Idempotent. Subsequent next() returns done without advancing the synth. */
+    cancel(): void;
+}
+/** Validate and estimate without allocating any PCM or advancing a synth. */
+export declare function estimateSequenceCapacity(events: readonly SequenceEvent[], options?: ChunkedSequenceOptions): SequenceCapacity;
+/** Fully validate first; each next() advances at most chunkFrames, never allocates full PCM. */
+export declare function renderSequenceChunks(events: readonly SequenceEvent[], options?: ChunkedSequenceOptions): ChunkedSequenceRender;
+/** Convenience full-buffer rendering retains the original score and allocation budgets. */
+export declare function renderSequence(events: readonly SequenceEvent[], options?: SequenceOptions): RenderResult;
+</code></pre></section>
+<section><h2 id="declaration-coresynthdts">core/synth.d.ts</h2><pre><code class="language-typescript">import type { ADSR, PreparedVoice, VoiceInput } from &#39;../voices/schema.js&#39;;
+import type { TuningOptions } from &#39;./tuning.js&#39;;
+import type { QualityProfile } from &#39;./decimator.js&#39;;
+export type { QualityProfile } from &#39;./decimator.js&#39;;
+export type VoiceEndReason = &#39;stolen&#39; | &#39;ended&#39; | &#39;error&#39; | &#39;cancelled&#39;;
+export interface NoteOptions {
+    velocity?: number;
+    pan?: number;
+    voicePriority?: number;
+}
+export interface NoteControls {
+    pitch?: number;
+    glide?: number;
+    expression?: number;
+    pan?: number;
+    modulation?: number;
+    ramp?: number;
+    /** Independent per-note amplitude, 0..1 (default 1), multiplied with expression before mix saturation. */
+    gain?: number;
+    operatorLevels?: readonly [number, number, number, number];
+    feedback?: number;
+    lfoRate?: number;
+    amDepth?: number;
+    pmDepth?: number;
+    operatorRatios?: readonly [number, number, number, number];
+    /** A number enables fixed Hz; null restores the operator&#39;s live ratio. Pitch still applies. */
+    operatorFrequencies?: readonly [number | null, number | null, number | null, number | null];
+    operatorADSR?: readonly [ADSR, ADSR, ADSR, ADSR];
+}
+export interface SynthOptions {
+    mixGain?: number;
+    tuning?: TuningOptions;
+    stealing?: &#39;oldest&#39; | &#39;release-first&#39; | &#39;quietest&#39;;
+    quality?: QualityProfile;
+}
+/** A valid note could not displace any higher-priority logical voice. */
+export declare class VoiceAdmissionError extends Error {
+    constructor();
+}
+export declare function validateMaxVoices(value: unknown): number;
+export declare function validateVoicePriority(value: unknown): number;
+/** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
+export declare function validateNoteControls(input: NoteControls): NoteControls;
+export { normalizeVoice, prepareVoice } from &#39;../voices/normalize.js&#39;;
+export declare class Synth {
+    readonly sampleRate: number;
+    readonly maxVoices: number;
+    readonly quality: QualityProfile;
+    readonly currentFrame: number;
+    readonly errorCount: number;
+    readonly lastStolenId: number | null;
+    onVoiceEnded?: ((id: number, reason: VoiceEndReason) =&gt; void) | null;
+    constructor(sampleRate: number, maxVoices?: number, options?: SynthOptions);
+    setMixGain(gain: number): void;
+    setTuning(tuning: TuningOptions): void;
+    noteOn(input: VoiceInput | PreparedVoice, note: number, id?: number, options?: NoteOptions): number;
+    noteOff(id: number): boolean;
+    allNotesOff(): void;
+    panic(): void;
+    updateNote(id: number, input: NoteControls): boolean;
+    render(left: Float32Array, right: Float32Array, offset?: number, length?: number): void;
+}
+</code></pre></section>
+<section><h2 id="declaration-coretransportdts">core/transport.d.ts</h2><pre><code class="language-typescript">export interface TempoPoint {
+    beat: number;
+    bpm: number;
+    curve?: &#39;step&#39; | &#39;linear&#39;;
+    endBpm?: number;
+}
+export interface TimeSignature {
+    numerator: number;
+    denominator: number;
+}
+/** One-based bars and beats; beat may contain a fractional subdivision. */
+export interface BarBeat {
+    bar: number;
+    beat: number;
+}
+export declare const MAX_TRANSPORT_BEATS = 86400;
+export declare const MAX_TEMPO_POINTS = 1024;
+export declare function transportNumber(value: unknown, min: number, max: number, label: string): number;
+/** Read dense own-data arrays without executing element getters or iteration overrides. */
+export declare function transportArray(input: unknown, max: number, label: string): unknown[];
+/** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space. */
+export declare function normalizeTempoMap(input?: readonly TempoPoint[], bpm?: number): readonly Readonly&lt;TempoPoint&gt;[];
+export declare function normalizeTimeSignature(input?: TimeSignature): Readonly&lt;TimeSignature&gt;;
+/** BPM at a beat in an already validated map. */
+export declare function tempoBPM(beat: number, map: readonly Readonly&lt;TempoPoint&gt;[]): number;
+/** Insert a step without changing the elapsed portion of a linear ramp. */
+export declare function replaceTempoFrom(beat: number, bpm: number, map: readonly Readonly&lt;TempoPoint&gt;[]): readonly Readonly&lt;TempoPoint&gt;[];
+/** Integral of 60/BPM across tempo boundaries. */
+export declare function beatsToSeconds(beat: number, tempoMap?: readonly TempoPoint[]): number;
+/** Internal validated-map form avoids recopying a map on each scheduler tick. */
+export declare function tempoSeconds(beat: number, map: readonly Readonly&lt;TempoPoint&gt;[]): number;
+export declare function secondsToBeats(seconds: number, tempoMap?: readonly TempoPoint[]): number;
+export declare function tempoBeat(seconds: number, map: readonly Readonly&lt;TempoPoint&gt;[]): number;
+export declare function beatToBarBeat(beat: number, signature?: TimeSignature): Readonly&lt;BarBeat&gt;;
+export declare function barBeatToBeat(position: BarBeat, signature?: TimeSignature): number;
+export type BeatQuantization = &#39;floor&#39; | &#39;ceil&#39; | &#39;nearest&#39; | &#39;next&#39;;
+/** Grid in quarter-note beats; next is strictly later even at an exact boundary. */
+export declare function quantizeBeat(beat: number, quantum?: number, mode?: BeatQuantization): number;
+/** Warp each pair of subdivisions; ratio .5 is straight, 2/3 is triplet swing. */
+export declare function swingBeat(beat: number, subdivision?: number, ratio?: number): number;
+</code></pre></section>
+<section><h2 id="declaration-coretuningdts">core/tuning.d.ts</h2><pre><code class="language-typescript">export interface TuningOptions {
+    referenceHz?: number;
+    offsets?: readonly number[];
+}
+export interface NormalizedTuning {
+    readonly referenceHz: number;
+    readonly offsets: readonly number[];
+}
+/** Validate own data only and detach the cents table from its caller. */
+export declare function normalizeTuning(input: TuningOptions): NormalizedTuning;
+/** Fractional MIDI notes interpolate cents, not frequencies, between adjacent keys. */
+export declare function tuningFrequency(note: number, tuning: NormalizedTuning): number;
+</code></pre></section>
+<section><h2 id="declaration-corewavdts">core/wav.d.ts</h2><pre><code class="language-typescript">export type WavFormat = &#39;pcm16&#39; | &#39;pcm24&#39; | &#39;float32&#39;;
+export interface WavOptions {
+    left: Float32Array;
+    right?: Float32Array;
+    sampleRate: number;
+    format?: WavFormat;
+}
+export interface WavEncoderOptions {
+    sampleRate: number;
+    channels: 1 | 2;
+    format?: WavFormat;
+    totalFrames: number;
+}
+export interface WavChunk {
+    left: Float32Array;
+    right?: Float32Array;
+}
+export interface WavEncoder {
+    readonly totalFrames: number;
+    readonly framesEncoded: number;
+    /** Entire file length, including the header and any RIFF alignment byte. */
+    readonly byteLength: number;
+    readonly finished: boolean;
+    /** Emit exactly once, before encoding PCM. */
+    header(): Uint8Array;
+    /** Atomic accounting: invalid chunks never consume frames. Maximum65536 frames per call. */
+    encode(chunk: WavChunk): Uint8Array;
+    /** Require exact totalFrames; returns the RIFF alignment byte, or an empty array. */
+    finalize(): Uint8Array;
+}
+/** Streaming RIFF32 output with known length; retains no PCM or emitted bytes. */
+export declare function createWavEncoder(options: WavEncoderOptions): WavEncoder;
+/** Full-buffer WAV convenience export; defaultPCM16, at most4000000 frames. */
+export declare function encodeWav(input: WavOptions): Uint8Array;
+</code></pre></section>
+<section><h2 id="declaration-toolsassetsdts">tools/assets.d.ts</h2><pre><code class="language-typescript">export interface CopyAssetsOptions {
+    destination: string;
+    /** Advanced: deploy this installed opm.js package directory instead of the one containing this module. */
+    packageRoot?: string;
+}
+export interface AssetDeployment {
+    readonly version: string;
+    readonly destination: string;
+    readonly files: number;
+    readonly bytes: number;
+    readonly reused: boolean;
+}
+export interface CheckDeploymentOptions {
+    /** Overall deadline, integer milliseconds in 1..60000; default 15000. */
+    timeoutMs?: number;
+    /** Require production X-Content-Type-Options: nosniff; default true. */
+    requireNosniff?: boolean;
+    /** Advanced: compare with this installed opm.js package directory instead of the one containing this module. */
+    packageRoot?: string;
+}
+export interface DeploymentCheck {
+    readonly version: string;
+    readonly baseUrl: string;
+    readonly files: number;
+    readonly bytes: number;
+    readonly limitations: readonly string[];
+}
+/** Node-only. Atomically create a complete release-specific directory; never overwrite host files. */
+export declare function copyAssets(options: CopyAssetsOptions): Promise&lt;AssetDeployment&gt;;
+/** Fetch and hash the complete installed release; this does not certify page CSP or audible playback. */
+export declare function checkDeployment(baseUrl: string | URL, options?: CheckDeploymentOptions): Promise&lt;DeploymentCheck&gt;;
+</code></pre></section>
+<section><h2 id="declaration-versiondts">version.d.ts</h2><pre><code class="language-typescript">/** Package version; scripts/security-check.ts fails if it differs from package.json. */
+export declare const VERSION = &quot;1.8.1&quot;;
+</code></pre></section>
+<section><h2 id="declaration-voicesbrassdts">voices/brass.d.ts</h2><pre><code class="language-typescript">import type { Voice } from &#39;./schema.js&#39;;
+export declare const brass: Voice;
+</code></pre></section>
+<section><h2 id="declaration-voicesdx7dts">voices/dx7.d.ts</h2><pre><code class="language-typescript">import type { Algorithm, Voice } from &#39;./schema.js&#39;;
+export interface DX7ImportDescription {
+    name: string;
+    /** Original DX7 algorithm, 1..32. */
+    sourceAlgorithm: number;
+    algorithm: Algorithm;
+    /** DX7 operator numbers 1..6 in converted OPM signal order. */
+    selectedOperators: number[];
+    droppedOperators: number[];
+    warnings: string[];
+}
+/** Import exactly one standard DX7 single/bank dump as approximate four-op voices. */
+export declare function importDX7(input: Uint8Array): Voice[];
+/** Report losses separately so imported voices retain the strict normal voice shape. */
+export declare function describeDX7(input: Uint8Array): DX7ImportDescription[];
+</code></pre></section>
+<section><h2 id="declaration-voicesexamplesdts">voices/examples.d.ts</h2><pre><code class="language-typescript">import type { Voice } from &#39;./schema.js&#39;;
+export declare const examples: readonly Voice[];
+</code></pre></section>
+<section><h2 id="declaration-voicesnormalizedts">voices/normalize.d.ts</h2><pre><code class="language-typescript">import type { NormalizedVoice, PreparedVoice, VoiceInput } from &#39;./schema.js&#39;;
+export declare function normalizeVoice(source: VoiceInput): NormalizedVoice;
+/** Validate once and retain a deeply immutable, caller-independent snapshot. */
+export declare function prepareVoice(input: VoiceInput): PreparedVoice;
+</code></pre></section>
+<section><h2 id="declaration-voicesoriginaldts">voices/original.d.ts</h2><pre><code class="language-typescript">import type { Voice } from &#39;./schema.js&#39;;
+export declare const originalPresets: readonly Voice[];
+</code></pre></section>
+<section><h2 id="declaration-voicespreset-metadatadts">voices/preset-metadata.d.ts</h2><pre><code class="language-typescript">export interface PresetMetadata {
+    readonly family: &#39;bell&#39; | &#39;brass&#39; | &#39;bass&#39; | &#39;keys&#39; | &#39;organ&#39; | &#39;lead&#39; | &#39;strings&#39; | &#39;mallet&#39; | &#39;pluck&#39; | &#39;reed&#39; | &#39;pad&#39; | &#39;metallic&#39; | &#39;percussion&#39; | &#39;inharmonic&#39;;
+    readonly provenance: {
+        readonly kind: &#39;repository-recipe&#39; | &#39;original-recipe&#39;;
+        readonly source: string;
+        readonly license: &#39;Apache-2.0&#39;;
+        readonly copiedEmulatorPatch: false;
+    };
+    readonly intendedMidi: readonly [number, number];
+    readonly intendedVelocity: readonly [number, number];
+    /** Extra attenuation before the common audition gain; never an operator-level compensation. */
+    readonly hostTrimDb: number;
+    readonly purpose: string;
+    readonly suggestedPolyphony: number;
+    readonly designRationale: string;
+    /** Authoring intent and numerical checks are not a listener verdict. */
+    readonly listeningStatus: &#39;unverified&#39;;
+}
+export declare const presetMetadata: Readonly&lt;Record&lt;string, PresetMetadata&gt;&gt;;
+/** The separate default brass export is not the bank brass recipe. */
+export declare const defaultBrassMetadata: PresetMetadata;
+</code></pre></section>
+<section><h2 id="declaration-voicesschemadts">voices/schema.d.ts</h2><pre><code class="language-typescript">export type Algorithm = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+export interface ADSR {
+    a: number;
+    d: number;
+    s: number;
+    r: number;
+}
+export type LFOTargets = readonly [number, number, number, number];
+export type LFOTargetsInput = readonly [number | boolean, number | boolean, number | boolean, number | boolean];
+export interface LegacyLFO {
+    rate: number;
+    amDepth: number;
+    pmDepth: number;
+    waveform?: never;
+    delay?: never;
+    sync?: never;
+    phase?: never;
+    amTargets?: never;
+    pmTargets?: never;
+}
+export interface LegacyLFOV4 extends Omit&lt;LegacyLFO, &#39;waveform&#39;&gt; {
+    waveform: &#39;sine&#39; | &#39;triangle&#39; | &#39;saw&#39; | &#39;square&#39;;
+}
+export interface LegacyLFOV5 extends Omit&lt;LegacyLFOV4, &#39;delay&#39; | &#39;sync&#39; | &#39;phase&#39;&gt; {
+    delay?: number;
+    sync?: &#39;note&#39; | &#39;global&#39;;
+    phase?: number;
+}
+export interface LFO extends Omit&lt;LegacyLFOV5, &#39;amTargets&#39; | &#39;pmTargets&#39;&gt; {
+    amTargets?: LFOTargets;
+    pmTargets?: LFOTargets;
+}
+export type LFOInput = Omit&lt;LFO, &#39;waveform&#39; | &#39;amTargets&#39; | &#39;pmTargets&#39;&gt; &amp; {
+    waveform?: LFO[&#39;waveform&#39;];
+    amTargets?: LFOTargetsInput;
+    pmTargets?: LFOTargetsInput;
+};
+export interface PitchEnvelope {
+    a: number;
+    d: number;
+    r: number;
+    initial: number;
+    peak: number;
+    sustain: number;
+    final: number;
+}
+export interface KeyScale {
+    breakpoint: number;
+    leftDbPerOctave: number;
+    rightDbPerOctave: number;
+}
+export interface LegacyOperator {
+    ratio: number;
+    level: number;
+    detune: number;
+    adsr: ADSR;
+    keyScale?: never;
+    velocitySensitivity?: never;
+    frequency?: never;
+    rateKeyScale?: never;
+}
+export interface LegacyOperatorV2 extends Omit&lt;LegacyOperator, &#39;keyScale&#39;&gt; {
+    keyScale?: KeyScale;
+}
+export interface LegacyOperatorV3 extends Omit&lt;LegacyOperatorV2, &#39;velocitySensitivity&#39;&gt; {
+    velocitySensitivity?: number;
+}
+export interface Operator extends Omit&lt;LegacyOperatorV3, &#39;frequency&#39; | &#39;rateKeyScale&#39;&gt; {
+    frequency?: number;
+    rateKeyScale?: number;
+}
+export type FourOperators&lt;T = Operator&gt; = [T, T, T, T];
+interface VoiceBase {
+    name?: string;
+    algorithm: Algorithm;
+    feedback: Algorithm;
+    modIndex?: number;
+}
+/** Strict single-voice input; omitted version uses the current shape. */
+export type VoiceInput = (VoiceBase &amp; {
+    version?: 6;
+    lfo?: LFOInput;
+    pitchEnvelope?: PitchEnvelope;
+    ops: readonly [Operator, Operator, Operator, Operator];
+}) | (VoiceBase &amp; {
+    version: 5;
+    lfo?: Omit&lt;LegacyLFOV5, &#39;waveform&#39;&gt; &amp; {
+        waveform?: LFO[&#39;waveform&#39;];
+    };
+    pitchEnvelope?: PitchEnvelope;
+    ops: readonly [Operator, Operator, Operator, Operator];
+}) | (VoiceBase &amp; {
+    version: 4;
+    lfo?: Omit&lt;LegacyLFOV4, &#39;waveform&#39;&gt; &amp; {
+        waveform?: LFO[&#39;waveform&#39;];
+    };
+    pitchEnvelope?: never;
+    ops: readonly [LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3];
+}) | (VoiceBase &amp; {
+    version: 3;
+    lfo?: LegacyLFO;
+    pitchEnvelope?: never;
+    ops: readonly [LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3];
+}) | (VoiceBase &amp; {
+    version: 2;
+    lfo?: LegacyLFO;
+    pitchEnvelope?: never;
+    ops: readonly [LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2, LegacyOperatorV2];
+}) | (VoiceBase &amp; {
+    version: 1;
+    lfo?: LegacyLFO;
+    pitchEnvelope?: never;
+    ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator];
+});
+export interface Voice {
+    version: 6;
+    name: string;
+    algorithm: Algorithm;
+    feedback: Algorithm;
+    modIndex: number;
+    lfo: LFO;
+    pitchEnvelope?: PitchEnvelope;
+    ops: FourOperators;
+}
+export interface LegacyVoice {
+    version: 1;
+    name: string;
+    algorithm: Algorithm;
+    feedback: Algorithm;
+    modIndex: number;
+    lfo: LegacyLFO;
+    pitchEnvelope?: never;
+    ops: FourOperators&lt;LegacyOperator&gt;;
+}
+export interface LegacyVoiceV2 extends Omit&lt;LegacyVoice, &#39;version&#39; | &#39;ops&#39;&gt; {
+    version: 2;
+    ops: FourOperators&lt;LegacyOperatorV2&gt;;
+}
+export interface LegacyVoiceV3 extends Omit&lt;LegacyVoice, &#39;version&#39; | &#39;ops&#39;&gt; {
+    version: 3;
+    ops: FourOperators&lt;LegacyOperatorV3&gt;;
+}
+export interface LegacyVoiceV4 extends Omit&lt;LegacyVoiceV3, &#39;version&#39; | &#39;lfo&#39;&gt; {
+    version: 4;
+    lfo: LegacyLFOV4;
+}
+export interface LegacyVoiceV5 extends Omit&lt;Voice, &#39;version&#39; | &#39;lfo&#39;&gt; {
+    version: 5;
+    lfo: LegacyLFOV5;
+}
+export interface NormalizedVoice {
+    version: 6;
+    name?: string;
+    algorithm: Algorithm;
+    feedback: Algorithm;
+    modIndex: number;
+    lfo: LFO;
+    pitchEnvelope?: PitchEnvelope;
+    ops: FourOperators;
+}
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5;
+export type FrozenVoice = Readonly&lt;Omit&lt;Voice, &#39;lfo&#39; | &#39;ops&#39; | &#39;pitchEnvelope&#39;&gt;&gt; &amp; {
+    readonly lfo: Readonly&lt;LFO&gt;;
+    readonly pitchEnvelope?: Readonly&lt;PitchEnvelope&gt;;
+    readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
+};
+export type FrozenOperator = Readonly&lt;Omit&lt;Operator, &#39;adsr&#39; | &#39;keyScale&#39;&gt;&gt; &amp; {
+    readonly adsr: Readonly&lt;ADSR&gt;;
+    readonly keyScale?: Readonly&lt;KeyScale&gt;;
+};
+declare const preparedVoiceBrand: unique symbol;
+/** Immutable validated snapshot. Only prepareVoice can create the trusted identity. */
+export type PreparedVoice = Readonly&lt;Omit&lt;NormalizedVoice, &#39;lfo&#39; | &#39;ops&#39; | &#39;pitchEnvelope&#39;&gt;&gt; &amp; {
+    readonly lfo: Readonly&lt;LFO&gt;;
+    readonly pitchEnvelope?: Readonly&lt;PitchEnvelope&gt;;
+    readonly ops: readonly [FrozenOperator, FrozenOperator, FrozenOperator, FrozenOperator];
+    readonly [preparedVoiceBrand]: true;
+};
+export { prepareVoice } from &#39;./normalize.js&#39;;
+export declare const MAX_BANK_BYTES = 262144;
+export declare const MAX_BANK_VOICES = 128;
+type LimitKey = &#39;ratio&#39; | &#39;level&#39; | &#39;detune&#39; | &#39;velocitySensitivity&#39; | &#39;frequency&#39; | &#39;rateKeyScale&#39; | &#39;a&#39; | &#39;d&#39; | &#39;s&#39; | &#39;r&#39; | &#39;modIndex&#39; | &#39;rate&#39; | &#39;amDepth&#39; | &#39;pmDepth&#39; | &#39;delay&#39; | &#39;phase&#39; | &#39;initial&#39; | &#39;peak&#39; | &#39;sustain&#39; | &#39;final&#39; | &#39;breakpoint&#39; | &#39;leftDbPerOctave&#39; | &#39;rightDbPerOctave&#39;;
+export declare const LIMITS: Readonly&lt;Record&lt;LimitKey, readonly [number, number]&gt;&gt;;
+export declare function bounded(value: unknown, min: number, max: number, label?: string): number;
+export declare function lfoWaveform(value: unknown): LFO[&#39;waveform&#39;];
+export declare function lfoSync(value: unknown): NonNullable&lt;LFO[&#39;sync&#39;]&gt;;
+export declare function validateVoice(input: unknown): FrozenVoice;
+export declare function parseVoiceBank(source: string | readonly unknown[]): Map&lt;string, FrozenVoice&gt;;
+</code></pre></section>
+<section><h2 id="declaration-voicesvoiceschemadts">voices/voice.schema.d.ts</h2><pre><code class="language-typescript">export declare const voiceSchema: {
+    $schema: string;
+    title: string;
+    type: string;
+    additionalProperties: boolean;
+    required: string[];
+    properties: {
+        version: {
+            const: number;
+        };
+        name: {
+            type: string;
+            pattern: string;
+        };
+        algorithm: {
+            type: string;
+            minimum: number;
+            maximum: number;
+        };
+        feedback: {
+            type: string;
+            minimum: number;
+            maximum: number;
+        };
+        modIndex: {
+            type: string;
+            minimum: number;
+            maximum: number;
+        };
+        pitchEnvelope: {
+            type: string;
+            additionalProperties: boolean;
+            required: string[];
+            properties: {
+                a: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                d: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                r: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                initial: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                peak: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                sustain: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                final: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+            };
+        };
+        lfo: {
+            type: string;
+            additionalProperties: boolean;
+            required: string[];
+            properties: {
+                delay: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                    default: number;
+                };
+                sync: {
+                    type: string;
+                    enum: string[];
+                    default: string;
+                };
+                phase: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                    default: number;
+                };
+                amTargets: {
+                    type: string;
+                    minItems: number;
+                    maxItems: number;
+                    items: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    description: string;
+                };
+                pmTargets: {
+                    type: string;
+                    minItems: number;
+                    maxItems: number;
+                    items: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    description: string;
+                };
+                waveform: {
+                    type: string;
+                    enum: string[];
+                };
+                rate: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                amDepth: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+                pmDepth: {
+                    type: string;
+                    minimum: number;
+                    maximum: number;
+                };
+            };
+        };
+        ops: {
+            type: string;
+            minItems: number;
+            maxItems: number;
+            items: {
+                type: string;
+                additionalProperties: boolean;
+                required: string[];
+                properties: {
+                    frequency: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
+                    rateKeyScale: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
+                    velocitySensitivity: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        description: string;
+                    };
+                    keyScale: {
+                        type: string;
+                        additionalProperties: boolean;
+                        required: string[];
+                        properties: {
+                            breakpoint: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                            leftDbPerOctave: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                            rightDbPerOctave: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                        };
+                    };
+                    ratio: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    level: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    detune: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                    };
+                    adsr: {
+                        type: string;
+                        additionalProperties: boolean;
+                        required: string[];
+                        properties: {
+                            a: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                            d: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                            s: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                            r: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                            };
+                        };
+                    };
+                };
+            };
+        };
+    };
+};
+</code></pre></section></main></div></body></html>

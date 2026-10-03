@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { minify } from 'terser';
 import ts from 'typescript';
+import { buildDocs } from './docs-build.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const outdir = join(root, 'dist');
@@ -108,5 +109,6 @@ for (const { path, data } of files) {
   await writeFile(path, data);
   sizes.push({ file: relative(outdir, path), bytes: data.length });
 }
+await buildDocs(root);
 console.table(sizes);
 console.log('Total bytes:', sizes.reduce((sum, size) => sum + size.bytes, 0));

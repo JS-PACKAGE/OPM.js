@@ -14,6 +14,19 @@ GitHub Release **v1.8.1（套件 1.8.1）**同步文件與封裝，不改變 v1.
 - [壓縮部署](#壓縮部署)
 - [疑難排解](#疑難排解)
 
+## 開發中功能（尚未發佈）
+
+**[HTTPS 線上範例](https://opm.js-package.xyz/)**需點擊播放按鈕才能啟動音訊。以下新功能屬於目前 checkout，不在下方歷史 v1.8.1 tarball 中；工作樹保留套件版本 1.8.1，不表示新 Release、npm 上架或部署已完成。在目前原始碼根目錄執行 `npm ci`、`npm run build`，或以 `npm pack` 建立本機套件。
+
+- `parseScoreProject(source: string | object)`／`serializeScoreProject(project)`讀寫 canonical version 1 專案：拍點 events、正規化 tempoMap／timeSignature、具名完整 voices 與 synthesis settings。預設為 120 BPM、4/4、44100 Hz、standard、8 聲部、mixGain 1、A4 440 Hz、oldest；嚴格 own-data 驗證且回傳 frozen snapshot。上限 8 MiB、65,536 events、128 voices／256 KiB 音色 JSON。`compileBeatSequence(events, { tempoMap?, bpm?, voices? })`轉為驗證過的秒制 `SequenceEvent[]`，供離線／Worker 渲染；Transport 直接使用拍點 events，先將具名音色載入 OPM。詳見[樂譜專案](./score-projects.md)。
+- `importMidiFile(Uint8Array, options?)`回傳 `{ events, tempoMap, timeSignature, warnings }`；`exportMidiFile(events, options?)`回傳 `Uint8Array`，由 root、core 與 `opm.js/midi-file`匯出。僅支援 format 0／1 PPQN，嚴格拒絕截斷／損毀及超額資料。匯入預設將 sustain 納入音符長度、警告不支援的資料並拒絕未閉合音符；使用 channelVoices／defaultVoice 與匯出的 voiceChannels 明確映射 FM 音色。匯出拒絕 controls、非整數音高、非零 pan／priority、同音高配對歧義與 linear tempo ramp，不默默遺失表情。無 program-to-FM 轉換或 SysEx 傳送。詳見[MIDI 檔案](./midi-files.md)。
+- `TransportOptions.startupLead`為 0–10 秒，預設 `min(0.05, horizon / 2)`：啟動／恢復／重建以未來時刻為原點，提前量期間維持音樂位置；0 可取消提前量。這修正歷史 beat-0 冷啟動缺陷，但不保證主執行緒停頓下的 deadline。
+- Arrangement layer `gain`為 0–1（預設 1），`switchSection`／`setLayer`可指定 fade 0–10 秒；`setLayerGain(name, gain, { quantize?, fade? })`回傳提交拍點。共用 layer 不重新起音，gain 獨立乘上 expression，涵蓋自行擁有的 release tails 與新音符；layer score 的 gain controls 保留給 Arrangement，音樂力度請用 expression。詳見[自適應音樂](./adaptive-music.md)。
+- `MidiAdapterOptions.controllerMap`至多 128 項，指定 controller、field、明確 min／max／ramp、選用 reset；operator tuple field 另需零起算 operator。重複 CC／target 與 CC64／120／121／123 拒絕。Scalar field 包含獨立 `NoteControls.gain`（0–1、預設 1）；CC121 恢復建立 adapter 時擷取的有效預設或 explicit reset，fixed-Hz 的 reset:null 回到 ratio mode。`performance.getPartControls(part)`回傳 frozen 有效聲部控制，不含個別 key override。詳見[MIDI 表情控制](./midi-performance.md)。
+- 目前 checkout 建置 13 個 demo scripts，新增兩首原創歌曲的播放／停止、專案存取與 WAV 匯出；demo HTML 仍僅供 checkout／網站使用。
+
+建置在 dist 輸出後產生 [HTML 文件](./index.html)與完整[編譯器產生的 API 參考](./api.html)，本機新建套件將它們放在 doc/；歷史套件不變。可直接開啟 doc/index.html，或連同頂層 Markdown／法律檔案部署整個 doc/。本機搜尋支援鍵盤，不需伺服器、遠端搜尋服務或 runtime dependencies；Markdown 仍是唯一文件來源。
+
 ## 安裝與範例頁面
 
 需要 Node.js 22+ 與 npm。**不需 checkout 或建置工具鏈**即可在新專案安裝 GitHub Release 的附加套件：
@@ -151,6 +164,8 @@ npx --no-install opm-assets check https://your-host.example/opm-1.8.1/
 遲到音符預設 `late:'start'`：在可用的第一個影格開始，數值 duration 從實際開始保留完整 gate；`late:'drop'` 則以 `reason:'late'` 拒絕，包含訊息處理延遲造成的遲到。同影格依序處理 stop、onset、controls；onset 前收到的控制保留到開始。
 
 controls 為非空 own-data 物件：pitch −48..48 半音；glide 0..10 秒且須搭配 pitch；expression 0..1；pan −1..1；modulation 0..2（AM 上限 1、PM 1200 音分）；operatorLevels 是四個 0..2 的原音色 level 倍率。新增 feedback 0..7、lfoRate 0..20 Hz、amDepth 0..1、pmDepth 0..1200 音分；operatorRatios 為四個 0.125..32，operatorFrequencies 為四個 1..20000 Hz 或 null（恢復 ratio 模式），operatorADSR 為四個完整 `{a,d,s,r}`。ramp 0..10 秒獨立平滑指定的 scalar／level／ratio／frequency 欄位，省略／零立即生效；glide 獨立以半音線性滑動。phase／回授歷史保留，但 ADSR 從當前 dB 重新錨定：held 音重啟 attack，released 音開始新縮放 release（最多 10 秒），零 release 立即進入 filter drain。固定 Hz 仍跟隨 pitch 控制，忽略 tuning table 的移調。未知欄位、存取器、非有限／超界值拒絕。詳細控制語意見[表情音色](./expressive-voices.md)，宿主時鐘／生命週期見[宿主整合](./host-integration.md)。
+
+尚未發佈的 checkout 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平滑且不重啟 phase／包絡；Arrangement layer fade 使用這個獨立倍率。
 
 最多 maxVoices 個邏輯聲部（1–32，預設 8），另有至多八個獨立約 5 ms 搶音淡出；增加 maxVoices 不增加淡出數。滿額時只能搶走 voicePriority 不高於新音符的聲部，先選最低優先權，再依 stealing 政策決定。全部較高時回報音符拒絕 `reason:'priority'`，不搶走既有音符。預設 oldest；release-first 優先最早 release，quietest 按 carrier 包絡 × 力度 × expression 比較，同分取最早，不以瞬間波形判定。事件／ID 各限 256，未來定時音符佔兩筆，控制／stop 也佔額度；終止會回收過期事件。預備音色採 128 槽 content-key LRU，重新驗證後替換／重用 ID，既有排程與聲部保留原快照。無 setLFO；速率／深度可用 updateNote，波形與目標屬於音色。
 
@@ -354,7 +369,7 @@ console.log(frames, energy, render.diagnostics.errors);
 
 bpm 預設 120、範圍 1–1000；tempoMap 從 beat 0 開始嚴格遞增，最多 1024 點，拍點上限 86400。timeSignature 分子 1–32，分母為不超過 32 的二次冪；horizon 0.01–10 秒、interval 0.001–horizon/2、maxSlots 1–256。pause／seek／loop 重啟包絡與 phase，不是 DSP snapshot；重建當前 scalar／ratio ramp 與剩餘時間，最新 fixed-Hz／null 政策立即套用（即使 frequency ramp 未完成），最新 ADSR 在重啟 onset 重新錨定。純核心亦匯出 beatsToSeconds／secondsToBeats／beatToBarBeat／barBeatToBeat／normalizeTempoMap。
 
-下方配方保留一拍 count-in。Transport 從當前 AudioContext 時間開始，起音使用 `late:'drop'`；冷啟動時 beat 0 的訊息可能太晚抵達 worklet，拒絕會停止 helper 並通知 onError。Count-in 提供排程提前量，不保證宿主停頓下仍能準時；start() 完成也不是每個音符已發聲的確認。
+下方配方保留音樂上的一拍 count-in。目前 checkout 額外使用 startupLead（預設 min(0.05,horizon/2) 秒）將時鐘原點放在未來，避免 beat 0 冷啟動時提交到已過期時刻；歷史 v1.8.1 套件沒有這項修正。late:'drop' 仍會拒絕真正晚到的起音、停止 helper 並通知 onError。Count-in／startupLead 不保證宿主停頓下仍能準時；start() 完成也不是每個音符已發聲的確認。
 
 `createPerformance(opm,{parts:16,maxKeys:128,maxKeysPerPart:128,onError})` 提供零起算 1–16 個聲部，各自 configurePart 設定 voice、poly／mono、legato、last／high／low 按鍵選擇 priority、glide 0–10 秒、pan ±1 與 expression 0–1；兩種 key 額度皆為 1–128。先在使用者手勢中 `await opm.start()`，再呼叫 noteOn；回傳實體 key ID，須用 `noteOff(part,key)` 釋放，同音高按鍵仍獨立。另有 updatePart、sustain、allNotesOff(part?)、getPart 與 dispose。實際 held keys 優先於踏板保留；mono legato 在原 onset ±48 半音內重用 gate／包絡／原力度與 key scaling，超出時以真實音高重觸發。被偷走的 key 會移除，不自動重入；中斷／reset 即使 preserve 也清除 helper 自有狀態。可直接執行的 Transport／Performance 配方見[宿主整合](./host-integration.md)與[串流樂譜](./streaming-sequences.md)。
 
@@ -570,7 +585,7 @@ Worker 在模組載入／解析／求值後送出 `{type:'ready',protocol:1}`，
 
 在 checkout 執行維護指令，不是在已安裝的套件中：
 
-所有程式皆使用 strict TypeScript；compile 輸出忽略追蹤的 .dev，npm test 編譯並選擇行為測試，不用裸 node --test。build 由實作產生宣告、保留引擎路徑並建置 12 個 demo entry scripts；每個 JS 配對 map／型別。typecheck 包含 source／tools／tests／demo／公開型別；使用端仍只需 JS，不需建置工具鏈。
+所有程式皆使用 strict TypeScript；compile 輸出忽略追蹤的 .dev，npm test 編譯並選擇行為測試，不用裸 node --test。目前 build 由實作產生宣告、保留引擎路徑並建置 13 個 demo entry scripts，再由 Markdown 與輸出宣告產生靜態 HTML 文件；歷史 v1.8.1 為 12 個 scripts。每個 JS 配對 map／型別，typecheck 包含 source／tools／tests／demo／公開型別；使用端仍只需 JS，不需建置工具鏈。
 
 ```sh
 npm ci

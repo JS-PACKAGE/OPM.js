@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>OPM.js 使用說明（繁體中文） — OPM.js</title><link rel="stylesheet" href="site.css"><script src="search-data.js" defer></script><script src="site.js" defer></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">OPM.js documentation</a><a href="https://opm.js-package.xyz/">Online demos</a></header><div class="layout"><aside><form role="search"><label for="docs-search">Search guides and API exports</label><input id="docs-search" type="search" autocomplete="off" aria-controls="search-results"><p id="search-status" role="status" aria-live="polite"></p><ul id="search-results"></ul></form><nav aria-label="Documentation"><ul><li><a href="./index.html">OPM.js documentation</a></li><li><a href="./readme.html">OPM.js</a></li><li><a href="./security.html">SECURITY.md — OPM.js Security Policy &amp; Review Mechanism</a></li><li><a href="./changelog.html">Changelog</a></li><li><a href="./acoustic-quality.html">Acoustic references and decimation</a></li><li><a href="./adaptive-music.html">Adaptive music, tempo curves and the seek contract</a></li><li><a href="./audio-buses.html">Polyphony budgets, voice priority and independent buses</a></li><li><a href="./compatibility.html">Compatibility policy</a></li><li><a href="./expressive-voices.html">Voice v6 and expressive controls</a></li><li><a href="./host-integration.html">Host integration</a></li><li><a href="./midi-files.html">Standard MIDI files</a></li><li><a href="./midi-performance.html">Expressive performance and optional Web MIDI</a></li><li><a href="./mobile-acceptance.html">Physical-device audio recovery acceptance</a></li><li><a href="./publishing.html">Publication and package verification</a></li><li><a href="./score-projects.html">Replayable score projects</a></li><li><a href="./sound-design.html">Sound design workflow</a></li><li><a href="./streaming-sequences.html">Bounded sequences</a></li><li><a href="./usage.en.html">OPM.js usage guide (English)</a></li><li><a href="./usage.zh-TW.html" aria-current="page">OPM.js 使用說明（繁體中文）</a></li><li><a href="./voice-quality.html">Preset and conversion acceptance</a></li><li><a href="./worker-diagnostics.html">Worker render diagnostics, deadlines and rollback</a></li><li><a href="./api.html">Generated API reference</a></li></ul></nav><nav aria-label="On this page"><h2>On this page</h2><ul><li class="depth-1"><a href="#opmjs-使用說明繁體中文">OPM.js 使用說明（繁體中文）</a></li><li class="depth-2"><a href="#開發中功能尚未發佈">開發中功能（尚未發佈）</a></li><li class="depth-2"><a href="#安裝與範例頁面">安裝與範例頁面</a></li><li class="depth-2"><a href="#瀏覽器靜態部署">瀏覽器靜態部署</a></li><li class="depth-2"><a href="#瀏覽器-api-與自訂音色">瀏覽器 API 與自訂音色</a></li><li class="depth-3"><a href="#有界前瞻排程">有界前瞻排程</a></li><li class="depth-3"><a href="#共用-context-與輸出接線">共用 context 與輸出接線</a></li><li class="depth-3"><a href="#共用樂譜全域調音與安全恢復">共用樂譜、全域調音與安全恢復</a></li><li class="depth-3"><a href="#有界長樂譜">有界長樂譜</a></li><li class="depth-3"><a href="#拍點-transport-與演奏聲部">拍點 Transport 與演奏聲部</a></li><li class="depth-3"><a href="#速度曲線網格與分層編曲">速度曲線、網格與分層編曲</a></li><li class="depth-2"><a href="#nodejs-離線渲染">Node.js 離線渲染</a></li><li class="depth-2"><a href="#音色格式與銀行載入">音色格式與銀行載入</a></li><li class="depth-2"><a href="#wav-匯出與-dx7-匯入">WAV 匯出與 DX7 匯入</a></li><li class="depth-2"><a href="#品質與發佈驗收">品質與發佈驗收</a></li><li class="depth-2"><a href="#壓縮部署">壓縮部署</a></li><li class="depth-2"><a href="#疑難排解">疑難排解</a></li></ul></nav></aside><main id="content" tabindex="-1"><p class="source">Generated from <a href="./usage.zh-TW.md">Markdown source</a>. Edit the source, not this HTML.</p><h1 id="opmjs-使用說明繁體中文">OPM.js 使用說明（繁體中文） <a class="anchor" href="#opmjs-使用說明繁體中文" aria-label="Link to OPM.js 使用說明（繁體中文）">#</a></h1>
+<p><a href="./usage.en.html">English</a> · <a href="./readme.html">專案 README</a> · <a href="https://github.com/YueyuHoshizora/OPM.js">原始碼儲存庫</a></p>
+<p>GitHub Release <strong>v1.8.1（套件 1.8.1）</strong>同步文件與封裝，不改變 v1.8 runtime：canonical v6 音色、即時運算子控制、拍點 Transport、速度曲線／網格、分層 Arrangement、多聲部表情控制與選用 MIDI、1–32 個邏輯聲部與音符優先權、品質模式、原子音色銀行管理，以及 PCM16／PCM24／Float32 增量 WAV、Worker 啟動／階段診斷和資產部署 CLI。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。</p>
+<p>音色格式版本與套件版本獨立：v1.8.1 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。</p>
+<ul><li><p><a href="#安裝與範例頁面">安裝與範例頁面</a></p></li><li><p><a href="#瀏覽器靜態部署">瀏覽器靜態部署</a></p></li><li><p><a href="#瀏覽器-api-與自訂音色">瀏覽器 API 與自訂音色</a></p></li><li><p><a href="#nodejs-離線渲染">Node.js 離線渲染</a></p></li><li><p><a href="#音色格式與銀行載入">音色格式與銀行載入</a></p></li><li><p><a href="#壓縮部署">壓縮部署</a></p></li><li><p><a href="#疑難排解">疑難排解</a></p></li></ul>
+<h2 id="開發中功能尚未發佈">開發中功能（尚未發佈） <a class="anchor" href="#開發中功能尚未發佈" aria-label="Link to 開發中功能（尚未發佈）">#</a></h2>
+<p><strong><a href="https://opm.js-package.xyz/">HTTPS 線上範例</a></strong>需點擊播放按鈕才能啟動音訊。以下新功能屬於目前 checkout，不在下方歷史 v1.8.1 tarball 中；工作樹保留套件版本 1.8.1，不表示新 Release、npm 上架或部署已完成。在目前原始碼根目錄執行 <code>npm ci</code>、<code>npm run build</code>，或以 <code>npm pack</code> 建立本機套件。</p>
+<ul><li><p><code>parseScoreProject(source: string | object)</code>／<code>serializeScoreProject(project)</code>讀寫 canonical version 1 專案：拍點 events、正規化 tempoMap／timeSignature、具名完整 voices 與 synthesis settings。預設為 120 BPM、4/4、44100 Hz、standard、8 聲部、mixGain 1、A4 440 Hz、oldest；嚴格 own-data 驗證且回傳 frozen snapshot。上限 8 MiB、65,536 events、128 voices／256 KiB 音色 JSON。<code>compileBeatSequence(events, { tempoMap?, bpm?, voices? })</code>轉為驗證過的秒制 <code>SequenceEvent[]</code>，供離線／Worker 渲染；Transport 直接使用拍點 events，先將具名音色載入 OPM。詳見<a href="./score-projects.html">樂譜專案</a>。</p></li><li><p><code>importMidiFile(Uint8Array, options?)</code>回傳 <code>{ events, tempoMap, timeSignature, warnings }</code>；<code>exportMidiFile(events, options?)</code>回傳 <code>Uint8Array</code>，由 root、core 與 <code>opm.js/midi-file</code>匯出。僅支援 format 0／1 PPQN，嚴格拒絕截斷／損毀及超額資料。匯入預設將 sustain 納入音符長度、警告不支援的資料並拒絕未閉合音符；使用 channelVoices／defaultVoice 與匯出的 voiceChannels 明確映射 FM 音色。匯出拒絕 controls、非整數音高、非零 pan／priority、同音高配對歧義與 linear tempo ramp，不默默遺失表情。無 program-to-FM 轉換或 SysEx 傳送。詳見<a href="./midi-files.html">MIDI 檔案</a>。</p></li><li><p><code>TransportOptions.startupLead</code>為 0–10 秒，預設 <code>min(0.05, horizon / 2)</code>：啟動／恢復／重建以未來時刻為原點，提前量期間維持音樂位置；0 可取消提前量。這修正歷史 beat-0 冷啟動缺陷，但不保證主執行緒停頓下的 deadline。</p></li><li><p>Arrangement layer <code>gain</code>為 0–1（預設 1），<code>switchSection</code>／<code>setLayer</code>可指定 fade 0–10 秒；<code>setLayerGain(name, gain, { quantize?, fade? })</code>回傳提交拍點。共用 layer 不重新起音，gain 獨立乘上 expression，涵蓋自行擁有的 release tails 與新音符；layer score 的 gain controls 保留給 Arrangement，音樂力度請用 expression。詳見<a href="./adaptive-music.html">自適應音樂</a>。</p></li><li><p><code>MidiAdapterOptions.controllerMap</code>至多 128 項，指定 controller、field、明確 min／max／ramp、選用 reset；operator tuple field 另需零起算 operator。重複 CC／target 與 CC64／120／121／123 拒絕。Scalar field 包含獨立 <code>NoteControls.gain</code>（0–1、預設 1）；CC121 恢復建立 adapter 時擷取的有效預設或 explicit reset，fixed-Hz 的 reset:null 回到 ratio mode。<code>performance.getPartControls(part)</code>回傳 frozen 有效聲部控制，不含個別 key override。詳見<a href="./midi-performance.html">MIDI 表情控制</a>。</p></li><li><p>目前 checkout 建置 13 個 demo scripts，新增兩首原創歌曲的播放／停止、專案存取與 WAV 匯出；demo HTML 仍僅供 checkout／網站使用。</p></li></ul>
+<p>建置在 dist 輸出後產生 <a href="./index.html">HTML 文件</a>與完整<a href="./api.html">編譯器產生的 API 參考</a>，本機新建套件將它們放在 doc/；歷史套件不變。可直接開啟 doc/index.html，或連同頂層 Markdown／法律檔案部署整個 doc/。本機搜尋支援鍵盤，不需伺服器、遠端搜尋服務或 runtime dependencies；Markdown 仍是唯一文件來源。</p>
+<h2 id="安裝與範例頁面">安裝與範例頁面 <a class="anchor" href="#安裝與範例頁面" aria-label="Link to 安裝與範例頁面">#</a></h2>
+<p>需要 Node.js 22+ 與 npm。<strong>不需 checkout 或建置工具鏈</strong>即可在新專案安裝 GitHub Release 的附加套件：</p>
+<pre><code class="language-sh">mkdir opm-app
+cd opm-app
+npm init -y
+npm install https://github.com/YueyuHoshizora/OPM.js/releases/download/v1.8.1/opm.js-1.8.1.tgz</code></pre>
+<p>v1.8.1 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 <strong>OPM.js 儲存庫根目錄</strong> 執行，<code>npm pack</code> 會自行執行建置（<code>prepack</code>），不必預先重複執行 <code>npm run build</code>：</p>
+<pre><code class="language-sh">npm ci
+npm pack</code></pre>
+<p>此 checkout 的套件版本產生 <code>opm.js-1.8.1.tgz</code>。以下從儲存庫根目錄建立<strong>同層的新專案</strong> <code>opm-app</code>，假設 checkout 目錄名為 <code>OPM.js</code>；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：</p>
+<pre><code class="language-sh">cd ..
+mkdir opm-app
+cd opm-app
+npm init -y
+npm install ../OPM.js/opm.js-1.8.1.tgz</code></pre>
+<p>既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 <code>npm install</code>，不需 <code>npm init</code>。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 <code>dist</code> 的最小化 <code>.js</code> 模組、內嵌 TypeScript 原始碼的 <code>.js.map</code>、<code>.d.ts</code>、12 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、12 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。</p>
+<p>要直接試用儲存庫的範例，請在 <strong>OPM.js 儲存庫根目錄</strong> 啟動伺服器：</p>
+<pre><code class="language-sh">python3 -m http.server 8000</code></pre>
+<p>開啟 <code>http://localhost:8000/index.html</code> 查看 12 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、<a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html">共用樂譜／中斷恢復</a>、自適應音樂、表情樂器／MIDI、音色設計與音訊匯流排。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 <code>dist</code> 不需安裝建置，原始碼／helper 改動後才執行 <code>npm ci</code>、<code>npm run build</code>。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 <code>file://</code>。</p>
+<h2 id="瀏覽器靜態部署">瀏覽器靜態部署 <a class="anchor" href="#瀏覽器靜態部署" aria-label="Link to 瀏覽器靜態部署">#</a></h2>
+<p>在<strong>已安裝套件的 <code>opm-app</code> 根目錄</strong>複製完整發佈樹與授權檔：</p>
+<pre><code class="language-sh">mkdir -p public/opm
+cp -R node_modules/opm.js/dist/. public/opm/
+cp node_modules/opm.js/LICENSE public/opm/LICENSE</code></pre>
+<p>將下列頁面存為 <strong><code>opm-app/public/index.html</code></strong>：</p>
+<pre><code class="language-html">&lt;!doctype html&gt;
+&lt;html lang=&quot;zh-Hant&quot;&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;title&gt;OPM.js example&lt;/title&gt;
+&lt;button id=&quot;play&quot; type=&quot;button&quot;&gt;Play brass chord&lt;/button&gt;
+&lt;output id=&quot;status&quot; aria-live=&quot;polite&quot;&gt;Ready&lt;/output&gt;
+&lt;script type=&quot;module&quot;&gt;
+  import { OPM } from &#39;./opm/api/index.js&#39;;
+
+  const opm = new OPM();
+  const play = document.querySelector(&#39;#play&#39;);
+  const status = document.querySelector(&#39;#status&#39;);
+  play.addEventListener(&#39;click&#39;, async () =&gt; {
+    play.disabled = true;
+    try {
+      await opm.start();
+      for (const note of [60, 64, 67]) opm.playNote({ note, duration: 0.7 });
+      status.textContent = &#39;Playing brass chord&#39;;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      play.disabled = false;
+    }
+  });
+&lt;/script&gt;
+&lt;/html&gt;</code></pre>
+<p>在 <strong><code>opm-app</code> 根目錄</strong>執行：</p>
+<pre><code class="language-sh">python3 -m http.server 8000 --directory public</code></pre>
+<p>開啟 <code>http://localhost:8000/</code>，點擊按鈕播放。上述複製指令適用 POSIX shell；其他系統可手動複製相同檔案。若完全不使用 npm，亦可將 checkout 的完整 <code>dist/</code> <strong>內容</strong>複製到網站根目錄的 <code>site/opm/</code>，將 checkout 的 <code>LICENSE</code> 複製為 <code>site/opm/LICENSE</code>，把同一 HTML 存成 <code>site/index.html</code>，並以網站根目錄 <code>site/</code> 提供服務。務必連同 <code>api/</code>、<code>core/</code>、<code>worklet/</code>、<code>voices/</code> 一起保留，不能單獨重新命名或移動 worklet 及其相依模組。引擎保留來源模組路徑，不再產生 hashed chunks。純 HTML 無 import map 時不能直接解析 <code>import &#39;opm.js&#39;</code>；即便使用 bundler，也不能假定它會複製 worklet URL 的模組相依樹。上述靜態複製與站內相對 URL 不依賴 bundler。</p>
+<p>Worker 匯出需要完整同版本樹，包括 companions、maps 與 declarations：</p>
+<pre><code class="language-text">public/opm/
+├── api/
+├── core/
+├── worklet/
+├── worker/render.js
+└── voices/</code></pre>
+<p>Worker 為同源 HTTP(S) 靜態 module，不使用 blob／data／eval；正式 CSP 的 <code>worker-src</code>／<code>script-src</code> 應允許 <code>&#39;self&#39;</code>，資產須有正確 JavaScript MIME。不要把 worker 請求改寫為 SPA HTML。</p>
+<p>使用 Vite 的獨立、子路徑部署範例見 <a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md">examples/vite/README.md（僅供 checkout）</a>：它安裝 tarball 並複製完整 <code>dist</code> 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 <a href="./security.html">SECURITY.md</a>。</p>
+<p>已安裝套件也提供 <code>opm-assets</code>，可取代手動複製。從 <code>opm-app</code> 根目錄使用<strong>尚不存在</strong>的目的目錄：</p>
+<pre><code class="language-sh">npx --no-install opm-assets copy public/opm-1.8.1
+npx --no-install opm-assets check https://your-host.example/opm-1.8.1/</code></pre>
+<p>第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 <code>./opm-1.8.1/api/index.js</code>。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、<code>nosniff</code> 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 <code>nosniff</code>，不符合預設 check；正式主機須設定此標頭。完整契約見<a href="./host-integration.html#other-bundlers-and-ssr-hosts">宿主整合</a>。</p>
+<h2 id="瀏覽器-api-與自訂音色">瀏覽器 API 與自訂音色 <a class="anchor" href="#瀏覽器-api-與自訂音色" aria-label="Link to 瀏覽器 API 與自訂音色">#</a></h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th scope="col">API</th><th scope="col">用法與限制</th></tr></thead><tbody><tr><td><code>new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain=1, tuning={}, stealing=&#39;oldest&#39;, interruption=&#39;cancel&#39;, quality=&#39;standard&#39;, maxVoices=8 }={})</code></td><td>整數 sampleRate 8000–96000 Hz；maxVoices 為整數 1–32，預設 8。quality／maxVoices 建構後不可變，close／重啟仍保留。借用 context 不會被關閉／暫停；省略 destination 接到其 destination，null 不自動接線。workletUrl 可改變同源完整 worklet 模組樹的位置，但不放寬安全來源、CSP 或 MIME 限制。</td></tr><tr><td><code>await opm.start()</code>／<code>await opm.resume()</code></td><td>在使用者互動中啟動／恢復並等待，再播放。並行啟動會合併；既有 context 被瀏覽器暫停後可恢復。</td></tr><tr><td><code>opm.connect(destination)</code>／<code>opm.disconnect(destination?)</code></td><td>對已啟動的輸出接線／斷線，回傳 opm；目的節點必須來自相同 context。省略斷線目的地會移除所有輸出連線。</td></tr><tr><td><code>opm.loadVoice(name, voice)</code></td><td>啟動前即可驗證、複製並註冊音色；名稱為 1–64 個 ASCII 英文字母、數字、<code>_</code> 或 <code>-</code>，registry 最多 128 筆。覆蓋只影響未來音符。</td></tr><tr><td><code>opm.voices</code></td><td><code>ReadonlyMap</code> 的防禦性快照；音色深度凍結。更換音色須用 <code>loadVoice</code>，修改取得的 Map 不會改變引擎。</td></tr><tr><td><code>opm.replaceVoiceBank(bank)</code>／<code>opm.exportVoiceBank()</code>／<code>opm.removeVoice(name)</code></td><td>完整驗證後原子替換；bank 是 JSON 字串或完整音色陣列，最多 128 筆／JSON 256 KiB。直接傳 <code>[]</code> 清空，但 JSON <code>&quot;[]&quot;</code> 依 parser 契約拒絕。export 回傳具名不可變音色的 canonical JSON（空銀行為 <code>[]</code>），上限 256 KiB。remove 回傳 boolean，不終止正在播放／排隊的快照。</td></tr><tr><td><code>opm.playNote({ voice=&#39;brass&#39;, note, time=0, at, duration=null, velocity=1, pan=0, voicePriority=0, late=&#39;start&#39; })</code></td><td>有限 MIDI 小數 0–127；相對 time 0–60 秒或互斥的絕對 at（最多提前 60 秒）。duration 為 <code>(0,60]</code> 或 null 持續音；力度 0–1、聲像 −1–1、voicePriority 為整數 0–127。回傳正安全整數音符 ID，不代表接收成功。</td></tr><tr><td><code>opm.stop(id,{at,cancelControls}={})</code></td><td>一般 stop 取消待開始音符／開始 release，保留自然尾音的 automation。<code>cancelControls:true</code> 立即取消此 ID 的排隊 onset／control／off 並 release；cancelControls 欄位即使為 false，也不能與 at 共用。未知、終止或已 release 目標會回報命令拒絕。</td></tr><tr><td><code>opm.updateNote(id,controls,{at}={})</code></td><td>回傳命令 ID；待開始控制保留到 onset，release 中仍可更新。無效、inactive 或 queue-full 命令會回報拒絕。</td></tr><tr><td><code>opm.allNotesOff()</code>／<code>opm.panic()</code></td><td>回傳命令 ID，不受已滿排程佇列阻擋。前者取消待處理事件並自然 release；後者立即移除所有尾音並發出 reset，保留路由／快取。</td></tr><tr><td><code>opm.setMixGain(gain)</code>／<code>opm.setTuning(tuning)</code></td><td>須先啟動，回傳命令 ID；設定保留到 node 重建，不重設 phase／包絡。</td></tr><tr><td><code>await opm.getDiagnostics()</code></td><td>回傳 <code>{type:&#39;diagnostics&#39;,requestId,activeVoices,pendingEvents,errors,rejectedNotes}</code>；context 須在 running，最多 64 個未完成請求。暫停／關閉／processor 失敗會拒絕待回覆請求，請先 resume 再重試。</td></tr><tr><td><code>await opm.close()</code></td><td>與初始化依序處理，斷開 node，只關閉自行建立的 context。再次啟動會重建自有 context；借用的 context 仍可由宿主使用。</td></tr><tr><td><code>opm.subscribe(listener)</code></td><td>獨立事件訂閱，回傳冪等的取消訂閱函式；各回呼例外隔離。</td></tr><tr><td><code>await opm.waitForCommand(commandId,{timeout,signal}={})</code></td><td>僅等待 admission：預設 5000 ms、整數 1–60000 ms，可由 AbortSignal 取消；最多 64 pending waits／128 receipts。拒絕拋出 CommandRejectedError；accepted 不是執行完成。</td></tr><tr><td><code>await opm.dispose()</code></td><td>終止式清理，不能重新啟動；close 仍可重新 start。</td></tr></tbody></table></div>
+<p><code>onEvent</code> 除 note／diagnostics／error，新增 <code>{type:&#39;command&#39;,command,commandId?,id?,state,reason?,frame,time}</code>、context 狀態與全域 reset。命令 state 為 accepted／rejected；accepted 只表示接收或立即套用，不保證未來一定執行。以 commandId 對應拒絕；frame／time 為音訊邊界而非回呼送達時間。reset 原因為 close／failure／panic／interruption，收到時清除自有 gate 紀錄；close／failure 不保證每音符終止回覆。回呼例外隔離。</p>
+<p>遲到音符預設 <code>late:&#39;start&#39;</code>：在可用的第一個影格開始，數值 duration 從實際開始保留完整 gate；<code>late:&#39;drop&#39;</code> 則以 <code>reason:&#39;late&#39;</code> 拒絕，包含訊息處理延遲造成的遲到。同影格依序處理 stop、onset、controls；onset 前收到的控制保留到開始。</p>
+<p>controls 為非空 own-data 物件：pitch −48..48 半音；glide 0..10 秒且須搭配 pitch；expression 0..1；pan −1..1；modulation 0..2（AM 上限 1、PM 1200 音分）；operatorLevels 是四個 0..2 的原音色 level 倍率。新增 feedback 0..7、lfoRate 0..20 Hz、amDepth 0..1、pmDepth 0..1200 音分；operatorRatios 為四個 0.125..32，operatorFrequencies 為四個 1..20000 Hz 或 null（恢復 ratio 模式），operatorADSR 為四個完整 <code>{a,d,s,r}</code>。ramp 0..10 秒獨立平滑指定的 scalar／level／ratio／frequency 欄位，省略／零立即生效；glide 獨立以半音線性滑動。phase／回授歷史保留，但 ADSR 從當前 dB 重新錨定：held 音重啟 attack，released 音開始新縮放 release（最多 10 秒），零 release 立即進入 filter drain。固定 Hz 仍跟隨 pitch 控制，忽略 tuning table 的移調。未知欄位、存取器、非有限／超界值拒絕。詳細控制語意見<a href="./expressive-voices.html">表情音色</a>，宿主時鐘／生命週期見<a href="./host-integration.html">宿主整合</a>。</p>
+<p>尚未發佈的 checkout 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平滑且不重啟 phase／包絡；Arrangement layer fade 使用這個獨立倍率。</p>
+<p>最多 maxVoices 個邏輯聲部（1–32，預設 8），另有至多八個獨立約 5 ms 搶音淡出；增加 maxVoices 不增加淡出數。滿額時只能搶走 voicePriority 不高於新音符的聲部，先選最低優先權，再依 stealing 政策決定。全部較高時回報音符拒絕 <code>reason:&#39;priority&#39;</code>，不搶走既有音符。預設 oldest；release-first 優先最早 release，quietest 按 carrier 包絡 × 力度 × expression 比較，同分取最早，不以瞬間波形判定。事件／ID 各限 256，未來定時音符佔兩筆，控制／stop 也佔額度；終止會回收過期事件。預備音色採 128 槽 content-key LRU，重新驗證後替換／重用 ID，既有排程與聲部保留原快照。無 setLFO；速率／深度可用 updateNote，波形與目標屬於音色。</p>
+<p>要自訂 LFO、排程與提早停止，保留上方 <strong><code>public/index.html</code></strong> 的 <code>#play</code> 按鈕與 <code>#status</code> 輸出，將其原本的 <code>&lt;script type=&quot;module&quot;&gt;…&lt;/script&gt;</code> <strong>完整替換</strong>為以下區塊；從 <code>opm-app</code> 根目錄照前節提供 <code>public/</code>：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM } from &#39;./opm/api/index.js&#39;;
+  import { brass } from &#39;./opm/voices/brass.js&#39;;
+
+  const opm = new OPM();
+  const voice = structuredClone(brass);
+  voice.lfo.rate = 5;
+  voice.lfo.amDepth = 0.2;
+  voice.ops[0].level = 0.6;
+  opm.loadVoice(&#39;my-brass&#39;, voice);
+
+  const play = document.querySelector(&#39;#play&#39;);
+  play.textContent = &#39;Play custom brass note&#39;;
+  const status = document.querySelector(&#39;#status&#39;);
+  play.addEventListener(&#39;click&#39;, async () =&gt; {
+    play.disabled = true;
+    try {
+      await opm.start();
+      const at = opm.context.currentTime + 0.1;
+      const id = opm.playNote({ voice: &#39;my-brass&#39;, note: 64, at, velocity: 0.7, pan: -0.5 });
+      opm.updateNote(id, { pitch: 7, glide: 0.1, expression: 0.8, pan: 0.5, modulation: 1.2 }, { at: at + 0.1 });
+      opm.stop(id, { at: at + 0.3 });
+      status.textContent = &#39;Scheduled custom brass note and controls&#39;;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      play.disabled = false;
+    }
+  });
+&lt;/script&gt;</code></pre>
+<p>上述 onset、控制與 release 皆由音訊時鐘執行，不靠頁面計時器停止；單次僅排三筆事件，且皆在 60 秒範圍內。完成使用後可在應用程式生命週期中 <code>await opm.close()</code>，下次要播放時再由使用者互動呼叫 <code>start()</code>。</p>
+<h3 id="有界前瞻排程">有界前瞻排程 <a class="anchor" href="#有界前瞻排程" aria-label="Link to 有界前瞻排程">#</a></h3>
+<p>長曲用 <code>createLookaheadScheduler</code> 分批排程，而非一次塞滿 queue。將同一 <strong><code>opm-app/public/index.html</code></strong> 的 module script 完整替換如下，再從 <code>opm-app</code> 根目錄提供 <code>public/</code>。點擊播放會安排有限的八個音符；主執行緒停頓時跳過已錯過的窗口，不補塞過期音符：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM, createLookaheadScheduler } from &#39;./opm/api/index.js&#39;;
+  const status = document.querySelector(&#39;#status&#39;);
+  const opm = new OPM();
+  const melody = [60, 64, 67, 72, 67, 64, 62, 60];
+  let origin;
+  const scheduler = createLookaheadScheduler(opm, ({ from, to, maxNotes }) =&gt; {
+    origin ??= from + 0.1;
+    return melody.flatMap((note, index) =&gt; {
+      const at = origin + index * 0.3;
+      return at &gt;= from &amp;&amp; at &lt; to
+        ? [{ note, at, duration: 0.2, velocity: 0.6, late: &#39;drop&#39; }]
+        : [];
+    }).slice(0, maxNotes);
+  }, {
+    horizon: 0.2, interval: 0.025, maxNotes: 8,
+    onError(error) { status.textContent = error.message; }
+  });
+  const play = document.querySelector(&#39;#play&#39;);
+  play.textContent = &#39;Play finite melody&#39;;
+  play.addEventListener(&#39;click&#39;, async () =&gt; {
+    try {
+      scheduler.stop();
+      origin = undefined;
+      await scheduler.start();
+      status.textContent = &#39;Scheduling eight notes&#39;;
+    } catch (error) { status.textContent = error.message; }
+  });
+  const stop = document.createElement(&#39;button&#39;);
+  stop.textContent = &#39;Stop melody&#39;;
+  document.body.append(stop);
+  stop.addEventListener(&#39;click&#39;, () =&gt; scheduler.stop());
+  window.disposeOPM = async () =&gt; {
+    scheduler.dispose();
+    await opm.close();
+  };
+&lt;/script&gt;</code></pre>
+<p>回呼同步回傳陣列，每筆必須有窗口 <code>[from,to)</code> 內的絕對 <code>at</code> 與 <code>(0,60]</code> 數值 duration，不能用相對 time 或持續音。<code>onError</code> 必填；計時器／回呼失敗會停止排程並通知它。預設 horizon 為 0.2 秒（範圍 0.02–10），interval 為 0.025 秒（0.005–1），且 horizon 必須大於 interval；maxNotes 預設 32（整數 1–128），最多追蹤 128 個尚未關 gate 的自有音符。本例每個窗口至多一音，全部音符播放後回呼回傳空陣列，計時器仍運作直到 stop／dispose。兩者只取消／釋放自己的音符，不關閉 OPM；dispose 後不可重啟。移除介面時呼叫 <code>await window.disposeOPM()</code>。</p>
+<p>任何 non-running context 或 reset 都會停止前瞻排程並通知 onError，須由使用者互動明確重啟。預設 interruption:&#39;cancel&#39; 取消中斷前 gate／automation；preserve 只保留直接音符／佇列，不自動恢復前瞻計時器。</p>
+<h3 id="共用-context-與輸出接線">共用 context 與輸出接線 <a class="anchor" href="#共用-context-與輸出接線" aria-label="Link to 共用 context 與輸出接線">#</a></h3>
+<p>若宿主已有 AudioContext，可將快速範例的 module script 替換成以下區塊。按播放後音符持續到按停止；<code>disposeOPM()</code> 只清除本合成器，不會關閉宿主 context：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM } from &#39;./opm/api/index.js&#39;;
+  const context = new AudioContext();
+  const gain = context.createGain();
+  gain.gain.value = 0.3;
+  gain.connect(context.destination);
+  const status = document.querySelector(&#39;#status&#39;);
+  const opm = new OPM({
+    context, destination: null,
+    onEvent(event) {
+      if (event.type === &#39;reset&#39;) {
+        id = undefined;
+        if (event.reason === &#39;close&#39; || event.reason === &#39;failure&#39;) connected = false;
+      }
+      status.textContent = event.type === &#39;error&#39; ? event.error.message
+        : event.type === &#39;note&#39; ? `${event.id}: ${event.state}`
+        : event.type === &#39;diagnostics&#39; ? `Voices: ${event.activeVoices}`
+        : event.type === &#39;command&#39; ? `${event.command}: ${event.state} ${event.reason ?? &#39;&#39;}`
+        : event.type === &#39;context&#39; ? `Context: ${event.state}` : `Reset: ${event.reason}`;
+    }
+  });
+  const stop = document.createElement(&#39;button&#39;);
+  stop.textContent = &#39;Stop held note&#39;;
+  document.body.append(stop);
+  let id;
+  let connected = false;
+  document.querySelector(&#39;#play&#39;).addEventListener(&#39;click&#39;, async () =&gt; {
+    try {
+      await opm.resume();
+      if (!connected) { opm.connect(gain); connected = true; }
+      if (id !== undefined) opm.stop(id);
+      id = opm.playNote({ note: 60, velocity: 0.7, pan: 0.5 });
+      console.log(await opm.getDiagnostics());
+    } catch (error) { status.textContent = error.message; }
+  });
+  stop.addEventListener(&#39;click&#39;, () =&gt; { if (id !== undefined) opm.stop(id); });
+  window.disposeOPM = async () =&gt; {
+    await opm.close();
+    connected = false;
+    id = undefined;
+    gain.disconnect();
+  };
+&lt;/script&gt;</code></pre>
+<p>移除此應用程式的音訊介面時呼叫 <code>await window.disposeOPM()</code>。context／下游節點由宿主管理；不要為了停止單一合成器而暫停整個共用 context。</p>
+<h3 id="共用樂譜全域調音與安全恢復">共用樂譜、全域調音與安全恢復 <a class="anchor" href="#共用樂譜全域調音與安全恢復" aria-label="Link to 共用樂譜、全域調音與安全恢復">#</a></h3>
+<p>mixGain 是有限 0–1（預設 1），在 <strong>tanh 前</strong>縮放；下游 GainNode 只控制聆聽音量，無法還原已產生的飽和失真。tuning 替換完整設定：referenceHz（A4）20–20000 Hz，offsets 可省略表示零，否則為恰好 128 個 −4800..4800 的有限音分。小數 MIDI 線性插值相鄰偏移，127 使用自身端點。即時調音保留 phase／包絡與原音符 key scaling。</p>
+<p>保留 quick-start 的 play／status，將 module script 替換為：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM, playSequence } from &#39;./opm/api/index.js&#39;;
+  import { renderSequence } from &#39;./opm/core/index.js&#39;;
+  import { brass } from &#39;./opm/voices/brass.js&#39;;
+  const settings = { mixGain: 0.5, tuning: { referenceHz: 442 }, stealing: &#39;release-first&#39; };
+  const opm = new OPM({ ...settings, interruption: &#39;cancel&#39; });
+  const score = [
+    { type: &#39;note&#39;, id: 1, time: 0, duration: 0.4, voice: &#39;lead&#39;, note: 60.5 },
+    { type: &#39;control&#39;, id: 1, time: 0.1, controls: { pan: -0.5, expression: 0.7, ramp: 0.03 } },
+  ];
+  let playback;
+  document.querySelector(&#39;#play&#39;).addEventListener(&#39;click&#39;, async () =&gt; {
+    try {
+      await opm.start();
+      playback?.stop();
+      opm.loadVoice(&#39;lead&#39;, brass);
+      playback = playSequence(opm, score, { at: opm.context.currentTime + 0.05 });
+      const audio = renderSequence(score, { ...settings, sampleRate: opm.context.sampleRate, voices: opm.voices });
+      document.querySelector(&#39;#status&#39;).textContent = `Rendered ${audio.left.length} frames; errors ${audio.diagnostics.errors}`;
+    } catch (error) { document.querySelector(&#39;#status&#39;).textContent = error.message; }
+  });
+  window.disposeOPM = async () =&gt; { playback?.stop(); await opm.close(); };
+&lt;/script&gt;</code></pre>
+<p>樂譜使用相對秒數；note 為唯一正 ID 與有限 duration，stop／control 指向同一樂譜音符。整份驗證後才派送；限 128 notes、256 保留槽（每音符兩槽加命令）、含 gate 的 60 秒及離線 4,000,000 影格。playSequence 回傳防禦性 scoreId→noteId Map 與冪等 stop，不會對其他 caller 原子保留 worklet 容量。renderSequence 包含尾音；相同 PCM 須設定／取樣率／相對影格原點一致且無其他競爭音符。WAV 僅傳 left／right／sampleRate。</p>
+<p>以 HTTPS 在實體 iOS／Android 使用<a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html">第 08 範例（僅供 checkout）</a>，依<a href="./mobile-acceptance.html">行動裝置驗收流程與支援矩陣</a>記錄裝置／OS／瀏覽器／取樣率／政策、觀察與手動 pass／fail／unverified 判定。涵蓋鎖屏、切換 app、來電、耳機／Bluetooth、節電、長播放與主執行緒停頓。報告僅留本機；桌面、headless 與 analyser 訊號不代表實機恢復或聽感不中斷。恢復須手勢；借用 context 由宿主管理。</p>
+<h3 id="有界長樂譜">有界長樂譜 <a class="anchor" href="#有界長樂譜" aria-label="Link to 有界長樂譜">#</a></h3>
+<p>24 小時／65,536 個輸入事件以內，改用 <code>opm.js/core</code> 的 <code>prepareLongSequence</code>、<code>estimateSequenceCapacity</code> 與 <code>renderSequenceChunks</code>。估算會分別列出整段 buffer／單批 eligibility 與預設串流視窗密度，並不保證和其他 caller 競爭時的 admission。每塊 PCM 是借用 buffer，下一次 <code>next()</code> 就會覆寫；立即消費，只有需要保留時才複製。break、<code>cancel()</code> 或 AbortSignal 停止前進，<code>maxFrames</code> 可限制累計工作量；整段 PCM／WAV 預算不變。</p>
+<pre><code class="language-js">import { estimateSequenceCapacity, renderSequenceChunks } from &#39;opm.js/core&#39;;
+const score = [{ type: &#39;note&#39;, id: 1, time: 0, duration: 61, note: 60 }];
+const options = { sampleRate: 96000, chunkFrames: 4096 };
+console.log(estimateSequenceCapacity(score, options));
+let frames = 0, energy = 0;
+const render = renderSequenceChunks(score, options);
+for (const chunk of render) {
+  for (let i = 0; i &lt; chunk.frames; i++) energy += chunk.left[i] ** 2;
+  frames += chunk.frames;
+}
+console.log(frames, energy, render.diagnostics.errors);</code></pre>
+<p>瀏覽器播放時與 OPM 一起 import <code>streamSequence</code>，建立 <code>const stream = streamSequence(opm, score, { onError: console.error })</code>，再於播放按鈕手勢內 <code>await stream.start()</code>。<code>stop()</code> 僅取消此串流的音符；<code>dispose()</code> 移除 listener 並永久終止此實例。control、明確 stop 與自動 release 跨視窗保留 score ID 對應。兩種政策的 interruption／reset 都停止串流；先恢復 context，再由使用者明確重啟。完整瀏覽器配方、預設值與密度限制見<a href="./streaming-sequences.html">串流契約</a>。</p>
+<h3 id="拍點-transport-與演奏聲部">拍點 Transport 與演奏聲部 <a class="anchor" href="#拍點-transport-與演奏聲部" aria-label="Link to 拍點 Transport 與演奏聲部">#</a></h3>
+<p><code>createTransport</code>、<code>createArrangement</code>、<code>createPerformance</code>、<code>createMidiAdapter</code>、<code>requestMidiAccess</code>、<code>playSequence</code>、<code>streamSequence</code>、<code>renderSequenceInWorker</code> 與套件版本常數 <code>VERSION</code> 由根入口 <code>opm.js</code>（靜態部署為 <code>./opm/api/index.js</code>）匯出。Transport 事件以 beat 取代 time，note.duration 也以四分音符拍計算。提供 start／resume、pause／stop、seek、setTempo（從目前位置起）、setTempoMap、setLoop、pump、dispose 與 state／position／running／snapshot／ids。它使用 AudioContext 時鐘，只管理自有音符。</p>
+<p>bpm 預設 120、範圍 1–1000；tempoMap 從 beat 0 開始嚴格遞增，最多 1024 點，拍點上限 86400。timeSignature 分子 1–32，分母為不超過 32 的二次冪；horizon 0.01–10 秒、interval 0.001–horizon/2、maxSlots 1–256。pause／seek／loop 重啟包絡與 phase，不是 DSP snapshot；重建當前 scalar／ratio ramp 與剩餘時間，最新 fixed-Hz／null 政策立即套用（即使 frequency ramp 未完成），最新 ADSR 在重啟 onset 重新錨定。純核心亦匯出 beatsToSeconds／secondsToBeats／beatToBarBeat／barBeatToBeat／normalizeTempoMap。</p>
+<p>下方配方保留音樂上的一拍 count-in。目前 checkout 額外使用 startupLead（預設 min(0.05,horizon/2) 秒）將時鐘原點放在未來，避免 beat 0 冷啟動時提交到已過期時刻；歷史 v1.8.1 套件沒有這項修正。late:&#39;drop&#39; 仍會拒絕真正晚到的起音、停止 helper 並通知 onError。Count-in／startupLead 不保證宿主停頓下仍能準時；start() 完成也不是每個音符已發聲的確認。</p>
+<p><code>createPerformance(opm,{parts:16,maxKeys:128,maxKeysPerPart:128,onError})</code> 提供零起算 1–16 個聲部，各自 configurePart 設定 voice、poly／mono、legato、last／high／low 按鍵選擇 priority、glide 0–10 秒、pan ±1 與 expression 0–1；兩種 key 額度皆為 1–128。先在使用者手勢中 <code>await opm.start()</code>，再呼叫 noteOn；回傳實體 key ID，須用 <code>noteOff(part,key)</code> 釋放，同音高按鍵仍獨立。另有 updatePart、sustain、allNotesOff(part?)、getPart 與 dispose。實際 held keys 優先於踏板保留；mono legato 在原 onset ±48 半音內重用 gate／包絡／原力度與 key scaling，超出時以真實音高重觸發。被偷走的 key 會移除，不自動重入；中斷／reset 即使 preserve 也清除 helper 自有狀態。可直接執行的 Transport／Performance 配方見<a href="./host-integration.html">宿主整合</a>與<a href="./streaming-sequences.html">串流樂譜</a>。</p>
+<p>v1.8 的 <code>updateKey(part,key,controls)</code> 對單一實體按鍵套用 NoteControls；未選取的 mono key 保留控制，不改動目前 gate。<code>updatePartNotes(part,controls)</code> 更新整個聲部的自有音符（含 release 尾音）與未來音符預設。configurePart 的 <code>voiceLimit</code> 為 1–32，自有 release 尾音也佔額度，滿額 noteOn 拋出 RangeError；它不增加引擎聲部數。<code>voicePriority</code> 為 0–127（預設 0），與 last／high／low 的按鍵選擇 priority 不同。</p>
+<p>選用的 <code>createMidiAdapter(performance,await requestMidiAccess(),options)</code> 將使用者授權的 MIDI inputs 映射到聲部，支援 note、sustain、bend、wheel、volume／expression、pan、pressure 與 all-notes-off。匯入模組不會要求權限，永不要求 SysEx；disconnect／dispose 只釋放 adapter 自有按鍵。詳細配方與限制見<a href="./midi-performance.html">表情演奏與 MIDI</a>及<a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/instrument.html">第 10 範例（僅供 checkout）</a>。</p>
+<h3 id="速度曲線網格與分層編曲">速度曲線、網格與分層編曲 <a class="anchor" href="#速度曲線網格與分層編曲" aria-label="Link to 速度曲線、網格與分層編曲">#</a></h3>
+<p><code>TempoPoint</code> 為 <code>{beat,bpm,curve?,endBpm?}</code>；省略 curve 或 <code>&#39;step&#39;</code> 為定速段，<code>&#39;linear&#39;</code> 使 BPM 隨拍點線性變化至下一點 bpm 或指定 endBpm（僅 linear 可用；末點不可 linear）。beatsToSeconds／secondsToBeats 使用閉式對數積分與反函式。<code>quantizeBeat</code>、<code>swingBeat</code>、<code>swingBeatEvents</code> 從根入口 <code>opm.js</code> 匯入（純瀏覽器使用部署的 <code>./opm/api/index.js</code>），不是 <code>opm.js/core</code> 匯出；後者連同音符起點與終點一起套用 swing。</p>
+<p><code>createArrangement(opm,{layers,sections,initialSection,bpm?,tempoMap?,timeSignature?})</code> 在共用拍點網格上循環具名 layers；<code>switchSection</code>／<code>setLayer</code> 在不早於已接收音符的第一個量化邊界提交（預設 bar，也可 beat／拍數），回傳提交拍點。共用 layer 保持連續，不重觸發；移除 layer 預設在邊界 release，<code>preserveNotes:true</code> 可讓它自然結束。layer 與 note 的 voicePriority 取較大值，優先權拒絕計入 <code>snapshot.priorityDrops</code> 而不停止編曲，其他拒絕會停止並通知 onError。至多 16 layers、32 sections、65,536 events，每層循環長度至多 256 拍；只清理自有音符。Arrangement pause／resume 不還原跨越恢復點的持續音，只從後續 onset 繼續；它和 Transport 都不是 DSP checkpoint。公式、密度上限及可執行配方見<a href="./adaptive-music.html">自適應音樂</a>與<a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/adaptive.html">第 09 範例（僅供 checkout）</a>。</p>
+<p>保留 quick-start 的按鈕／輸出並替換 module script，可直接試用兩種 helper：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM, createTransport, createPerformance } from &#39;./opm/api/index.js&#39;;
+  const opm = new OPM();
+  const transport = createTransport(opm, [
+    { type: &#39;note&#39;, id: 1, beat: 1, duration: 1, note: 60 },
+    { type: &#39;note&#39;, id: 2, beat: 2, duration: 1, note: 64 }
+  ], { bpm: 120, onError: console.error });
+  const performance = createPerformance(opm, { parts: 1 });
+  performance.configurePart(0, {
+    voice: &#39;brass&#39;, mode: &#39;mono&#39;, legato: true, priority: &#39;last&#39;, glide: 0.1
+  });
+  document.querySelector(&#39;#play&#39;).addEventListener(&#39;click&#39;, async () =&gt; {
+    try {
+      transport.stop();
+      await transport.start();
+      const key = performance.noteOn(0, 67, { velocity: 0.7 });
+      performance.sustain(0, true);
+      performance.noteOff(0, key);
+      document.querySelector(&#39;#status&#39;).textContent = &#39;Release pedal to stop held note&#39;;
+    } catch (error) {
+      document.querySelector(&#39;#status&#39;).textContent = error.message;
+    }
+  });
+  const pedal = document.createElement(&#39;button&#39;);
+  pedal.textContent = &#39;Release pedal&#39;;
+  document.body.append(pedal);
+  pedal.addEventListener(&#39;click&#39;, () =&gt; performance.sustain(0, false));
+  window.disposeOPM = async () =&gt; {
+    transport.dispose();
+    performance.dispose();
+    await opm.close();
+  };
+&lt;/script&gt;</code></pre>
+<h2 id="nodejs-離線渲染">Node.js 離線渲染 <a class="anchor" href="#nodejs-離線渲染" aria-label="Link to Node.js 離線渲染">#</a></h2>
+<p>在<strong>已安裝套件的 <code>opm-app</code> 根目錄</strong>建立 <code>render.mjs</code>：</p>
+<pre><code class="language-js">import { Synth, prepareVoice } from &#39;opm.js/core&#39;;
+import { brass } from &#39;opm.js/voices/brass.js&#39;;
+
+const sampleRate = 44100;
+const synth = new Synth(sampleRate);
+const prepared = prepareVoice(brass);
+const id = synth.noteOn(prepared, 60);
+const left = new Float32Array(sampleRate);
+const right = new Float32Array(sampleRate);
+synth.render(left, right, 0, 22050);
+synth.updateNote(id, { pitch: 7, glide: 0.1, expression: 0.8 });
+synth.noteOff(id);
+synth.render(left, right, 22050, 22050);
+console.log(left.some(sample =&gt; sample !== 0), synth.errorCount);</code></pre>
+<p>在同一目錄執行 <code>node render.mjs</code>，預期顯示 <code>true 0</code>。中央聲像為左右相同，其他位置產生立體聲；此例只產生記憶體 PCM，不會自動播放或寫檔。checkout 匯入改為 <code>./dist/core/index.js</code> 與 <code>./dist/voices/brass.js</code>。使用 <code>.mjs</code> 或 <code>&quot;type&quot;:&quot;module&quot;</code>，沒有 CommonJS 入口。</p>
+<p><code>new Synth(sampleRate,maxVoices=8,{mixGain,tuning,stealing,quality=&#39;standard&#39;}={})</code> 需要有限 8000–192000 Hz 與整數 1–32 聲部（預設 8）；noteOn 接受有限小數 MIDI 0–127、嚴格力度／聲像、voicePriority 0–127（預設 0）及未占用正安全 ID。滿額且所有聲部優先權較高時拋出 <code>VoiceAdmissionError</code>，保留既有聲部。noteOff／updateNote 回傳 boolean；allNotesOff 自然 release，panic 移除所有尾音；設定 gain／tuning 不重設 phase／包絡。onVoiceEnded 每音符一次 stolen／ended／error／cancelled；lastStolenId 無搶音時為 null。</p>
+<p><code>prepareVoice(input)</code> 一次嚴格驗證並建立不可變的可信任快照；不能用型別斷言或自製物件偽造。<code>Synth.noteOn</code> 可重用此快照，原始音色輸入則仍逐次驗證。核心預先配置 <code>maxVoices + 9</code> 個狀態槽（maxVoices 個邏輯聲部、八個淡出與一個入列暫存槽；預設 17 個），重用預備音色不需每音符配置 Float64 狀態陣列，但這不是整個 JavaScript／瀏覽器零配置保證。<code>synth.updateNote(id, controls)</code> 使用前述控制範圍，成功回傳 true，未知／已終止 ID 回傳 false。</p>
+<p><code>onVoiceEnded</code> 可呼叫 noteOn／noteOff；回呼中新增的音符最早在下一影格渲染，不回頭改寫已計算的當前影格。不可在回呼中遞迴呼叫 render；引擎會拒絕。通知有固定工作上限，應保持回呼簡短。</p>
+<p><code>render(left,right,offset=0,length=nativeLeftLength-offset)</code> 需原生 Float32Array，非負安全整數範圍容納於兩個實際緩衝區。遮蔽 length／fill 不能增加工作，Proxy／偽造及需數值 coercion 的輸入拒絕。自行分段渲染／保留 release；currentFrame 為累計影格，errorCount 記錄數值失敗。</p>
+<p>若只需要單音的輔助渲染函式，在 <strong><code>opm-app</code> 根目錄</strong>另存 <code>render-note.mjs</code>：</p>
+<pre><code class="language-js">import { renderNote } from &#39;opm.js/core&#39;;
+import { brass } from &#39;opm.js/voices/brass.js&#39;;
+
+const { samples, sampleRate, diagnostics } = renderNote({
+  voice: brass,
+  note: 60,
+  duration: 0.1,
+  sampleRate: 44100
+});
+console.log(samples.length, sampleRate, diagnostics.errors);</code></pre>
+<p>執行 <code>node render-note.mjs</code>；checkout 改用 <code>./dist/...</code> 匯入。<code>renderNote({voice,note=60,duration=0.5,velocity=1,pan=0,sampleRate=44100})</code> 回傳 <code>{samples,left,right,sampleRate,diagnostics:{errors}}</code>，<code>samples === left</code>。要求完整 Schema 音色；有限的音色數值會限制到範圍，但無效版本／algorithm／feedback 仍拒絕。有限 note／duration／velocity／pan 分別限制至 0–127／0–30 秒／0–1／−1–1；note 可為小數，sampleRate 必須是整數 8000–96000。</p>
+<p>renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／四階）、standard（預設 4×／八階，保留原預設輸出）或 high（8×／八階）；不是無混疊或即時期限保證。模式取捨見<a href="./acoustic-quality.html">聲學品質</a>，CPU 須在目標宿主測量。</p>
+<p>此函式與 Synth 使用相同包絡、LFO、濾波、力度、聲像及飽和路徑。長度為 <code>ceil((duration+最長有效release+0.01)*sampleRate)</code>，包含 note-dependent rate scaling，上限 4,000,000 影格。飽和前聲像增益為 <code>sqrt(2)*cos/sin((pan+1)*pi/4)</code>；飽和後不保證感知音量恆定。</p>
+<p>其他 <code>opm.js/core</code> 公開項目：<code>normalizeVoice</code>（嚴格驗證並產生獨立複本）、<code>prepareVoice</code>、<code>NoteControls</code>／<code>PreparedVoice</code> 型別、<code>envelopeAt(time, gate, adsr)</code>（以秒為單位的時間／gate 計算 dB 包絡對應振幅）、不可變的八種訊號圖 <code>ALGORITHMS</code>、<code>HEADROOM = 0.7</code>、<code>OVERSAMPLE = 4</code>、<code>MAX_RENDER_SAMPLES = 4000000</code>，以及整數 8000–96000 取樣率驗證器 <code>sampleRateValue</code>。</p>
+<h2 id="音色格式與銀行載入">音色格式與銀行載入 <a class="anchor" href="#音色格式與銀行載入" aria-label="Link to 音色格式與銀行載入">#</a></h2>
+<p>參考 <a href="./../dist/voices/voice.schema.js">voice.schema.js</a> 的 <code>voiceSchema</code> 與 <a href="./../dist/voices/examples.js">examples.js</a> 的 <code>examples</code> 匯出。下列為<strong>單一音色 JSON 物件</strong>，四個 <code>ops</code> 順序是訊號演算法的運算子順序；若要作為銀行，必須用 <code>[</code> 和 <code>]</code> 包成<strong>陣列</strong>：</p>
+<pre><code class="language-json">{
+  &quot;version&quot;: 6,
+  &quot;name&quot;: &quot;simple&quot;,
+  &quot;algorithm&quot;: 7,
+  &quot;feedback&quot;: 0,
+  &quot;modIndex&quot;: 4,
+  &quot;lfo&quot;: { &quot;rate&quot;: 0, &quot;amDepth&quot;: 0, &quot;pmDepth&quot;: 0, &quot;waveform&quot;: &quot;sine&quot;, &quot;amTargets&quot;: [1, 1, 1, 1], &quot;pmTargets&quot;: [1, 1, 1, 1] },
+  &quot;ops&quot;: [
+    { &quot;ratio&quot;: 1, &quot;level&quot;: 0.8, &quot;detune&quot;: 0, &quot;adsr&quot;: { &quot;a&quot;: 0.01, &quot;d&quot;: 0.2, &quot;s&quot;: 0.6, &quot;r&quot;: 0.2 }, &quot;keyScale&quot;: { &quot;breakpoint&quot;: 60, &quot;leftDbPerOctave&quot;: 0, &quot;rightDbPerOctave&quot;: 6 } },
+    { &quot;ratio&quot;: 2, &quot;level&quot;: 0.4, &quot;detune&quot;: 0, &quot;adsr&quot;: { &quot;a&quot;: 0.01, &quot;d&quot;: 0.2, &quot;s&quot;: 0.5, &quot;r&quot;: 0.2 } },
+    { &quot;ratio&quot;: 3, &quot;level&quot;: 0.3, &quot;detune&quot;: 0, &quot;adsr&quot;: { &quot;a&quot;: 0.01, &quot;d&quot;: 0.2, &quot;s&quot;: 0.5, &quot;r&quot;: 0.2 } },
+    { &quot;ratio&quot;: 4, &quot;level&quot;: 0.2, &quot;detune&quot;: 0, &quot;adsr&quot;: { &quot;a&quot;: 0.01, &quot;d&quot;: 0.2, &quot;s&quot;: 0.5, &quot;r&quot;: 0.2 } }
+  ]
+}</code></pre>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th scope="col">欄位</th><th scope="col">範圍</th></tr></thead><tbody><tr><td><code>version</code>／<code>name</code></td><td>目前 canonical 版本 6；explicit 1–5 僅接受各自原有欄位。v1 無 keyScale，v1／2 無 velocitySensitivity，v1–3 無 waveform，v1–4 不接受 v5 欄位；v5 不接受 v6 targets。名稱為 1–64 ASCII 字母／數字／底線／連字號。</td></tr><tr><td><code>algorithm</code>／<code>feedback</code>／<code>modIndex</code></td><td>前兩者是 0–7 的整數；調變強度 <code>modIndex</code> 是 0–16。</td></tr><tr><td>四個 <code>ops</code> 各項</td><td>必須提供 <code>ratio</code> 0.125–32、<code>level</code> 0–1、<code>detune</code> -1200–1200 音分，以及 <code>adsr</code> 的 <code>a</code>、<code>d</code>、<code>s</code>、<code>r</code>；<code>a</code>／<code>d</code>／<code>r</code> 是 0–10 秒，<code>s</code> 是 0–1。</td></tr><tr><td><code>lfo</code></td><td>rate 0–20 Hz、amDepth 0–1、pmDepth 0–1200 音分；waveform 為 sine（預設）、triangle、saw 或 square。</td></tr><tr><td><code>ops[i].keyScale</code></td><td>可省略表示平坦；breakpoint 為 MIDI 整數 0–127，leftDbPerOctave／rightDbPerOctave 為 0–24 dB／八度。</td></tr><tr><td><code>ops[i].velocitySensitivity</code></td><td>從版本 3 起可選，0–48 dB，省略為 0；定義 velocity=0 時的運算子衰減。</td></tr><tr><td><code>ops[i].frequency</code>／<code>ops[i].rateKeyScale</code></td><td>v5 可選固定頻率 1–20000 Hz（ratio 仍必填）、速率鍵位縮放 0–4；ADSR 時間乘 <code>2 ** (-scale*(note-60)/12)</code> 並限制為最多 10 秒。</td></tr><tr><td><code>pitchEnvelope</code></td><td>v5 可選 <code>{a,d,r,initial,peak,sustain,final}</code>；時間 0–10 秒、音高 −4800..4800 音分；release 從目前音高連續開始。</td></tr><tr><td><code>lfo.delay</code>／<code>lfo.sync</code>／<code>lfo.phase</code></td><td>v5 可選 0–10 秒、note／global、0–1 圈，預設 0／note／0；delay 門控深度，不停止 phase 時鐘。</td></tr><tr><td><code>lfo.amTargets</code>／<code>lfo.pmTargets</code></td><td>v6 可選各四個 0–1 權重；boolean 輸入正規化為數字。省略為 <code>[1,1,1,1]</code>，依運算子順序套用。</td></tr></tbody></table></div>
+<p>單一音色可省略 version／name／lfo／modIndex，仍需 algorithm／feedback 與四個完整運算子。預設目前格式、modIndex 4、LFO off／sine，輸出統一版本 6；舊版 1–5 嚴格保留原始形狀，不得挾帶後來欄位。內建音色與 DX7 匯出也採 canonical v6。所有路徑拒絕錯誤型別、未知欄位、存取器及稀疏陣列，嚴格路徑另拒絕超界數字。鍵位縮放依原音符；pan 屬於音符。完整組合語意見<a href="./expressive-voices.html">表情音色參考</a>。</p>
+<p><code>parseVoiceBank()</code> 由 <code>opm.js/voices/schema.js</code>（瀏覽器靜態樹中為 <code>./opm/voices/schema.js</code>）匯出，可接受 JSON 字串或音色陣列，要求 <strong>1–128 筆完整音色</strong>且名稱不重複，回傳 <code>Map&lt;name, voice&gt;</code>，其音色為已驗證且凍結的完整物件。字串輸入最多 256 KiB（UTF-8）；陣列輸入也有數量限制。和 <code>validateVoice()</code>、<code>renderNote()</code> 相同，此路徑將<strong>有限但超界</strong>的數值限制在範圍內，與嚴格的單音色 <code>normalizeVoice()</code> 不同；不合法的 <code>version</code>／<code>algorithm</code>／<code>feedback</code>、非有限數值、錯誤型別、未知欄位仍會拒絕。<code>schema.js</code> 也提供 <code>validateVoice(voice)</code>、有限數值邊界函式 <code>bounded(value, min, max, label = &#39;number&#39;)</code>、<code>LIMITS</code>、<code>MAX_BANK_BYTES</code> 與 <code>MAX_BANK_VOICES</code>。</p>
+<p>要載入已部署的可信任 <code>examples.js</code> 模組，保留先前 <strong><code>opm-app/public/index.html</code></strong> 的 <code>#play</code> 與 <code>#status</code>，將其原本 module script <strong>完整替換</strong>為：</p>
+<pre><code class="language-html">&lt;script type=&quot;module&quot;&gt;
+  import { OPM } from &#39;./opm/api/index.js&#39;;
+  import { parseVoiceBank } from &#39;./opm/voices/schema.js&#39;;
+  import { examples } from &#39;./opm/voices/examples.js&#39;;
+
+  const opm = new OPM();
+  const play = document.querySelector(&#39;#play&#39;);
+  play.textContent = &#39;Play bank brass note&#39;;
+  const status = document.querySelector(&#39;#status&#39;);
+  play.addEventListener(&#39;click&#39;, async () =&gt; {
+    play.disabled = true;
+    try {
+      await opm.start();
+      const bank = parseVoiceBank(examples);
+      for (const [name, voice] of bank) opm.loadVoice(name, voice);
+      opm.playNote({ voice: &#39;brass&#39;, note: 60, duration: 0.7 });
+      status.textContent = &#39;Playing bank brass note&#39;;
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      play.disabled = false;
+    }
+  });
+&lt;/script&gt;</code></pre>
+<p>仍在 <code>opm-app</code> 根目錄以 <code>python3 -m http.server 8000 --directory public</code> 提供頁面。此例匯入套件所附的可信任模組；<code>parseVoiceBank</code> 仍支援外部 JSON 銀行。若接收不可信任的遠端下載，應由應用程式先限制來源、Content-Type 與下載大小，再讀取回應內容；合成引擎沒有內建網路下載 API。</p>
+<h2 id="wav-匯出與-dx7-匯入">WAV 匯出與 DX7 匯入 <a class="anchor" href="#wav-匯出與-dx7-匯入" aria-label="Link to WAV 匯出與 DX7 匯入">#</a></h2>
+<p>在 <strong>opm-app</strong> 建立 <code>export.mjs</code>，執行 <code>node export.mjs</code> 會寫出立體聲 WAV：</p>
+<pre><code class="language-js">import { writeFile, readFile } from &#39;node:fs/promises&#39;;
+import { renderNote, encodeWav } from &#39;opm.js/core&#39;;
+import { brass } from &#39;opm.js/voices/brass.js&#39;;
+import { importDX7, describeDX7 } from &#39;opm.js/voices/dx7.js&#39;;
+const audio = renderNote({ voice: brass, duration: 0.7, velocity: 0.8, pan: -0.5 });
+await writeFile(&#39;brass.wav&#39;, encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate }));
+// 有檔案時：node export.mjs /實際路徑/voice.syx
+if (process.argv[2]) {
+  const bytes = new Uint8Array(await readFile(process.argv[2]));
+  const voices = importDX7(bytes);
+  console.log(describeDX7(bytes));
+  const imported = renderNote({ voice: voices[0], duration: 1 });
+  await writeFile(&#39;imported.wav&#39;, encodeWav({ left: imported.left, right: imported.right, sampleRate: imported.sampleRate }));
+}</code></pre>
+<p>checkout 匯入改為 <code>./dist/core/index.js</code>、<code>./dist/voices/brass.js</code> 與 <code>./dist/voices/dx7.js</code>。<code>encodeWav({left,right?,sampleRate,format=&#39;pcm16&#39;})</code> 回傳小端序 RIFF 位元組，format 可為 pcm16／pcm24／float32；省略 right 為單聲道。所有格式的 Float32Array 樣本須有限且在 −1–1，超界拒絕而非削波；立體聲長度須相同。取樣率整數 8000–192000，上限 4,000,000 影格。只傳這些自有資料欄位：整個 renderNote 結果有額外欄位，會被拒絕。編碼不會自動寫檔；短預覽可使用有明確記憶體預算的 Blob，長檔案須直接寫 sink。</p>
+<p>增量 <code>createWavEncoder({sampleRate,channels:1|2,format,totalFrames})</code> 由 <code>opm.js/core</code> 匯出：先寫一次 <code>header()</code>，每次 <code>encode({left,right?})</code> 消費 1–65536 影格並回傳有界位元組，最後寫 <code>finalize()</code>（精確影格數與 RIFF padding）。它不保留完整 PCM／輸出，不受完整 buffer 的四百萬影格限制；仍受 RIFF32 大小與 24 小時加 release 預算限制。</p>
+<p>瀏覽器長檔案用 <code>renderSequenceInWorker(score,{sampleRate,chunkFrames,quality,format,sink,signal,onProgress})</code>，sink 提供 <code>write(bytes)</code> 與可選 close／abort，write 可回傳 Promise 施加 backpressure；最多一塊編碼資料未確認。progress 提供 frames／totalFrames／bytesWritten／errors，結果為 capacity／format／bytesWritten／diagnostics。AbortSignal 取消立即終止 Worker 並拒絕，不等待卡住的 write／abort；sink 負責回滾／失效化未完成寫入。此 helper 僅限瀏覽器，純核心／Node 離線工具仍可用。可指定同源靜態 workerUrl，預設為樹內 <code>worker/render.js</code>。增量 WAV 契約與可執行的 Worker file sink／取消配方見<a href="./host-integration.html">宿主整合</a>，長 PCM 消費配方見<a href="./streaming-sequences.html">串流樂譜</a>。</p>
+<p>Worker 在模組載入／解析／求值後送出 <code>{type:&#39;ready&#39;,protocol:1}</code>，宿主收到有效 ready 才傳送樂譜。<code>startupTimeoutMs</code> 是選用整數 1–2,147,483,647 ms 的模組啟動 watchdog，僅從 Worker 建立量到 ready，逾時以 TimeoutError 拒絕並終止 Worker／abort sink，不限制渲染或慢速寫入。<code>phaseDiagnostics:true</code> 在成功結果的 <code>diagnostics.phases</code> 保留 initializing／rendering／writing／closing 與總時間；<code>onPhase</code> 同步通知轉換及 completed／cancelled／failed，回呼拋錯會使工作失敗。這些是宿主 wall-clock 時間，並非 DSP benchmark。</p>
+<p><strong>沒有內建整體期限或自動重試</strong>；可用 <code>signal:AbortSignal.timeout(300000)</code> 對整份工作設五分鐘政策。取消不等待卡住的 write／abort；sink 仍須失效化已寫入的部分輸出。完整診斷、deadline 與回滾配方見<a href="./worker-diagnostics.html">Worker 診斷</a>。</p>
+<p><a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html">第 08 範例（僅供 checkout）</a> 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。</p>
+<p><code>importDX7(Uint8Array)</code> 只接受單個框架／checksum 正確的 <strong>163-byte 單音色</strong>或 <strong>4104-byte／32 音色銀行</strong>；拒絕原始、串接或非 7-bit payload，輸出完整版本 6 音色。describeDX7 回傳 name／sourceAlgorithm／algorithm／selectedOperators／droppedOperators／warnings；原 algorithm 1–32、轉換後 0–7，operator 編號依 DX7 的 1–6。</p>
+<p>這仍是<strong>六運算子轉四運算子的有損音樂啟發式轉換</strong>，不是 DX7 合成／模擬。固定 Hz 運算子會保留；力度／速率鍵位縮放、減少階段的 pitch envelope 與 LFO delay／sync 採近似。下降 saw／sample-and-hold 波形以其他波形替代並附 warning；路由、oscillator sync、transpose 與包絡細節仍有損。轉換器將所選運算子的 AM sensitivity 簡化成共用深度，不保留逐運算子 AM，也不映射至選擇性 v6 amTargets。先看 descriptions、<a href="./expressive-voices.html">表情音色與轉換限制</a>及<a href="./voice-quality.html">音色品質</a>再試聽；不可信任檔案／下載仍須先限制大小。</p>
+<h2 id="品質與發佈驗收">品質與發佈驗收 <a class="anchor" href="#品質與發佈驗收" aria-label="Link to 品質與發佈驗收">#</a></h2>
+<p>在 checkout 執行維護指令，不是在已安裝的套件中：</p>
+<p>所有程式皆使用 strict TypeScript；compile 輸出忽略追蹤的 .dev，npm test 編譯並選擇行為測試，不用裸 node --test。目前 build 由實作產生宣告、保留引擎路徑並建置 13 個 demo entry scripts，再由 Markdown 與輸出宣告產生靜態 HTML 文件；歷史 v1.8.1 為 12 個 scripts。每個 JS 配對 map／型別，typecheck 包含 source／tools／tests／demo／公開型別；使用端仍只需 JS，不需建置工具鏈。</p>
+<pre><code class="language-sh">npm ci
+npm run build
+npm test
+npm run typecheck
+npm run security -- --package-smoke
+npx --no-install playwright install --with-deps chromium
+npm run browser-smoke -- chromium
+npm run benchmark</code></pre>
+<p>可改用 firefox／webkit 安裝與測試其他引擎。CI 設定 Node 22／24／26 與三種瀏覽器，但設定本身不代表執行成功；實測版本與結果以 CHANGELOG 為準。瀏覽器驗收觀察真正 AudioWorklet 訊號、有限輸出、生命週期／release 與發佈路徑。發佈前置條件見<a href="./publishing.html">發佈指南</a>；本儲存庫沒有 npm publish workflow，本文件也不表示已設定 registry 授權或已執行 npm publish。</p>
+<p>Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽器函式庫並不足夠。CI 安裝 <code>pulseaudio</code>，執行 <code>pulseaudio --start --exit-idle-time=-1</code>、<code>pactl load-module module-null-sink sink_name=opm_ci</code>、<code>pactl set-default-sink opm_ci</code>，並以 <code>pactl info</code> 確認就緒後才執行 smoke。Null sink 僅丟棄喇叭輸出，仍保留原生音訊時鐘與真正 worklet graph；若初始化／resume 卡住，log 會列出等待階段及 context 狀態。</p>
+<p>效能報告列出暖機後 128 影格區塊 p95／p99／最慢值與超過 <code>128/sampleRate</code> 秒的次數；<code>OPM_BENCH_BLOCKS</code>、<code>OPM_BENCH_WARMUP</code>、<code>OPM_BENCH_SAMPLE_RATE</code> 調整負載，p99／worst budget ratio 可設主機相關門檻。本機預設只報告；CI 設定 48 kHz 的 <code>OPM_BENCH_P99_BUDGET_RATIO=1</code>（2.667 ms），最慢值／GC 停頓僅報告，非所有平台即時保證。頻譜驗收比較 48 kHz 下折疊到 18 kHz 的 30 kHz 振盪器與同強度 1760 Hz 控制，要求至少 30 dB 衰減，不能宣稱所有 FM 無混疊。</p>
+<p>另可在 checkout 執行 <code>npm run sound-quality</code>、<code>npm run voice-quality</code>、<code>npm run browser-stress -- chromium</code> 與 <code>npm run vite-smoke -- chromium</code>。品質矩陣涵蓋多取樣率、演算法、回授、音高、力度與多音；音色工具提供低／中／高音域與力度的 peak／RMS dBFS、建議宿主 trim 及 DX7 限制報告，並不自動重寫音色音量。詳細方法見<a href="./voice-quality.html">音色品質指南</a>。已觀察到的矩陣通過與瀏覽器有限訊號，只證明所測條件；主執行緒事件間隔不等於 worklet CPU／GC 時間，也不能證明所有平台零爆音、任意 FM 無混疊或全部音色等響度。</p>
+<p>獨立驗收含 Bessel PM、收斂／全強度回授能量界限、獨立四運算子串接／分支／多 carrier 參考，以及兩段 120 秒 LFO／glide 串流。4× 八階 Butterworth decimator 以相位／延遲取捨換取較平坦的可聽 passband 與受控 stopband 衰減；詳見<a href="./acoustic-quality.html">聲學參考數學與限制</a>。這些不是任意音色、聽感、實體裝置或硬體保真保證。</p>
+<h2 id="壓縮部署">壓縮部署 <a class="anchor" href="#壓縮部署" aria-label="Link to 壓縮部署">#</a></h2>
+<p><code>dist/</code> 每個最小化 <code>.js</code> 都有對應 <code>.js.map</code> 與 TypeScript 自動產生的 <code>.d.ts</code>，包含 demo scripts。引擎保留來源模組路徑，不產生 hashed chunks；demo 無公開匯出，其宣告如實為 <code>export {};</code>。建置不產生 JSON 資產或壓縮側檔。Source maps 映射回並內嵌原始 TypeScript；發佈 maps 即公開這些原始碼供除錯。需要壓縮時由網站主機處理，程式仍匯入原本的 <code>.js</code> URL。伺服器送出壓縮內容時，須提供對應 <code>Content-Encoding</code>、<code>Vary: Accept-Encoding</code> 與 JavaScript MIME 類型；未壓縮回應不可標示為已壓縮。基本的 Python HTTP 伺服器可直接提供一般模組。整套 <code>dist</code> 須維持同一建置版本；詳見 README 的<a href="./readme.html#optimized-distribution">最佳化發佈</a>。</p>
+<h2 id="疑難排解">疑難排解 <a class="anchor" href="#疑難排解" aria-label="Link to 疑難排解">#</a></h2>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Scrollable table"><table><thead><tr><th scope="col">現象</th><th scope="col">修正方式</th></tr></thead><tbody><tr><td><code>file://</code>、非安全來源或 AudioWorklet 不可用</td><td>使用支援 AudioWorklet 的現代瀏覽器，由 HTTPS 或 localhost 提供整個頁面與檔案。</td></tr><tr><td>瀏覽器無法解析 <code>opm.js</code> 裸套件名稱</td><td>使用複製的 <code>./opm/api/index.js</code> 相對 URL；如自行設定 import map，也要確保 worklet 的完整模組樹可讀取。</td></tr><tr><td>worklet／模組 404，或拿到 HTML、MIME 類型錯誤</td><td>重新複製完整 <code>dist</code> 目錄並確認站點路徑；不要讓 SPA rewrite 將資產請求改送 <code>index.html</code>。</td></tr><tr><td>尚未啟動就播放、瀏覽器自動播放被擋</td><td>在點擊事件內 <code>await opm.start()</code> 後才呼叫 <code>playNote()</code>。</td></tr><tr><td>音高、名稱、延遲、時長或未知音色出錯</td><td>依<a href="#瀏覽器-api-與自訂音色">瀏覽器 API</a>檢查範圍，先註冊自訂音色。</td></tr><tr><td>多音符遺失</td><td>檢查事件的 rejected／stolen 與診斷；注意 maxVoices 1–32（預設 8）、voicePriority 拒絕、聲部自有 voiceLimit 及有界事件／ID，分批排程。</td></tr><tr><td>Node 無聲、找不到 WAV</td><td>PCM 不會自動播放／寫檔；依上方 WAV 範例編碼並儲存。</td></tr><tr><td>Processor 失敗</td><td>處理 onEvent error 與拒絕的診斷請求，關閉／重啟；不要以不安全 fallback 掩蓋錯誤。</td></tr><tr><td>npm 回報 E404</td><td>不假設 registry 有此套件；依<a href="#安裝與範例頁面">安裝步驟</a>安裝 GitHub Release tarball 或 checkout 封裝的本機 tarball。</td></tr><tr><td>音色銀行格式錯誤</td><td>必須是完整音色組成的<strong>陣列</strong>，並符合名稱、欄位、數量與大小限制；單一 JSON 物件須包入 <code>[...]</code>。</td></tr><tr><td>壓縮回應顯示亂碼</td><td>設定正確的 <code>Content-Encoding</code> 與 MIME 類型，或直接提供未壓縮的 <code>.js</code> 模組。</td></tr></tbody></table></div></main></div></body></html>

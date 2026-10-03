@@ -2,6 +2,36 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+These additions describe the working tree, not the immutable v1.8.1 release archive. Package metadata and `VERSION` remain 1.8.1; no npm publication is performed.
+
+### Integration and musical workflows
+
+- Add bounded Transport `startupLead` for cold starts and reconstructed playback. The musical position stays at the requested beat during count-in; genuine late/drop errors remain visible.
+- Add independent per-note and Arrangement layer gain, quantized gain changes and section fades/crossfades, including existing notes and release tails without overwriting authored expression.
+- Add declarative MIDI CC mappings with scalar/operator targets and captured-baseline reset. Adapter-owned notes can be released under a held pedal without cancelling another input's keys or pedal state.
+- Add version-1 self-contained score projects, deterministic serialization and a shared tempo-integrating beat compiler for live/offline workflows.
+- Add the independent `opm.js/midi-file` SMF type 0/1 PPQN import/export adapter, with bounded parsing and explicit warnings or rejection for unsupported content.
+- Keep beat-event type ownership in the environment-independent core. Separate Node consumer checks compile core/project/MIDI declarations without DOM or Web Audio globals, including an installed-package check.
+- Add two original short pieces with play/stop, project save/load and Worker PCM16 WAV export. These are musical examples, not a listening-quality certification.
+
+### Documentation and acceptance
+
+- Generate navigable, locally searchable HTML guides and a full compiler-derived API reference, with prominent online-demo links. Markdown remains the documentation source.
+- Add condition-grouped device and human-listening evidence review tools. Conflicting, incomplete, automated and unassessed evidence does not become a physical-device or listening PASS.
+- Capture the actually applied gain/tuning after Play and after partial settings failures, rather than stale session defaults.
+
+### Observed verification and review boundaries
+
+- Local behavioral suite: 381 passing tests. Dependency audit: zero vulnerabilities; runtime dependency tree: empty. Numerical sound-quality checks cover 2,505 matrix rows and 24 live-control cases; preset-quality output is accepted.
+- Native Chromium AudioWorklet observations cover beat-0 startup, gain mute/resume without retrigger, pedal-owned MIDI cleanup, both original pieces and project round trips. The actual Arrangement UI produces signal → exact silence → signal for a solo pad layer and switches/fades sections across pause/resume. Project JSON and a valid Worker PCM16 WAV were downloaded to disk; the documented Node chunk-WAV recipe also produced a finite, correctly framed file.
+- Default-gain PCM remains bit-identical in 333 baseline comparison renders. Node CPU measurements are report-only host observations, not real-time or mobile support guarantees.
+- FinalImprovementInputs approved scoped static A/B; FinalImprovementDspSupply approved scoped static C/D for an isolated immutable canonical candidate after the pedal ownership, workload-recording, generated-link and DOM-free type-boundary fixes. Reviewers ran no runtime gates. Numbered generated-file copies unexpectedly reappeared; original/restored trees were preserved outside the checkout. Live-tree packaging remains blocked by those copies and is not covered by isolated-candidate approval.
+- The isolated candidate passes the 141-asset build, all behavioral/type checks and installed-package/runtime/asset/DOM-free-Node declaration gates. Native Chromium 150 smoke and the bounded 768-note stress gate pass with zero DSP errors; the intentional late/drop remains counted. HTML search and declaration-anchor navigation also work from `file://` at a 390-pixel viewport without page overflow.
+- Native matched/dry A/B previews produce finite signal, but numerical measurement leaves every human criterion unassessed and refuses unconfirmed/empty finding exports. The actual desktop device capture validates as 0/36 PASS and remains unverified; neither observation is physical iOS/Android, physical MIDI or human-listening evidence.
+- Physical-device captures and genuine human listening findings are still required before those acceptance statuses or trim recommendations can be promoted. No version bump, commit, deployment, release or npm publication is performed by this work.
+
 ## v1.8.1
 
 Package version 1.8.1. Documentation and packaging patch; no runtime API, voice-format, DSP or scheduling behavior changes. The original v1.8 tag and archive remain immutable. GitHub release distribution is not npm registry publication.

@@ -10,6 +10,19 @@ OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis wit
 
 Usage guides: [English](./doc/usage.en.md) · [繁體中文](./doc/usage.zh-TW.md).
 
+**Online demos (HTTPS): [opm.js-package.xyz](https://opm.js-package.xyz/).** Click a playback button to grant audio startup; physical-device and listening acceptance remain separate from a working web page.
+
+## Development additions (unreleased)
+
+This working tree retains package version 1.8.1; new APIs below require a build of the current source checkout and are **not** included in the historical v1.8.1 release tarball. No npm publication, new release or deployment is implied. Run `npm ci` and `npm run build` before using checkout additions; `npm pack` builds a local archive of this working tree.
+
+- Portable score projects and beat-to-second compilation: [score projects](./doc/score-projects.md).
+- Standard MIDI file import/export (format 0/1, PPQN), with explicit mapping and unsupported-data policies: [MIDI files](./doc/midi-files.md).
+- Transport startup lead and exact arrangement layer gains/crossfades: [adaptive music](./doc/adaptive-music.md).
+- Configurable MIDI CC mappings and independent live `NoteControls.gain` (0–1, default 1): [MIDI performance](./doc/midi-performance.md).
+- The current checkout adds example 13: two original songs, Play/Stop, score-project save/load and WAV export.
+- Static [HTML documentation](./doc/index.html) and a complete [generated API reference](./doc/api.html) are rebuilt after distribution emit and included under `doc/` in locally built packages. Markdown remains the source of truth. Open `doc/index.html` locally or serve the whole `doc/` directory; navigation and local search require no server or runtime dependencies.
+
 Choose a workflow: [try the demos](#try-the-checkout) · [install into an npm project](#install-into-an-npm-project) · [deploy in a browser](#use-in-a-browser) · [render in Node.js](#render-in-nodejs) · [API reference](#api-reference) · [troubleshooting](#troubleshooting).
 
 ## About
@@ -200,6 +213,8 @@ To run the same script from a checkout instead, change the imports to `./dist/co
 
 ## API reference
 
+The following reference describes the current source checkout. Unreleased additions are identified above and do not change the historical release archives. The [compiler-generated reference](./doc/api.html) includes every public root/core/voice/tool export and its full declarations; it is refreshed by `npm run build`.
+
 All times are in seconds unless stated otherwise. Browser and Node examples intentionally use different import styles:
 
 | Exports | Installed npm import | Browser URL in the layout above |
@@ -239,6 +254,8 @@ At most `maxVoices` logical voices (default 8, opt-in up to 32, including releas
 `late: 'start'` preserves the full duration after the actual delayed start; `late: 'drop'` rejects a missed start with reason `late`, including worklet-delivery delays. Same-frame stops precede onsets, then controls. Scheduled stops/controls obey the same 60-second future horizon and 256-event bound.
 
 `NoteControls` accepts nonempty subsets of `pitch` (−48..48 semitones), `glide` (0..10 seconds, requires pitch), `expression` (0..1), `pan` (−1..1), `modulation` (0..2), `operatorLevels` (four 0..2 multipliers), `feedback` (continuous 0..7), `lfoRate` (0..20 Hz), `amDepth` (0..1), `pmDepth` (0..1200 cents), `operatorRatios` (four 0.125..32 values), `operatorFrequencies` (four 1..20000 Hz values or `null` to restore ratio mode), and `operatorADSR` (four complete ADSR objects). `ramp` (0..10 seconds) independently interpolates supplied rampable controls; glide remains linear in semitones. Omitted controls retain state and oscillators keep phase/feedback history. ADSR edits **reanchor** from current dB: held notes restart attack, released notes begin their new key-scaled release; zero release silences the source and drains the filter. ADSR is not a rampable control. Fixed-Hz controls still follow live pitch but not tuning-table transposition. There is no global `setLFO()`. See [expressive controls](./doc/expressive-voices.md) and [host integration](./doc/host-integration.md).
+
+Unreleased checkout addition: `gain` is an independent 0–1 multiplier, default 1, using the same `ramp` range. It composes with expression rather than replacing it and does not restart phase or envelopes.
 
 `createLookaheadScheduler(opm, callback, { onError, horizon = 0.2, interval = 0.025, maxNotes = 32 })` returns `{ running, start(), stop(), dispose() }`. Its callback receives the half-open absolute window `{ from, to, maxNotes }` and returns at most `maxNotes` notes with `at` in that window and a numeric duration. Horizon is 0.02–10 seconds; interval is 0.005–1 second and less than horizon; maxNotes is an integer 1–128. At most 128 gates remain outstanding. Call `start()` from a gesture and handle its rejected promise; callback/admission errors stop the scheduler and reach required `onError`. Timer stalls skip missed windows rather than bursting old notes. Stop/dispose cancel only its notes and never close OPM. See the checkout-only [song demo](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/song.html) and both usage guides for executable recipes.
 
@@ -320,11 +337,34 @@ console.log(frames, energy, render.diagnostics.errors);
 
 `streamSequence(opm, score, { at, horizon, interval, maxSlots, signal, onError })` returns `{ running, ids, start(), pump(), stop(), dispose() }`. It validates the whole bounded long score, then schedules note/control/stop windows using held gates and incremental releases, preserving cross-window ID mappings and only cancelling its own notes. Start from a gesture; context interruption/reset stops the stream and requires explicit restart. Shared worklet admission remains bounded and is not atomically reserved against unrelated callers. See [streaming contracts, capacity and browser recipe](./doc/streaming-sequences.md) and checkout-only [example 08](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html).
 
+### Portable score projects and MIDI files (unreleased)
+
+`parseScoreProject(source: string | object)` returns a canonical frozen `ScoreProject` with `version: 1`, beat `events`, normalized `tempoMap`, `timeSignature`, named complete `voices`, and synthesis `settings` (`sampleRate`, `quality`, `maxVoices`, `mixGain`, `tuning`, `stealing`). `serializeScoreProject(project)` emits bounded canonical JSON. Projects are limited to 8 MiB, 65,536 events and 128 voices (256 KiB total voice JSON); notes refer to stored voice names, with omitted voice requiring stored `brass`. Missing tempo/meter/settings normalize to 120 BPM, 4/4 and the normal synthesis defaults.
+
+```js
+import { parseScoreProject, serializeScoreProject, compileBeatSequence } from 'opm.js/core';
+import { brass } from 'opm.js/voices/brass.js';
+
+const project = parseScoreProject({
+  version: 1,
+  voices: { brass },
+  events: [{ type: 'note', id: 1, beat: 0, duration: 2, note: 60 }],
+});
+const seconds = compileBeatSequence(project.events, {
+  tempoMap: project.tempoMap, voices: project.voices,
+});
+const saved = serializeScoreProject(project);
+```
+
+`compileBeatSequence(events, { tempoMap?, bpm?, voices? })` validates beat events and returns second-based `SequenceEvent[]` for existing full/chunked/Worker rendering. Live Transport uses the original beat events and tempo map; load the project's named voices into OPM first. Keep the project's synthesis settings when choosing the live/offline engine. See [score projects](./doc/score-projects.md) for complete recipes and bounds.
+
+`importMidiFile(bytes, options?)` / `exportMidiFile(events, options?)` are exported from root, core and `opm.js/midi-file`. Import returns `{ events, tempoMap, timeSignature, warnings }`; format 0/1 PPQN only, with strict byte/track/event budgets and malformed/truncated rejection. `channelVoices`/`defaultVoice` map channels to named FM voices; program changes do not select FM patches. Default import applies sustain to durations, warns about unsupported data and rejects unclosed notes; explicit policies may reject unsupported data or close notes at the end. Export maps named voices through `voiceChannels` and rejects inexpressible controls, fractional notes, pan/priority, ambiguous same-pitch overlap and linear tempo ramps rather than silently losing them. This is a score adapter, not a MIDI driver or SysEx transmitter. See [MIDI files](./doc/midi-files.md).
+
 ### Musical Transport and performance policies
 
 `createTransport(opm, beatScore, options)` uses quarter-note beats for event positions and note durations. It provides `start()`/`resume()`, `pause()`, `stop()`, `seek(beat)`, `setTempo(bpm)`, `setTempoMap(points)`, `setLoop({ enabled, from, to })`, `pump()` and `dispose()`, with defensive state/cursor/ID snapshots. BPM is 1–1000 (default 120); tempo maps start at beat 0 and contain at most 1024 increasing points. The AudioContext clock drives bounded scheduling; pause/seek/loop affect only owned notes. Restarting reconstructs scalar/ratio ramps and remaining durations but restarts envelopes/phases; unfinished fixed-Hz transitions restore the latest Hz/null policy immediately. This is **musical seeking**, not a DSP-state snapshot. See [Transport contracts](./doc/streaming-sequences.md).
 
-Transport uses `late:'drop'` and starts its origin at the current AudioContext time; cold-start beat-0 onsets can be rejected as late and stop it through `onError`. The usage-guide recipes leave a one-beat count-in. This is scheduling headroom, not a deadline guarantee or a change to the engine's behavior.
+In the current checkout, `TransportOptions.startupLead` is a finite 0–10 seconds, default `min(0.05, horizon / 2)`. Startup, resume, seek and clock reconstruction anchor in the future and keep musical position fixed during that lead, avoiding the historical cold-start beat-0 scheduling defect. Set 0 to opt out. `late:'drop'` still rejects genuinely late admissions; this is not a deadline guarantee. The historical v1.8.1 tarball lacks this fix.
 
 The root and core export `beatsToSeconds`, `secondsToBeats`, `normalizeTempoMap`, `beatToBarBeat` and `barBeatToBeat`. Meter denominators are powers of two through 32; numerator is 1–32. Positions are bounded to 86400 quarter-note beats.
 
@@ -340,9 +380,13 @@ The root and core export `beatsToSeconds`, `secondsToBeats`, `normalizeTempoMap`
 
 `createArrangement(opm, { layers, sections, initialSection, bpm?, tempoMap?, timeSignature? })` loops named layers on one global beat grid and switches sections or toggles layers at the first beat/bar boundary that is not earlier than the notes already admitted. Shared layers are one continuous schedule, so their sounding notes are not retriggered. `TempoPoint` accepts `curve: 'linear'` (BPM changes linearly per beat; closed-form logarithmic integral) and `endBpm`; `quantizeBeat`, `swingBeat` and `swingBeatEvents` shape grids. `createTransport` and `createArrangement` are musical restarts, **not** DSP checkpoints. Details, formulas and the exact pause/seek contract: [adaptive music](./doc/adaptive-music.md); try checkout-only [example 09](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/adaptive.html).
 
+Unreleased: `ArrangementLayer.gain` is 0–1 (default 1). `switchSection` and `setLayer` accept `fade` in seconds (0–10, default 0), and `setLayerGain(name, gain, { quantize?, fade? })` returns the committed beat. Shared layers continue without retriggering; layer gain multiplies independent note expression and includes owned release tails. Arrangement reserves authored `gain` controls for layer envelopes; use `expression` inside layer scores.
+
 ### Expressive performance and Web MIDI
 
 `performance.updateKey(part, key, controls)` and `performance.updatePartNotes(part, controls)` apply any `NoteControls` to one key or to a whole part; `configurePart` accepts `voiceLimit` (1–32, release tails count) and `voicePriority`. `createMidiAdapter(performance, await requestMidiAccess(), options)` maps channel-voice MIDI (notes, sustain, bend, wheel, volume/expression, pan, pressure, all-notes-off) from user-granted inputs to parts. Importing never requests access, SysEx is never requested, and disconnect or `dispose()` releases only the keys the adapter owns. See [expressive performance and MIDI](./doc/midi-performance.md) and checkout-only [example 10](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/instrument.html).
+
+Unreleased: `MidiAdapterOptions.controllerMap` accepts at most 128 `MidiControllerMapping` entries. Each names `controller`, scalar `field` (including `gain`) or tuple `field` plus zero-based `operator`, explicit `min`, `max`, `ramp`, and optional `reset`. Reserved CC64/120/121/123 cannot be remapped; duplicates reject. A mapping overrides that CC's ordinary default only. CC121 restores captured effective part defaults or the supplied reset; fixed-Hz `reset:null` restores ratio mode. `performance.getPartControls(part)` returns a detached frozen snapshot of effective part controls, not per-key overrides. See the MIDI guide for field bounds and reset behavior.
 
 ### Worker diagnostics and deployment
 
@@ -371,9 +415,9 @@ This remains an **approximate six-to-four-operator conversion**, not DX7 synthes
 
 ## Optimized distribution
 
-Every `.js` in `dist/` has a matching `.js.map` and compiler-generated `.d.ts`, including twelve bundled example entry points. Engine modules preserve source paths; demo-only helpers are bundled into those entry points rather than shipped as separate modules or orphan declarations. Safe minification retains composed maps with embedded TypeScript; the empty type-only worklet-globals module has no source mappings. Deploy the entire matching tree; publishing maps exposes its sources. Do not edit generated files. Build/package smoke rejects missing map/declaration companions.
+Every `.js` in `dist/` has a matching `.js.map` and compiler-generated `.d.ts`, including thirteen bundled example entry points in the current checkout (twelve in historical v1.8.1). Engine modules preserve source paths; demo-only helpers are bundled into those entry points rather than shipped as separate modules or orphan declarations. Safe minification retains composed maps with embedded TypeScript; the empty type-only worklet-globals module has no source mappings. Deploy the entire matching tree; publishing maps exposes its sources. Do not edit generated files. Build/package smoke rejects missing map/declaration companions.
 
-Engine, worklet, demos, tests and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s approach, declarations derive from implementation. Node.js 22+ is required. `tsconfig.json` checks source/emits declarations; `tsconfig.dev.json` emits ignored `.dev/`. ESM imports retain `.js` specifiers. Use `npm test`, not bare `node --test`; `npm run typecheck` includes tools/tests/demos/public consumers. The build produces twelve `dist/demo/` entry points; checkout `index.html` is their catalog.
+Engine, worklet, demos, tests and development scripts use strict TypeScript. Following [XYZ.js](https://github.com/YueyuHoshizora/XYZ.js)'s approach, declarations derive from implementation. Node.js 22+ is required. `tsconfig.json` checks source/emits declarations; `tsconfig.dev.json` emits ignored `.dev/`. ESM imports retain `.js` specifiers. Use `npm test`, not bare `node --test`; `npm run typecheck` includes tools/tests/demos/public consumers. The current build produces thirteen `dist/demo/` entry points plus static HTML/search under `doc/`; checkout `index.html` is the demo catalog. Copy the complete `doc/` directory together with top-level Markdown/legal files when hosting generated guides.
 
 In the **repository checkout**, not the installed npm package:
 

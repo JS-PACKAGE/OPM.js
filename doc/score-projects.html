@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Replayable score projects — OPM.js</title><link rel="stylesheet" href="site.css"><script src="search-data.js" defer></script><script src="site.js" defer></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">OPM.js documentation</a><a href="https://opm.js-package.xyz/">Online demos</a></header><div class="layout"><aside><form role="search"><label for="docs-search">Search guides and API exports</label><input id="docs-search" type="search" autocomplete="off" aria-controls="search-results"><p id="search-status" role="status" aria-live="polite"></p><ul id="search-results"></ul></form><nav aria-label="Documentation"><ul><li><a href="./index.html">OPM.js documentation</a></li><li><a href="./readme.html">OPM.js</a></li><li><a href="./security.html">SECURITY.md — OPM.js Security Policy &amp; Review Mechanism</a></li><li><a href="./changelog.html">Changelog</a></li><li><a href="./acoustic-quality.html">Acoustic references and decimation</a></li><li><a href="./adaptive-music.html">Adaptive music, tempo curves and the seek contract</a></li><li><a href="./audio-buses.html">Polyphony budgets, voice priority and independent buses</a></li><li><a href="./compatibility.html">Compatibility policy</a></li><li><a href="./expressive-voices.html">Voice v6 and expressive controls</a></li><li><a href="./host-integration.html">Host integration</a></li><li><a href="./midi-files.html">Standard MIDI files</a></li><li><a href="./midi-performance.html">Expressive performance and optional Web MIDI</a></li><li><a href="./mobile-acceptance.html">Physical-device audio recovery acceptance</a></li><li><a href="./publishing.html">Publication and package verification</a></li><li><a href="./score-projects.html" aria-current="page">Replayable score projects</a></li><li><a href="./sound-design.html">Sound design workflow</a></li><li><a href="./streaming-sequences.html">Bounded sequences</a></li><li><a href="./usage.en.html">OPM.js usage guide (English)</a></li><li><a href="./usage.zh-TW.html">OPM.js 使用說明（繁體中文）</a></li><li><a href="./voice-quality.html">Preset and conversion acceptance</a></li><li><a href="./worker-diagnostics.html">Worker render diagnostics, deadlines and rollback</a></li><li><a href="./api.html">Generated API reference</a></li></ul></nav><nav aria-label="On this page"><h2>On this page</h2><ul><li class="depth-1"><a href="#replayable-score-projects">Replayable score projects</a></li><li class="depth-2"><a href="#create-save-and-load">Create, save and load</a></li><li class="depth-2"><a href="#replay-with-transport">Replay with Transport</a></li><li class="depth-2"><a href="#node-load--compile--chunk-wav">Node: load → compile → chunk WAV</a></li><li class="depth-2"><a href="#original-composition-showcase">Original composition showcase</a></li></ul></nav></aside><main id="content" tabindex="-1"><p class="source">Generated from <a href="./score-projects.md">Markdown source</a>. Edit the source, not this HTML.</p><h1 id="replayable-score-projects">Replayable score projects <a class="anchor" href="#replayable-score-projects" aria-label="Link to Replayable score projects">#</a></h1>
+<p>Current checkout / Unreleased. A version 1 <code>ScoreProject</code> stores musical events, a tempo map, meter, named complete voice snapshots and synthesis settings in one self-contained JSON file. The pure APIs import from <code>opm.js/core</code> in Node without an <code>AudioContext</code>, DOM or Worker.</p>
+<h2 id="create-save-and-load">Create, save and load <a class="anchor" href="#create-save-and-load" aria-label="Link to Create, save and load">#</a></h2>
+<pre><code class="language-ts">import { parseScoreProject, serializeScoreProject } from &#39;opm.js/core&#39;;
+import { brass } from &#39;opm.js/voices/brass.js&#39;;
+
+const project = parseScoreProject({
+  version: 1,
+  voices: { lead: brass },
+  events: [
+    { type: &#39;note&#39;, id: 1, voice: &#39;lead&#39;, note: 60, beat: 0, duration: 4 },
+    { type: &#39;control&#39;, id: 1, beat: 2, controls: { expression: 0.6, ramp: 0.2 } },
+  ],
+  tempoMap: [{ beat: 0, bpm: 90, curve: &#39;linear&#39; }, { beat: 4, bpm: 120 }],
+  timeSignature: { numerator: 4, denominator: 4 },
+  settings: { sampleRate: 44100, quality: &#39;standard&#39;, maxVoices: 8,
+    mixGain: 0.35, stealing: &#39;release-first&#39;, tuning: { referenceHz: 440 } },
+});
+const json = serializeScoreProject(project);
+const replay = parseScoreProject(json);</code></pre>
+<p>The parser accepts a JSON string or a plain own-data object. <code>version</code>, <code>events</code> and <code>voices</code> are required. Omitted tempo, meter and settings normalize to 120 BPM, 4/4, 44100 Hz, <code>standard</code>, eight voices, mixGain 1, <code>oldest</code> stealing and 440 Hz with zero tuning offsets. Canonical output contains all settings and the 128-entry tuning table. Voice names are sorted, controls use stable key order, and saved defaults are explicit. Event array order is retained for deterministic simultaneous-event ordering.</p>
+<p>Every note uses a stored voice name. Omitted note voice means <code>brass</code>, which must also be stored. Inline patches are rejected inside projects; standalone <code>compileBeatSequence</code> accepts them. Voice definitions normalize through the existing voice-version validator, including supported legacy patch inputs; project files themselves must specify version 1. No external bank or URL is referenced.</p>
+<p>Returned objects, arrays, voices, controls and settings are detached and frozen. Unknown fields, inherited fields, accessors, invalid versions, malformed meters/tempo maps, invalid controls/settings, duplicate note IDs and missing note/voice references throw. There is no prototype merge or invocation of JSON serialization hooks from caller data. Do not pass Proxies or executable objects as project data.</p>
+<p>Budgets: 8 MiB total serialized project, 128 stored voices with a 256 KiB normalized bank budget, 65,536 events and 86,400 quarter-note beats. Compiled seconds must fit the existing 24-hour long-sequence horizon. Array holes/extra properties are rejected. These budgets do not enlarge worklet queues or full-buffer rendering limits.</p>
+<h2 id="replay-with-transport">Replay with Transport <a class="anchor" href="#replay-with-transport" aria-label="Link to Replay with Transport">#</a></h2>
+<pre><code class="language-ts">import { OPM, createTransport } from &#39;opm.js&#39;;
+
+// Create/resume this context inside a user gesture in a browser.
+const context = new AudioContext({ sampleRate: replay.settings.sampleRate });
+const monitor = context.createGain();
+monitor.gain.value = 0.16;
+monitor.connect(context.destination);
+await context.resume();
+const opm = new OPM({ ...replay.settings, context, destination: monitor });
+for (const [name, voice] of Object.entries(replay.voices)) opm.loadVoice(name, voice);
+const transport = createTransport(opm, replay.events, {
+  tempoMap: replay.tempoMap,
+  timeSignature: replay.timeSignature,
+  onError: error =&gt; console.error(error),
+});
+await transport.start();
+// Stop the owned score, then release the synth and the owned context when done.
+transport.dispose();
+await opm.close();
+monitor.disconnect();
+await context.close();</code></pre>
+<p>Transport retains musical timing for restart/tempo edits. The actual browser sample rate may differ from the requested rate. Host monitoring attenuation is deliberately separate from saved synthesis <code>mixGain</code>.</p>
+<h2 id="node-load--compile--chunk-wav">Node: load → compile → chunk WAV <a class="anchor" href="#node-load--compile--chunk-wav" aria-label="Link to Node: load → compile → chunk WAV">#</a></h2>
+<pre><code class="language-ts">import { readFile, open } from &#39;node:fs/promises&#39;;
+import { parseScoreProject, compileBeatSequence, renderSequenceChunks,
+  createWavEncoder } from &#39;opm.js/core&#39;;
+
+const score = parseScoreProject(await readFile(&#39;piece.opm.json&#39;, &#39;utf8&#39;));
+const voices = new Map(Object.entries(score.voices));
+const events = compileBeatSequence(score.events, { tempoMap: score.tempoMap, voices });
+const chunks = renderSequenceChunks(events, {
+  ...score.settings, voices, chunkFrames: 4096,
+  maxFrames: score.settings.sampleRate * 120,
+});
+const wav = createWavEncoder({ sampleRate: score.settings.sampleRate,
+  channels: 2, format: &#39;pcm16&#39;, totalFrames: chunks.capacity.frames });
+const file = await open(&#39;piece.wav&#39;, &#39;w&#39;);
+try {
+  // FileHandle.writeFile completes each byte chunk before the next render step.
+  await file.writeFile(wav.header());
+  for (const chunk of chunks) await file.writeFile(wav.encode({ left: chunk.left, right: chunk.right }));
+  await file.writeFile(wav.finalize());
+} finally {
+  chunks.cancel();
+  await file.close();
+}</code></pre>
+<p><code>compileBeatSequence(events, { tempoMap?, bpm?, voices? })</code> returns validated second-based <code>SequenceEvent[]</code>, preserving named voice references. Supply the same registry to the render consumer. Its default tempo is 120 BPM; <code>tempoMap</code> takes precedence over <code>bpm</code>. A gate&#39;s duration is the integrated end time minus integrated onset time, including all tempo ramps and steps it crosses. Control <code>ramp</code>/<code>glide</code> durations remain <strong>seconds</strong>, not beats. IDs and stable input ordering are preserved. The existing full-buffer <code>renderSequence</code> and browser <code>renderSequenceInWorker</code> consume the same compiled events/settings; existing queue/render capacity limits still apply.</p>
+<p>The <code>opm.js/core</code> and <code>opm.js/midi-file</code> declarations can be consumed by Node TypeScript projects without DOM or Web Audio globals. This boundary is checked separately from the browser API declarations.</p>
+<p>Chunk arrays are borrowed; encode/write each chunk before advancing. A failed write can leave a partial file: use a temporary output and rename only after successful finalization if atomic replacement is required. Rendering errors and device output are different evidence: deterministic WAV tests do not certify physical playback or subjective listening quality.</p>
+<h2 id="original-composition-showcase">Original composition showcase <a class="anchor" href="#original-composition-showcase" aria-label="Link to Original composition showcase">#</a></h2>
+<p>Open <code>examples/showcase.html</code> over localhost or HTTPS after building. <strong>Harbor at First Light</strong> is a D-major/B-minor 4/4 miniature with a glass lead, a middle countermelody and a slowing return. <strong>Lanterns on the Stair</strong> is an E-minor 3/4 miniature with a chromatic dominant and an open-ninth ending. Both melodies and arrangements are original to this demo, not copied songs.</p>
+<p>Play/Stop uses the public Transport API and a low 16% host monitor gain. Render WAV streams PCM16 in a Worker, with a 90-second/32-MiB demo download budget. Save project writes canonical JSON; Load project validates before replacing the current score. Reload either saved composition, play it and render it again to exercise replay. Offline export preserves synthesis mixGain, not the extra host monitoring gain. Stop also cancels an active export. No physical iOS/Android or human listening outcome is asserted here.</p></main></div></body></html>

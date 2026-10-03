@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Host integration — OPM.js</title><link rel="stylesheet" href="site.css"><script src="search-data.js" defer></script><script src="site.js" defer></script></head><body><a class="skip" href="#content">Skip to content</a><header><a href="index.html">OPM.js documentation</a><a href="https://opm.js-package.xyz/">Online demos</a></header><div class="layout"><aside><form role="search"><label for="docs-search">Search guides and API exports</label><input id="docs-search" type="search" autocomplete="off" aria-controls="search-results"><p id="search-status" role="status" aria-live="polite"></p><ul id="search-results"></ul></form><nav aria-label="Documentation"><ul><li><a href="./index.html">OPM.js documentation</a></li><li><a href="./readme.html">OPM.js</a></li><li><a href="./security.html">SECURITY.md — OPM.js Security Policy &amp; Review Mechanism</a></li><li><a href="./changelog.html">Changelog</a></li><li><a href="./acoustic-quality.html">Acoustic references and decimation</a></li><li><a href="./adaptive-music.html">Adaptive music, tempo curves and the seek contract</a></li><li><a href="./audio-buses.html">Polyphony budgets, voice priority and independent buses</a></li><li><a href="./compatibility.html">Compatibility policy</a></li><li><a href="./expressive-voices.html">Voice v6 and expressive controls</a></li><li><a href="./host-integration.html" aria-current="page">Host integration</a></li><li><a href="./midi-files.html">Standard MIDI files</a></li><li><a href="./midi-performance.html">Expressive performance and optional Web MIDI</a></li><li><a href="./mobile-acceptance.html">Physical-device audio recovery acceptance</a></li><li><a href="./publishing.html">Publication and package verification</a></li><li><a href="./score-projects.html">Replayable score projects</a></li><li><a href="./sound-design.html">Sound design workflow</a></li><li><a href="./streaming-sequences.html">Bounded sequences</a></li><li><a href="./usage.en.html">OPM.js usage guide (English)</a></li><li><a href="./usage.zh-TW.html">OPM.js 使用說明（繁體中文）</a></li><li><a href="./voice-quality.html">Preset and conversion acceptance</a></li><li><a href="./worker-diagnostics.html">Worker render diagnostics, deadlines and rollback</a></li><li><a href="./api.html">Generated API reference</a></li></ul></nav><nav aria-label="On this page"><h2>On this page</h2><ul><li class="depth-1"><a href="#host-integration">Host integration</a></li><li class="depth-2"><a href="#worklet-deployment">Worklet deployment</a></li><li class="depth-2"><a href="#worker-wav-output-and-bounded-sinks">Worker WAV output and bounded sinks</a></li><li class="depth-2"><a href="#events-acknowledgements-and-ownership">Events, acknowledgements and ownership</a></li><li class="depth-2"><a href="#audiooutput-clock-mapping-and-component-cleanup">Audio/output clock mapping and component cleanup</a></li><li class="depth-2"><a href="#other-bundlers-and-ssr-hosts">Other bundlers and SSR hosts</a></li><li class="depth-2"><a href="#part-scoped-performance">Part-scoped performance</a></li></ul></nav></aside><main id="content" tabindex="-1"><p class="source">Generated from <a href="./host-integration.md">Markdown source</a>. Edit the source, not this HTML.</p><h1 id="host-integration">Host integration <a class="anchor" href="#host-integration" aria-label="Link to Host integration">#</a></h1>
+<h2 id="worklet-deployment">Worklet deployment <a class="anchor" href="#worklet-deployment" aria-label="Link to Worklet deployment">#</a></h2>
+<p><code>new OPM({ workletUrl?: string | URL })</code> accepts an optional module path. Relative paths resolve against the page URL; a <code>URL</code> is copied when constructed. The default remains <code>new URL(&#39;../worklet/processor.js&#39;, import.meta.url)</code>. A custom module must be same-origin HTTP(S), with no credentials or fragment. HTTPS and secure loopback HTTP are supported; insecure contexts are rejected before audio resources are allocated. <code>start()</code> rejects and emits an <code>error</code> event when initialization fails, including normal CSP, network and MIME failures. Validation does not bypass browser policy.</p>
+<p>Deploy the processor <strong>and its relative imports</strong>, not only one JavaScript file. Keep their installed layout; serve JavaScript as JavaScript and asset misses as 404, not SPA HTML. See the <a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md">installed-package Vite example (checkout-only)</a> for a non-root deployment with <code>script-src &#39;self&#39;</code>, <code>worker-src &#39;self&#39;</code> and no blob/eval allowances.</p>
+<pre><code class="language-ts">import { OPM } from &#39;opm.js&#39;;
+
+const engine = new OPM({ workletUrl: &#39;/assets/opm/worklet/processor.js&#39; });
+// Invoke initialization/resume from a trusted user gesture.
+await engine.start();</code></pre>
+<h2 id="worker-wav-output-and-bounded-sinks">Worker WAV output and bounded sinks <a class="anchor" href="#worker-wav-output-and-bounded-sinks" aria-label="Link to Worker WAV output and bounded sinks">#</a></h2>
+<p><code>renderSequenceInWorker(events, { sink, format?, onProgress?, signal?, workerUrl?, ...chunkOptions })</code>
+renders long scores in a static module Worker. Chunk options are the core
+<code>renderSequenceChunks</code> options, including <code>sampleRate</code>, <code>chunkFrames</code> (1–65536,
+default4096), <code>maxFrames</code>, voice registry, mix/tuning/stealing and <code>quality</code>.
+<code>format</code> is <code>pcm16</code> (default), <code>pcm24</code>, or IEEE <code>float32</code>. Output is stereo RIFF32
+WAV; oversized RIFF files reject before Worker allocation. Score, options and
+patches are validated and detached first; there is no audio device/context.</p>
+<p>The default module is <code>new URL(&#39;../worker/render.js&#39;, import.meta.url)</code>.
+Deploy <code>dist/worker/render.js</code> <strong>and all its relative imports</strong>, maps and
+declarations from the matching distribution. An explicit <code>workerUrl</code> resolves
+against the page and must be same-origin HTTPS or secure loopback HTTP, with
+no credentials/fragment. The default must also remain same-origin.
+Use <code>worker-src &#39;self&#39;</code>; no blob module, eval, dynamic executable source or
+cross-origin loading is used. CSP, MIME and network failures reject normally.
+Importing the browser API on Node/SSR is safe, but calling this helper requires
+a browser with module Workers.</p>
+<p>A sink is an own-data object with <code>write(Uint8Array): void | Promise&lt;void&gt;</code>,
+optional <code>close()</code> and optional <code>abort(reason)</code>. The Worker transfers one byte
+chunk and waits until the sink write fulfills before advancing DSP. The sink owns
+the byte buffer and may transfer/detach it (for example, to a storage Worker);
+byte accounting captures its native size before invoking <code>write</code>. Neither thread
+accumulates a complete PCM buffer or WAV. The sink must actually drain to bounded
+storage: retaining every chunk defeats the memory bound.
+<code>onProgress({ frames, totalFrames, bytesWritten, errors })</code> runs after each
+successful write, including the initial header (<code>frames:0</code>); frame counts are
+cumulative. The result contains <code>capacity</code>, <code>format</code>, <code>bytesWritten</code> and
+<code>diagnostics: { errors, processedEvents, renderedFrames }</code>. Success means
+all bytes were written and <code>close()</code> fulfilled, not that a host file is audible.</p>
+<p>Abort, sink/progress exceptions and Worker failures terminate the Worker,
+remove listeners and reject. <code>abort(reason)</code> is invoked once, but its promise
+and an outstanding <code>write</code>/<code>close</code> are <strong>not awaited</strong>: a hung sink cannot hold
+cancellation hostage. Their later rejections are consumed. A sink must
+invalidate in-flight writes and discard/roll back incomplete output; cancellation
+cannot retract bytes already persisted. <code>abort</code> must not finalize an incomplete
+file. Use host-side cleanup when abort itself fails.</p>
+<p>For an actual file export, request File System Access from a trusted gesture
+where it is supported. Feature-detect it; if unavailable, report that long-file
+export is unsupported rather than aggregating a long WAV into a Blob:</p>
+<pre><code class="language-js">import { renderSequenceInWorker } from &#39;opm.js&#39;;
+
+// Run this handler directly from a user gesture.
+async function exportScore(events, signal) {
+  signal?.throwIfAborted();
+  if (typeof window.showSaveFilePicker !== &#39;function&#39;) {
+    throw new Error(&#39;Streaming file export requires File System Access&#39;);
+  }
+  let file, settled = false;
+  const rollback = async reason =&gt; {
+    if (!file || settled) return;
+    settled = true;
+    await file.abort(reason);
+  };
+  try {
+    const handle = await window.showSaveFilePicker({
+      suggestedName: &#39;sequence.wav&#39;,
+      types: [{ description: &#39;WAV audio&#39;, accept: { &#39;audio/wav&#39;: [&#39;.wav&#39;] } }],
+    });
+    signal?.throwIfAborted();
+    file = await handle.createWritable();
+    signal?.throwIfAborted();
+    return await renderSequenceInWorker(events, {
+      sampleRate:48000, chunkFrames:4096, format:&#39;pcm24&#39;, signal,
+      workerUrl:&#39;/audio/opm/worker/render.js&#39;,
+      sink: {
+        write(bytes) { return file.write(bytes); },
+        async close() { await file.close(); settled = true; },
+        abort: rollback,
+      },
+    });
+  } catch (error) {
+    await rollback(error).catch(cleanup =&gt; console.error(&#39;File rollback failed&#39;, cleanup));
+    throw error;
+  }
+}</code></pre>
+<p>The checkout demo&#39;s memory-only download is intentionally a <strong>small export</strong>:
+preflight a hard frame/byte budget, retain chunks only within that budget, and
+revoke its old Blob URL on replacement/disposal. It is not a fallback for a long
+file sink. Hosts also own cumulative work, concurrency and export-frequency limits.</p>
+<p>Node and browser hosts may use `createWavEncoder({ sampleRate, channels:1|2,
+format?, totalFrames })<code> from </code>opm.js/core<code> directly. Write </code>header()` exactly
+once, then each <code>encode({ left, right? })</code> result to a backpressured sink before
+consuming the next borrowed PCM chunk; finally write <code>finalize()</code> (a RIFF
+alignment byte or empty array). Each call accepts1–65536 frames. The declared
+frame count is exact: overrun/underrun reject, and invalid chunks never advance
+<code>framesEncoded</code>. No audio/file bytes are retained by the encoder. Its getters
+are <code>totalFrames</code>, <code>framesEncoded</code>, <code>byteLength</code> and <code>finished</code>. Zero-frame WAVs
+are supported by this streaming API. The full-buffer `encodeWav({ left,
+right?, sampleRate, format? })` keeps its original1–4,000,000-frame budget.
+All channels must be native Float32Arrays of finite samples in−1–1; encoding
+rejects rather than clipping. PCM24 uses signed little-endian endpoints; float
+WAV uses format3 with a <code>fact</code> sample-count chunk.</p>
+<h2 id="events-acknowledgements-and-ownership">Events, acknowledgements and ownership <a class="anchor" href="#events-acknowledgements-and-ownership" aria-label="Link to Events, acknowledgements and ownership">#</a></h2>
+<p><code>engine.subscribe(listener)</code> returns an idempotent unsubscribe function. Each subscription is independent, even for the same listener; it coexists with <code>onEvent</code> and scheduler subscriptions. Exceptions and attempts to mutate frozen event records cannot disrupt other listeners or cleanup. Removing a listener during dispatch skips its remaining delivery; newly added listeners begin with the next event. Ordinary <code>close()</code> preserves subscriptions for a later <code>start()</code>.</p>
+<p>Commands still synchronously return numeric IDs. <code>waitForCommand(commandId, { timeout?, signal? })</code> waits only for the correlated <strong>admission acknowledgement</strong>, including a reply received before the method is called. The timeout is milliseconds: default <strong>5000</strong>, integer range <strong>1..60000</strong>. At most <strong>64 pending waits</strong> and <strong>128 command receipts</strong> are retained. Receipts without live waiters are evicted oldest-first; an unknown/expired ID rejects rather than waiting forever. Multiple waits for one ID are independent. Abort/timeout removes only that wait, not the admitted command or another waiter. A late acknowledgement can still be retrieved while its receipt is retained. Signals must be genuine AbortSignals: intrinsic state/reason and listener operations bypass shadow accessors and reject duck-typed objects.</p>
+<p>A rejected acknowledgement throws <code>CommandRejectedError</code> with its frozen <code>event</code> (<code>reason</code>, note ID and command ID). Pending waits reject on reset, close, interruption/suspension or processor failure. A command-triggered reset carries its initiating <code>commandId</code>; an ordered panic reset rejects earlier outstanding commands, but preserves that panic&#39;s own acknowledgement and commands posted after it, even after receipt eviction. Uncommanded interruption resets invalidate every outstanding receipt. A settled acknowledgement is historical admission evidence and is not revoked by a later reset. <strong>Accepted does not prove scheduled execution, gate release, release-tail completion or audible output.</strong> Use note lifecycle events and diagnostics for those distinct observations.</p>
+<pre><code class="language-ts">const id = engine.playNote({ note: 60 });
+const stop = engine.stop(id, { at: engine.context!.currentTime + 0.1 });
+const acknowledgement = await engine.waitForCommand(stop, { timeout: 2000 });
+// acknowledgement.state === &#39;accepted&#39;: future stop was admitted, not completed.</code></pre>
+<p><code>close()</code> disconnects OPM&#39;s node, closes its port and removes its context listener; it is restartable. <code>dispose()</code> is terminal and idempotent: it also removes subscriptions/<code>onEvent</code>, rejects outstanding waits and prevents restart/new subscriptions. Both close an owned AudioContext, but <strong>never close or suspend a borrowed context</strong>. The host owns its additional routing nodes and any context it supplied.</p>
+<h2 id="audiooutput-clock-mapping-and-component-cleanup">Audio/output clock mapping and component cleanup <a class="anchor" href="#audiooutput-clock-mapping-and-component-cleanup" aria-label="Link to Audio/output clock mapping and component cleanup">#</a></h2>
+<p><code>getOutputTimestamp()</code> pairs an AudioContext <code>contextTime</code> (seconds at device output) with the corresponding <code>performanceTime</code> (milliseconds on the performance clock). It is not a pair of independent current-time samples. Map an audio event at <code>audioTime</code> to an estimated output time with:</p>
+<pre><code class="language-ts">const stamp = context.getOutputTimestamp();
+const estimatedOutputMs = stamp.performanceTime + (audioTime - stamp.contextTime) * 1000;</code></pre>
+<p>Do not add <code>baseLatency</code> or <code>outputLatency</code> again: the timestamp already describes output. Timestamp support/precision varies, the initial pair may be zero, and the result is an estimate—not microphone-observed acoustic onset. Re-sample while running after resume/device changes. If unavailable, display audio-clock timing only rather than inventing output-clock precision.</p>
+<p>The following host can be mounted beside a button/status element. <code>unmount()</code> removes DOM/OPM listeners, aborts outstanding waits, disposes OPM, disconnects host routing and closes the host-owned context. The asynchronous gesture handler checks teardown after every asynchronous startup boundary.</p>
+<pre><code class="language-ts">import { OPM } from &#39;opm.js&#39;;
+
+const button = document.querySelector&lt;HTMLButtonElement&gt;(&#39;#play&#39;)!;
+const status = document.querySelector&lt;HTMLElement&gt;(&#39;#status&#39;)!;
+const context = new AudioContext();
+const output = context.createGain();
+output.gain.value = 0.08;
+output.connect(context.destination);
+const engine = new OPM({ context, destination: output,
+  workletUrl: &#39;/assets/opm/worklet/processor.js&#39; });
+const lifetime = new AbortController();
+let mounted = true;
+let note: number | undefined;
+const unsubscribe = engine.subscribe(event =&gt; {
+  if (event.type === &#39;error&#39;) status.textContent = event.error.message;
+  if (event.type === &#39;reset&#39;) note = undefined;
+  if (event.type === &#39;note&#39; &amp;&amp; event.id === note) {
+    status.textContent = event.state;
+    if ([&#39;ended&#39;, &#39;stolen&#39;, &#39;cancelled&#39;, &#39;rejected&#39;].includes(event.state)) note = undefined;
+    if (event.state === &#39;started&#39; &amp;&amp; typeof context.getOutputTimestamp === &#39;function&#39;) {
+      const stamp = context.getOutputTimestamp();
+      if (stamp.performanceTime &gt; 0 &amp;&amp; Number.isFinite(stamp.contextTime) &amp;&amp; Number.isFinite(stamp.performanceTime)) {
+        const outputMs = stamp.performanceTime + (event.time - stamp.contextTime) * 1000;
+        status.title = `Estimated output onset: ${outputMs.toFixed(1)} ms`;
+      }
+    }
+  }
+});
+let busy = false;
+const onClick = async () =&gt; {
+  if (!mounted || busy) return;
+  busy = true;
+  try {
+    await context.resume(); // Called synchronously in the trusted gesture.
+    if (!mounted) return;
+    await engine.start();
+    if (!mounted) return;
+    if (note !== undefined) {
+      await engine.waitForCommand(engine.stop(note), { signal: lifetime.signal });
+      if (!mounted) return;
+    }
+    // A desired performance-clock target converted back to audio seconds.
+    const desiredOutputMs = performance.now() + 150;
+    let at = context.currentTime + 0.05;
+    if (typeof context.getOutputTimestamp === &#39;function&#39;) {
+      const stamp = context.getOutputTimestamp();
+      if (stamp.performanceTime &gt; 0 &amp;&amp; Number.isFinite(stamp.contextTime) &amp;&amp; Number.isFinite(stamp.performanceTime)) {
+        at = Math.max(at, stamp.contextTime + (desiredOutputMs - stamp.performanceTime) / 1000);
+      }
+    }
+    note = engine.playNote({ note: 60, at, duration: 1 });
+  } catch (error) {
+    if (mounted) status.textContent = error instanceof Error ? error.message : String(error);
+  } finally { busy = false; }
+};
+button.addEventListener(&#39;click&#39;, onClick);
+
+let teardown: Promise&lt;void&gt; | undefined;
+function unmount(): Promise&lt;void&gt; {
+  if (teardown) return teardown;
+  mounted = false;
+  button.removeEventListener(&#39;click&#39;, onClick);
+  lifetime.abort();
+  unsubscribe();
+  teardown = (async () =&gt; {
+    try { await engine.dispose(); }
+    finally {
+      output.disconnect();
+      if (context.state !== &#39;closed&#39;) await context.close();
+    }
+  })();
+  return teardown;
+}</code></pre>
+<p>For a shared context owned elsewhere, omit its final <code>context.close()</code>; disconnect only the routing nodes this component owns. <code>streamSequence</code> and <code>createLookaheadScheduler</code> have their own <code>dispose()</code> methods: dispose each scheduler before its OPM instance so admission timers and live-note ownership are released.</p>
+<h2 id="other-bundlers-and-ssr-hosts">Other bundlers and SSR hosts <a class="anchor" href="#other-bundlers-and-ssr-hosts" aria-label="Link to Other bundlers and SSR hosts">#</a></h2>
+<p>Webpack, Rollup, Parcel and static hosts use the same explicit static-asset contract without relying on unverified worklet-plugin APIs: deploy the installed package&#39;s <strong>entire <code>dist/</code> tree plus the package-root <code>LICENSE</code></strong> at a same-origin URL, preserving relative paths. This is a packaging recipe, not a claim that those other bundlers were exercised. Only the existing Vite production smoke provides bundler-specific runtime verification.</p>
+<p>The package ships a dependency-free helper that does this safely: Run it from a project with OPM.js installed; <code>--no-install</code> prevents an accidental registry fetch.</p>
+<pre><code class="language-sh">npx --no-install opm-assets copy public/audio/opm-1.8.1     # atomic copy into a NEW directory
+npx --no-install opm-assets check https://example.test/audio/opm-1.8.1/   # byte-for-byte check of what is served</code></pre>
+<p><code>copy</code> (also <code>import { copyAssets } from &#39;opm.js/tools/assets.js&#39;</code>, Node only) inspects the installed release first: only <code>.js</code>, <code>.js.map</code> and <code>.d.ts</code> files under <code>dist/</code>, no symlinks, every <code>.js</code> with its map and declaration, the entry modules <code>api/index.js</code>, <code>core/index.js</code>, <code>worklet/processor.js</code> and <code>worker/render.js</code>, and a bounded size (4,096 files, 16 MiB). It stages a temporary directory beside the destination, copies and re-hashes every file, writes <code>opm-assets.json</code> (SHA-256 and size per file, plus <code>LICENSE</code>) and renames the staging directory into place. It <strong>never overwrites</strong>: a destination that already holds exactly this release is reported as <code>reused: true</code>; anything else is an error and left untouched. Use a fresh release-specific directory (or an atomic deployment switch) so removed old assets cannot mix with a new tree.</p>
+<p><code>check</code> (or <code>checkDeployment(url)</code>) downloads each listed file from an HTTPS or loopback-HTTP base URL and compares status, a JavaScript MIME type, <code>X-Content-Type-Options: nosniff</code> (disable with <code>requireNosniff: false</code>) and the SHA-256 against the installed release. Redirects are errors, so an SPA fallback that returns HTML with status 200 fails on MIME or bytes. It cannot see your page&#39;s Content-Security-Policy and does not start an AudioWorklet or Worker: run the browser smoke or the <a href="https://github.com/YueyuHoshizora/OPM.js/blob/v1.8.1/examples/vite/README.md">Vite example (checkout-only)</a> for that.</p>
+<p>Configure <code>new OPM({ workletUrl: &#39;/audio/opm-1.8.1/worklet/processor.js&#39; })</code> and, for Worker export, <code>workerUrl: &#39;/audio/opm-1.8.1/worker/render.js&#39;</code>. The worklet&#39;s own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import <code>/audio/opm-1.8.1/api/index.js</code> externally.</p>
+<p>An SSR module may import types safely, but instantiate/resume OPM only on the client, from a trusted user gesture. Keep module initialization free of <code>window</code>, <code>document</code> and <code>AudioContext</code> access on the server; dynamically import the runtime inside client-only code when required by the host. Dispose it during component teardown using the ownership recipe above.</p>
+<h2 id="part-scoped-performance">Part-scoped performance <a class="anchor" href="#part-scoped-performance" aria-label="Link to Part-scoped performance">#</a></h2>
+<p><code>createPerformance()</code> supplies playing policies, not a MIDI driver. It requires
+a started OPM and never owns its AudioContext. Keep returned <strong>physical key IDs</strong>
+until their matching key-up; repeated equal-pitch keys have separate identities.</p>
+<pre><code class="language-js">import { createPerformance } from &#39;opm.js&#39;;
+
+// opm is already started from the host&#39;s trusted input gesture.
+const performance = createPerformance(opm, {
+  parts: 16, maxKeys: 128, maxKeysPerPart: 16,
+  onError: error =&gt; console.error(error),
+});
+performance.configurePart(0, {
+  voice: &#39;brass&#39;, mode: &#39;mono&#39;, legato: true, priority: &#39;high&#39;, glide: 0.02,
+  pan: 0, expression: 0.8,
+});
+const key = performance.noteOn(0, 60, { velocity: 0.7 }); // host key-down
+performance.sustain(0, true);                           // pedal-down
+performance.noteOff(0, key);                            // physical key-up
+// Later, in the pedal-up input handler:
+// performance.sustain(0, false);
+// performance.updatePart(0, { pan: -0.5, expression: 0.6, glide: 0.03 });
+// performance.allNotesOff(0); // only this part; no global panic
+// performance.dispose();     // release all helper-owned gates on unmount</code></pre>
+<p>Parts are 0-based, with 1–16 configured parts (default 16), at most 128 keys and
+128 tracked gates system-wide, including pending releases. Per-part limits share
+that system budget; overflow rejects without evicting unrelated parts. A part
+may use <code>mode: &#39;poly&#39;</code> or <code>&#39;mono&#39;</code>, <code>legato</code>, and <code>priority: &#39;last&#39; | &#39;high&#39; | &#39;low&#39;</code>.
+Physically held keys take precedence over pedal-only keys; equal pitches choose
+the newest identity. Mono legato preserves the original onset&#39;s envelope,
+velocity and key/rate scaling. Its pitch offset is anchored to that onset:
+within ±48 semitones it reuses the gate, farther moves retrigger at the actual
+pitch instead of clamping. Non-legato switching retriggers the patch.</p>
+<p><code>getPart(part)</code> returns a detached frozen snapshot. Stealing prunes the affected
+gate without later automatic readmission; reset clears state. Interruption
+releases helper-owned notes even when direct OPM notes use preserve policy.
+Dispose performance/Transport helpers before disposing their shared engine.
+Their cleanup does not release unrelated host or Transport notes.</p>
+<p>Release 1.8 adds <code>updateKey</code>, <code>updatePartNotes</code>, per-part <code>voiceLimit</code>/<code>voicePriority</code> and an optional Web MIDI adapter; see <a href="./midi-performance.html">expressive performance and MIDI</a>. Looping layers and boundary-quantized section switching are covered in <a href="./adaptive-music.html">adaptive music</a>, and Worker startup and phase diagnostics in <a href="./worker-diagnostics.html">Worker diagnostics</a>.</p></main></div></body></html>
