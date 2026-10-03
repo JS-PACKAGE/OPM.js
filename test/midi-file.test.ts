@@ -95,7 +95,7 @@ test('omitted programs/controllers/metadata/SysEx and release velocity are expos
   const bytes = smf([[0, 0xc0, 10, 0, 0xd0, 32, 0, 0xe0, 0, 64, 0, 0xb0, 7, 100, 0, 0xff, 1, 3, 65, 66, 67, 0, 0xf0, 3, 1, 2, 0xf7, 0, 0x90, 60, 127, 120, 0x80, 60, 64, ...end]]);
   const result = importMidiFile(bytes);
   assert.deepEqual(result.warnings.map(warning => [warning.code, warning.count]), [
-    ['ignored-channel', 4], ['ignored-meta', 1], ['ignored-sysex', 1], ['release-velocity', 1], ['default-voice', 1],
+    ['ignored-channel', 3], ['ignored-meta', 1], ['ignored-sysex', 1], ['release-velocity', 1], ['ignored-program', 1], ['default-voice', 1],
   ]);
   assert.throws(() => importMidiFile(bytes, { ...mapped, unsupported: 'reject' }), /Unsupported/);
   assert.throws(() => importMidiFile(smf([[0, 0x99, 36, 127, 120, 0x89, 36, 0, ...end]]), { unsupported: 'reject' }), /defaultVoice/);
@@ -314,10 +314,10 @@ test('loss summary separates omissions, approximations and recognized source con
     120, 0x80, 60, 0, 120, 0xb0, 64, 0, ...end,
   ]]);
   const result = importMidiFile(bytes, expressive);
-  assert.deepEqual(result.lossSummary.omissions.map(entry => [entry.code, entry.count]), [['ignored-channel', 4]]);
+  assert.deepEqual(result.lossSummary.omissions.map(entry => [entry.code, entry.count]), [['ignored-channel', 2], ['ignored-program', 1]]);
   assert.deepEqual(result.lossSummary.approximations.map(entry => [entry.code, entry.count]), [['sustain-applied', 2]]);
-  assert.deepEqual(result.lossSummary.preservedControls, [{ kind: 'pitch-bend', count: 1 }]);
-  for (const message of [[0xc0, 7], [0xb0, 0, 1], [0xb0, 101, 0], [0xb0, 6, 12], [0xb0, 121, 0]]) {
+  assert.deepEqual(result.lossSummary.preservedControls, [{ kind: 'pitch-bend', count: 1 }, { kind: 'pitch-bend-range', count: 1 }]);
+  for (const message of [[0xc0, 7], [0xb0, 0, 1], [0xb0, 6, 12], [0xb0, 121, 0]]) {
     assert.throws(() => importMidiFile(smf([[0, ...message, ...end]]), { ...expressive, unsupported: 'reject' }), /Unsupported/);
   }
 });

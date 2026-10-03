@@ -3,11 +3,13 @@ import { sequenceOwnData } from '../core/sequence.js';
 import { transportArray } from '../core/transport.js';
 import { validateNoteControls } from '../core/synth.js';
 import type { NoteControls } from '../core/synth.js';
+import { midiVoiceMap, midiRpnState, midiRpnControl } from '../core/midi-state.js';
+import type { MidiVoiceMap } from '../core/midi-state.js';
 
 export type MidiScalarControl = 'pitch' | 'expression' | 'gain' | 'pan' | 'modulation' | 'feedback' | 'lfoRate' | 'amDepth' | 'pmDepth';
 export type MidiOperatorControl = 'operatorLevels' | 'operatorRatios' | 'operatorFrequencies';
 interface MidiControllerRange {
-  /** CC number 0..127, excluding pedal/reset/panic CC64/120/121/123. */
+  /** CC number 0..127, excluding RPN selection/pedal/reset/panic CC64/100/101/120/121/123. */
   controller: number;
   /** CC0 maps to min and CC127 to max; both endpoints must be valid engine controls. */
   min: number;
@@ -44,6 +46,8 @@ export interface MidiAdapterOptions {
   parts?: number;
   /** Semitones for full pitch-bend deflection, 0..48; default 2. */
   pitchBendRange?: number;
+  /** Opt-in program 0..127 to named voice selection for later note onsets. */
+  programVoices?: MidiVoiceMap;
   /** Restrict to these stable port IDs; default every currently and subsequently connected input. */
   inputIds?: readonly string[];
   /** At most 128 own-data mappings. Ordinary CC defaults are overridden only for listed CCs. */
@@ -98,7 +102,7 @@ function controllerMappings(input: unknown): ReadonlyMap<number, ControllerMappi
     const data = sequenceOwnData(entry, ['controller', 'field', 'operator', 'min', 'max', 'ramp', 'reset'],
       ['controller', 'field', 'min', 'max', 'ramp'], 'controller mapping');
     if (typeof data.controller !== 'number' || !Number.isInteger(data.controller) || data.controller < 0 || data.controller > 127 ||
-        [64, 120, 121, 123].includes(data.controller)) throw new RangeError('controller must be 0..127 excluding CC64/120/121/123');
+        [64, 100, 101, 120, 121, 123].includes(data.controller)) throw new RangeError('controller must be 0..127 excluding CC64/100/101/120/121/123');
     if (typeof data.field !== 'string' || !SCALAR_FIELDS.includes(data.field) && !OPERATOR_FIELDS.includes(data.field)) {
       throw new TypeError('unsupported controller field');
     }
@@ -142,14 +146,14 @@ export async function requestMidiAccess(host: MidiNavigatorLike | undefined = am
 
 /**
  * Map channel-voice MIDI from user-granted inputs onto Performance parts. It is an adapter, not a MIDI driver:
- * no SysEx, clock, program-change or hardware-specific behavior is implemented.
+ * no SysEx, clock or hardware-specific behavior is implemented.
  *
  * Note-off releases the oldest still-held key of the same input/channel/pitch. CC1, channel pressure and polyphonic
  * pressure all scale LFO depth 1x..2x (never below the patch default). CC7/CC11 multiply into part expression, CC10 pans,
  * CC64 is sustain, CC120/123 release only this adapter's keys for the channel, and CC121 resets its controllers.
  */
 export function createMidiAdapter(performance: Performance, access: MidiAccessLike, options: MidiAdapterOptions = {}): MidiAdapter {
-  const config = sequenceOwnData(options, ['parts', 'pitchBendRange', 'inputIds', 'controllerMap', 'onError'], [], 'MIDI adapter options');
+  const config = sequenceOwnData(options, ['parts', 'pitchBendRange', 'programVoices', 'inputIds', 'controllerMap', 'onError'], [], 'MIDI adapter options');
   const rawParts: unknown = config.parts === undefined ? 16 : config.parts;
   if (typeof rawParts !== 'number' || !Number.isInteger(rawParts) || rawParts < 1 || rawParts > 16) throw new RangeError('parts must be an integer in 1..16');
   const parts: number = rawParts;
@@ -167,6 +171,8 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     allowed = new Set(ids as string[]);
   }
   const mappings = config.controllerMap === undefined ? new Map<number, ControllerMapping>() : controllerMappings(config.controllerMap);
+  const programs = midiVoiceMap(config.programVoices);
+  const rpn = Array.from({ length: parts }, () => midiRpnState(range));
   // Capture the defined reset baseline before ports can deliver any messages.
   const baselines = mappings.size === 0 ? [] : Array.from({ length: parts }, (_, channel) => performance.getPartControls(channel));
   if (!access || typeof access.addEventListener !== 'function' || !(access.inputs instanceof Map || typeof access.inputs?.values === 'function')) {
@@ -215,6 +221,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
   }
   function control(channel: number, input: string, controller: number, value: number): void {
     const state = states[channel]!;
+    if (midiRpnControl(rpn[channel]!, controller, value)) return;
     const mapping = mappings.get(controller);
     if (mapping) {
       const target = value === 0 ? mapping.min : value === 127 ? mapping.max : mapping.min + (mapping.max - mapping.min) * value / 127;
@@ -237,6 +244,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     else if (controller === 120 || controller === 123) releaseWhere(key => key.startsWith(`${input}\u0000${channel}\u0000`), controller === 120);
     else if (controller === 121) {
       state.volume = 1; state.expression = 1;
+      Object.assign(rpn[channel]!, midiRpnState(range));
       performance.updatePart(channel, { expression: 1, pan: 0 });
       performance.updatePartNotes(channel, { pitch: 0, modulation: 1 });
       for (const mapped of mappings.values()) {
@@ -284,10 +292,16 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
         const owned = owners?.[owners.length - 1];
         if (owned) performance.updateKey(channel, owned.key, { modulation: 1 + data[2]! / 127 });
       } else if (status === 0xb0) control(channel, input, data[1]!, data[2]!);
+      else if (status === 0xc0) {
+        const voice = programs.get(data[1]!);
+        if (voice === undefined) ignored++;
+        else performance.configurePart(channel, { voice }, { preserveNotes: true });
+      }
       else if (status === 0xd0) performance.updatePartNotes(channel, { modulation: 1 + data[1]! / 127 });
       else if (status === 0xe0) {
         const bend = ((data[2]! << 7) | data[1]!) - 8192;
-        performance.updatePartNotes(channel, { pitch: Math.max(-range, Math.min(range, bend / (bend < 0 ? 8192 : 8191) * range)) });
+        const channelRange = rpn[channel]!.range;
+        performance.updatePartNotes(channel, { pitch: bend / (bend < 0 ? 8192 : 8191) * channelRange });
       } else ignored++;
     } catch (error) { report(error); }
   }
@@ -338,6 +352,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       for (const id of [...listeners.keys()]) detach(id);
       held.clear();
       heldKeys = 0;
+      for (const state of rpn) Object.assign(state, midiRpnState(range));
     },
   });
 }

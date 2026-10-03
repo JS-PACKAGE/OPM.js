@@ -24,6 +24,8 @@ export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCOR
 export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions, ArrangementProject } from '../core/project.js';
 export type { ArrangementDefinition } from '../core/arrangement-definition.js';
 export { VERSION } from '../version.js';
+export type { MidiVoiceMap } from '../core/midi-state.js';
+export { gmProgramVoices, gmDrumVoices } from '../voices/gm-map.js';
 export { createPerformance } from './performance.js';
 export type { Performance, PerformanceOptions, PerformancePartOptions, PerformancePartControls, PerformanceNoteOptions, PerformanceNoteOffOptions, PerformanceKeySnapshot, PerformancePartSnapshot } from './performance.js';
 export { renderSequenceInWorker } from './render-worker.js';

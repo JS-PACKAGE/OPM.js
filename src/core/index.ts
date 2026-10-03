@@ -16,6 +16,8 @@ export { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRAC
 export type { MidiFileWarningCode, MidiFileWarning, MidiImportOptions, MidiImportResult, MidiExportOptions, MidiFileControlKind, MidiFilePreservedControl, MidiFileLossSummary } from './midi-file.js';
 export { parseScoreProject, serializeScoreProject, compileBeatSequence, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES, parseArrangementProject, serializeArrangementProject, MAX_ARRANGEMENT_PROJECT_BYTES, MAX_ARRANGEMENT_PROJECT_VOICES } from './project.js';
 export type { ScoreProject, ScoreProjectSettings, BeatSequenceOptions, ArrangementProject } from './project.js';
+export type { MidiVoiceMap } from './midi-state.js';
+export { gmProgramVoices, gmDrumVoices } from '../voices/gm-map.js';
 export type { ArrangementLayer, ArrangementSection, ArrangementDefinition } from './arrangement-definition.js';
 
 export interface RenderNoteOptions extends SynthOptions {

@@ -5,6 +5,7 @@ import { createMidiAdapter, requestMidiAccess } from '../src/api/midi.js';
 import type { MidiAccessLike, MidiAdapterOptions, MidiControllerMapping, MidiInputLike, MidiMessageEventLike } from '../src/api/midi.js';
 import type { NoteControls } from '../src/core/synth.js';
 import { installWorkletHarness, startedEngine, renderFrames } from './worklet-harness.js';
+import { examples } from '../src/voices/examples.js';
 
 const restore = await installWorkletHarness();
 after(restore);
@@ -486,5 +487,102 @@ test('omitting controllerMap preserves default pan, pressure, wheel and reset ac
     assert.equal(performance.getPartControls(0).modulation, 1);
     renderFrames(opm, 256);
     assert.deepEqual(errors, []);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('mapped programs preserve sounding gates and select voices only for later onsets', async () => {
+  const map = new Map([[8, 'bell']]);
+  const { opm, performance, input, adapter, errors } = await setup({ programVoices: map });
+  try {
+    opm.loadVoice('bell', examples.find(voice => voice.name === 'bell')!);
+    const played: unknown[] = [];
+    const play = opm.playNote.bind(opm);
+    opm.playNote = options => { played.push(options.voice); return play(options); };
+    input.send(0x90, 60, 100);
+    const oldGate = performance.getPart(0).keys[0]!.gateId;
+    map.set(8, 'bass');
+    input.send(0xc0, 8);
+    assert.equal(performance.getPart(0).voice, 'bell');
+    assert.equal(performance.getPart(0).keys[0]!.gateId, oldGate);
+    assert.deepEqual(held(performance, 0), [60]);
+    input.send(0x90, 64, 100);
+    input.send(0x91, 67, 100);
+    assert.deepEqual(played, ['brass', 'bell', 'brass']);
+    input.send(0xc0, 127);
+    assert.equal(performance.getPart(0).voice, 'bell');
+    assert.equal(adapter.snapshot.ignoredMessages, 1);
+    assert.deepEqual(errors, []);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('live RPN range is channel-local, data mappings resume on null, reset and disposal clear selection', async () => {
+  const { opm, performance, input, access, adapter, errors } = await setup({
+    pitchBendRange: 3,
+    controllerMap: [{ controller: 6, field: 'feedback', min: 0, max: 7, ramp: 0 }],
+  });
+  try {
+    input.send(0xb0, 6, 127);
+    assert.equal(performance.getPartControls(0).feedback, 7);
+    input.send(0xb0, 101, 0); input.send(0xb0, 100, 0);
+    input.send(0xb0, 6, 12); input.send(0xb0, 38, 50);
+    input.send(0xe0, 127, 127); input.send(0xe1, 0, 0);
+    assert.equal(performance.getPartControls(0).pitch, 12.5);
+    assert.equal(performance.getPartControls(1).pitch, -3);
+    assert.equal(performance.getPartControls(0).feedback, 7);
+    input.send(0xb0, 101, 127); input.send(0xb0, 100, 127);
+    input.send(0xb0, 6, 0);
+    assert.equal(performance.getPartControls(0).feedback, 0);
+    input.send(0xe0, 0, 0);
+    assert.equal(performance.getPartControls(0).pitch, -12.5);
+    input.send(0xb0, 101, 0); input.send(0xb0, 100, 0);
+    input.send(0xb0, 6, 127); input.send(0xb0, 38, 127); input.send(0xe0, 127, 127);
+    assert.equal(performance.getPartControls(0).pitch, 48);
+    input.send(0xb0, 121, 0); input.send(0xe0, 127, 127);
+    assert.equal(performance.getPartControls(0).pitch, 3);
+    adapter.dispose(); input.send(0xe0, 0, 0);
+    assert.equal(performance.getPartControls(0).pitch, 3);
+    const next = createMidiAdapter(performance, access, { pitchBendRange: 3 });
+    try {
+      input.send(0xb0, 6, 12); input.send(0xe0, 0, 0);
+      assert.equal(performance.getPartControls(0).pitch, -3);
+    } finally { next.dispose(); }
+    assert.deepEqual(errors, []);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('program map and RPN selector mapping validation runs before opening MIDI ports', async () => {
+  const { opm, performance, adapter } = await setup();
+  try {
+    const access = new FakeAccess();
+    const input = new FakeInput('unused'); access.inputs.set(input.id, input);
+    for (const value of [null, { 128: 'bell' }, { 0: 'bad name' }, new Map([[NaN, 'bell']])]) {
+      assert.throws(() => createMidiAdapter(performance, access, { programVoices: value } as unknown as MidiAdapterOptions));
+    }
+    for (const controller of [100, 101]) assert.throws(() => createMidiAdapter(performance, access, {
+      controllerMap: [{ controller, field: 'feedback', min: 0, max: 7, ramp: 0 }],
+    }), /excluding/);
+    assert.equal(input.opened, 0);
+    assert.equal(access.listening, 0);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('mono program changes keep the held gate until a later onset restarts the new patch', async () => {
+  const { opm, performance, input, adapter, errors } = await setup({ programVoices: { 8: 'bell', 9: 'missing' } });
+  try {
+    opm.loadVoice('bell', examples.find(voice => voice.name === 'bell')!);
+    performance.configurePart(0, { mode: 'mono', legato: true });
+    input.send(0x90, 60, 100);
+    const before = performance.getPart(0).keys[0]!.gateId;
+    input.send(0xc0, 8);
+    assert.equal(performance.getPart(0).keys[0]!.gateId, before);
+    input.send(0x90, 62, 100);
+    assert.notEqual(performance.getPart(0).keys.find(key => key.note === 62)!.gateId, before);
+    assert.equal(errors.length, 0);
+    input.send(0xc0, 9);
+    assert.match(errors[0]!.message, /Unknown performance voice/);
+    assert.equal(performance.getPart(0).voice, 'bell');
+    performance.configurePart(0, { voice: 'brass' });
+    assert.equal(performance.getPart(0).keys.length, 0);
+    assert.throws(() => performance.configurePart(0, {}, { preserveNotes: 1 } as never), /boolean/);
   } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
 });

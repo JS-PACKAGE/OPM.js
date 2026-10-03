@@ -51,7 +51,8 @@ export interface PerformancePartSnapshot {
   readonly keys: readonly PerformanceKeySnapshot[];
 }
 export interface Performance {
-  configurePart(part: number, options: Partial<PerformancePartOptions>): void;
+  /** preserveNotes keeps existing gates when only the voice changes; default false. */
+  configurePart(part: number, options: Partial<PerformancePartOptions>, policy?: { preserveNotes?: boolean }): void;
   updatePart(part: number, controls: PerformancePartControls): void;
   /** Update one physical key; inactive mono keys store controls without touching the selected gate. */
   updateKey(part: number, key: number, controls: NoteControls): boolean;
@@ -74,7 +75,7 @@ interface Config {
   voiceLimit: number | undefined; voicePriority: number;
 }
 interface Part { config: Config; keys: Map<number, Key>; sustain: boolean; selected: number | null; controls: NoteControls }
-interface Gate { part: Part; anchor: number; key: number | null; releasing: boolean; offset: number; controls: NoteControls; baseline: NoteControls }
+interface Gate { part: Part; voice: string | PreparedVoice; anchor: number; key: number | null; releasing: boolean; offset: number; controls: NoteControls; baseline: NoteControls }
 
 function number(input: unknown, min: number, max: number, label: string, integer = false): number {
   if (typeof input !== 'number' || !Number.isFinite(input) || input < min || input > max || integer && !Number.isInteger(input)) {
@@ -134,7 +135,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     if (!target) return false;
     const old = current(p);
     if (old?.[1].key === target.key) return false;
-    return !old || !p.config.legato ||
+    return !old || old[1].voice !== p.config.voice || !p.config.legato ||
       Math.abs(target.note - old[1].anchor + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0)) > 48;
   }
   function gateCapacity(p: Part): void {
@@ -208,7 +209,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       return null;
     }
     if (terminal) { removeKey(p, key.key); return null; }
-    gates.set(id, { part: p, anchor: key.note, key: key.key, releasing: false, offset: 0, controls: key.controls, baseline: baseline(p) });
+    gates.set(id, { part: p, voice: p.config.voice, anchor: key.note, key: key.key, releasing: false, offset: 0, controls: key.controls, baseline: baseline(p) });
     key.gateId = id;
     try {
       opm.updateNote(id, { expression: p.config.expression, ...controlsFor(p, key.controls, 0) });
@@ -238,7 +239,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     }
     const offset = old ? target.note - old[1].anchor : 0;
     const pitch = offset + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0);
-    if (old && p.config.legato && Math.abs(pitch) <= 48) {
+    if (old && old[1].voice === p.config.voice && p.config.legato && Math.abs(pitch) <= 48) {
       const generation = epoch;
       const controls = retargetControls(p, old[1], target, offset);
       const previous = old[1].key === null ? undefined : p.keys.get(old[1].key);
@@ -301,7 +302,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
   }
   const unsubscribe = opm.subscribe(observe);
 
-  function configure(p: Part, input: Record<string, unknown>): void {
+  function configure(p: Part, input: Record<string, unknown>, preserveNotes = false): void {
     const config: Config = { ...p.config };
     if (Object.hasOwn(input, 'voice')) {
       if (typeof input.voice === 'string') {
@@ -326,7 +327,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     for (const name of ['glide', 'pan', 'expression'] as const) if (Object.hasOwn(input, name)) {
       config[name] = number(input[name], name === 'pan' ? -1 : 0, name === 'glide' ? 10 : 1, name);
     }
-    if (config.voice !== p.config.voice || config.mode !== p.config.mode) {
+    if ((!preserveNotes && config.voice !== p.config.voice) || config.mode !== p.config.mode) {
       const failure = clear(p, true);
       if (failure !== undefined) throw failure;
     }
@@ -340,7 +341,11 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     } catch (error) { p.config = previous; throw error; }
   }
   return {
-    configurePart(index, input) { configure(part(index), sequenceOwnData(input, ['voice', 'mode', 'legato', 'priority', 'glide', 'pan', 'expression', 'voiceLimit', 'voicePriority'], [], 'part options')); },
+    configurePart(index, input, policy = {}) {
+      const data = sequenceOwnData(policy, ['preserveNotes'], [], 'part configuration policy');
+      if (data.preserveNotes !== undefined && typeof data.preserveNotes !== 'boolean') throw new TypeError('preserveNotes must be boolean');
+      configure(part(index), sequenceOwnData(input, ['voice', 'mode', 'legato', 'priority', 'glide', 'pan', 'expression', 'voiceLimit', 'voicePriority'], [], 'part options'), data.preserveNotes === true);
+    },
     updatePart(index, input) { configure(part(index), sequenceOwnData(input, ['glide', 'pan', 'expression'], [], 'part controls')); },
     updateKey(index, id, input) {
       const p = part(index);
