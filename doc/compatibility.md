@@ -8,15 +8,16 @@ OPM.js follows semantic versioning for the surfaces below. Within 1.x:
 
 - **Patch** releases fix defects. They may change rendered PCM only to correct documented-incorrect behavior, and the CHANGELOG says so.
 - **Minor** releases add backward-compatible API, optional voice fields, new example pages and tooling. Default behavior is preserved: with default options, the same voice, notes, sample rate and quality profile render **bit-identical PCM** to the previous minor. Release 1.8.0 was checked against the 1.7.0 build over 279 renders (all bundled voices × three quality profiles × three registers × two sample rates, plus dense scores with all three stealing policies); see the CHANGELOG.
-- **Major** releases may remove deprecated API or change defaults. Deprecations are announced in the CHANGELOG at least one minor release before removal. Nothing is deprecated in 1.8.
+- **Major** releases may remove deprecated API or change defaults. Deprecations are announced in the CHANGELOG at least one minor release before removal. No public API is currently deprecated.
 
 ## Public surface
 
 | Surface | Promise |
 | --- | --- |
-| `opm.js` (browser API), `opm.js/core` (offline DSP), `opm.js/voices/schema.js`, `opm.js/voices/normalize.js`, `opm.js/voices/dx7.js`, `opm.js/voices/*.js` (banks and metadata), `opm.js/tools/assets.js` | Documented exports, option names, event shapes and error classes are stable in 1.x. Added fields are optional. |
+| `opm.js` (browser API), `opm.js/core` (offline DSP), `opm.js/midi-file` (SMF adapter), `opm.js/voices/schema.js`, `opm.js/voices/normalize.js`, `opm.js/voices/dx7.js`, `opm.js/voices/*.js` (banks and metadata), `opm.js/tools/assets.js` | Documented exports, option names, event shapes and error classes are stable in 1.x. Added options are optional. Browser-only calls require their documented environment even when importing on Node is safe. |
 | `opm-assets` command | `copy <destination>` and `check <base-url>` keep their arguments and one-line JSON result; new subcommands may be added. |
 | Voice JSON | Canonical **version 6**. Versions 1–5 normalize to version 6 for all of 1.x. See [below](#voice-format). |
+| Score / Arrangement projects | Each project has its own explicit format version. Parsing is inert, bounded and detached; serialization saves musical definitions and synthesis settings, not DSP state, permissions, timers or external effects. Newer project formats may reject in older runtimes. |
 | `dist/` file layout | Deploy the **complete** matching tree. Relative paths between modules, the AudioWorklet processor and the Worker are an implementation detail, but the tree is released as one unit. |
 | Generated declarations | Types describe the public API. Types marked `@internal` are stripped from declarations and may change at any time. |
 
@@ -27,7 +28,7 @@ OPM.js follows semantic versioning for the surfaces below. Within 1.x:
 - Version 6 is canonical. Exported banks are always version 6.
 - Legacy versions 1–5 are accepted for the whole 1.x line with their original shapes: v1 excludes key scaling, v1/2 velocity sensitivity, v1–3 waveform, v1–4 expressive fields and v1–5 per-operator LFO targets.
 - A new voice field requires a new version. Validation rejects unknown fields, so a voice written for a newer minor version may **fail to load** in an older runtime. Forward compatibility is not promised; backward compatibility is.
-- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/src/voices/preset-metadata.ts), outside the voice schema, and is never part of the exported voice JSON.
+- Curated usage metadata (suggested register, velocity, polyphony, trim) is kept in [`src/voices/preset-metadata.ts` (checkout-only)](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/src/voices/preset-metadata.ts), outside the voice schema, and is never part of the exported voice JSON.
 
 ## Sound compatibility
 
@@ -47,12 +48,16 @@ Two facts matter when planning mixes:
 | Desktop CI | The repository's workflow runs real AudioWorklet smoke and stress against Chromium, Firefox and WebKit. A configured workflow is a capability; consult the release notes for runs that actually passed. |
 | iOS Safari, Android Chrome | **Unverified on physical hardware.** The [mobile acceptance workflow](./mobile-acceptance.md) and checkout-only `npm run device-evidence` exist so a maintainer can review real captures; none is supplied. |
 | Web MIDI | Availability depends on the browser and a user permission prompt. The package never requests access on import and never requests SysEx. |
+| Physical MIDI controllers | **Unverified on physical hardware.** Injected MIDI objects and desktop automation verify software paths, not a browser permission prompt, a real pedal or hot-unplug recovery. |
+| Preset listening quality | **Unverified by human listeners.** Numerical safety, RMS matching and automated playback do not establish musical preference, perceived loudness or a listening-approved trim. |
 
 Support for a platform means "no known defect and the documented checks were run", never a certification for every device, OS version or audio route.
 
 ## Resource bounds
 
 Limits (note and slot counts, bank size, tempo points, layer and section counts, held keys) are part of the validation contract. Raising a limit is a minor change; lowering one is a major change. CPU cost is **not** bounded by contract: `maxVoices` above 8, additional buses and the `high` profile all trade CPU for polyphony or fidelity. Measure on target devices.
+
+Benchmark capacity candidates describe only their recorded host, runtime, patch and workload. They are not portable device limits or an AudioWorklet underrun measurement. Quality and voice budgets never change automatically; choosing another quality is an explicit sound change. See [measured capacity guidance](./acoustic-quality.md) and the [cross-feature contracts](./host-integration.md#cross-feature-contracts).
 
 ## Reporting breaks
 

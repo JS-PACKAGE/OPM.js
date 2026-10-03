@@ -2,6 +2,34 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### Portable music and expressive file exchange
+
+- Add a separate bounded version-1 Arrangement project format for named looping layers, sections, initial section, tempo/meter, validated voices and synthesis settings. Share definition validation with live Arrangement playback; save/load reconstructs music, never DSP state or pending live commands.
+- Add opt-in MIDI-file expressive controls while preserving the default note-only conversion policy. Preserve supported channel/key expression under explicit bend-range policy and expose grouped omissions, approximations and preserved wire-message counts; reject unrepresentable export semantics.
+- Add host/workload-scoped benchmark capacity candidates across quality and fully occupied voice limits. Require explicit p99 reserve, zero observed misses and clean diagnostics; retain raw worst/misses and unchanged baseline CI budgets. Candidates do not certify browser/physical-device performance.
+- Consolidate public project/MIDI surfaces, ID/lifecycle/ownership contracts and the distinction between saved musical definitions, running sessions, numerical safety and human acceptance. Mark checkout-only additions separately from the immutable v1.9 release and synchronize current-release example links.
+- Reuse the mobile and audition harnesses for explicit current-version acceptance campaigns. Add bounded local physical-MIDI observation downloads to the instrument page, recording exact submitted/observed settings, text-only identifiers and separate manual judgments; desktop, active, stale-scope, abandoned and truncated runs remain unverified.
+
+### Acceptance boundaries
+
+- Physical iOS/Android interruption/route/long-play acceptance, real MIDI hardware/permission/hot-unplug behavior and the eighteen presets' genuine human listening findings remain blocked pending original physical/listener observations. Local UI, numerical rendering and injected MIDI checks must not promote those results or trim metadata.
+- Package version remains 1.9.0 during checkout development. No release tag, push, deployment or npm publication is performed by these changes.
+
+### Observed checkout verification
+
+- Integration owner: build, **403 behavioral tests**, strict generated public and DOM-free core types, security AST/dependency gates, isolated installed package/asset CLI/type smoke, and development/runtime audits (zero reported vulnerabilities) passed.
+- **108 stereo renders** (all eighteen bundled presets × eco/standard/high × 44100/48000 Hz, fixed note/velocity/pan/gate) remained bit-identical to the published checkout's committed distribution. This establishes those exercised defaults, not every possible score.
+- Expressive SMF export/import preserved gate-internal bend/expression/pan/modulation under explicit policy, reported no losses for that representable fixture, rendered **31680 finite stereo frames** and encoded a **126764-byte WAV**; after-gate export rejected.
+- Native isolated Microsoft Edge **154.0.4258.48** UI verified save → load without autoplay → explicit replay, edited gain/section persistence, arbitrary imported layer/section names, quantized switches with fades, literal HTML-looking capture metadata, desktop manual-pass remaining unverified and scope invalidation. No page errors were observed; screenshots were inspected. Automation is not hardware/listening evidence.
+- A separate native Edge boundary smoke confirmed active exports stay unverified, 270 synthetic host actions retain 256 observations with 16 counted drops, 24 finished runs disable further capture, and a deliberately deferred injected permission result after Dispose cannot resurrect the adapter/audio. These synthetic checks do not exercise a physical permission prompt/controller.
+- The existing browser smoke and stress bodies also passed using a throwaway launch override selecting isolated Edge (not mocked audio, no weakened gates): real stereo/pan analyser signal, suspend/resume/close ownership, 768 dense notes, bounded contention, expected late rejection and final zero active voices/pending events/DSP errors. The smoke fixture logged a forbidden resource request while its audio/lifecycle assertions passed; the separate example UI had no page errors.
+- The 29-row Apple M5 / darwin arm64 / Node v26.7.0 benchmark used 48000 Hz, 128 frames, 300 excluded warmup blocks and 2000 measured blocks per row. All rows retained clean diagnostics and zero observed misses. The fully occupied held-brass matrix selected eco/32, standard/32 and high/16 as highest sampled candidates under 50% p99 reserve; high/32 was ineligible. The complete matrix and its scope are in [acoustic-quality](./doc/acoustic-quality.md#observed-checkout-measurement).
+- ExpressionSecurity approved scoped static **A/B**, and ArrangementCaptureSecurity scoped **A/C/D**, with no evidence-backed findings. Reviewers ran no runtime gates. These reviews do not approve publication or certify hardware/listeners.
+- The pinned Playwright Chromium launcher initially failed because its cached macOS Framework was missing; forced reinstallation downloaded but timed out during installation. Managed browser sessions also detached. Native Edge supplied the observed UI checks; these are not successful runs of the pinned Chromium binary.
+
+
 ## v1.9
 
 Package version 1.9.0. Integration and musical workflows release; voice format remains v6. Historical releases remain immutable. GitHub distribution is separate from npm publication; no npm publication is performed.

@@ -6,6 +6,8 @@ GitHub Release **v1.9（套件 1.9.0）**加入可攜樂譜專案、Standard MID
 
 音色格式版本與套件版本獨立：v1.9 與歷史 v1.7 使用 canonical v6；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–5 仍保留各自原有輸入格式。
 
+**尚未發佈的 checkout 新增功能：**[可攜 Arrangement 定義](./score-projects.md)、選用的 [MIDI 檔案表情保留與損失摘要](./midi-files.md)、[實測容量候選](./acoustic-quality.md)及[跨功能契約總覽](./host-integration.md#cross-feature-contracts)需使用目前 checkout 建置，不包含在不可變的 v1.9 tarball。實體手機／MIDI 與人工聽感仍須真正的原始觀察才能完成驗收，不能用自動播放冒充通過。
+
 - [安裝與範例頁面](#安裝與範例頁面)
 - [瀏覽器靜態部署](#瀏覽器靜態部署)
 - [瀏覽器 API 與自訂音色](#瀏覽器-api-與自訂音色)
@@ -63,7 +65,7 @@ npm install ../OPM.js/opm.js-1.9.0.tgz
 python3 -m http.server 8000
 ```
 
-開啟 `http://localhost:8000/index.html` 查看 12 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計與音訊匯流排。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
+開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
 
 ## 瀏覽器靜態部署
 
@@ -341,7 +343,7 @@ mixGain 是有限 0–1（預設 1），在 **tanh 前**縮放；下游 GainNode
 
 樂譜使用相對秒數；note 為唯一正 ID 與有限 duration，stop／control 指向同一樂譜音符。整份驗證後才派送；限 128 notes、256 保留槽（每音符兩槽加命令）、含 gate 的 60 秒及離線 4,000,000 影格。playSequence 回傳防禦性 scoreId→noteId Map 與冪等 stop，不會對其他 caller 原子保留 worklet 容量。renderSequence 包含尾音；相同 PCM 須設定／取樣率／相對影格原點一致且無其他競爭音符。WAV 僅傳 left／right／sampleRate。
 
-以 HTTPS 在實體 iOS／Android 使用[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html)，依[行動裝置驗收流程與支援矩陣](./mobile-acceptance.md)記錄裝置／OS／瀏覽器／取樣率／政策、觀察與手動 pass／fail／unverified 判定。涵蓋鎖屏、切換 app、來電、耳機／Bluetooth、節電、長播放與主執行緒停頓。報告僅留本機；桌面、headless 與 analyser 訊號不代表實機恢復或聽感不中斷。恢復須手勢；借用 context 由宿主管理。
+以 HTTPS 在實體 iOS／Android 使用[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html)，依[行動裝置驗收流程與支援矩陣](./mobile-acceptance.md)記錄裝置／OS／瀏覽器／取樣率／政策、觀察與手動 pass／fail／unverified 判定。涵蓋鎖屏、切換 app、來電、耳機／Bluetooth、節電、長播放與主執行緒停頓。報告僅留本機；桌面、headless 與 analyser 訊號不代表實機恢復或聽感不中斷。恢復須手勢；借用 context 由宿主管理。
 
 ### 有界長樂譜
 
@@ -375,13 +377,13 @@ bpm 預設 120、範圍 1–1000；tempoMap 從 beat 0 開始嚴格遞增，最�
 
 v1.8 的 `updateKey(part,key,controls)` 對單一實體按鍵套用 NoteControls；未選取的 mono key 保留控制，不改動目前 gate。`updatePartNotes(part,controls)` 更新整個聲部的自有音符（含 release 尾音）與未來音符預設。configurePart 的 `voiceLimit` 為 1–32，自有 release 尾音也佔額度，滿額 noteOn 拋出 RangeError；它不增加引擎聲部數。`voicePriority` 為 0–127（預設 0），與 last／high／low 的按鍵選擇 priority 不同。
 
-選用的 `createMidiAdapter(performance,await requestMidiAccess(),options)` 將使用者授權的 MIDI inputs 映射到聲部，支援 note、sustain、bend、wheel、volume／expression、pan、pressure 與 all-notes-off。匯入模組不會要求權限，永不要求 SysEx；disconnect／dispose 只釋放 adapter 自有按鍵。詳細配方與限制見[表情演奏與 MIDI](./midi-performance.md)及[第 10 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/instrument.html)。
+選用的 `createMidiAdapter(performance,await requestMidiAccess(),options)` 將使用者授權的 MIDI inputs 映射到聲部，支援 note、sustain、bend、wheel、volume／expression、pan、pressure 與 all-notes-off。匯入模組不會要求權限，永不要求 SysEx；disconnect／dispose 只釋放 adapter 自有按鍵。詳細配方與限制見[表情演奏與 MIDI](./midi-performance.md)及[第 10 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/instrument.html)。
 
 ### 速度曲線、網格與分層編曲
 
 `TempoPoint` 為 `{beat,bpm,curve?,endBpm?}`；省略 curve 或 `'step'` 為定速段，`'linear'` 使 BPM 隨拍點線性變化至下一點 bpm 或指定 endBpm（僅 linear 可用；末點不可 linear）。beatsToSeconds／secondsToBeats 使用閉式對數積分與反函式。`quantizeBeat`、`swingBeat`、`swingBeatEvents` 從根入口 `opm.js` 匯入（純瀏覽器使用部署的 `./opm/api/index.js`），不是 `opm.js/core` 匯出；後者連同音符起點與終點一起套用 swing。
 
-`createArrangement(opm,{layers,sections,initialSection,bpm?,tempoMap?,timeSignature?})` 在共用拍點網格上循環具名 layers；`switchSection`／`setLayer` 在不早於已接收音符的第一個量化邊界提交（預設 bar，也可 beat／拍數），回傳提交拍點。共用 layer 保持連續，不重觸發；移除 layer 預設在邊界 release，`preserveNotes:true` 可讓它自然結束。layer 與 note 的 voicePriority 取較大值，優先權拒絕計入 `snapshot.priorityDrops` 而不停止編曲，其他拒絕會停止並通知 onError。至多 16 layers、32 sections、65,536 events，每層循環長度至多 256 拍；只清理自有音符。Arrangement pause／resume 不還原跨越恢復點的持續音，只從後續 onset 繼續；它和 Transport 都不是 DSP checkpoint。公式、密度上限及可執行配方見[自適應音樂](./adaptive-music.md)與[第 09 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/adaptive.html)。
+`createArrangement(opm,{layers,sections,initialSection,bpm?,tempoMap?,timeSignature?})` 在共用拍點網格上循環具名 layers；`switchSection`／`setLayer` 在不早於已接收音符的第一個量化邊界提交（預設 bar，也可 beat／拍數），回傳提交拍點。共用 layer 保持連續，不重觸發；移除 layer 預設在邊界 release，`preserveNotes:true` 可讓它自然結束。layer 與 note 的 voicePriority 取較大值，優先權拒絕計入 `snapshot.priorityDrops` 而不停止編曲，其他拒絕會停止並通知 onError。至多 16 layers、32 sections、65,536 events，每層循環長度至多 256 拍；只清理自有音符。Arrangement pause／resume 不還原跨越恢復點的持續音，只從後續 onset 繼續；它和 Transport 都不是 DSP checkpoint。公式、密度上限及可執行配方見[自適應音樂](./adaptive-music.md)與[第 09 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/adaptive.html)。
 
 保留 quick-start 的按鈕／輸出並替換 module script，可直接試用兩種 helper：
 
@@ -575,7 +577,7 @@ Worker 在模組載入／解析／求值後送出 `{type:'ready',protocol:1}`，
 
 **沒有內建整體期限或自動重試**；可用 `signal:AbortSignal.timeout(300000)` 對整份工作設五分鐘政策。取消不等待卡住的 write／abort；sink 仍須失效化已寫入的部分輸出。完整診斷、deadline 與回滾配方見[Worker 診斷](./worker-diagnostics.md)。
 
-[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.8/examples/sequence.html) 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。
+[第 08 範例（僅供 checkout）](https://github.com/YueyuHoshizora/OPM.js/blob/v1.9/examples/sequence.html) 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。
 
 `importDX7(Uint8Array)` 只接受單個框架／checksum 正確的 **163-byte 單音色**或 **4104-byte／32 音色銀行**；拒絕原始、串接或非 7-bit payload，輸出完整版本 6 音色。describeDX7 回傳 name／sourceAlgorithm／algorithm／selectedOperators／droppedOperators／warnings；原 algorithm 1–32、轉換後 0–7，operator 編號依 DX7 的 1–6。
 

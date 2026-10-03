@@ -72,7 +72,11 @@ Independent note `gain` and `expression` are both bounded to 0..1 and multiply b
 
 Versioned score-project parsing accepts only the documented own-data schema, detached validated voices, bounded beat events and synthesis settings. Loading a project does not fetch assets, execute code or start playback. Compilation converts note gate endpoints through the complete tempo map; offline resource budgets still apply after conversion.
 
+The separate version-1 Arrangement project uses the same own-data beat/voice/settings boundaries and one pure definition validator shared with live arrangements. Bounds include 8 MiB serialized input/output, 128 voices/256 KiB voice JSON, 16 layers, 32 sections and 65,536 total events. Parsing is inert; persisted musical definitions do not include live IDs, permissions, pending commands or DSP state. Host replay must explicitly load validated voices and start from a gesture.
+
 The independent Standard MIDI file adapter validates native bytes, bounded chunks, PPQN timing and event framing. It does not provide a native MIDI driver, transmit SysEx or interpret uploaded bytes as executable content. Hosts must check file size before buffering, choose explicit channel-to-voice mappings, expose import warnings and reject unsupported export semantics instead of silently changing a score.
+
+Opt-in expressive SMF conversion separately bounds generated per-note fanout to 65,536 events. Frozen loss summaries separate omitted content, approximations and recognized source-message counts. Channel expression after a closed gate reports possible patch-dependent release-tail loss; strict unsupported policy rejects it. Export rejects incompatible channel ownership, unsupported controls and after-gate semantics rather than guessing. Explicit pitch-range policy is not RPN support.
 
 ### External downloads and file uploads
 
@@ -237,6 +241,8 @@ Unreleased integration-quality review: FinalImprovementInputs approved scoped st
 v1.9 release review: Release19Inputs approved scoped static **A/B** and Release19Supply scoped static **C/D** for an isolated canonical package 1.9.0 candidate, with no evidence-backed security findings. Reviewers ran no runtime gates. Numbered live-tree generated copies are not approved for packaging and must remain outside the candidate. GitHub publication requires exact clean-commit artifacts, passing remote Node/browser CI and an archive digest retained in the release record. Physical-device/MIDI, human listening and npm provenance remain unverified and are not claimed by this GitHub-only release.
 
 v1.9 deadline repair: Release19Supply rechecked and approved scoped static **C/D** topology-cache/pooling/render changes after the initial release candidate failed the Node 22 prepared-burst p99 gate. Fixed slot-local caches derive only from the existing validated graphs, overwrite all edges, preserve summation order and retain finite checks, bounded fades and reentrant callback behavior. The reviewer executed no checks; this is not a performance waiver. The repaired exact commit must pass the unchanged remote gates before tagging.
+
+Unreleased readiness review: ExpressionSecurity approved scoped static **A/B** for final expressive SMF boundaries, ownership and loss accounting; ArrangementCaptureSecurity approved scoped **A/C/D** for portable/shared arrangement validation, lifecycle, inert imports, pure core contracts and bounded text-only local MIDI capture. No evidence-backed findings remained. Reviewers executed no gates. The integration owner separately observed 403 passing tests, installed package/types/security/audit checks, 108 bit-identical baseline renders, scoped capacity measurements and native isolated Edge UI/worklet checks, recorded in CHANGELOG. Physical phones/controllers and genuine eighteen-preset listening originals remain blocked/unverified. This is not release/publication approval.
 
 ## Non-goals
 

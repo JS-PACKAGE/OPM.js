@@ -134,6 +134,27 @@ const acknowledgement = await engine.waitForCommand(stop, { timeout: 2000 });
 
 `close()` disconnects OPM's node, closes its port and removes its context listener; it is restartable. `dispose()` is terminal and idempotent: it also removes subscriptions/`onEvent`, rejects outstanding waits and prevents restart/new subscriptions. Both close an owned AudioContext, but **never close or suspend a borrowed context**. The host owns its additional routing nodes and any context it supplied.
 
+## Cross-feature contracts
+
+| Identity / observation | Meaning | Not equivalent to |
+| --- | --- | --- |
+| Score note ID | Local musical identity used by note, control and stop events | A live OPM note ID; score IDs are remapped on admission |
+| OPM note ID | One live note's owned lifecycle | A physical key ID or a command ID |
+| Performance key ID | One physical key press, distinct even at equal pitch | Its current sounding gate; mono selection may reuse or replace a gate |
+| Command ID / `accepted` | Correlated command admission | Scheduled execution, audible onset or completed release |
+| Note `started` / `released` / `ended` | Audio-frame lifecycle transitions | Device-output or microphone-observed timing; `released` may retain a tail |
+| Arrangement committed beat | The scheduled musical change boundary | Immediate application; already admitted notes retain their times |
+| `getDiagnostics()` | Voice/queue counts, errors and rejected notes | CPU utilization, GC pauses, underrun counters or audible continuity |
+
+Persist authored music, not an audio session. [Score projects](./score-projects.md) store finite beat events; Arrangement projects store looping layers and named sections. Both retain validated named patches, tempo/meter and synthesis settings. They do not retain current DSP phases/envelopes, live key/pedal ownership, pending section commands, host effects/routing or MIDI permissions/controller mappings. Hosts save those additional application choices separately and explicitly.
+
+Parsing or loading a file never grants permission or starts audio. Load the validated named voices, construct the intended engine with its immutable quality/voice budget, connect the host graph and start from a trusted gesture. Dispose the old helper and its owned engine when replacing a session; never close a context borrowed from another component. Treat new project definitions as musical starts, not seamless continuation.
+
+Live MIDI and MIDI files are different contracts. The live adapter applies channel/key policies to owned gates; an SMF conversion must make its expressive-controller policy explicit and expose every reported omission or approximation. A valid MIDI or project round trip does not prove hardware fidelity or lossless conversion of unsupported musical semantics. See [MIDI files](./midi-files.md).
+
+For reproducible sound retain the package version, normalized patch identity, sample rate, quality, voice budget, tuning, mix gain and stealing policy. Retain host/output gains and routing separately: downstream attenuation cannot undo the engine's saturation. Numerical output and measured host capacity remain separate from [physical recovery](./mobile-acceptance.md) and [human listening acceptance](./voice-quality.md).
+
+
 ## Audio/output clock mapping and component cleanup
 
 `getOutputTimestamp()` pairs an AudioContext `contextTime` (seconds at device output) with the corresponding `performanceTime` (milliseconds on the performance clock). It is not a pair of independent current-time samples. Map an audio event at `audioTime` to an estimated output time with:
