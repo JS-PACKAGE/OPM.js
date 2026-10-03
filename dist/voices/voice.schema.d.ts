@@ -143,6 +143,18 @@ export declare const voiceSchema: {
                 additionalProperties: boolean;
                 required: string[];
                 properties: {
+                    waveform: {
+                        type: string;
+                        enum: string[];
+                        default: string;
+                    };
+                    noiseRate: {
+                        type: string;
+                        minimum: number;
+                        maximum: number;
+                        default: number;
+                        description: string;
+                    };
                     frequency: {
                         type: string;
                         minimum: number;

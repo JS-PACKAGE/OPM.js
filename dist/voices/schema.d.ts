@@ -49,6 +49,7 @@ export interface KeyScale {
     leftDbPerOctave: number;
     rightDbPerOctave: number;
 }
+export type OperatorWaveform = 'sine' | 'half' | 'abs' | 'quarter' | 'alternating' | 'camel' | 'square' | 'saw' | 'noise';
 export interface LegacyOperator {
     ratio: number;
     level: number;
@@ -58,6 +59,8 @@ export interface LegacyOperator {
     velocitySensitivity?: never;
     frequency?: never;
     rateKeyScale?: never;
+    waveform?: never;
+    noiseRate?: never;
 }
 export interface LegacyOperatorV2 extends Omit<LegacyOperator, 'keyScale'> {
     keyScale?: KeyScale;
@@ -65,9 +68,13 @@ export interface LegacyOperatorV2 extends Omit<LegacyOperator, 'keyScale'> {
 export interface LegacyOperatorV3 extends Omit<LegacyOperatorV2, 'velocitySensitivity'> {
     velocitySensitivity?: number;
 }
-export interface Operator extends Omit<LegacyOperatorV3, 'frequency' | 'rateKeyScale'> {
+export interface LegacyOperatorV6 extends Omit<LegacyOperatorV3, 'frequency' | 'rateKeyScale'> {
     frequency?: number;
     rateKeyScale?: number;
+}
+export interface Operator extends Omit<LegacyOperatorV6, 'waveform' | 'noiseRate'> {
+    waveform?: OperatorWaveform;
+    noiseRate?: number;
 }
 export type FourOperators<T = Operator> = [T, T, T, T];
 interface VoiceBase {
@@ -78,17 +85,22 @@ interface VoiceBase {
 }
 /** Strict single-voice input; omitted version uses the current shape. */
 export type VoiceInput = (VoiceBase & {
-    version?: 6;
+    version?: 7;
     lfo?: LFOInput;
     pitchEnvelope?: PitchEnvelope;
     ops: readonly [Operator, Operator, Operator, Operator];
+}) | (VoiceBase & {
+    version: 6;
+    lfo?: LFOInput;
+    pitchEnvelope?: PitchEnvelope;
+    ops: readonly [LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6];
 }) | (VoiceBase & {
     version: 5;
     lfo?: Omit<LegacyLFOV5, 'waveform'> & {
         waveform?: LFO['waveform'];
     };
     pitchEnvelope?: PitchEnvelope;
-    ops: readonly [Operator, Operator, Operator, Operator];
+    ops: readonly [LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6];
 }) | (VoiceBase & {
     version: 4;
     lfo?: Omit<LegacyLFOV4, 'waveform'> & {
@@ -113,7 +125,7 @@ export type VoiceInput = (VoiceBase & {
     ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator];
 });
 export interface Voice {
-    version: 6;
+    version: 7;
     name: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -144,12 +156,16 @@ export interface LegacyVoiceV4 extends Omit<LegacyVoiceV3, 'version' | 'lfo'> {
     version: 4;
     lfo: LegacyLFOV4;
 }
-export interface LegacyVoiceV5 extends Omit<Voice, 'version' | 'lfo'> {
+export interface LegacyVoiceV6 extends Omit<Voice, 'version' | 'ops'> {
+    version: 6;
+    ops: FourOperators<LegacyOperatorV6>;
+}
+export interface LegacyVoiceV5 extends Omit<LegacyVoiceV6, 'version' | 'lfo'> {
     version: 5;
     lfo: LegacyLFOV5;
 }
 export interface NormalizedVoice {
-    version: 6;
+    version: 7;
     name?: string;
     algorithm: Algorithm;
     feedback: Algorithm;
@@ -158,7 +174,7 @@ export interface NormalizedVoice {
     pitchEnvelope?: PitchEnvelope;
     ops: FourOperators;
 }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5;
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5 | LegacyVoiceV6;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops' | 'pitchEnvelope'>> & {
     readonly lfo: Readonly<LFO>;
     readonly pitchEnvelope?: Readonly<PitchEnvelope>;
@@ -179,10 +195,11 @@ export type PreparedVoice = Readonly<Omit<NormalizedVoice, 'lfo' | 'ops' | 'pitc
 export { prepareVoice } from './normalize.js';
 export declare const MAX_BANK_BYTES = 262144;
 export declare const MAX_BANK_VOICES = 128;
-type LimitKey = 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'frequency' | 'rateKeyScale' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'delay' | 'phase' | 'initial' | 'peak' | 'sustain' | 'final' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
+type LimitKey = 'noiseRate' | 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'frequency' | 'rateKeyScale' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'delay' | 'phase' | 'initial' | 'peak' | 'sustain' | 'final' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
 export declare const LIMITS: Readonly<Record<LimitKey, readonly [number, number]>>;
 export declare function bounded(value: unknown, min: number, max: number, label?: string): number;
 export declare function lfoWaveform(value: unknown): LFO['waveform'];
 export declare function lfoSync(value: unknown): NonNullable<LFO['sync']>;
+export declare function operatorWaveform(value: unknown): OperatorWaveform;
 export declare function validateVoice(input: unknown): FrozenVoice;
 export declare function parseVoiceBank(source: string | readonly unknown[]): Map<string, FrozenVoice>;

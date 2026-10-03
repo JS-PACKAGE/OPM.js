@@ -55,7 +55,10 @@ export interface PerformancePartSnapshot {
     readonly keys: readonly PerformanceKeySnapshot[];
 }
 export interface Performance {
-    configurePart(part: number, options: Partial<PerformancePartOptions>): void;
+    /** preserveNotes keeps existing gates when only the voice changes; default false. */
+    configurePart(part: number, options: Partial<PerformancePartOptions>, policy?: {
+        preserveNotes?: boolean;
+    }): void;
     updatePart(part: number, controls: PerformancePartControls): void;
     /** Update one physical key; inactive mono keys store controls without touching the selected gate. */
     updateKey(part: number, key: number, controls: NoteControls): boolean;

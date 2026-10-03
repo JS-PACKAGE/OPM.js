@@ -1,8 +1,9 @@
 import type { Performance } from './performance.js';
+import type { MidiVoiceMap } from '../core/midi-state.js';
 export type MidiScalarControl = 'pitch' | 'expression' | 'gain' | 'pan' | 'modulation' | 'feedback' | 'lfoRate' | 'amDepth' | 'pmDepth';
 export type MidiOperatorControl = 'operatorLevels' | 'operatorRatios' | 'operatorFrequencies';
 interface MidiControllerRange {
-    /** CC number 0..127, excluding pedal/reset/panic CC64/120/121/123. */
+    /** CC number 0..127, excluding RPN selection/pedal/reset/panic CC64/100/101/120/121/123. */
     controller: number;
     /** CC0 maps to min and CC127 to max; both endpoints must be valid engine controls. */
     min: number;
@@ -48,6 +49,8 @@ export interface MidiAdapterOptions {
     parts?: number;
     /** Semitones for full pitch-bend deflection, 0..48; default 2. */
     pitchBendRange?: number;
+    /** Opt-in program 0..127 to named voice selection for later note onsets. */
+    programVoices?: MidiVoiceMap;
     /** Restrict to these stable port IDs; default every currently and subsequently connected input. */
     inputIds?: readonly string[];
     /** At most 128 own-data mappings. Ordinary CC defaults are overridden only for listed CCs. */
@@ -74,7 +77,7 @@ export interface MidiAdapter {
 export declare function requestMidiAccess(host?: MidiNavigatorLike | undefined): Promise<MidiAccessLike>;
 /**
  * Map channel-voice MIDI from user-granted inputs onto Performance parts. It is an adapter, not a MIDI driver:
- * no SysEx, clock, program-change or hardware-specific behavior is implemented.
+ * no SysEx, clock or hardware-specific behavior is implemented.
  *
  * Note-off releases the oldest still-held key of the same input/channel/pitch. CC1, channel pressure and polyphonic
  * pressure all scale LFO depth 1x..2x (never below the patch default). CC7/CC11 multiply into part expression, CC10 pans,

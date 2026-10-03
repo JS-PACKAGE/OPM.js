@@ -1,16 +1,17 @@
 import type { BeatSequenceEvent } from './sequence.js';
 import type { TempoPoint, TimeSignature } from './transport.js';
+import type { MidiVoiceMap } from './midi-state.js';
 export declare const MAX_MIDI_FILE_BYTES: number;
 export declare const MAX_MIDI_FILE_TRACKS = 128;
 /** Counts all wire events, including skipped messages and end-of-track markers. */
 export declare const MAX_MIDI_FILE_EVENTS = 65536;
-export type MidiFileWarningCode = 'header-extension' | 'ignored-meta' | 'ignored-sysex' | 'ignored-channel' | 'release-velocity' | 'default-voice' | 'sustain-applied' | 'tempo-conflict' | 'meter-detail' | 'unclosed-notes' | 'release-tail-controls';
+export type MidiFileWarningCode = 'header-extension' | 'ignored-meta' | 'ignored-sysex' | 'ignored-channel' | 'ignored-program' | 'release-velocity' | 'default-voice' | 'sustain-applied' | 'tempo-conflict' | 'meter-detail' | 'unclosed-notes' | 'release-tail-controls';
 export interface MidiFileWarning {
     code: MidiFileWarningCode;
     message: string;
     count: number;
 }
-export type MidiFileControlKind = 'pitch-bend' | 'expression' | 'pan' | 'modulation' | 'channel-pressure' | 'poly-pressure';
+export type MidiFileControlKind = 'pitch-bend' | 'expression' | 'pan' | 'modulation' | 'channel-pressure' | 'poly-pressure' | 'program-change' | 'pitch-bend-range';
 export interface MidiFilePreservedControl {
     kind: MidiFileControlKind;
     count: number;
@@ -25,6 +26,8 @@ export interface MidiImportOptions {
     /** Zero-based MIDI channels, written as decimal object keys, to OPM voice names. */
     channelVoices?: Readonly<Record<string, string>>;
     defaultVoice?: string;
+    programVoices?: MidiVoiceMap;
+    drumVoices?: MidiVoiceMap;
     /** Unsupported musical/metadata content is reported, or rejects the entire file. */
     unsupported?: 'warn' | 'reject';
     /** Includes keys held by sustain at the final end-of-track tick. */
@@ -32,7 +35,7 @@ export interface MidiImportOptions {
     sustain?: 'apply' | 'reject';
     /** Legacy note-only conversion is the default. */
     controls?: 'preserve' | 'omit';
-    /** Caller policy, not inferred from RPN; finite semitones in 0..48, default 2. */
+    /** Initial bend range; preserve mode honors RPN 0. Finite semitones in 0..48, default 2. */
     pitchBendRange?: number;
 }
 export interface MidiImportResult {
