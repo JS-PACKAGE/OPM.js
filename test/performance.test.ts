@@ -202,7 +202,8 @@ test('mono legato preserves onset velocity and envelopes while retrigger restart
   const legato = await scenario(true), retrigger = await scenario(false);
   assert.equal(legato.first, legato.second);
   assert.notEqual(retrigger.first, retrigger.second);
-  assert.ok(energy(legato.transition) > energy(retrigger.transition) * 20);
+  // Skip the released note's last ~13 frames still leaving the linear-phase decimator.
+  assert.ok(energy(legato.transition.subarray(32)) > energy(retrigger.transition.subarray(32)) * 20);
   assert.ok(Math.abs(frequency(legato.transition) - 880) < 1);
 });
 

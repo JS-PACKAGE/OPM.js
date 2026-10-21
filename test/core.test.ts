@@ -158,7 +158,7 @@ test('voice ceiling steals the oldest note and preserves headroom with eight voi
 test('nonfinite DSP state snaps to silence and increments the error count', () => {
   const synth = new Synth(16000);
   synth.noteOn(voice(), 60);
-  synth.voices[0].filters[0] = Infinity;
+  synth.voices[0].filters.fill(Infinity);
   assert.ok(audio(synth, 128).every(value => value === 0));
   assert.equal(synth.errorCount, 1);
   assert.equal(synth.voices.length, 0);

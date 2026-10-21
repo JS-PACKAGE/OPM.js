@@ -88,11 +88,9 @@ for (const rate of QUALITY_SAMPLE_RATES) {
       const amplitude = binAmplitude(result.samples, rate, hz);
       const lossDb = 20 * Math.log10(amplitude / fundamental);
       assert.ok(Number.isFinite(lossDb) && lossDb <= 0.02, 'controlled passband does not boost settled tones');
-      if (fraction <= 0.2) assert.ok(lossDb > -0.03, 'flat upper-register passband through 0.2 Fs');
-      if (fraction === 0.35) assert.ok(lossDb > -12 && lossDb < -11, 'documented steep transition band');
+      assert.ok(lossDb > -0.03, 'flat upper-register passband through .35 Fs');
       passbandDb.push(lossDb);
     }
-    assert.ok(passbandDb[2] - passbandDb[3] > 10, 'transition-band attenuation is distinct from passband brightness');
     for (const fraction of [0.625, 1.125]) {
       const sourceHz = Math.round(rate * fraction);
       const ultrasonic = renderNote(controlledTone(rate, sourceHz));

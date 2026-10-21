@@ -3,7 +3,7 @@ import type { AlgorithmGraph } from './algorithms.js';
 import { normalizeTuning, tuningFrequency } from './tuning.js';
 import type { NormalizedTuning, TuningOptions } from './tuning.js';
 import { lfoValue } from './lfo.js';
-import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, qualityOversample } from './decimator.js';
+import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, decimatorPeak, qualityOversample } from './decimator.js';
 import type { QualityProfile } from './decimator.js';
 export type { QualityProfile } from './decimator.js';
 
@@ -259,7 +259,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     operatorStart: 0, operatorFrames: 0,
     gains: new Float64Array(4 * oversample), levels: new Float64Array(4),
     leftGain: 0, rightGain: 0, lastSample: 0, fadeRemaining: 0, lastFadeGain: 1, carrierGain: 0,
-    phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(oversample === 2 ? 4 : DECIMATOR_STATE_SIZE), releaseDb: new Float64Array(4),
+    phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(DECIMATOR_STATE_SIZE), releaseDb: new Float64Array(4),
     previous: 0, older: 0, pitchRelease: 0, feedbackScale: 0,
     elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0,
     expressionFrom: 1, expressionTarget: 1, expressionStart: 0, expressionFrames: 0,
@@ -1101,7 +1101,7 @@ export class Synth {
           mixedRight += sample * active.rightGain;
           let tailPeak = Math.abs(sample);
           if (active.releaseTime >= 0 && (active.elapsed - 1) / this.sampleRate >= active.releaseEnd) {
-            for (let state = 0; state < active.filters.length; state++) tailPeak = Math.max(tailPeak, Math.abs(active.filters[state]));
+            tailPeak = Math.max(tailPeak, decimatorPeak(active.filters));
           } else tailPeak = Infinity;
           if (tailPeak < AMPLITUDE_FLOOR) {
             this.terminalIds[terminalCount] = active.id;

@@ -72,7 +72,7 @@ test('prepared admissions never allocate typed state and remain bounded under re
       assert.equal(new Set([...synth.voices, ...synth.fades, ...synth.freeVoices]).size, capacity);
     }
     const invalidId = synth.voices[0].id;
-    synth.voices[0].filters[0] = Infinity;
+    synth.voices[0].filters.fill(Infinity);
     synth.render(left, right);
     assert.equal(terminal.get(invalidId), 'error');
     assert.ok(synth.voices.some(active => active.id === 1001));
@@ -270,7 +270,7 @@ test('terminal callback replacements first render on the next frame and cannot r
     let callbacks = 0;
     const admit = () => {
       const id = synth.noteOn(prepared, 60);
-      if (corrupt) synth.voices[0].filters[0] = Infinity;
+      if (corrupt) synth.voices[0].filters.fill(Infinity);
       else synth.noteOff(id);
     };
     synth.onVoiceEnded = (_id, reason) => {

@@ -4,6 +4,7 @@ import { Synth, renderNote, prepareVoice, normalizeVoice, validateNoteControls }
 import { validateVoice } from '../src/voices/schema.js';
 import type { NoteControls, Voice, VoiceInput } from '../src/core/index.js';
 import type { FourOperators, LegacyOperatorV6 } from '../src/voices/schema.js';
+import { filterGroupDelayFrames } from './decimator-reference.js';
 
 function tone(): Voice {
   return { version: 7, name: 'expressive-v5', algorithm: 7, feedback: 0, modIndex: 0,
@@ -259,7 +260,8 @@ test('operator ramps move linearly from current multipliers rather than jumping 
       const weight = drySignal * drySignal;
       projected += actualSignal * drySignal;
       energy += weight;
-      expected += weight * (start + (target - start) * frame / 16000 / 0.2);
+      // Output lags the control clock by the decimator's constant group delay.
+      expected += weight * (start + (target - start) * (frame - filterGroupDelayFrames()) / 16000 / 0.2);
     }
     assert.ok(Math.abs(projected / energy - expected / energy) < 0.003, 'demodulated gain follows the continuous linear multiplier');
   }

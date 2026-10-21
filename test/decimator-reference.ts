@@ -1,24 +1,40 @@
-// Reference mathematics only: analog Butterworth poles and Fourier convolution.
-// Neither the production coefficient generator nor its recurrence is imported.
+// Reference mathematics only: the half-band taps are the design contract and
+// are read from the coefficient table, but the transfer is evaluated directly
+// as each linear-phase stage's DTFT. The polyphase rings are not used.
+import { createDecimatorCoefficients } from '../src/core/decimator.js';
 import type { QualityProfile } from '../src/core/decimator.js';
 import { referenceProfile } from './fm-reference-fixtures.js';
 
-export function filterResponse(frequency: number, sampleRate: number, cutoff = 0.30, quality: QualityProfile = 'standard') {
-  const { factor, order } = referenceProfile(quality);
-  const warpedFrequency = Math.tan(Math.PI * frequency / (factor * sampleRate)) / Math.tan(Math.PI * cutoff / factor);
-  let real = 1, imaginary = 0;
-  for (let pole = 0; pole < order; pole++) {
-    const angle = Math.PI * (2 * pole + order + 1) / (2 * order);
-    const poleReal = Math.cos(angle), poleImaginary = Math.sin(angle);
-    const denominatorReal = -poleReal, denominatorImaginary = warpedFrequency - poleImaginary;
-    const power = denominatorReal ** 2 + denominatorImaginary ** 2;
-    const factorReal = (poleReal ** 2 - poleImaginary * denominatorImaginary) / power;
-    const factorImaginary = (poleReal * denominatorImaginary + poleReal * poleImaginary) / power;
-    const nextReal = real * factorReal - imaginary * factorImaginary;
-    imaginary = real * factorImaginary + imaginary * factorReal;
-    real = nextReal;
+/** Unique half-band taps per stage, input stage first, with every stage's input-rate multiple. */
+export function halfBandStages(quality: QualityProfile = 'standard') {
+  const table = createDecimatorCoefficients(1, quality), stages: { taps: Float64Array; rate: number }[] = [];
+  const { factor } = referenceProfile(quality);
+  for (let stage = 0, offset = 1; stage < Math.log2(table[0]); stage++) {
+    const count = table[offset];
+    stages.push({ taps: table.slice(offset + 1, offset + 1 + count), rate: factor / 2 ** stage });
+    offset += 1 + count;
   }
-  return { real, imaginary, magnitude: Math.hypot(real, imaginary) };
+  return stages;
+}
+
+// H_s(w) = e^{-jwc} (1/2 + 2 sum_k g_k cos((2k-1) w)), w at the stage input rate
+// and c = 2M-1 its centre delay. The cascade is evaluated at the internal rate,
+// so source products fold at the profile's INTERNAL Nyquist before filtering.
+export function filterResponse(frequency: number, sampleRate: number, quality: QualityProfile = 'standard') {
+  let magnitude = 1, phase = 0;
+  for (const { taps, rate } of halfBandStages(quality)) {
+    const omega = 2 * Math.PI * frequency / (rate * sampleRate);
+    let amplitude = 0.5;
+    for (let k = 0; k < taps.length; k++) amplitude += 2 * taps[k] * Math.cos((2 * k + 1) * omega);
+    magnitude *= amplitude;
+    phase -= omega * (2 * taps.length - 1);
+  }
+  return { real: magnitude * Math.cos(phase), imaginary: magnitude * Math.sin(phase), magnitude: Math.abs(magnitude) };
+}
+
+/** Linear-phase delay of the cascade in output frames. */
+export function filterGroupDelayFrames(quality: QualityProfile = 'standard'): number {
+  return halfBandStages(quality).reduce((sum, { taps, rate }) => sum + (2 * taps.length - 1) / rate, 0);
 }
 
 export function fft(real: Float64Array, imaginary: Float64Array, inverse = false): void {
@@ -54,14 +70,14 @@ export function fft(real: Float64Array, imaginary: Float64Array, inverse = false
 
 export function filterByFourier(source: Float64Array, sampleRate: number, quality: QualityProfile = 'standard'): Float64Array {
   // At least 4096 zero input samples remove circular wrap well beyond the
-  // slowest pole's settling time, even for envelope/release transitions.
+  // longest cascade's finite impulse response.
   const length = 2 ** Math.ceil(Math.log2(source.length + 4096));
   const real = new Float64Array(length), imaginary = new Float64Array(length);
   real.set(source);
   fft(real, imaginary);
   for (let bin = 0; bin < length; bin++) {
     const frequency = (bin <= length / 2 ? bin : bin - length) * referenceProfile(quality).factor * sampleRate / length;
-    const response = filterResponse(frequency, sampleRate, 0.30, quality);
+    const response = filterResponse(frequency, sampleRate, quality);
     const nextReal = real[bin] * response.real - imaginary[bin] * response.imaginary;
     imaginary[bin] = real[bin] * response.imaginary + imaginary[bin] * response.real;
     real[bin] = nextReal;
@@ -79,11 +95,4 @@ export function filterImpulseBounds(quality: QualityProfile = 'standard') {
     energy += impulse[i] ** 2; energyFirstMoment += i * impulse[i] ** 2;
   }
   return { impulse, l1, absoluteFirstMoment, energyDelayOutputFrames: energyFirstMoment / energy / referenceProfile(quality).factor };
-}
-
-export function filterGroupDelayFrames(fraction: number): number {
-  const before = filterResponse(fraction - 1e-6, 1), after = filterResponse(fraction + 1e-6, 1);
-  const crossReal = after.real * before.real + after.imaginary * before.imaginary;
-  const crossImaginary = after.imaginary * before.real - after.real * before.imaginary;
-  return -Math.atan2(crossImaginary, crossReal) / (4 * Math.PI * 1e-6);
 }

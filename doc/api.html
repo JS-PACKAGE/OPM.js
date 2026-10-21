@@ -704,10 +704,12 @@ export declare function prepareArrangementDefinition(input: unknown, voices?: Se
 export {};
 </code></pre></section>
 <section><h2 id="declaration-coredecimatordts">core/decimator.d.ts</h2><pre><code class="language-typescript">export type QualityProfile = &#39;eco&#39; | &#39;standard&#39; | &#39;high&#39;;
-export declare const DECIMATOR_STATE_SIZE = 8;
+export declare const DECIMATOR_STATE_SIZE: number;
 export declare function qualityOversample(quality: QualityProfile): number;
 export declare function createDecimatorCoefficients(sampleRate: number, quality?: QualityProfile): Float64Array;
 export declare function decimateSample(input: number, state: Float64Array, coefficients: Float64Array): number;
+/** Largest buffered sample magnitude, excluding counter/position bookkeeping. */
+export declare function decimatorPeak(state: Float64Array): number;
 </code></pre></section>
 <section><h2 id="declaration-coreenvelopedts">core/envelope.d.ts</h2><pre><code class="language-typescript">import type { ADSR } from &#39;../voices/schema.js&#39;;
 export interface PreparedEnvelope extends ADSR {
