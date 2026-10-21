@@ -121,11 +121,20 @@ class Engine implements StereoEffects {
   }
   private chorusFrame(): void {
     const p = this.current, a = this.left, b = this.right;
+    // Voices sit pi/2 apart and the right tap leads by pi/2, so with s = sin(phase),
+    // c = cos(phase) the eight sines are left [s, c, -s, -c] and right [c, -s, -c, s].
+    // Voices whose weight is exactly 0 contribute exactly 0 and skip their reads.
+    const s = Math.sin(this.phase), c = Math.cos(this.phase);
+    const centre = this.rate * .01, swing = this.rate * .008 * p[1]!, left = this.chorus[0]!, right = this.chorus[1]!;
     let l = 0, r = 0, weights = 0;
     for (let voice = 0; voice < 4; voice++) {
-      const weight = p[4 + voice]!; weights += weight;
-      l += weight * this.chorus[0]!.read(this.rate * (.01 + .008 * p[1]! * Math.sin(this.phase + voice * Math.PI / 2)));
-      r += weight * this.chorus[1]!.read(this.rate * (.01 + .008 * p[1]! * Math.sin(this.phase + voice * Math.PI / 2 + Math.PI / 2)));
+      const weight = p[4 + voice]!;
+      if (weight === 0) continue;
+      weights += weight;
+      const sine = voice === 0 ? s : voice === 1 ? c : voice === 2 ? -s : -c;
+      const cosine = voice === 0 ? c : voice === 1 ? -s : voice === 2 ? -c : s;
+      l += weight * left.read(centre + swing * sine);
+      r += weight * right.read(centre + swing * cosine);
     }
     l /= Math.max(1, weights); r /= Math.max(1, weights);
     this.chorus[0]!.push(a + p[3]! * l); this.chorus[1]!.push(b + p[3]! * r);

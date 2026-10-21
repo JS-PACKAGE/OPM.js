@@ -149,7 +149,7 @@ export function validateNoteControls(input: NoteControls): NoteControls {
 interface ActiveVoice {
   id: number; sequence: number; note: number; voicePriority: number; voice: PreparedVoice; graph: AlgorithmGraph;
   inputIndices: Int8Array; carrierIndices: Uint8Array;
-  baseIncrements: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
+  baseIncrements: Float64Array; incrementDeltas: Float64Array; incrementCurves: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
   attackStep: Float64Array; decayStep: Float64Array; releaseStep: Float64Array; gains: Float64Array;
   attackTimes: Float64Array; decayTimes: Float64Array; releaseTimes: Float64Array;
   operatorLevels: Float64Array; operatorFrom: Float64Array; operatorTargets: Float64Array;
@@ -251,7 +251,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
   return {
     id: 0, sequence: 0, note: 0, voicePriority: 0, voice: null!, graph: ALGORITHMS[0],
     inputIndices: new Int8Array(8), carrierIndices: new Uint8Array(4),
-    baseIncrements: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
+    baseIncrements: new Float64Array(4), incrementDeltas: new Float64Array(4), incrementCurves: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
     sustainDb: new Float64Array(4), sustainGain: new Float64Array(4),
     attackStep: new Float64Array(4), decayStep: new Float64Array(4), releaseStep: new Float64Array(4),
     attackTimes: new Float64Array(4), decayTimes: new Float64Array(4), releaseTimes: new Float64Array(4),
@@ -287,6 +287,12 @@ function pitchAt(active: ActiveVoice, frame: number): number {
 function rampAt(from: number, target: number, start: number, frames: number, frame: number): number {
   if (frames === 0 || frame >= start + frames) return target;
   return from + (target - from) * (frame - start) / frames;
+}
+
+function rampedFrequency(active: ActiveVoice, op: number, frame: number): number {
+  const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
+  const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
+  return rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, frame);
 }
 
 function pitchEnvelopeAt(active: ActiveVoice, time: number): number {
@@ -850,11 +856,7 @@ export class Synth {
     if (active.controlRamps & ENGINE_RAMP) advanceControls(active);
     if (controls.operatorRatios !== undefined || controls.operatorFrequencies !== undefined) {
       // Sample ongoing pitch-independent Hz before changing either timeline.
-      for (let op = 0; op < 4; op++) {
-        const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, active.elapsed);
-        const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
-        active.frequencies[op] = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, active.elapsed);
-      }
+      for (let op = 0; op < 4; op++) active.frequencies[op] = rampedFrequency(active, op, active.elapsed);
     }
     if (controls.operatorRatios !== undefined) {
       for (let op = 0; op < 4; op++) {
@@ -1013,20 +1015,44 @@ export class Synth {
     // All-sine voices with static operator levels and shared AM take the branch-light path below.
     const simple = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 &&
       !operatorRamping && !lfo.amTargets;
-    for (let sub = 0; sub < oversample; sub++) {
-      const frame = active.elapsed + sub / this.oversample;
-      if (dynamicPitch) {
-        const factor = 2 ** (pitchAt(active, frame) / 12 + pitchEnvelopeAt(active, time + this.subTimes[sub]) / 1200);
+    // The pitch exponent e = glide/12 + envelope/1200 is piecewise linear in time, so
+    // 2^e(n + s/O) = 2^e(n) * r^s with r = 2^((e(n+1) - e(n)) / O): two pows per
+    // output frame instead of O. Ramped Hz is piecewise linear, or quadratic while a
+    // Hz ramp chases a ratio ramp, so the parabola through x = 0, 1/2, 1 gives
+    // hz(n + x) = h0 + x * (b + c * x) with c = 2 * (h1 - 2 * hm + h0), b = h1 - h0 - c.
+    // Both are exact to rounding except in a frame holding a segment corner, which
+    // is smoothed over that single frame.
+    let pitchFactor = 1, pitchStep = 1;
+    const incrementDeltas = active.incrementDeltas, incrementCurves = active.incrementCurves;
+    if (dynamicPitch) {
+      const next = active.elapsed + 1;
+      const start = pitchAt(active, active.elapsed) / 12 + pitchEnvelopeAt(active, time) / 1200;
+      const end = pitchAt(active, next) / 12 + pitchEnvelopeAt(active, next / this.sampleRate) / 1200;
+      pitchFactor = 2 ** start;
+      if (end !== start) pitchStep = 2 ** ((end - start) / oversample);
+      if (frequencyRamping) {
         for (let op = 0; op < 4; op++) {
-          if (frequencyRamping) {
-            const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
-            const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
-            const hz = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, frame);
-            active.baseIncrements[op] = hz * active.frequencyScales[op];
-          }
-          const pm = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
-          steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, active.baseIncrements[op] * factor) * pm);
+          const scale = active.frequencyScales[op];
+          const from = rampedFrequency(active, op, active.elapsed) * scale;
+          const middle = rampedFrequency(active, op, active.elapsed + 0.5) * scale;
+          const to = rampedFrequency(active, op, next) * scale;
+          const curve = 2 * (to - 2 * middle + from);
+          active.baseIncrements[op] = from;
+          incrementDeltas[op] = to - from - curve;
+          incrementCurves[op] = curve;
         }
+      }
+    }
+    for (let sub = 0; sub < oversample; sub++) {
+      if (dynamicPitch) {
+        const x = sub / oversample;
+        for (let op = 0; op < 4; op++) {
+          const base = frequencyRamping ?
+            active.baseIncrements[op] + x * (incrementDeltas[op] + x * incrementCurves[op]) : active.baseIncrements[op];
+          const pm = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
+          steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, base * pitchFactor) * pm);
+        }
+        pitchFactor *= pitchStep;
       }
       let sample = 0;
       if (!finished) {
@@ -1049,7 +1075,7 @@ export class Synth {
             if (first >= 0) modulation += values[first] * active.modIndex;
             if (second >= 0) modulation += values[second] * active.modIndex;
             const operatorLevel = operatorRamping ?
-              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame) : active.operatorLevels[op];
+              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, active.elapsed + sub / oversample) : active.operatorLevels[op];
             const am = lfo.amTargets ? active.amGains[op] : amGain;
             const code = active.waveforms[op];
             let oscillator: number;
@@ -1084,6 +1110,10 @@ export class Synth {
     if (active.lfoLive) {
       active.lfoTurns += active.scalarValues[1] / this.sampleRate;
       active.lfoTurns -= Math.floor(active.lfoTurns);
+    }
+    if (frequencyRamping) {
+      const x = (oversample - 1) / oversample;
+      for (let op = 0; op < 4; op++) active.baseIncrements[op] += x * (incrementDeltas[op] + x * incrementCurves[op]);
     }
     active.elapsed++;
     if (gliding && active.elapsed >= active.pitchStart + active.pitchFrames) {
