@@ -54,7 +54,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 - **Prepared immutable patches and pooled DSP state** — reuse bounded voice slots instead of allocating typed state on every admission
 - **Incremental PCM16/PCM24/Float32 WAV export** with static Worker rendering, progress, cancellation and sink backpressure; approximate six-to-four-operator DX7 import
 - **Pre-saturation mix gain and global tuning** — reference A4 and interpolated 128-note cents offsets
-- **DSP quality profiles** — eco 2×/fourth-order, default standard 4×/eighth-order and high 8×/eighth-order; bounded state and explicit CPU/aliasing tradeoffs
+- **DSP quality profiles** — eco 2×, default standard 4× and high 8× oversampling with linear-phase half-band FIR decimation; bounded state and explicit CPU/aliasing tradeoffs
 - **Atomic voice-bank replacement, removal and JSON export** preserving queued/sounding patch snapshots
 - **TypeScript declarations** for browser, core, and voice-module exports
 - **AudioWorklet-based DSP** — synthesis runs off the main thread
@@ -424,7 +424,7 @@ The root and core export `beatsToSeconds`, `secondsToBeats`, `normalizeTempoMap`
 
 `renderSequenceInWorker(score, { ...chunkedOptions, format, sink, onProgress, signal, workerUrl, startupTimeoutMs, phaseDiagnostics, onPhase })` returns a promise for `{ capacity, format, bytesWritten, diagnostics }`. `sink.write(bytes)` may transfer ownership and return a promise: the static module Worker waits for acknowledgement before rendering the next encoded chunk. Optional `close()` runs on completion; `abort(reason)` handles rollback. Cancellation terminates/rejects without waiting for a hung sink; the host must invalidate its partial output. Progress reports `{ frames, totalFrames, bytesWritten, errors }`. This helper is browser-only; pure chunk rendering/encoding also works in Node. Deploy the entire `dist/` tree, including `worker/render.js` and its companions, with same-origin secure URLs and normal CSP/JavaScript MIME checks. See [incremental/Worker sink recipes](./doc/host-integration.md) and checkout-only [example 08](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html); long-file export uses a direct file sink, not an aggregate Blob fallback.
 
-`quality` is accepted by OPM, Synth, `renderNote`, full/chunked sequence rendering and Worker options. `standard` preserves the existing 4×/eighth-order sound; `eco` uses 2×/fourth-order filtering with weaker alias rejection, while `high` uses 8×/eighth-order filtering at higher CPU cost. Profiles do not promise alias-free FM or universal realtime deadlines. See [measured quality tradeoffs](./doc/acoustic-quality.md).
+`quality` is accepted by OPM, Synth, `renderNote`, full/chunked sequence rendering and Worker options. `standard` uses 4× oversampling with a 15 → 47-tap half-band FIR cascade (flat to 0.40 output Fs, 81 dB rejection, 13.25-frame delay); `eco` uses 2× with a single 35-tap stage and weaker (63 dB) rejection, while `high` uses 8× with an 11 → 15 → 47-tap cascade at higher CPU cost. Profiles do not promise alias-free FM or universal realtime deadlines. See [measured quality tradeoffs](./doc/acoustic-quality.md).
 
 ### Adaptive music, tempo curves and grids
 

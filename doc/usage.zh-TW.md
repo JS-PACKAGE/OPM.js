@@ -485,7 +485,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 執行 `node render-note.mjs`；checkout 改用 `./dist/...` 匯入。`renderNote({voice,note=60,duration=0.5,velocity=1,pan=0,sampleRate=44100})` 回傳 `{samples,left,right,sampleRate,diagnostics:{errors}}`，`samples === left`。要求完整 Schema 音色；有限的音色數值會限制到範圍，但無效版本／algorithm／feedback 仍拒絕。有限 note／duration／velocity／pan 分別限制至 0–127／0–30 秒／0–1／−1–1；note 可為小數，sampleRate 必須是整數 8000–96000。
 
-renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／四階）、standard（預設 4×／八階，保留原預設輸出）或 high（8×／八階）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
+renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／35-tap 半帶 FIR）、standard（預設 4×／15 → 47-tap 半帶 FIR 串接）或 high（8×／11 → 15 → 47-tap）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
 
 此函式與 Synth 使用相同包絡、LFO、濾波、力度、聲像及飽和路徑。長度為 `ceil((duration+最長有效release+0.01)*sampleRate)`，包含 note-dependent rate scaling，上限 4,000,000 影格。飽和前聲像增益為 `sqrt(2)*cos/sin((pan+1)*pi/4)`；飽和後不保證感知音量恆定。
 
