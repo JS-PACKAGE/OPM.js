@@ -18,7 +18,7 @@ GitHub Release **v1.10（套件 1.10.0）**加入可攜 Arrangement 專案、選
 
 ## v1.11 新功能（目前 checkout，尚未發佈）
 
-- **音色 v7 波形與雜訊。**每個運算子可指定 `waveform`（`sine`、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`）與 `noiseRate`（20–20000 Hz）。既有正弦音色輸出不變；square、saw、noise 不保證無混疊。內建音色庫新增原創的 `noise-snare`、`noise-hihat`、`explosion`。詳見[表情音色參考](./expressive-voices.md)。
+- **音色 v7 波形與雜訊。**每個運算子可指定 `waveform`（`sine`、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`）與 `noiseRate`（20–20000 Hz）。既有正弦音色輸出不變；square／saw（polyBLEP）與 half（polyBLAMP）有邊緣抗混疊修正，但與 noise 一樣不保證無混疊。內建音色庫新增原創的 `noise-snare`、`noise-hihat`、`explosion`。詳見[表情音色參考](./expressive-voices.md)。
 - **選用立體聲效果。**`createStereoEffects`／`applyEffects`（離線）與 `createEffects`（專用 AudioWorklet insert）提供 chorus 與 reverb；不會自動接線。詳見[音訊匯流排](./audio-buses.md)。
 - **MIDI 程式對照與 RPN。**`programVoices`／`drumVoices` 將 Program Change 與 GM 鼓音符對應到具名 FM 音色（需主動啟用；`gmProgramVoices`／`gmDrumVoices` 為起手對照表）；保留模式的檔案匯入與即時轉接器也會解碼 RPN 0 的 pitch-bend 靈敏度。詳見 [MIDI 檔案](./midi-files.md)與 [MIDI 演奏](./midi-performance.md)。
 - **`.opm` 匯入。**`opm.js/voices/opm.js` 的 `importOPM`／`describeOPM` 近似轉換 VOPM／MXDRV 系列文字音色；並非暫存器層級模擬。

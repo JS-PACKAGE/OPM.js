@@ -2,6 +2,12 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### Band-limited square, saw and half-wave operators
+
+Square and saw operators now add two-sample polyBLEP residuals at their jumps, and half-wave operators add polyBLAMP residuals at their corners, sized from each operator's unmodulated phase step at the oversampled rate. In unit tests the folded-alias power of periodic frames drops by about 8–17 dB at the internal rate, before the decimator. Phase modulation makes the nominal step an approximation, so these shapes remain not alias-free. All non-sine periodic shapes now use the deterministic polynomial `fastSin` instead of `Math.sin`, and the shape helpers are split so the dispatcher stays inlinable. Measured on Node 22 with 16 held voices at 48 kHz (`standard`): square 1.74 → 0.98 ms/block, half 1.89 → 1.40 ms, saw 1.04 → 1.13 ms. Sine output and `periodicWaveform(theta, code)` without a step are unchanged apart from `fastSin` replacing `Math.sin` (~1e-10). Square/saw/half voices render differently near their edges. These timings are one Node process on one machine, not a browser AudioWorklet or device measurement.
+
 ## v1.11.1
 
 Package version 1.11.1, a GitHub release (not on npm). Performance patch over v1.11; no API, voice-format (still v7) or protocol changes. Output differs from v1.11 by about 1e-10 for sine operators. Security: scoped static review of the `src/core` change found no evidence-backed issue.

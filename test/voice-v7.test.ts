@@ -57,8 +57,58 @@ test('periodic shapes stay finite and bounded for negative, huge and modulated p
   assert.ok(periodicWaveform(0.1, waveformCode('saw')) > 0);
   for (const angle of [Math.PI * 0.6, Math.PI * 0.9, Math.PI * 1.6, Math.PI * 1.9]) assert.equal(periodicWaveform(angle, 3), 0);
   for (const code of [4, 5]) for (const angle of [Math.PI * 1.1, Math.PI * 1.5, Math.PI * 1.9]) assert.equal(periodicWaveform(angle, code), 0);
-  assert.ok(Math.abs(periodicWaveform(Math.PI / 4, 4) - 1) < 1e-15);
-  assert.ok(Math.abs(periodicWaveform(Math.PI * 1.25, 3) - Math.SQRT1_2) < 1e-15);
+  assert.ok(Math.abs(periodicWaveform(Math.PI / 4, 4) - 1) < 1e-9);
+  assert.ok(Math.abs(periodicWaveform(Math.PI * 1.25, 3) - Math.SQRT1_2) < 1e-9);
+});
+
+/** Alias-to-harmonic power (dB) of exactly periodic frames: k cycles in N samples, so true harmonics
+ * occupy bins m*k and every other bin holds folded (aliased) energy. */
+function aliasRatioDb(code: number, k: number, dt: number): number {
+  const n = 1024;
+  const x = new Float64Array(n);
+  for (let i = 0; i < n; i++) x[i] = periodicWaveform(TAU * ((k * i) % n) / n, code, dt);
+  let harmonic = 0, folded = 0;
+  for (let bin = 1; bin < n / 2; bin++) {
+    let re = 0, im = 0;
+    for (let i = 0; i < n; i++) {
+      const angle = TAU * ((bin * i) % n) / n;
+      re += x[i] * Math.cos(angle);
+      im -= x[i] * Math.sin(angle);
+    }
+    if (bin % k === 0) harmonic += re * re + im * im;
+    else folded += re * re + im * im;
+  }
+  return 10 * Math.log10(folded / harmonic);
+}
+
+test('polyBLEP square/saw and polyBLAMP half stay bounded, keep naive dt=0 shapes and cut aliases', () => {
+  const naive = (code: number, t: number): number => code === 1 ? Math.max(0, fastSin(t * TAU)) :
+    code === 6 ? (t <= 0.5 ? 1 : -1) : 2 * ((t + 0.5) - Math.floor(t + 0.5)) - 1;
+  let random = 24681357;
+  for (const code of [1, 6, 7]) {
+    for (let i = 0; i < 20000; i++) {
+      random = (Math.imul(random, 1664525) + 1013904223) >>> 0;
+      const t = random / 0x100000000;
+      const dt = (i % 50) / 49 * 0.45;
+      const value = periodicWaveform(t * TAU, code, dt);
+      assert.ok(Number.isFinite(value) && Math.abs(value) <= 1, `${code} ${t} ${dt}`);
+      if (code === 1) assert.ok(value >= 0);
+      assert.ok(Math.abs(periodicWaveform(t * TAU, code, 0) - naive(code, t)) < 1e-15);
+      // Residuals only touch samples within one step of a jump or corner.
+      const edges = code === 1 || code === 6 ? [0, 0.5, 1] : [0.5];
+      if (edges.every((edge) => Math.abs(t - edge) >= Math.min(dt, code === 1 ? 0.25 : dt))) {
+        assert.ok(Math.abs(value - naive(code, t)) < 1e-15);
+      }
+    }
+  }
+  // A jump lands halfway between its neighbours; the half-wave corner rises above zero.
+  for (const angle of [0, Math.PI, TAU]) assert.ok(Math.abs(periodicWaveform(angle, 6, 0.1)) < 1e-15);
+  assert.ok(Math.abs(periodicWaveform(Math.PI, 7, 0.1)) < 1e-15);
+  assert.ok(periodicWaveform(0, 1, 0.1) > 0);
+  for (const [code, k, gain] of [[1, 37, 8], [1, 151, 8], [6, 37, 6], [6, 151, 10], [7, 37, 12], [7, 151, 12]]) {
+    const before = aliasRatioDb(code, k, 0), after = aliasRatioDb(code, k, k / 1024);
+    assert.ok(after < before - gain, `${code}@${k}: ${before.toFixed(1)} -> ${after.toFixed(1)} dB`);
+  }
 });
 
 test('fastSin is bounded, accurate and odd across reduction boundaries', () => {
