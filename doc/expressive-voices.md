@@ -39,7 +39,7 @@ For θ = phase + modulation and fractional turns `t = frac(θ / (2π))`, the per
 | square | −1 for negative sine, +1 otherwise (including zero) |
 | saw | `2 * frac(t + 0.5) - 1`; rising, zero at θ = 0 |
 
-Phase reduction uses fractional turns, including negative and very large finite arguments, never wrapping loops. Square, saw and held noise can alias: the existing per-voice oversampling/decimator reduces some products but does **not** make these oscillators alias-free.
+Phase reduction uses fractional turns, including negative and very large finite arguments, never wrapping loops. Square, saw and held noise can alias: the existing oversampling and post-mix decimator reduce some products but does **not** make these oscillators alias-free.
 
 Noise is an original deterministic 17-bit maximal-length LFSR (`x^17+x^3+1`), seeded with `0x1ffff` at every note admission, including pooled slot reuse. The low bit produces bipolar ±1 and advances on the `noiseRate` time-domain hold clock, independent of output sample rate. Identical admissions reproduce the sequence. Ratio, fixed frequency, detune, tuning, pitch envelopes, live pitch and modulator PM do not pitch noise; existing `operatorRatios`/`operatorFrequencies` controls remain valid but have no audible pitch effect on it. Envelope, key/rate scaling, velocity, level, AM and graph routing still apply; noise can be either a modulator or carrier.
 

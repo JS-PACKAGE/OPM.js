@@ -2,6 +2,14 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### Post-mix decimation
+
+- Voices are now panned and summed to left/right at the oversampled rate, and one shared decimator per output channel runs after the mix, instead of one decimator per voice. A centered (dual-mono) mix filters once until the channel inputs differ. Measured with a 128-frame `Synth.render` loop at 48 kHz (median of five interleaved runs, one Node 22 process on one cloud x64 host): `standard` 8 voices 0.664 → 0.603 ms/block (−9%), 32 voices 2.801 → 2.369 ms (−15%); `high` 8 voices 1.200 → 0.998 ms (−17%), 32 voices 4.800 → 3.907 ms (−19%); `eco` 32 voices unchanged; a single voice costs about 0.01 ms/block more (mix-buffer overhead).
+- Behavior change: note gain, expression, pan and steal fades now apply before the decimator, so a hard gain step is band-limited by it and rings for a few output frames (about 30 frames to −100 dB) instead of cutting instantly at the output rate. Ramps are within s·p·Σk|h[k]|/4 of the former output-rate product.
+- Voices retire on their envelope end (all operator releases finished) and report `ended` without waiting for filter history; the shared decimator drains the tail and snaps a silent channel to exact zero below the −96 dB floor.
+
 ## v1.11.1
 
 Package version 1.11.1, a GitHub release (not on npm). Performance patch over v1.11; no API, voice-format (still v7) or protocol changes. Output differs from v1.11 by about 1e-10 for sine operators. Security: scoped static review of the `src/core` change found no evidence-backed issue.

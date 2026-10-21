@@ -155,7 +155,7 @@ interface ActiveVoice {
   operatorLevels: Float64Array; operatorFrom: Float64Array; operatorTargets: Float64Array;
   operatorStart: number; operatorFrames: number;
   levels: Float64Array; leftGain: number; rightGain: number; lastSample: number; fadeRemaining: number;
-  lastFadeGain?: number; carrierGain: number; phases: Float64Array; values: Float64Array; filters: Float64Array;
+  lastFadeGain?: number; carrierGain: number; phases: Float64Array; values: Float64Array;
   releaseDb: Float64Array; previous: number; older: number; pitchRelease: number;
   feedbackScale: number; elapsed: number; releaseTime: number; releaseEnd: number;
   velocity: number; expression: number; pan: number;
@@ -258,7 +258,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     operatorStart: 0, operatorFrames: 0,
     gains: new Float64Array(4 * oversample), levels: new Float64Array(4),
     leftGain: 0, rightGain: 0, lastSample: 0, fadeRemaining: 0, lastFadeGain: 1, carrierGain: 0,
-    phases: new Float64Array(4), values: new Float64Array(4), filters: new Float64Array(oversample === 2 ? 4 : DECIMATOR_STATE_SIZE), releaseDb: new Float64Array(4),
+    phases: new Float64Array(4), values: new Float64Array(4), releaseDb: new Float64Array(4),
     previous: 0, older: 0, pitchRelease: 0, feedbackScale: 0,
     elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0,
     expressionFrom: 1, expressionTarget: 1, expressionStart: 0, expressionFrames: 0,
@@ -460,6 +460,14 @@ function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
   return gain * active.carrierGain * active.velocity * expression * layerGain;
 }
 
+/** True when the state is (now) exactly zero; sub-floor residue is cleared. */
+function settleDecimator(state: Float64Array): boolean {
+  let peak = 0;
+  for (let index = 0; index < state.length; index++) peak = Math.max(peak, Math.abs(state[index]));
+  if (peak >= AMPLITUDE_FLOOR) return false;
+  if (peak !== 0) state.fill(0);
+  return true;
+}
 
 export class Synth {
   declare readonly sampleRate: number;
@@ -491,6 +499,18 @@ export class Synth {
   declare sequence: number;
   /** @internal */
   declare decimatorCoefficients: Float64Array;
+  /** @internal Oversampled stereo mix for the current output frame. */
+  declare mixLeft: Float64Array;
+  /** @internal */
+  declare mixRight: Float64Array;
+  /** @internal Shared post-mix decimator state, one per output channel. */
+  declare filterLeft: Float64Array;
+  /** @internal */
+  declare filterRight: Float64Array;
+  /** @internal True once both decimator states have drained below the floor. */
+  declare decimatorIdle: boolean;
+  /** @internal filterRight is stale and logically equals filterLeft (dual mono). */
+  declare decimatorMirrored: boolean;
   /** @internal Bounded spare slots include one admission scratch slot. */
   declare freeVoices: ActiveVoice[];
   /** @internal Preallocated notifications are drained after each stable frame. */
@@ -537,6 +557,12 @@ export class Synth {
     this.subTimes = Float64Array.from({ length: this.oversample }, (_, sub) => sub / (sampleRate * this.oversample));
     this.sequence = 0;
     this.decimatorCoefficients = createDecimatorCoefficients(sampleRate, this.quality);
+    this.mixLeft = new Float64Array(this.oversample);
+    this.mixRight = new Float64Array(this.oversample);
+    this.filterLeft = new Float64Array(DECIMATOR_STATE_SIZE);
+    this.filterRight = new Float64Array(DECIMATOR_STATE_SIZE);
+    this.decimatorIdle = true;
+    this.decimatorMirrored = true;
   }
   setMixGain(gain: number): void {
     validateMixGain(gain);
@@ -695,7 +721,6 @@ export class Synth {
     active.noiseStates.fill(NOISE_SEED);
     active.noiseTurns.fill(0);
     active.values.fill(0);
-    active.filters.fill(0);
     active.releaseDb.fill(0);
     active.releaseStep.fill(0);
     active.gains.fill(0);
@@ -760,8 +785,17 @@ export class Synth {
   panic(): void {
     while (this.fades.length > 0) this.freeVoices.push(this.fades.pop()!);
     this.spillLeft = this.spillRight = this.spillRemaining = 0;
+    this.resetDecimator();
     (this as MutableCounters).lastStolenId = null;
     this.cancelVoices();
+  }
+
+  /** @internal Drop the shared decimator tail, as panic dropped per-voice filters. */
+  resetDecimator(): void {
+    this.filterLeft.fill(0);
+    this.filterRight.fill(0);
+    this.decimatorIdle = true;
+    this.decimatorMirrored = true;
   }
 
   /** @internal */
@@ -930,10 +964,17 @@ export class Synth {
   }
 
   // One output frame, with no temporary arrays or objects in the hot path.
+  // Oversampled samples are panned into mixLeft/mixRight; the shared post-mix
+  // decimator then runs once per channel instead of once per voice. Returns
+  // the last undecimated sample (for steal spill) or NaN on corrupt state;
+  // substeps accumulated before a NaN were finite and stay in the mix.
   /** @internal */
-  renderVoice(active: ActiveVoice): number {
-    const { graph, inputIndices, carrierIndices, phases, values, filters, increments, steps, gains, levels } = active;
+  renderVoice(active: ActiveVoice, fadeGain = 1): number {
+    const { graph, inputIndices, carrierIndices, phases, values, increments, steps, gains, levels } = active;
     if (active.controlRamps !== 0) advanceControls(active);
+    const voiceGain = active.scalarValues[4] * fadeGain;
+    const panLeft = active.leftGain * voiceGain, panRight = active.rightGain * voiceGain;
+    const mixLeft = this.mixLeft, mixRight = this.mixRight;
     const time = active.elapsed / this.sampleRate;
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
     const lfo = active.voice.lfo;
@@ -1033,9 +1074,10 @@ export class Synth {
         sample *= active.carrierGain;
         // Non-finite operator state always reaches a carrier through modulation or the mix.
         if (!Number.isFinite(sample)) return NaN;
+        mixLeft[sub] += sample * panLeft;
+        mixRight[sub] += sample * panRight;
       }
-      output = decimateSample(sample, filters, this.decimatorCoefficients);
-      if (!Number.isFinite(output)) return NaN;
+      output = sample;
     }
     if (active.lfoLive) {
       active.lfoTurns += active.scalarValues[1] / this.sampleRate;
@@ -1076,16 +1118,20 @@ export class Synth {
         offset + length > leftLength || offset + length > rightLength) {
       throw new RangeError('render requires an in-bounds offset and length');
     }
-    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0) {
+    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdle) {
       typedArrayFill.call(left, 0, offset, offset + length);
       if (right !== left) typedArrayFill.call(right, 0, offset, offset + length);
       (this as MutableCounters).currentFrame += length;
       return;
     }
     this.rendering = true;
+    const oversample = this.oversample, coefficients = this.decimatorCoefficients;
+    const mixLeft = this.mixLeft, mixRight = this.mixRight, filterLeft = this.filterLeft, filterRight = this.filterRight;
     try {
       for (let frame = offset, end = offset + length; frame < end; frame++) {
-        let mixedLeft = 0, mixedRight = 0, terminalCount = 0;
+        let terminalCount = 0;
+        mixLeft.fill(0);
+        mixRight.fill(0);
         for (let index = 0; index < this.voices.length; index++) {
           const active = this.voices[index];
           const sample = this.renderVoice(active);
@@ -1096,13 +1142,9 @@ export class Synth {
             this.freeVoices.push(removeAt(this.voices, index--));
             continue;
           }
-          mixedLeft += sample * active.leftGain;
-          mixedRight += sample * active.rightGain;
-          let tailPeak = Math.abs(sample);
+          // Envelope-based retirement: once every operator release has ended the
+          // voice contributes silence; the shared decimator drains its tail.
           if (active.releaseTime >= 0 && (active.elapsed - 1) / this.sampleRate >= active.releaseEnd) {
-            for (let state = 0; state < active.filters.length; state++) tailPeak = Math.max(tailPeak, Math.abs(active.filters[state]));
-          } else tailPeak = Infinity;
-          if (tailPeak < AMPLITUDE_FLOOR) {
             this.terminalIds[terminalCount] = active.id;
             this.terminalErrors[terminalCount++] = 0;
             this.freeVoices.push(removeAt(this.voices, index--));
@@ -1110,29 +1152,55 @@ export class Synth {
         }
         for (let index = 0; index < this.fades.length; index++) {
           const active = this.fades[index];
-          const sample = this.renderVoice(active);
+          const gain = active.fadeRemaining / this.fadeFrames;
+          const sample = this.renderVoice(active, gain);
           if (!Number.isFinite(sample)) {
             (this as MutableCounters).errorCount++;
             this.freeVoices.push(removeAt(this.fades, index--));
             continue;
           }
-          const gain = active.fadeRemaining / this.fadeFrames;
           active.lastFadeGain = gain;
-          mixedLeft += sample * active.leftGain * gain;
-          mixedRight += sample * active.rightGain * gain;
           if (--active.fadeRemaining === 0) this.freeVoices.push(removeAt(this.fades, index--));
         }
         if (this.spillRemaining > 0) {
-          mixedLeft += this.spillLeft;
-          mixedRight += this.spillRight;
+          for (let sub = 0; sub < oversample; sub++) {
+            mixLeft[sub] += this.spillLeft;
+            mixRight[sub] += this.spillRight;
+          }
           const next = --this.spillRemaining;
           this.spillLeft *= next / (next + 1);
           this.spillRight *= next / (next + 1);
         }
+        let mixedLeft = 0, mixedRight = 0, silentLeft = true, silentRight = true;
+        let mirrored = this.decimatorMirrored;
+        for (let sub = 0; sub < oversample; sub++) {
+          const inputLeft = mixLeft[sub], inputRight = mixRight[sub];
+          if (inputLeft !== 0) silentLeft = false;
+          if (inputRight !== 0) silentRight = false;
+          // Identical channel histories give identical outputs: centered mixes
+          // filter once until the inputs first differ.
+          if (mirrored && inputLeft !== inputRight) {
+            filterRight.set(filterLeft);
+            mirrored = false;
+          }
+          mixedLeft = decimateSample(inputLeft, filterLeft, coefficients);
+          mixedRight = mirrored ? mixedLeft : decimateSample(inputRight, filterRight, coefficients);
+        }
+        this.decimatorMirrored = mirrored;
         // Saturate each stereo sum independently, preserving center dual mono.
         left[frame] = Number.isFinite(mixedLeft) ? HEADROOM * Math.tanh(mixedLeft * this.mixGain / HEADROOM) : 0;
         right[frame] = Number.isFinite(mixedRight) ? HEADROOM * Math.tanh(mixedRight * this.mixGain / HEADROOM) : 0;
-        if (!Number.isFinite(mixedLeft) || !Number.isFinite(mixedRight)) (this as MutableCounters).errorCount++;
+        if (!Number.isFinite(mixedLeft) || !Number.isFinite(mixedRight)) {
+          (this as MutableCounters).errorCount++;
+          this.resetDecimator();
+        } else {
+          // A silent channel (ended, muted or hard-panned voices) snaps to exact
+          // zero once its filter state falls below the -96 dB envelope floor.
+          const idleLeft = silentLeft && settleDecimator(filterLeft);
+          const idleRight = mirrored ? idleLeft : silentRight && settleDecimator(filterRight);
+          this.decimatorIdle = idleLeft && idleRight;
+          if (this.decimatorIdle) this.decimatorMirrored = true;
+        }
         // Callbacks may admit/release notes, but replacements first render on the
         // next frame. Live traversal would let a zero-release chain run forever.
         for (let index = 0; index < terminalCount; index++) {

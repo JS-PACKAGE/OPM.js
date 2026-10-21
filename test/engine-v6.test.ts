@@ -218,11 +218,15 @@ test('zero attack/decay updates bridge the current dB for one frame and zero rel
     }
   }
   const expected = reference(source);
-  assert.ok(endedFrame >= 400 && endedFrame < 550, 'zero release drains filter state before retirement');
-  near(result.subarray(0, endedFrame + 1), expected.subarray(0, endedFrame + 1));
+  assert.equal(endedFrame, 400, 'zero release retires on its envelope end without waiting for filter history');
+  // The shared post-mix decimator keeps draining the retired voice's history
+  // until its state falls below the floor, then snaps to exact silence.
+  let settled = endedFrame + 1;
+  while (settled < frames && result.subarray(settled).some(value => value !== 0)) settled++;
+  assert.ok(settled > endedFrame + 1 && settled < 550, 'filter history drains after retirement');
+  near(result.subarray(0, settled), expected.subarray(0, settled));
   const tailBound = filterStateTailBound();
-  assert.ok(expected.subarray(endedFrame + 1).every(value => Math.abs(value) < tailBound));
-  assert.ok(result.subarray(endedFrame + 1).every(value => value === 0));
+  assert.ok(expected.subarray(settled).every(value => Math.abs(value) < tailBound));
 });
 
 test('independent feedback and LFO ramp interruption matches instantaneous continuous controls across chunks', () => {

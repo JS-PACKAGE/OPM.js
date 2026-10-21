@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HEADROOM, Synth } from '../src/core/index.js';
 import type { NoteControls, Voice } from '../src/core/index.js';
+import { filterImpulseBounds } from './decimator-reference.js';
 
 function tone(): Voice {
   return { version: 7, name: 'dsp-controls', algorithm: 7, feedback: 0, modIndex: 0,
@@ -25,6 +26,15 @@ function near(actual: Float32Array, expected: Float32Array, tolerance = 2e-7): v
       `frame ${frame}: ${actual[frame]} differs from ${expected[frame]}`);
   }
 }
+
+// Note gains apply before the shared post-mix decimator. With per-frame gain
+// slope s and a raw peak p, |filter(g·x) − g·filter(x)| ≤ s·p·Σk|h[k]|/4 (k in
+// substeps). tone() has one audible carrier of four, so p = HEADROOM / 4.
+function rampTolerance(slope: number): number {
+  return 2e-7 + slope * HEADROOM / 4 * filterImpulseBounds().absoluteFirstMoment / 4;
+}
+// A hard gain step rings through the decimator before the channel snaps to zero.
+const DECIMATOR_SETTLE_FRAMES = 64;
 
 function peak(samples: Float32Array): number {
   let result = 0;
@@ -53,6 +63,8 @@ test('expression and pan ramps retarget continuously and keep independent timeli
     const actual = audio(synth, segments[segment]);
     assert.deepEqual(actual, audio(chunked, segments[segment], 37));
     const unchanged = audio(reference, segments[segment]);
+    // Expression slope ≤ 5e-4/frame; pan gain slope ≤ √2·π/4 · 1.25/1600.
+    const tolerance = rampTolerance(5e-4 * Math.SQRT2 + Math.SQRT2 * Math.PI / 4 * 1.25 / 1600);
     for (let frame = 0; frame < segments[segment]; frame++) {
       const time = elapsed + frame;
       const expression = time < 400 ? 1 - 0.8 * time / 1600 :
@@ -65,8 +77,8 @@ test('expression and pan ramps retarget continuously and keep independent timeli
       const rightGain = pan === -1 ? 0 : Math.SQRT2 * Math.sin(angle);
       const expectedLeft = HEADROOM * Math.tanh(dry * expression * leftGain / HEADROOM);
       const expectedRight = HEADROOM * Math.tanh(dry * expression * rightGain / HEADROOM);
-      assert.ok(Math.abs(actual.left[frame] - expectedLeft) < 2e-7, `left timeline at ${time}`);
-      assert.ok(Math.abs(actual.right[frame] - expectedRight) < 2e-7, `right timeline at ${time}`);
+      assert.ok(Math.abs(actual.left[frame] - expectedLeft) < tolerance, `left timeline at ${time}`);
+      assert.ok(Math.abs(actual.right[frame] - expectedRight) < tolerance, `right timeline at ${time}`);
     }
     elapsed += segments[segment];
   }
@@ -232,21 +244,26 @@ test('independent note gain composes exact ramps with expression and survives mu
     const actual = audio(synth, frames);
     assert.deepEqual(actual, audio(chunked, frames, 37));
     const dry = audio(reference, frames);
+    // Gain slope ≤ 1/1600 per frame plus expression slope 0.5/3200.
+    const tolerance = rampTolerance(1 / 1600 + 0.5 / 3200);
     for (let frame = 0; frame < frames; frame++) {
       const time = elapsed + frame;
       const gain = time < 400 ? 1 - time / 1600 : time < 1200 ? 0.75 - 0.5 * (time - 400) / 800 : 0.25;
       const expression = 1 - 0.5 * Math.min(time / 3200, 1);
       const source = HEADROOM * Math.atanh(dry.left[frame] / HEADROOM);
       const expected = HEADROOM * Math.tanh(source * gain * expression / HEADROOM);
-      assert.ok(Math.abs(actual.left[frame] - expected) < 2e-7, `gain × expression at ${time}`);
+      assert.ok(Math.abs(actual.left[frame] - expected) < tolerance, `gain × expression at ${time}`);
     }
     elapsed += frames;
   }
   synth.updateNote(1, { gain: 0 });
-  assert.ok(audio(synth, 128).left.every(sample => sample === 0));
+  assert.ok(audio(synth, 128).left.subarray(DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0));
   audio(reference, 128);
   synth.updateNote(1, { gain: 1, expression: 1 });
-  assert.deepEqual(audio(synth, 128), audio(reference, 128), 'mute does not reset oscillator or envelope state');
+  const unmuted = audio(synth, 128), continued = audio(reference, 128);
+  // Only the decimator restarts from silence; oscillator and envelope state continue.
+  near(unmuted.left.subarray(DECIMATOR_SETTLE_FRAMES), continued.left.subarray(DECIMATOR_SETTLE_FRAMES));
+  near(unmuted.right.subarray(DECIMATOR_SETTLE_FRAMES), continued.right.subarray(DECIMATOR_SETTLE_FRAMES));
 });
 
 test('quietest stealing includes independent gain and rejects invalid gain without changing audio', () => {

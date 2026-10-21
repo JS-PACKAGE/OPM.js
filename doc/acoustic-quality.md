@@ -1,10 +1,10 @@
 # Acoustic references and decimation
 
-The default **standard** profile uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Its coefficients, substep clocks and default sound are unchanged. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once; each voice has eight preallocated filter state scalars. Each internal sample performs four fixed sections with no allocations. State resets on admission and all state must drain on release; an output zero crossing is not sufficient to retire a ringing IIR.
+The default **standard** profile uses four-times internal sampling and an original eighth-order Butterworth low-pass, implemented as four low-Q-first bilinear biquads. Its coefficients, substep clocks and default sound are unchanged. Cutoff is **0.30 times output sample rate**. Each synth prepares 20 coefficients once. Since the post-mix change, voices are panned and summed to left/right at the internal rate and one shared decimator per output channel (eight preallocated state scalars each) runs after the mix, so filter work no longer scales with polyphony. A centered (dual-mono) mix filters once until the channel inputs first differ. Each internal sample performs four fixed sections per channel with no allocations. Because note gain, expression, pan and steal fades now apply before the decimator, a hard gain step is band-limited by it and rings for a few output frames (about 30 frames to −100 dB) instead of cutting at the output rate.
 
 Construction accepts `quality: 'eco' | 'standard' | 'high'` in `SynthOptions`, offline render options and `OPM` options. Quality cannot change on an active synth; OPM retains it across restart. `maxVoices` accepts 1–32, with default 8; larger budgets are opt-in; the profile tables and the stealing-fade ceiling (eight) are unchanged.
 
-| Profile | Internal rate | Filter order / sections | Filter state per voice | Tradeoff |
+| Profile | Internal rate | Filter order / sections | Filter state per channel | Tradeoff |
 | --- | ---: | ---: | ---: | --- |
 | eco | 2× | 4 / 2 | 4 scalars | Fewer oscillator/filter substeps, earlier internal Nyquist and weaker upper-band rejection |
 | standard (default) | 4× | 8 / 4 | 8 scalars | Existing sound and acceptance baseline |
@@ -73,7 +73,7 @@ Historical **1.8.0** checkout measurement (not the new capacity matrix): Apple M
 
 All rows reported zero DSP errors and admission rejections. These are offline host wall-clock measurements, not AudioWorklet underrun counters, allocation measurements, listening judgments or physical-device acceptance. They do not replace the different historical v1.6 host results recorded in CHANGELOG.
 
-Envelope-transition references compare the waveform through the actual voice-ended frame, then require exact retired silence. The implementation deliberately retires finite IIR state below its state floor rather than retaining an infinite mathematical tail. A state floor is not a bound on each future output sample: the independent causal impulse/state-to-output bound accounts for the combined remaining filter states at retirement.
+Voices retire on their envelope: once every operator release has ended, the voice is freed and its `ended` notification fires without waiting for filter history. The shared decimator keeps draining that history; envelope-transition references compare the waveform through the frame where the channel's state falls below its state floor, then require exact silence. The implementation deliberately clears finite IIR state below that floor (only on a channel whose input is silent) rather than retaining an infinite mathematical tail. A state floor is not a bound on each future output sample: the independent causal impulse/state-to-output bound accounts for the combined remaining filter states when they are cleared.
 
 ## Conservative host capacity candidates
 

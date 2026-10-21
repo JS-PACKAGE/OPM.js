@@ -88,6 +88,8 @@ function render(opm: OPM, length = 128) {
 }
 
 function audible(samples: Float32Array) { return samples.some(sample => Math.abs(sample) > 1e-6); }
+// A hard gain step rings through the shared post-mix decimator before it snaps to zero.
+const DECIMATOR_SETTLE_FRAMES = 64;
 
 test('public held gates, stereo options, scheduling and lifecycle diagnostics render through the worklet', async () => {
   const events: OPMEvent[] = [];
@@ -194,7 +196,7 @@ test('absolute scheduling, pending controls and same-frame cancellation affect r
       [['accepted', 0], ['started', 32], ['released', 96]]);
     for (const event of events) if (event.type === 'note') assert.equal(event.time, event.frame / sampleRate);
     opm.updateNote(id, { expression: 0 });
-    assert.ok(render(opm).right.every(sample => sample === 0), 'released tails still accept controls');
+    assert.ok(render(opm).right.subarray(DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0), 'released tails still accept controls');
     for (let block = 0; block < 40; block++) render(opm);
     assert.equal((await opm.getDiagnostics()).pendingEvents, 0);
   } finally { await opm.close(); }
@@ -872,8 +874,8 @@ test('explicit stop cancellation removes only its own automation and leaves a na
       const tail = render(opm);
       assert.ok(audible(tail.left), 'cancellation releases instead of silencing immediately');
       const after = render(opm);
-      assert.equal(audible(after.left), cancelControls);
-      assert.ok(after.right.every(sample => Math.abs(sample) < 1e-10), 'another gate keeps its own automation');
+      assert.equal(audible(after.left.subarray(DECIMATOR_SETTLE_FRAMES)), cancelControls);
+      assert.ok(after.right.subarray(DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0), 'another gate keeps its own automation');
       opm.panic();
       const future = opm.playNote({ note: 69, time: 1 });
       opm.updateNote(future, { expression: 0 }, { at: 2 });
@@ -901,6 +903,6 @@ test('malformed stop cancellation cannot remove controls or release its note', a
     assert.equal(reads, 0);
     assert.equal((await opm.getDiagnostics()).pendingEvents, 1);
     assert.ok(audible(render(opm).left));
-    assert.ok(render(opm).left.every(sample => sample === 0));
+    assert.ok(render(opm).left.subarray(DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0));
   } finally { await opm.dispose(); }
 });

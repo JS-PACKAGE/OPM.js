@@ -22,17 +22,20 @@ function rms(values: Float32Array) {
   return Math.sqrt(sum / values.length);
 }
 
+// The 40-frame fade (5 ms at 8 kHz) then rings through the shared post-mix decimator.
+const DECIMATOR_SETTLE_FRAMES = 64;
+
 test('steals preserve the waveform at the boundary and fade without resetting phase', () => {
   const synth = new Synth(8000, 1), reference = new Synth(8000, 1);
   synth.noteOn(voice(), 60, 1);
   reference.noteOn(voice(), 60, 1);
   audio(synth, 173); audio(reference, 173);
   synth.noteOn(voice(), 64, 2, { velocity: 0 });
-  const tail = audio(synth, 50).left;
+  const tail = audio(synth, 40 + DECIMATOR_SETTLE_FRAMES + 10).left;
   const continuation = audio(reference, 50).left;
   assert.equal(tail[0], continuation[0], 'first stolen sample retains complete DSP state');
   assert.ok(rms(tail.subarray(20, 40)) < rms(continuation.subarray(20, 40)));
-  assert.ok(tail.subarray(40).every(sample => sample === 0));
+  assert.ok(tail.subarray(40 + DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0));
   assert.equal(synth.noteOff(1), false);
 });
 
@@ -52,8 +55,8 @@ test('exhausted tail pool carries nonzero sound through rapid steals with bounde
   const expected = audio(reference, 1).left[0];
   assert.ok(Math.abs(expected) > 0.02, 'exhaustion occurs during audible output');
   assert.ok(Math.abs(first - expected) < 0.01, 'collapsed tails must not abruptly disappear');
-  const tail = audio(synth, 50).left;
-  assert.ok(tail.subarray(40).every(sample => sample === 0));
+  const tail = audio(synth, 40 + DECIMATOR_SETTLE_FRAMES + 10).left;
+  assert.ok(tail.subarray(40 + DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0));
   assert.equal(synth.fades.length, 0);
 });
 
@@ -65,13 +68,13 @@ test('logical terminal callbacks occur exactly once, including reused stolen IDs
   audio(synth, 50);
   synth.noteOn(voice(), 64, 2);
   assert.equal(synth.lastStolenId, 1);
-  synth.fades[0].filters[0] = Infinity;
+  synth.fades[0].phases[0] = NaN;
   audio(synth, 1);
   synth.noteOff(2);
   audio(synth, 400);
   synth.noteOn(voice(), 60, 1);
   assert.equal(synth.lastStolenId, null);
-  synth.voices[0].filters[0] = Infinity;
+  synth.voices[0].phases[0] = NaN;
   audio(synth, 200);
   assert.deepEqual(events, [[1, 'stolen'], [2, 'ended'], [1, 'error']]);
   assert.equal(synth.errorCount, 2);
