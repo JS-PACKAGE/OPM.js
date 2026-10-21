@@ -17,11 +17,14 @@ export declare function waveformCode(waveform?: OperatorWaveform): number;
 /** Pure periodic shapes. Noise is stateful and handled by Synth, not this function.
  * With t=frac(theta/TAU): half=max(0,sin); abs=|sin|;
  * quarter=|sin| when frac(theta/pi)<1/2; alternating=sin(2theta) when t<1/2;
- * camel=|sin(2theta)| when t<1/2; square=sign(sin), zero maps to +1;
+ * camel=|sin(2theta)| when t<1/2; square=+1 when t<=1/2, otherwise -1;
  * saw=2*frac(t+1/2)-1, rising through zero at theta=0.
- * Discontinuous shapes are naive, not alias-free.
+ * dt is the nominal phase advance in turns per sample. When positive, square and saw add
+ * polyBLEP residuals at their jumps and half adds polyBLAMP residuals at its two corners;
+ * dt=0 returns the naive shapes. Residuals use the unmodulated rate, so they fit carriers and
+ * only approximate modulated operators. Other discontinuous shapes stay naive; none is alias-free under arbitrary FM.
  */
-export declare function periodicWaveform(theta: number, code: number): number;
+export declare function periodicWaveform(theta: number, code: number, dt?: number): number;
 export declare const NOISE_SEED = 131071;
 export declare function advanceNoise(state: number): number;
 export declare function finiteOrSilence(value: number, diagnostics: {

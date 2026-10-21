@@ -11,6 +11,10 @@ For installation and executable examples, see the [README](./README.md#getting-s
 - Behavior change: output is delayed by a constant linear-phase 13.25 output frames for standard (8.5 eco, 13.875 high; about 0.28 ms at 48 kHz) instead of the IIR's frequency-dependent 2.7–3.3 frames. Each voice preallocates 158 state scalars instead of 8.
 - Measured on this checkout's cloud container with `npm run benchmark` (median of four interleaved runs per side): standard 8 held voices 0.702 → 0.669 ms per 128-frame block, high 8 held voices 1.204 → 1.116 ms, eco unchanged within noise (0.434 → 0.435 ms).
 
+### Band-limited square, saw and half-wave operators
+
+Square and saw operators now add two-sample polyBLEP residuals at their jumps, and half-wave operators add polyBLAMP residuals at their corners, sized from each operator's unmodulated phase step at the oversampled rate. In unit tests the folded-alias power of periodic frames drops by about 8–17 dB at the internal rate, before the decimator. Phase modulation makes the nominal step an approximation, so these shapes remain not alias-free. All non-sine periodic shapes now use the deterministic polynomial `fastSin` instead of `Math.sin`, and the shape helpers are split so the dispatcher stays inlinable. Measured on Node 22 with 16 held voices at 48 kHz (`standard`): square 1.74 → 0.98 ms/block, half 1.89 → 1.40 ms, saw 1.04 → 1.13 ms. Sine output and `periodicWaveform(theta, code)` without a step are unchanged apart from `fastSin` replacing `Math.sin` (~1e-10). Square/saw/half voices render differently near their edges. These timings are one Node process on one machine, not a browser AudioWorklet or device measurement.
+
 ## v1.11.1
 
 Package version 1.11.1, a GitHub release (not on npm). Performance patch over v1.11; no API, voice-format (still v7) or protocol changes. Output differs from v1.11 by about 1e-10 for sine operators. Security: scoped static review of the `src/core` change found no evidence-backed issue.

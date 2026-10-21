@@ -31,27 +31,70 @@ export function waveformCode(waveform: OperatorWaveform = 'sine'): number {
   return WAVEFORM_NAMES.indexOf(waveform);
 }
 
+/** PolyBLEP residual for a +2 step at t=0 of a unit-period phase t in [0,1) advancing dt per sample:
+ * with x=t/dt after the edge, -(1-x)^2; with x=(t-1)/dt before it, (1+x)^2; zero elsewhere.
+ * Adding it replaces the naive jump with an integrated triangular (two-sample) kernel. */
+function polyBlep(t: number, dt: number): number {
+  if (t < dt) {
+    const x = 1 - t / dt;
+    return -x * x;
+  }
+  if (t > 1 - dt) {
+    const x = 1 + (t - 1) / dt;
+    return x * x;
+  }
+  return 0;
+}
+// Shape helpers stay separate so the hot dispatcher remains small enough for the JIT to inline.
+function halfWave(t: number, dt: number): number {
+  const value = t < 0.5 ? fastSin(t * TAU) : 0;
+  if (!(dt > 0)) return value;
+  // Both corners raise the slope by TAU per turn, TAU*step per sample. The polyBLAMP residual
+  // (1-x)^3/6, x = samples to the nearest corner, integrates the unit-step polyBLEP residual.
+  // step<=0.25 keeps the peak at t=1/4 outside both windows, so value<=1.
+  const step = Math.min(dt, 0.25);
+  const p = t < 0.5 ? t : t - 0.5;
+  const x = (p < 0.25 ? p : 0.5 - p) / step;
+  if (x >= 1) return value;
+  const y = 1 - x;
+  return value + TAU * step * y * y * y / 6;
+}
+function squareWave(t: number, dt: number): number {
+  if (!(dt > 0)) return t <= 0.5 ? 1 : -1;
+  // Each residual treats its edge sample as already past the jump. Edges are 0.5 turn apart and
+  // Synth caps dt at 0.45, so the windows never overlap and |value|<=1.
+  const q = t < 0.5 ? t + 0.5 : t - 0.5;
+  return (t < 0.5 ? 1 : -1) + polyBlep(t, dt) - polyBlep(q, dt);
+}
+function sawWave(t: number, dt: number): number {
+  const p = (t + 0.5) - Math.floor(t + 0.5);
+  const value = 2 * p - 1;
+  return p < dt || p > 1 - dt ? value - polyBlep(p, dt) : value;
+}
+
 /** Pure periodic shapes. Noise is stateful and handled by Synth, not this function.
  * With t=frac(theta/TAU): half=max(0,sin); abs=|sin|;
  * quarter=|sin| when frac(theta/pi)<1/2; alternating=sin(2theta) when t<1/2;
- * camel=|sin(2theta)| when t<1/2; square=sign(sin), zero maps to +1;
+ * camel=|sin(2theta)| when t<1/2; square=+1 when t<=1/2, otherwise -1;
  * saw=2*frac(t+1/2)-1, rising through zero at theta=0.
- * Discontinuous shapes are naive, not alias-free.
+ * dt is the nominal phase advance in turns per sample. When positive, square and saw add
+ * polyBLEP residuals at their jumps and half adds polyBLAMP residuals at its two corners;
+ * dt=0 returns the naive shapes. Residuals use the unmodulated rate, so they fit carriers and
+ * only approximate modulated operators. Other discontinuous shapes stay naive; none is alias-free under arbitrary FM.
  */
-export function periodicWaveform(theta: number, code: number): number {
+export function periodicWaveform(theta: number, code: number, dt = 0): number {
   if (!Number.isFinite(theta)) return 0;
   const turns = theta / TAU;
   const t = turns - Math.floor(turns);
-  const sine = Math.sin(t * TAU);
   switch (code) {
     case 0: return fastSin(theta);
-    case 1: return Math.max(0, sine);
-    case 2: return Math.abs(sine);
-    case 3: return (t * 2 - Math.floor(t * 2)) < 0.5 ? Math.abs(sine) : 0;
-    case 4: return t < 0.5 ? Math.sin(t * TAU * 2) : 0;
-    case 5: return t < 0.5 ? Math.abs(Math.sin(t * TAU * 2)) : 0;
-    case 6: return sine >= 0 ? 1 : -1;
-    case 7: return 2 * ((t + 0.5) - Math.floor(t + 0.5)) - 1;
+    case 1: return halfWave(t, dt);
+    case 2: return Math.abs(fastSin(t * TAU));
+    case 3: return (t * 2 - Math.floor(t * 2)) < 0.5 ? Math.abs(fastSin(t * TAU)) : 0;
+    case 4: return t < 0.5 ? fastSin(t * TAU * 2) : 0;
+    case 5: return t < 0.5 ? Math.abs(fastSin(t * TAU * 2)) : 0;
+    case 6: return squareWave(t, dt);
+    case 7: return sawWave(t, dt);
     default: return 0;
   }
 }

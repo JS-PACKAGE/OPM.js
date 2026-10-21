@@ -189,6 +189,7 @@ export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 const HEADROOM = 0.7;
 const DEFAULT_MAX_VOICES = 8;
 const MAX_FADES = 8;
+const INV_TAU = 1 / TAU;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
 const DB_TO_LOG_GAIN = Math.LN10 / 20;
 const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
@@ -1018,7 +1019,7 @@ export class Synth {
               const ticks = Math.floor(turns);
               for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
               active.noiseTurns[op] = turns - ticks;
-            } else oscillator = periodicWaveform(phases[op] + modulation, code);
+            } else oscillator = periodicWaveform(phases[op] + modulation, code, steps[op] * INV_TAU);
             const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
             values[op] = value;
             const phase = phases[op] + steps[op];
