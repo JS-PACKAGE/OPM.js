@@ -54,7 +54,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 - **Prepared immutable patches and pooled DSP state** — reuse bounded voice slots instead of allocating typed state on every admission
 - **Incremental PCM16/PCM24/Float32 WAV export** with static Worker rendering, progress, cancellation and sink backpressure; approximate six-to-four-operator DX7 import
 - **Pre-saturation mix gain and global tuning** — reference A4 and interpolated 128-note cents offsets
-- **DSP quality profiles** — eco 2×/fourth-order, default standard 4×/eighth-order and high 8×/eighth-order; bounded state and explicit CPU/aliasing tradeoffs
+- **DSP quality profiles** — eco 2×, default standard 4× and high 8× oversampling with linear-phase half-band FIR decimation; bounded state and explicit CPU/aliasing tradeoffs
 - **Atomic voice-bank replacement, removal and JSON export** preserving queued/sounding patch snapshots
 - **TypeScript declarations** for browser, core, and voice-module exports
 - **AudioWorklet-based DSP** — synthesis runs off the main thread
@@ -424,7 +424,7 @@ The root and core export `beatsToSeconds`, `secondsToBeats`, `normalizeTempoMap`
 
 `renderSequenceInWorker(score, { ...chunkedOptions, format, sink, onProgress, signal, workerUrl, startupTimeoutMs, phaseDiagnostics, onPhase })` returns a promise for `{ capacity, format, bytesWritten, diagnostics }`. `sink.write(bytes)` may transfer ownership and return a promise: the static module Worker waits for acknowledgement before rendering the next encoded chunk. Optional `close()` runs on completion; `abort(reason)` handles rollback. Cancellation terminates/rejects without waiting for a hung sink; the host must invalidate its partial output. Progress reports `{ frames, totalFrames, bytesWritten, errors }`. This helper is browser-only; pure chunk rendering/encoding also works in Node. Deploy the entire `dist/` tree, including `worker/render.js` and its companions, with same-origin secure URLs and normal CSP/JavaScript MIME checks. See [incremental/Worker sink recipes](./doc/host-integration.md) and checkout-only [example 08](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html); long-file export uses a direct file sink, not an aggregate Blob fallback.
 
-`quality` is accepted by OPM, Synth, `renderNote`, full/chunked sequence rendering and Worker options. `standard` preserves the existing 4×/eighth-order sound; `eco` uses 2×/fourth-order filtering with weaker alias rejection, while `high` uses 8×/eighth-order filtering at higher CPU cost. Profiles do not promise alias-free FM or universal realtime deadlines. See [measured quality tradeoffs](./doc/acoustic-quality.md).
+`quality` is accepted by OPM, Synth, `renderNote`, full/chunked sequence rendering and Worker options. `standard` uses 4× oversampling with a 15 → 47-tap half-band FIR cascade (flat to 0.40 output Fs, 81 dB rejection, 13.25-frame delay); `eco` uses 2× with a single 35-tap stage and weaker (63 dB) rejection, while `high` uses 8× with an 11 → 15 → 47-tap cascade at higher CPU cost. Profiles do not promise alias-free FM or universal realtime deadlines. See [measured quality tradeoffs](./doc/acoustic-quality.md).
 
 ### Adaptive music, tempo curves and grids
 
@@ -502,7 +502,7 @@ The v1.10 checkout-only benchmark also reports scoped capacity candidates across
 
 `sound-quality` covers all three profiles and passed 2,505 lifecycle/headroom/determinism matrix cases plus 24 live-control cases in the recorded v1.8 verification. It also checks independent passband, THD, folded aliases and streaming references; these are controlled numerical gates, not arbitrary-FM or listening certification. `voice-quality` evaluates the curated preset bank and original synthetic DX7 recipes over register/velocity cells. Peak/RMS are raw dBFS, not LUFS or perceived loudness; host trims do not rewrite synthesis levels. See [acoustic-quality evidence](./doc/acoustic-quality.md#coverage-and-evidence) and [voice-quality notes](./doc/voice-quality.md).
 
-Independent references cover Bessel-series high-index PM, contractive delayed feedback, conservative full-level feedback energy, and nested four-operator chain/branched/multicarrier synthesis. The shared post-mix 4× decimator uses an eighth-order Butterworth cascade for a flatter audible passband with controlled stopband checks. Two 120-second streaming cases exercise held AM/PM and glide retargets. See [acoustic reference mathematics and limits](./doc/acoustic-quality.md); none certify arbitrary alias-free FM, perceptual quality or hardware fidelity.
+Independent references cover Bessel-series high-index PM, contractive delayed feedback, conservative full-level feedback energy, and nested four-operator chain/branched/multicarrier synthesis. The shared post-mix 4× decimator is a polyphase linear-phase half-band FIR cascade, flat to 0.40 output Fs with at least 81 dB rejection of products that fold below that edge. Two 120-second streaming cases exercise held AM/PM and glide retargets. See [acoustic reference mathematics and limits](./doc/acoustic-quality.md); none certify arbitrary alias-free FM, perceptual quality or hardware fidelity.
 
 `browser-stress` exercises real AudioWorklet output, dense admissions/steals, controls, late rejection and queue cleanup under bounded main-thread contention. Timer gaps and diagnostic round trips are observations, **not** worklet CPU/GC/underrun/glitch measurements. Periodic analyser samples cannot prove uninterrupted audio. The Vite smoke additionally verifies an installed current tarball, non-root production deployment, retained license, CSP and negative asset/MIME cases. Run these separately from deadline benchmarks.
 
@@ -555,7 +555,7 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 
 See the [expressive voice reference](./doc/expressive-voices.md) for pitch composition, fixed-frequency behavior and synchronization. Ratio remains required even when frequency is supplied. Preserve the source patch version when importing older banks; changing a version number alone does not add unsupported fields to its legacy shape.
 
-Periodic shapes use phase plus modulation; sine retains the unchanged legacy fast path. Noise uses a deterministic 17-bit bipolar sample-and-hold sequence reset at every admission/slot reuse. Ratio, fixed Hz, detune, pitch and PM do not pitch noise; live ratio/frequency controls remain valid but have no audible pitch effect. Envelope, velocity, level, key scaling, AM and graph roles still apply. Noise on any operator is an OPM.js extension, not hardware-fidelity emulation. Square/saw/noise can alias despite oversampling; see [shape formulas and noise details](./doc/expressive-voices.md#oscillator-shapes-and-noise). Original presets include `noise-snare`, `noise-hihat` and `explosion`.
+Periodic shapes use phase plus modulation; sine retains the unchanged legacy fast path. Noise uses a deterministic 17-bit bipolar sample-and-hold sequence reset at every admission/slot reuse. Ratio, fixed Hz, detune, pitch and PM do not pitch noise; live ratio/frequency controls remain valid but have no audible pitch effect. Envelope, velocity, level, key scaling, AM and graph roles still apply. Noise on any operator is an OPM.js extension, not hardware-fidelity emulation. Square/saw use polyBLEP and half uses polyBLAMP edge correction, but these shapes and noise can still alias, especially under FM; see [shape formulas and noise details](./doc/expressive-voices.md#oscillator-shapes-and-noise). Original presets include `noise-snare`, `noise-hihat` and `explosion`.
 
 
 Key scaling attenuates operator level by `10 ** (-slope * abs(note - breakpoint) / 12 / 20)` on the corresponding side; omitted scaling is flat. Velocity sensitivity additionally multiplies it by `10 ** (-sensitivity * (1 - velocity) / 20)`, changing carrier loudness and modulator brightness. Final note velocity still multiplies the output; default sensitivity 0 preserves legacy sound. Pan belongs to the note, not the voice.
@@ -614,7 +614,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 
 - Not a register-level YM2151 emulator; VGM playback is out of scope
 - Bundled sounds are original curated recipes, not a comprehensive commercial bank; bring your own sounds.
-- Selectable 2×/4×/8× oversampling and Butterworth decimation reduce controlled folded aliases; arbitrary FM can still alias and filters have phase/delay/CPU tradeoffs.
+- Selectable 2×/4×/8× oversampling and half-band FIR decimation reduce controlled folded aliases; arbitrary FM can still alias, and the linear-phase filters add a constant delay (13.25 output frames for standard).
 - Numerical host trims are not perceptual loudness matching. DX7 conversion remains six-to-four-operator and intentionally lossy; no hardware-fidelity or all-device glitch-free guarantee is made.
 
 ## License

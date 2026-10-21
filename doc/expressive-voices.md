@@ -36,10 +36,10 @@ For θ = phase + modulation and fractional turns `t = frac(θ / (2π))`, the per
 | quarter | `abs(sin(θ))` when `frac(θ/π) < 0.5`, otherwise zero |
 | alternating | `sin(2θ)` when `t < 0.5`, otherwise zero |
 | camel | `abs(sin(2θ))` when `t < 0.5`, otherwise zero |
-| square | −1 for negative sine, +1 otherwise (including zero) |
-| saw | `2 * frac(t + 0.5) - 1`; rising, zero at θ = 0 |
+| square | −1 for negative sine, +1 otherwise (including zero); polyBLEP-corrected in Synth |
+| saw | `2 * frac(t + 0.5) - 1`; rising, zero at θ = 0; polyBLEP-corrected in Synth |
 
-Phase reduction uses fractional turns, including negative and very large finite arguments, never wrapping loops. Square, saw and held noise can alias: the existing oversampling and post-mix decimator reduce some products but does **not** make these oscillators alias-free.
+Phase reduction uses fractional turns, including negative and very large finite arguments, never wrapping loops. Non-sine shapes evaluate the same deterministic polynomial sine as sine operators. Synth smooths the square and saw jumps with two-sample polyBLEP residuals and the two half-wave corners with polyBLAMP residuals, sized from each operator's unmodulated phase step at the oversampled rate. This lowers folded aliases of unmodulated carriers (about 8–17 dB at the internal rate in the unit tests, before decimation); under phase modulation the nominal step is only an approximation. Quarter, alternating and camel remain naive, and held noise is never band-limited. None of these oscillators is alias-free, even with oversampling and the post-mix decimator.
 
 Noise is an original deterministic 17-bit maximal-length LFSR (`x^17+x^3+1`), seeded with `0x1ffff` at every note admission, including pooled slot reuse. The low bit produces bipolar ±1 and advances on the `noiseRate` time-domain hold clock, independent of output sample rate. Identical admissions reproduce the sequence. Ratio, fixed frequency, detune, tuning, pitch envelopes, live pitch and modulator PM do not pitch noise; existing `operatorRatios`/`operatorFrequencies` controls remain valid but have no audible pitch effect on it. Envelope, key/rate scaling, velocity, level, AM and graph routing still apply; noise can be either a modulator or carrier.
 

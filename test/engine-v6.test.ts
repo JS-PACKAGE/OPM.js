@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, validateNoteControls } from '../src/core/synth.js';
 import type { NoteControls } from '../src/core/synth.js';
-import { createDecimatorCoefficients, decimateSample } from '../src/core/decimator.js';
+import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, decimatorPeak } from '../src/core/decimator.js';
 import type { QualityProfile } from '../src/core/decimator.js';
 import type { ADSR, Voice } from '../src/voices/schema.js';
-import { fft, filterByFourier } from './decimator-reference.js';
+import { filterByFourier, filterResponse, halfBandStages } from './decimator-reference.js';
 
 function tone(): Voice {
   return { version: 7, name: 'engine-test', algorithm: 7, feedback: 0, modIndex: 0,
@@ -28,59 +28,23 @@ function near(actual: Float32Array, expected: Float32Array, tolerance = 2e-7): v
 }
 
 function filterStateTailBound(): number {
-  // A sub-floor delay scalar can ring above that floor. Independently transform
-  // the analog poles and invert each state-to-output transfer. For section i:
-  // z1 contributes (1/A_i) * downstream H; z2 contributes its one-sample shift.
-  const length = 4096, warped = Math.tan(Math.PI * 0.30 / 4);
-  const poles = Array.from({ length: 4 }, (_, section) => {
-    const angle = (2 * section + 1) * Math.PI / 16;
-    const real = -Math.cos(angle), imaginary = Math.sin(angle);
-    const denominator = (1 - warped * real) ** 2 + (warped * imaginary) ** 2;
-    const digitalReal = (1 - warped ** 2) / denominator;
-    const digitalImaginary = 2 * warped * imaginary / denominator;
-    const power = digitalReal ** 2 + digitalImaginary ** 2;
-    return { real: digitalReal, power, dcNumerator: (1 - 2 * digitalReal + power) / 4 };
-  });
-  const bound = new Float64Array(length);
-  for (let initial = 0; initial < 4; initial++) {
-    const real = new Float64Array(length), imaginary = new Float64Array(length);
-    for (let bin = 0; bin < length; bin++) {
-      const omega = 2 * Math.PI * bin / length;
-      let transferReal = 1, transferImaginary = 0;
-      for (let section = initial; section < 4; section++) {
-        const pole = poles[section];
-        const denominatorReal = 1 - 2 * pole.real * Math.cos(omega) + pole.power * Math.cos(2 * omega);
-        const denominatorImaginary = 2 * pole.real * Math.sin(omega) - pole.power * Math.sin(2 * omega);
-        const power = denominatorReal ** 2 + denominatorImaginary ** 2;
-        const numeratorReal = section === initial ? 1 : pole.dcNumerator * (1 + 2 * Math.cos(omega) + Math.cos(2 * omega));
-        const numeratorImaginary = section === initial ? 0 : -pole.dcNumerator * (2 * Math.sin(omega) + Math.sin(2 * omega));
-        const factorReal = (numeratorReal * denominatorReal + numeratorImaginary * denominatorImaginary) / power;
-        const factorImaginary = (numeratorImaginary * denominatorReal - numeratorReal * denominatorImaginary) / power;
-        const nextReal = transferReal * factorReal - transferImaginary * factorImaginary;
-        transferImaginary = transferReal * factorImaginary + transferImaginary * factorReal;
-        transferReal = nextReal;
-      }
-      real[bin] = transferReal; imaginary[bin] = transferImaginary;
-    }
-    fft(real, imaginary, true);
-    assert.ok(real.subarray(length / 2).every(value => Math.abs(value) < 1e-12), 'independent state response settles within inversion window');
-    for (let sample = 0; sample < length; sample++) bound[sample] += Math.abs(real[sample]) + (sample === 0 ? 0 : Math.abs(real[sample - 1]));
-  }
-  let maximum = 0;
-  for (const sample of bound) maximum = Math.max(maximum, sample);
-  return 10 ** (-96 / 20) * (maximum + 1e-12);
+  // Retirement leaves every stored stage input below the -96 dB floor. Each
+  // linear-phase stage output is then at most its tap L1 norm times that floor,
+  // and the next stage sees only such outputs or sub-floor history.
+  let gain = 1;
+  for (const { taps } of halfBandStages()) gain *= 0.5 + 2 * taps.reduce((sum, tap) => sum + Math.abs(tap), 0);
+  return 10 ** (-96 / 20) * gain;
 }
 const tuple = (value: number): readonly [number, number, number, number] => [value, value, value, value];
 const envelopes = (value: ADSR): readonly [ADSR, ADSR, ADSR, ADSR] => [value, value, value, value];
 
-test('profile decimators meet independently derived Butterworth passband and folded-product transfer', () => {
+test('profile decimators meet the direct half-band transfer with a flat passband and folded-product rejection', () => {
   const sampleRate = 16000;
   for (const quality of ['eco', 'standard', 'high'] as const) {
     const factor = quality === 'eco' ? 2 : quality === 'high' ? 8 : 4;
-    const order = quality === 'eco' ? 4 : 8;
-    for (const fraction of [0.1, 0.25, 0.625]) {
+    for (const fraction of [0.1, 0.25, 0.4, 0.625, 0.9]) {
       const hz = fraction * sampleRate, folded = hz - Math.round(hz / sampleRate) * sampleRate;
-      const coefficients = createDecimatorCoefficients(sampleRate, quality), state = new Float64Array(order);
+      const coefficients = createDecimatorCoefficients(sampleRate, quality), state = new Float64Array(DECIMATOR_STATE_SIZE);
       let real = 0, imaginary = 0;
       for (let frame = 0; frame < sampleRate + 2048; frame++) {
         let output = 0;
@@ -91,13 +55,12 @@ test('profile decimators meet independently derived Butterworth passband and fol
         }
       }
       const measured = 2 * Math.hypot(real, imaginary) / sampleRate;
-      const warped = Math.tan(Math.PI * fraction / factor) / Math.tan(Math.PI * 0.30 / factor);
-      const expected = 1 / Math.sqrt(1 + warped ** (2 * order));
+      const expected = filterResponse(hz, sampleRate, quality).magnitude;
       assert.ok(Math.abs(measured - expected) < 2e-9, `${quality} at ${fraction} Fs`);
-      if (fraction === 0.1) assert.ok(measured > 0.999);
-      if (fraction === 0.625) assert.ok(measured < 0.02, 'controlled folded product is attenuated, including eco');
+      if (fraction <= 0.4) assert.ok(Math.abs(20 * Math.log10(measured)) < 0.01, 'passband is flat to .40 Fs');
+      else assert.ok(measured < (quality === 'eco' ? 10 ** (-60 / 20) : 10 ** (-80 / 20)), 'folded products below .40 Fs are rejected');
       for (let sample = 0; sample < 4096; sample++) decimateSample(0, state, coefficients);
-      assert.ok(state.every(value => Math.abs(value) < 1e-12), 'entire causal filter tail drains');
+      assert.equal(decimatorPeak(state), 0, 'entire finite filter history drains to exact zero');
     }
   }
 });

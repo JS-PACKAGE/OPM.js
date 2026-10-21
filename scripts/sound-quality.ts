@@ -141,7 +141,6 @@ for (const quality of FM_QUALITY_PROFILES) for (const sampleRate of quality === 
   const reference = binAmplitude(baseline.samples, sampleRate, baselineHz);
   assert.ok(reference > 0.02 && reference < 0.04, 'low-level reference must be audible without saturating');
   const passband: object[] = [];
-  const measuredPassbandDb: number[] = [];
   for (const fraction of [0.05, 0.1, 0.2, 0.35]) {
     const frequency = Math.round(sampleRate * fraction);
     const result = renderNote({ ...controlledTone(sampleRate, frequency), quality });
@@ -149,19 +148,14 @@ for (const quality of FM_QUALITY_PROFILES) for (const sampleRate of quality === 
     assert.ok(signalMetrics(result.samples).finite);
     const amplitude = binAmplitude(result.samples, sampleRate, frequency);
     const lossDb = 20 * Math.log10(amplitude / reference);
-    // Independent bilinear Butterworth magnitude, normalized by the same low-frequency control tone.
+    // Direct half-band cascade magnitude, normalized by the same low-frequency control tone.
     const expectedDb = 20 * Math.log10(acceptedFilterMagnitude(frequency, sampleRate, quality) / acceptedFilterMagnitude(baselineHz, sampleRate, quality));
     assert.ok(Number.isFinite(lossDb) && lossDb <= 0.02, 'settled passband does not boost controlled tones');
     assert.ok(Math.abs(lossDb - expectedDb) < (fraction <= 0.2 ? 0.03 : 0.15), `${quality}: measured response follows the independent filter equation (${lossDb} dB vs ${expectedDb} dB)`);
-    if (quality === 'standard') {
-      if (fraction <= 0.2) assert.ok(lossDb > -0.03, 'flat passband through 0.2 Fs');
-      if (fraction === 0.35) assert.ok(lossDb > -12 && lossDb < -11, 'documented steep transition band');
-    }
+    assert.ok(lossDb > -0.03, `${quality}: flat passband through .35 Fs`);
     passband.push({ frequency, fractionOfSampleRate: fraction, lossDb, expectedDb });
-    measuredPassbandDb.push(lossDb);
   }
   let harmonicEnergy = 0;
-  assert.ok(measuredPassbandDb[2] - measuredPassbandDb[3] > (quality === 'eco' ? 5 : 10), 'passband and transition band remain distinct');
   for (let harmonic = 2; harmonic <= 8; harmonic++) {
     harmonicEnergy += binAmplitude(baseline.samples, sampleRate, baselineHz * harmonic) ** 2;
   }
@@ -175,11 +169,10 @@ for (const quality of FM_QUALITY_PROFILES) for (const sampleRate of quality === 
     assert.equal(result.diagnostics.errors, 0);
     assert.ok(signalMetrics(result.samples).finite);
     const relative = binAmplitude(result.samples, sampleRate, foldedHz) / reference;
-    // Eco's fourth-order filter at a 2x internal rate is the only profile that cannot promise 30 dB at .625 Fs.
-    // Its bound is the independent filter equation, not a relaxed constant.
+    // Every profile keeps the 30 dB floor; the direct transfer is the tighter bound.
     const predicted = acceptedFilterMagnitude(sourceHz, sampleRate, quality) / acceptedFilterMagnitude(baselineHz, sampleRate, quality);
     assert.ok(relative < Math.max(10 ** (-30 / 20), predicted * 1.5), `${quality}: ultrasonic alias is bounded by the independent equation`);
-    assert.ok(relative < 10 ** (-30 / 20) || quality === 'eco', 'standard and high keep the 30 dB controlled alias floor');
+    assert.ok(relative < 10 ** (-30 / 20), 'every profile keeps the 30 dB controlled alias floor');
     aliases.push({ sourceHz, foldedHz, relativeDb: decibels(relative), predictedDb: decibels(predicted) });
   }
   controlled.push({ quality, sampleRate, baselineHz, passband, thdPercent: thd * 100, thdDb: decibels(thd), aliases });
@@ -195,11 +188,11 @@ console.log(JSON.stringify({ passed: true, elapsedMs: performance.now() - starte
   limitations: [
     'Synthetic clean-room fixtures, not hardware fidelity or perceptual preset evaluation.',
     'Standard retains the original complete sample-rate/register/velocity/polyphony grid. Eco and high run the same invariants over a bounded 22.05/48/96 kHz subset plus opt-in 32-voice rows, not every grid cell.',
-    'Controlled passband loss includes the Butterworth decimation filter and output saturation and is compared with an independent bilinear-transform equation per profile; decimatorComparison still isolates measured linear response, folded aliases, phase and impulse delay for the standard profile.',
+    'Controlled passband loss includes the half-band FIR decimation cascade and output saturation and is compared with its direct transfer per profile; decimatorComparison still isolates measured linear response, folded aliases, phase and impulse delay for the standard profile.',
     'THD measures harmonics 2..8 of one settled low-level pure tone, not noise, THD+N, or arbitrary FM distortion.',
-    'Eco uses a fourth-order filter at 2x internal rate; its controlled alias bound follows the independent equation and is weaker than the 30 dB floor retained for standard and high.',
+    'Eco uses a shorter 35-tap half-band at 2x internal rate (63 dB design rejection versus 81 dB for standard and high); every profile keeps the 30 dB controlled alias floor.',
     'Independent FM gates cover original zero-feedback two-operator PM at index 16, two frequency layouts and coherent one-second windows at 44.1/48/96 kHz per profile. They are not a blanket alias-free claim.',
-    'The Bessel reference and independent Butterworth transfer separate attenuated in-band brightness from folded ultrasonic energy; the conservative .30 internal-rate cutoff flattens the upper passband without relaxing the controlled alias gates.',
+    'The Bessel reference and direct half-band transfer separate in-band brightness from folded ultrasonic energy; the passband is flat to .40 output Fs and products that fold below it are rejected by the stopband from .60 Fs.',
     'The documented memoryless output tanh is inverted for independent FM, feedback and settled-stream analysis, isolating pre-saturation products rather than claiming nonlinear output spectra are ideal PM.',
     'Feedback7 at level 0.25 uses independent converged periodic phase grids with the same physical two-tap delays and a proven contraction; its harmonics, brightness loss, DC and aliases are checked per profile, not PCM identity.',
     'Full-level feedback7 has a filter/Parseval-derived high-band energy gate. Its chaotic aliases cannot be uniquely separated from true in-band harmonics, so only the mathematical alias bound is reported; no chaotic PCM-convergence claim.',

@@ -3,7 +3,7 @@ import type { AlgorithmGraph } from './algorithms.js';
 import { normalizeTuning, tuningFrequency } from './tuning.js';
 import type { NormalizedTuning, TuningOptions } from './tuning.js';
 import { lfoValue } from './lfo.js';
-import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, qualityOversample } from './decimator.js';
+import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, decimatorPeak, qualityOversample } from './decimator.js';
 import type { QualityProfile } from './decimator.js';
 export type { QualityProfile } from './decimator.js';
 
@@ -189,6 +189,7 @@ export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 const HEADROOM = 0.7;
 const DEFAULT_MAX_VOICES = 8;
 const MAX_FADES = 8;
+const INV_TAU = 1 / TAU;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
 const DB_TO_LOG_GAIN = Math.LN10 / 20;
 const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
@@ -460,11 +461,12 @@ function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
   return gain * active.carrierGain * active.velocity * expression * layerGain;
 }
 
-/** True when the state is (now) exactly zero; sub-floor residue is cleared. */
-function settleDecimator(state: Float64Array): boolean {
-  let peak = 0;
-  for (let index = 0; index < state.length; index++) peak = Math.max(peak, Math.abs(state[index]));
-  if (peak >= AMPLITUDE_FLOOR) return false;
+/** True when the buffered history is (now) exactly zero. With nothing left
+ *  sounding, sub-floor residue is cleared; a live silent voice instead flushes
+ *  the finite FIR to exact zeros so its envelope tail stays intact. */
+function settleDecimator(state: Float64Array, clear: boolean): boolean {
+  const peak = decimatorPeak(state);
+  if (peak !== 0 && (!clear || peak >= AMPLITUDE_FLOOR)) return false;
   if (peak !== 0) state.fill(0);
   return true;
 }
@@ -1059,7 +1061,7 @@ export class Synth {
               const ticks = Math.floor(turns);
               for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
               active.noiseTurns[op] = turns - ticks;
-            } else oscillator = periodicWaveform(phases[op] + modulation, code);
+            } else oscillator = periodicWaveform(phases[op] + modulation, code, steps[op] * INV_TAU);
             const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
             values[op] = value;
             const phase = phases[op] + steps[op];
@@ -1194,10 +1196,11 @@ export class Synth {
           (this as MutableCounters).errorCount++;
           this.resetDecimator();
         } else {
-          // A silent channel (ended, muted or hard-panned voices) snaps to exact
-          // zero once its filter state falls below the -96 dB envelope floor.
-          const idleLeft = silentLeft && settleDecimator(filterLeft);
-          const idleRight = mirrored ? idleLeft : silentRight && settleDecimator(filterRight);
+          // A silent channel goes idle once its FIR history is zero. After the
+          // last source retires, history below the -96 dB floor snaps to zero.
+          const clear = this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0;
+          const idleLeft = silentLeft && settleDecimator(filterLeft, clear);
+          const idleRight = mirrored ? idleLeft : silentRight && settleDecimator(filterRight, clear);
           this.decimatorIdle = idleLeft && idleRight;
           if (this.decimatorIdle) this.decimatorMirrored = true;
         }

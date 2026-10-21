@@ -27,8 +27,13 @@ for (const [name, version] of Object.entries(manifest.devDependencies ?? {})) {
 const versionSource = await readFile(join(root, 'src/version.ts'), 'utf8');
 assert.equal(/VERSION = '([^']+)'/.exec(versionSource)?.[1], manifest.version, 'src/version.ts must match package.json');
 
+// On Windows `npm` is a .cmd shim that spawnSync cannot run without a shell, so
+// reuse the npm CLI script that launched this check when one is available.
+const npmCli = /npm-cli\.js$/.test(process.env.npm_execpath ?? '') ? process.env.npm_execpath! : undefined;
 function command(args: string[], cwd = root): string {
-  const result = spawnSync('npm', args, { cwd, encoding: 'utf8', timeout: 120000 });
+  const result = npmCli
+    ? spawnSync(process.execPath, [npmCli, ...args], { cwd, encoding: 'utf8', timeout: 120000 })
+    : spawnSync('npm', args, { cwd, encoding: 'utf8', timeout: 120000 });
   if (result.error) throw result.error;
   assert.equal(result.status, 0, `npm ${args.join(' ')} failed\n${result.stdout}\n${result.stderr}`);
   return result.stdout;

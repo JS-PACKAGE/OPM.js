@@ -18,7 +18,7 @@ GitHub Release **v1.10（套件 1.10.0）**加入可攜 Arrangement 專案、選
 
 ## v1.11 新功能（目前 checkout，尚未發佈）
 
-- **音色 v7 波形與雜訊。**每個運算子可指定 `waveform`（`sine`、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`）與 `noiseRate`（20–20000 Hz）。既有正弦音色輸出不變；square、saw、noise 不保證無混疊。內建音色庫新增原創的 `noise-snare`、`noise-hihat`、`explosion`。詳見[表情音色參考](./expressive-voices.md)。
+- **音色 v7 波形與雜訊。**每個運算子可指定 `waveform`（`sine`、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`）與 `noiseRate`（20–20000 Hz）。既有正弦音色輸出不變；square／saw（polyBLEP）與 half（polyBLAMP）有邊緣抗混疊修正，但與 noise 一樣不保證無混疊。內建音色庫新增原創的 `noise-snare`、`noise-hihat`、`explosion`。詳見[表情音色參考](./expressive-voices.md)。
 - **選用立體聲效果。**`createStereoEffects`／`applyEffects`（離線）與 `createEffects`（專用 AudioWorklet insert）提供 chorus 與 reverb；不會自動接線。詳見[音訊匯流排](./audio-buses.md)。
 - **MIDI 程式對照與 RPN。**`programVoices`／`drumVoices` 將 Program Change 與 GM 鼓音符對應到具名 FM 音色（需主動啟用；`gmProgramVoices`／`gmDrumVoices` 為起手對照表）；保留模式的檔案匯入與即時轉接器也會解碼 RPN 0 的 pitch-bend 靈敏度。詳見 [MIDI 檔案](./midi-files.md)與 [MIDI 演奏](./midi-performance.md)。
 - **`.opm` 匯入。**`opm.js/voices/opm.js` 的 `importOPM`／`describeOPM` 近似轉換 VOPM／MXDRV 系列文字音色；並非暫存器層級模擬。
@@ -485,7 +485,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 執行 `node render-note.mjs`；checkout 改用 `./dist/...` 匯入。`renderNote({voice,note=60,duration=0.5,velocity=1,pan=0,sampleRate=44100})` 回傳 `{samples,left,right,sampleRate,diagnostics:{errors}}`，`samples === left`。要求完整 Schema 音色；有限的音色數值會限制到範圍，但無效版本／algorithm／feedback 仍拒絕。有限 note／duration／velocity／pan 分別限制至 0–127／0–30 秒／0–1／−1–1；note 可為小數，sampleRate 必須是整數 8000–96000。
 
-renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／四階）、standard（預設 4×／八階，保留原預設輸出）或 high（8×／八階）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
+renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／35-tap 半帶 FIR）、standard（預設 4×／15 → 47-tap 半帶 FIR 串接）或 high（8×／11 → 15 → 47-tap）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
 
 此函式與 Synth 使用相同包絡、LFO、濾波、力度、聲像及飽和路徑。長度為 `ceil((duration+最長有效release+0.01)*sampleRate)`，包含 note-dependent rate scaling，上限 4,000,000 影格。飽和前聲像增益為 `sqrt(2)*cos/sin((pan+1)*pi/4)`；飽和後不保證感知音量恆定。
 
@@ -623,7 +623,7 @@ Headless Linux Firefox 還需要運作中的原生音訊服務，只安裝瀏覽
 
 另可在 checkout 執行 `npm run sound-quality`、`npm run voice-quality`、`npm run browser-stress -- chromium` 與 `npm run vite-smoke -- chromium`。品質矩陣涵蓋多取樣率、演算法、回授、音高、力度與多音；音色工具提供低／中／高音域與力度的 peak／RMS dBFS、建議宿主 trim 及 DX7 限制報告，並不自動重寫音色音量。詳細方法見[音色品質指南](./voice-quality.md)。已觀察到的矩陣通過與瀏覽器有限訊號，只證明所測條件；主執行緒事件間隔不等於 worklet CPU／GC 時間，也不能證明所有平台零爆音、任意 FM 無混疊或全部音色等響度。
 
-獨立驗收含 Bessel PM、收斂／全強度回授能量界限、獨立四運算子串接／分支／多 carrier 參考，以及兩段 120 秒 LFO／glide 串流。4× 八階 Butterworth decimator 以相位／延遲取捨換取較平坦的可聽 passband 與受控 stopband 衰減；詳見[聲學參考數學與限制](./acoustic-quality.md)。這些不是任意音色、聽感、實體裝置或硬體保真保證。
+獨立驗收含 Bessel PM、收斂／全強度回授能量界限、獨立四運算子串接／分支／多 carrier 參考，以及兩段 120 秒 LFO／glide 串流。4× polyphase 半帶 FIR decimator 的 passband 平坦至輸出取樣率 0.40 倍，折返到該頻率以下的成分至少衰減 81 dB，代價是固定 13.25 frame 的線性相位延遲；詳見[聲學參考數學與限制](./acoustic-quality.md)。這些不是任意音色、聽感、實體裝置或硬體保真保證。
 
 ## 壓縮部署
 

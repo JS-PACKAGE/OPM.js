@@ -70,9 +70,11 @@ function verifyStableFeedback(sampleRate: number, quality: QualityProfile) {
   let referenceMean = 0, measuredMean = 0;
   for (const value of fine.samples) referenceMean += value / (fine.samples.length * FEEDBACK_LEVEL);
   for (const value of window) measuredMean += value / (window.length * normalization);
-  assert.ok(Math.abs(referenceMean - measuredMean) < COEFFICIENT_TOLERANCE, 'feedback DC matches the independent delayed reference');
+  // The equiripple cascade's DC gain is 1 within its passband ripple, not exactly 1.
+  const filteredMean = referenceMean * acceptedFilterMagnitude(0, sampleRate, quality);
+  assert.ok(Math.abs(filteredMean - measuredMean) < COEFFICIENT_TOLERANCE, 'feedback DC matches the independent delayed reference');
   let maximumGridDifference = 0, maximumEngineError = 0;
-  let idealPassbandEnergy = 2 * referenceMean ** 2, expectedPassbandEnergy = idealPassbandEnergy;
+  let idealPassbandEnergy = 2 * referenceMean ** 2, expectedPassbandEnergy = 2 * filteredMean ** 2;
   let measuredPassbandEnergy = 2 * measuredMean ** 2;
   let idealUltrasonicEnergy = 0, expectedAliasEnergy = 0, measuredAliasEnergy = 0;
   const bins = new Set<number>();

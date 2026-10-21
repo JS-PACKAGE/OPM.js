@@ -2,11 +2,12 @@
 // helpers are used: the reference is sin(wc*t + beta*sin(wm*t)).
 import type { Voice } from '../src/voices/schema.js';
 import type { QualityProfile } from '../src/core/decimator.js';
+import { filterResponse } from './decimator-reference.js';
 
 // Independent design contract; deliberately not read from production tables.
 export const FM_QUALITY_PROFILES = ['eco', 'standard', 'high'] as const;
 export function referenceProfile(quality: QualityProfile = 'standard') {
-  return quality === 'eco' ? { factor: 2, order: 4 } : { factor: quality === 'high' ? 8 : 4, order: 8 };
+  return { factor: quality === 'eco' ? 2 : quality === 'high' ? 8 : 4 };
 }
 
 export const FM_REFERENCE_RATES = [44100, 48000, 96000] as const;
@@ -73,12 +74,17 @@ export function legacyFilterMagnitude(frequency: number, sampleRate: number): nu
   return (numerator / denominator) ** 2;
 }
 
-// Independent bilinear Butterworth magnitude. The periodic tan also accounts
-// for source products folding at the profile's INTERNAL Nyquist before filtering.
-export function acceptedFilterMagnitude(frequency: number, sampleRate: number, quality: QualityProfile = 'standard'): number {
-  const { factor, order } = referenceProfile(quality);
+// Former bilinear Butterworth magnitude (order 4 eco, 8 otherwise, .30 Fs
+// cutoff), retained only for explicit design comparisons.
+export function butterworthFilterMagnitude(frequency: number, sampleRate: number, quality: QualityProfile = 'standard'): number {
+  const { factor } = referenceProfile(quality), order = quality === 'eco' ? 4 : 8;
   const normalized = Math.tan(Math.PI * frequency / (factor * sampleRate)) / Math.tan(Math.PI * 0.30 / factor);
   return 1 / Math.sqrt(1 + normalized ** (2 * order));
+}
+
+// Direct half-band cascade transfer; folding at the INTERNAL Nyquist is periodic in it.
+export function acceptedFilterMagnitude(frequency: number, sampleRate: number, quality: QualityProfile = 'standard'): number {
+  return filterResponse(frequency, sampleRate, quality).magnitude;
 }
 
 export function foldedFrequency(frequency: number, sampleRate: number): number {
