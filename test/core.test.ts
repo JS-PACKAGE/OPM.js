@@ -158,7 +158,7 @@ test('voice ceiling steals the oldest note and preserves headroom with eight voi
 test('nonfinite DSP state snaps to silence and increments the error count', () => {
   const synth = new Synth(16000);
   synth.noteOn(voice(), 60);
-  synth.voices[0].filters.fill(Infinity);
+  synth.voices[0].phases[0] = NaN;
   assert.ok(audio(synth, 128).every(value => value === 0));
   assert.equal(synth.errorCount, 1);
   assert.equal(synth.voices.length, 0);
@@ -200,4 +200,49 @@ test('native buffer bounds ignore shadow metadata and reject forged channels wit
   assert.ok(silent.subarray(0).every(value => value === 0));
   assert.ok(right.subarray(0).every(value => value === 0));
   assert.equal(idle.currentFrame, 6);
+});
+
+test('voices share one linear post-mix decimator per channel, including pan changes after a centered start', () => {
+  const HEADROOM = 0.7;
+  const stereo = (synth: Synth, length: number) => {
+    const left = new Float32Array(length), right = new Float32Array(length);
+    synth.render(left, right);
+    return { left, right };
+  };
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const both = new Synth(16000, 8, { quality, mixGain: 1 });
+    const first = new Synth(16000, 8, { quality }), second = new Synth(16000, 8, { quality });
+    for (const synth of [both, first]) synth.noteOn(voice(), 60, 1);
+    for (const synth of [both, second]) synth.noteOn(voice({ algorithm: 4 }), 67, 2);
+    const centered = stereo(both, 200);
+    assert.deepEqual(centered.left, centered.right, 'a centered mix stays exact dual mono');
+    stereo(first, 200); stereo(second, 200);
+    for (const synth of [both, first]) synth.updateNote(1, { pan: -0.6, ramp: 0.01 });
+    for (const synth of [both, second]) synth.updateNote(2, { pan: 0.8 });
+    const mixed = stereo(both, 600), a = stereo(first, 600), b = stereo(second, 600);
+    assert.ok(mixed.left.some((value, index) => value !== mixed.right[index]));
+    // The decimator is linear, so the pre-saturation mix equals the per-voice sum.
+    for (const channel of ['left', 'right'] as const) {
+      for (let i = 0; i < 600; i++) {
+        const sum = Math.atanh(a[channel][i] / HEADROOM) + Math.atanh(b[channel][i] / HEADROOM);
+        assert.ok(Math.abs(Math.atanh(mixed[channel][i] / HEADROOM) - sum) < 1e-6, `${quality} ${channel} ${i}`);
+      }
+    }
+  }
+});
+
+test('envelope-ended voices retire at once while the shared decimator drains to exact idle silence', () => {
+  const synth = new Synth(16000);
+  let endedFrame = -1;
+  synth.onVoiceEnded = () => { endedFrame = synth.currentFrame; };
+  synth.noteOn(voice({ ops: Array.from({ length: 4 }, (_, i) => ({ ratio: i + 1, level: 0.5, detune: 0,
+    adsr: { a: 0, d: 0, s: 1, r: 0 } })) }), 60, 1);
+  audio(synth, 100);
+  synth.noteOff(1);
+  const tail = audio(synth, 200);
+  assert.equal(endedFrame, 100, 'zero release ends on its envelope, not after filter drain');
+  assert.equal(synth.voices.length, 0);
+  assert.ok(tail.subarray(1, 8).some(value => value !== 0), 'decimator history continues after retirement');
+  assert.ok(tail.subarray(64).every(value => value === 0));
+  assert.equal(synth.decimatorIdle, true);
 });

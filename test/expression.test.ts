@@ -24,6 +24,9 @@ function rms(values: Float32Array): number {
   return Math.sqrt(sum / values.length);
 }
 
+// A hard gain step rings through the shared post-mix decimator before it snaps to zero.
+const DECIMATOR_SETTLE_FRAMES = 64;
+
 test('prepared voices are deeply immutable snapshots and forged copies cannot bypass validation', () => {
   const input = tone();
   input.ops[0].keyScale = { breakpoint: 60, leftDbPerOctave: 3, rightDbPerOctave: 6 };
@@ -72,7 +75,7 @@ test('prepared admissions never allocate typed state and remain bounded under re
       assert.equal(new Set([...synth.voices, ...synth.fades, ...synth.freeVoices]).size, capacity);
     }
     const invalidId = synth.voices[0].id;
-    synth.voices[0].filters.fill(Infinity);
+    synth.voices[0].phases[0] = NaN;
     synth.render(left, right);
     assert.equal(terminal.get(invalidId), 'error');
     assert.ok(synth.voices.some(active => active.id === 1001));
@@ -103,18 +106,21 @@ test('pitch stays relative to the original note and immediate controls preserve 
   synth.updateNote(id, controls);
   controls.expression = 1;
   const reduced = audio(synth, 256), unchanged = audio(reference, 256);
-  assert.ok(reduced.left.every(value => value === 0));
-  for (let i = 0; i < reduced.right.length; i++) {
+  assert.ok(reduced.left.subarray(DECIMATOR_SETTLE_FRAMES).every(value => value === 0));
+  for (let i = DECIMATOR_SETTLE_FRAMES; i < reduced.right.length; i++) {
     if (Math.abs(unchanged.right[i]) < 0.001) continue;
     const ratio = Math.atanh(reduced.right[i] / HEADROOM) / Math.atanh(unchanged.right[i] / HEADROOM);
     const expected = 0.25 / Math.sin((0.2 + 1) * Math.PI / 4);
     assert.ok(Math.abs(ratio - expected) < 0.00001);
   }
   synth.updateNote(id, { expression: 0, pan: -1 });
-  assert.ok(audio(synth, 256).left.every(value => value === 0));
+  assert.ok(audio(synth, 256).left.subarray(DECIMATOR_SETTLE_FRAMES).every(value => value === 0));
   synth.updateNote(id, { expression: 1, pan: 0.2 });
   audio(reference, 256);
-  assert.deepEqual(audio(synth, 256), audio(reference, 256));
+  const restored = audio(synth, 256), continued = audio(reference, 256);
+  for (const channel of ['left', 'right'] as const) {
+    for (let i = DECIMATOR_SETTLE_FRAMES; i < 256; i++) assert.ok(Math.abs(restored[channel][i] - continued[channel][i]) < 2e-7);
+  }
 });
 
 test('downward pitch bends recover the true operator frequency after an initially clipped high ratio', () => {
@@ -270,7 +276,7 @@ test('terminal callback replacements first render on the next frame and cannot r
     let callbacks = 0;
     const admit = () => {
       const id = synth.noteOn(prepared, 60);
-      if (corrupt) synth.voices[0].filters.fill(Infinity);
+      if (corrupt) synth.voices[0].phases[0] = NaN;
       else synth.noteOff(id);
     };
     synth.onVoiceEnded = (_id, reason) => {

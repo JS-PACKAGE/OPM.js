@@ -76,6 +76,9 @@ function diagnostics(processor: TestProcessor) {
   return processor.messages.at(-1)!;
 }
 
+// A hard gain step rings through the shared post-mix decimator before it snaps to zero.
+const DECIMATOR_SETTLE_FRAMES = 64;
+
 test('a stream longer than the pending cap reclaims stolen offs and retains only live note IDs', () => {
   Object.assign(globalThis, { currentFrame: 0 });
   const processor = new Processor();
@@ -313,7 +316,7 @@ test('raw controls and scheduling fields use own data and reject malformed recor
   assert.ok(block(processor, 128).some(sample => sample !== 0));
   assert.equal(processor.messages.filter(message => message.state === 'released').length, 0);
   processor.receive({ type: 'updateNote', id: 1, controls: { expression: 0 }, at: 256 / sampleRate });
-  assert.ok(block(processor, 256).every(sample => sample === 0));
+  assert.ok(block(processor, 256).subarray(DECIMATOR_SETTLE_FRAMES).every(sample => sample === 0));
 });
 
 test('full control queues report a rejected held-note stop and immediate recovery still ends the voice', () => {

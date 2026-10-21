@@ -16,6 +16,9 @@ function toneVoice(release = 0.006): Voice {
 
 const sampleRate = 8000;
 
+// A hard gain step rings through the shared post-mix decimator before it snaps to zero.
+const DECIMATOR_SETTLE_FRAMES = 64;
+
 test('a short fractional-note chord has exact onsets, ceil gates, release tails and deterministic stereo WAV audio', () => {
   const voice = toneVoice();
   const events: SequenceEvent[] = [
@@ -61,7 +64,7 @@ test('pending controls clamp to onset and expression automation still applies du
   assert.ok(result.right.subarray(0, 48).every(value => value === 0));
   assert.ok(result.right.subarray(48, 112).some(value => Math.abs(value) > 0.01));
   assert.ok(result.right.subarray(112, 120).some(value => Math.abs(value) > 1e-6));
-  assert.ok(result.right.subarray(120).every(value => value === 0));
+  assert.ok(result.right.subarray(120 + DECIMATOR_SETTLE_FRAMES).every(value => value === 0));
 });
 
 test('stops before or tied with an onset cancel only their targeted notes regardless of input ordering', () => {
@@ -85,7 +88,9 @@ test('the ninth simultaneous note steals the oldest with a bounded fade instead 
   const stolen = renderSequence(events, { sampleRate });
   const surviving = renderSequence(events.slice(1), { sampleRate });
   assert.notDeepEqual(stolen.left.subarray(0, 40), surviving.left.subarray(0, 40));
-  assert.deepEqual(stolen.left.subarray(40), surviving.left.subarray(40));
+  // After the 40-frame fade, only decimator history of the stolen note remains.
+  const settled = 40 + DECIMATOR_SETTLE_FRAMES;
+  assert.ok(stolen.left.subarray(settled).every((value, index) => Math.abs(value - surviving.left[settled + index]) < 2e-7));
   assert.ok(stolen.left.subarray(-32).every(value => value === 0));
 });
 
