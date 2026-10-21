@@ -12,7 +12,7 @@ Voice-format versions are independent of package versions: the published v1.10 r
 
 ## New in v1.11 (current checkout, unreleased)
 
-- **Voice v7 waveforms and noise.** Each operator accepts `waveform` (`sine`, `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`) and `noiseRate` (20–20000 Hz). Existing sine voices render identically; square, saw and noise are not alias-free. Original `noise-snare`, `noise-hihat` and `explosion` recipes join the bundled bank. See [expressive voices](./expressive-voices.md).
+- **Voice v7 waveforms and noise.** Each operator accepts `waveform` (`sine`, `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`) and `noiseRate` (20–20000 Hz). Existing sine voices render identically; square/saw (polyBLEP) and half (polyBLAMP) are edge-corrected but, like noise, not alias-free. Original `noise-snare`, `noise-hihat` and `explosion` recipes join the bundled bank. See [expressive voices](./expressive-voices.md).
 - **Optional stereo effects.** `createStereoEffects`/`applyEffects` (offline) and `createEffects` (a dedicated AudioWorklet insert) provide chorus and reverb; nothing is connected automatically. See [audio buses](./audio-buses.md).
 - **MIDI program maps and RPN.** `programVoices`/`drumVoices` map program changes and GM drum notes to named FM voices (opt-in; `gmProgramVoices`/`gmDrumVoices` are starter maps), and RPN 0 pitch-bend sensitivity is decoded in preserve-mode files and by the live adapter. See [MIDI files](./midi-files.md) and [MIDI performance](./midi-performance.md).
 - **`.opm` import.** `importOPM`/`describeOPM` from `opm.js/voices/opm.js` approximately convert VOPM/MXDRV-family text patches; this is not register-level emulation.
