@@ -502,7 +502,7 @@ The v1.10 checkout-only benchmark also reports scoped capacity candidates across
 
 `sound-quality` covers all three profiles and passed 2,505 lifecycle/headroom/determinism matrix cases plus 24 live-control cases in the recorded v1.8 verification. It also checks independent passband, THD, folded aliases and streaming references; these are controlled numerical gates, not arbitrary-FM or listening certification. `voice-quality` evaluates the curated preset bank and original synthetic DX7 recipes over register/velocity cells. Peak/RMS are raw dBFS, not LUFS or perceived loudness; host trims do not rewrite synthesis levels. See [acoustic-quality evidence](./doc/acoustic-quality.md#coverage-and-evidence) and [voice-quality notes](./doc/voice-quality.md).
 
-Independent references cover Bessel-series high-index PM, contractive delayed feedback, conservative full-level feedback energy, and nested four-operator chain/branched/multicarrier synthesis. The per-voice 4× decimator uses an eighth-order Butterworth cascade for a flatter audible passband with controlled stopband checks. Two 120-second streaming cases exercise held AM/PM and glide retargets. See [acoustic reference mathematics and limits](./doc/acoustic-quality.md); none certify arbitrary alias-free FM, perceptual quality or hardware fidelity.
+Independent references cover Bessel-series high-index PM, contractive delayed feedback, conservative full-level feedback energy, and nested four-operator chain/branched/multicarrier synthesis. The per-voice 4× decimator is a polyphase linear-phase half-band FIR cascade, flat to 0.40 output Fs with at least 81 dB rejection of products that fold below that edge. Two 120-second streaming cases exercise held AM/PM and glide retargets. See [acoustic reference mathematics and limits](./doc/acoustic-quality.md); none certify arbitrary alias-free FM, perceptual quality or hardware fidelity.
 
 `browser-stress` exercises real AudioWorklet output, dense admissions/steals, controls, late rejection and queue cleanup under bounded main-thread contention. Timer gaps and diagnostic round trips are observations, **not** worklet CPU/GC/underrun/glitch measurements. Periodic analyser samples cannot prove uninterrupted audio. The Vite smoke additionally verifies an installed current tarball, non-root production deployment, retained license, CSP and negative asset/MIME cases. Run these separately from deadline benchmarks.
 
@@ -614,7 +614,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 
 - Not a register-level YM2151 emulator; VGM playback is out of scope
 - Bundled sounds are original curated recipes, not a comprehensive commercial bank; bring your own sounds.
-- Selectable 2×/4×/8× oversampling and Butterworth decimation reduce controlled folded aliases; arbitrary FM can still alias and filters have phase/delay/CPU tradeoffs.
+- Selectable 2×/4×/8× oversampling and half-band FIR decimation reduce controlled folded aliases; arbitrary FM can still alias, and the linear-phase filters add a constant delay (13.25 output frames for standard).
 - Numerical host trims are not perceptual loudness matching. DX7 conversion remains six-to-four-operator and intentionally lossy; no hardware-fidelity or all-device glitch-free guarantee is made.
 
 ## License

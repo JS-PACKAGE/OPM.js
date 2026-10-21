@@ -2,6 +2,15 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### Half-band FIR decimation
+
+- Replace the per-voice Butterworth IIR decimator (cutoff 0.30 output Fs) with cascaded polyphase linear-phase half-band FIR stages: eco 35 taps at 2×; standard 15 → 47 taps; high 11 → 15 → 47 taps. Substep calls only buffer their input; the cascade runs once per output frame.
+- Passband is flat to 0.40 output Fs (ripple below 0.001 dB for standard/high; formerly −11.5 dB at 0.35 Fs). Products folding below 0.40 Fs are rejected by at least 81 dB for standard/high and 63 dB for eco (standard formerly −52.3/−55.6 dB at 0.60/0.625 Fs). Between 0.50 and 0.60 Fs the transition band folds into 0.40–0.50 Fs, and far above Nyquist the former filter's bilinear zero was deeper; see [acoustic quality](./doc/acoustic-quality.md).
+- Behavior change: output is delayed by a constant linear-phase 13.25 output frames for standard (8.5 eco, 13.875 high; about 0.28 ms at 48 kHz) instead of the IIR's frequency-dependent 2.7–3.3 frames. Each voice preallocates 158 state scalars instead of 8.
+- Measured on this checkout's cloud container with `npm run benchmark` (median of four interleaved runs per side): standard 8 held voices 0.702 → 0.669 ms per 128-frame block, high 8 held voices 1.204 → 1.116 ms, eco unchanged within noise (0.434 → 0.435 ms).
+
 ## v1.11.1
 
 Package version 1.11.1, a GitHub release (not on npm). Performance patch over v1.11; no API, voice-format (still v7) or protocol changes. Output differs from v1.11 by about 1e-10 for sine operators. Security: scoped static review of the `src/core` change found no evidence-backed issue.

@@ -65,13 +65,13 @@ test('logical terminal callbacks occur exactly once, including reused stolen IDs
   audio(synth, 50);
   synth.noteOn(voice(), 64, 2);
   assert.equal(synth.lastStolenId, 1);
-  synth.fades[0].filters[0] = Infinity;
+  synth.fades[0].filters.fill(Infinity);
   audio(synth, 1);
   synth.noteOff(2);
   audio(synth, 400);
   synth.noteOn(voice(), 60, 1);
   assert.equal(synth.lastStolenId, null);
-  synth.voices[0].filters[0] = Infinity;
+  synth.voices[0].filters.fill(Infinity);
   audio(synth, 200);
   assert.deepEqual(events, [[1, 'stolen'], [2, 'ended'], [1, 'error']]);
   assert.equal(synth.errorCount, 2);
