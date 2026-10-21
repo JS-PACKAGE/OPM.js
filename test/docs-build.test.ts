@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { buildDocs } from '../scripts/docs-build.js';
 
+const windows = process.platform === 'win32';
+
 async function fixture(): Promise<string> {
   const root = await mkdtemp(join(tmpdir(), 'opm-docs-test-'));
   await mkdir(join(root, 'doc'));
@@ -95,7 +97,8 @@ test('rendered Markdown URLs reject decoded schemes, controls and malformed esca
 test('filesystem-derived nav, index, search and source links cannot become URL schemes', async () => {
   const root = await fixture();
   try {
-    const names = ['javascript:alert(1)', 'data:payload', 'javascript:\talert', 'guide #?% 中文'];
+    // Windows filenames cannot contain ':', '?' or control characters; keep percent-encoded lookalikes there.
+    const names = windows ? ['javascript%3Aalert(1)', 'data%3Apayload', 'guide #% 中文'] : ['javascript:alert(1)', 'data:payload', 'javascript:\talert', 'guide #?% 中文'];
     for (const [i, name] of names.entries()) await writeFile(join(root, 'doc', `${name}.md`), `# Filename ${i}\n\n## Detail\n`);
     await buildDocs(root);
     const index = renderedLinks(await readFile(join(root, 'doc/index.html'), 'utf8'));
@@ -128,10 +131,11 @@ test('rendered URLs preserve encoded relative files, Markdown rewrites, queries,
   const root = await fixture();
   try {
     await mkdir(join(root, 'doc', 'nested folder'));
-    await writeFile(join(root, 'doc', 'nested folder', '圖片 #?.svg'), '<svg/>');
+    const asset = windows ? '圖片 #&.svg' : '圖片 #?.svg'; // '?' is not a valid Windows filename character.
+    await writeFile(join(root, 'doc', 'nested folder', asset), '<svg/>');
     await writeFile(join(root, 'doc', 'space 中文.md'), '# 空間\n\n## 繁體中文\n');
     await writeFile(join(root, 'doc/guide.md'), '# Guide\n\n' + [
-      '[Nested](./nested%20folder/%E5%9C%96%E7%89%87%20%23%3F.svg?value=a%26b&next=%23part#image)',
+      `[Nested](./nested%20folder/${encodeURIComponent(asset)}?value=a%26b&next=%23part#image)`,
       '[Unicode](./space%20%E4%B8%AD%E6%96%87%2Emd?value=a%26b#%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87)',
       '[Parent](../README.md?view=full#fixture)', '[Anchor](#guide)',
       '[HTTP](http://example.com/path?query=a%26b#part)', '[HTTPS](https://example.com/path?next=%23part#part)',
@@ -141,7 +145,7 @@ test('rendered URLs preserve encoded relative files, Markdown rewrites, queries,
     await buildDocs(root);
     const links = renderedLinks(await readFile(join(root, 'doc/guide.html'), 'utf8'));
     const expected: Record<string, string> = {
-      Nested: './nested%20folder/%E5%9C%96%E7%89%87%20%23%3F.svg?value=a%26b&next=%23part#image',
+      Nested: `./nested%20folder/${encodeURIComponent(asset)}?value=a%26b&next=%23part#image`,
       Unicode: './space%20%E4%B8%AD%E6%96%87.html?value=a%26b#%E7%B9%81%E9%AB%94%E4%B8%AD%E6%96%87',
       Parent: './readme.html?view=full#fixture', Anchor: '#guide',
       HTTP: 'http://example.com/path?query=a%26b#part', HTTPS: 'https://example.com/path?next=%23part#part',

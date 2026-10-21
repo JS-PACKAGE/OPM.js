@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import ts from 'typescript';
 
 interface Heading { level: number; title: string; id: string }
@@ -174,7 +174,9 @@ async function declarations(root: string): Promise<{ page: Page; search: SearchE
   }
   const program = ts.createProgram(entries.map(entry => entry.path), { noEmit: true, strict: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext, types: ['node'], lib: ['lib.es2024.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'] });
   const checker = program.getTypeChecker(); const search: SearchEntry[] = [];
-  const sources = program.getSourceFiles().filter(file => file.fileName.startsWith(join(root, 'dist') + sep)).sort((a, b) => a.fileName.localeCompare(b.fileName));
+  // TypeScript reports '/'-separated file names on every platform, so test containment with path.relative.
+  const dist = join(root, 'dist');
+  const sources = program.getSourceFiles().filter(file => { const path = relative(dist, file.fileName); return path !== '' && !/^\.\.(?:[\\/]|$)/.test(path) && !isAbsolute(path); }).sort((a, b) => a.fileName.localeCompare(b.fileName));
   const sourceIds = new Map(sources.map(file => [file.fileName, `declaration-${slug(portable(relative(join(root, 'dist'), file.fileName)))}`]));
   const headings: Heading[] = [{ level: 1, title: 'Generated API reference', id: 'generated-api-reference' }];
   const sections: string[] = [];
