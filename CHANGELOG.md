@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.13.0
 
-No voice-format or worklet protocol changes. The internal render-Worker start message gains a `dither` field. API addition: opt-in WAV dither (below). Rendering only changes by rounding: on a mixed 35-preset render with edits and releases, under 0.1% of Float32 output samples differ from v1.12.0, by at most 3e-8.
+Package version 1.13.0, a GitHub release (not on npm). No voice-format (still v7) or worklet protocol changes. The internal render-Worker start message gains a `dither` field. API addition: opt-in WAV dither (below). Rendering only changes by rounding: on a mixed 35-preset render with edits and releases, under 0.1% of Float32 output samples differ from v1.12.0, by at most 3e-8.
 
 ### WAV export dither
 

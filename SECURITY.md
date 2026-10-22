@@ -277,6 +277,8 @@ Unreleased WAV dither review: SecDither reviewed the opt-in `dither` option.
   - Undithered output is unchanged.
 - Its Low determinism finding was fixed: a chunk rejected midway used to advance the dither state, so later bytes diverged from `encodeWav`. `encode()` now dithers a copy of the state and commits it only after the chunk succeeds, and a regression test covers this.
 
+v1.13.0 release: covered by the SecPerfRound2, SecAllocReview, SecWaveFrames and SecDither records above (all approved, findings applied). The release adds no further source changes beyond the version number.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)
