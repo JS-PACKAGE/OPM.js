@@ -206,10 +206,15 @@ new OPM({ workletUrl: {} });
 synth.updateNote(id, { operatorLevels: [1, 1, 1] });
 // @ts-expect-error cumulative render budgets are numeric
 renderSequenceChunks(sequence, { maxFrames: 'unbounded' });
+const softKneeOutput: 'tanh' | 'soft-knee' = new OPM({ saturation: 'soft-knee' }).saturation;
+const blocksDc: boolean = new OPM({ dcBlock: true }).dcBlock;
+// @ts-expect-error saturation is a closed set of output stages
+new Synth(48000, 8, { saturation: 'hard' });
+void [softKneeOutput, blocksDc];
 void [bank, released, stolen, wav, mono, imports, descriptions, carrier, gain, browserConsumer, legacyOperator, changed, forged];
 
 // Published classes remain structural contracts, without implementation state.
-declare const opmAdapter: Pick<OPM, 'sampleRate' | 'quality' | 'maxVoices' | 'voices' | 'context' | 'node' |
+declare const opmAdapter: Pick<OPM, 'sampleRate' | 'quality' | 'saturation' | 'dcBlock' | 'maxVoices' | 'voices' | 'context' | 'node' |
   'loadVoice' | 'replaceVoiceBank' | 'removeVoice' | 'exportVoiceBank' | 'start' | 'resume' | 'connect' | 'disconnect' | 'playNote' | 'stop' | 'updateNote' |
   'allNotesOff' | 'panic' | 'setMixGain' | 'setTuning' | 'getDiagnostics' | 'subscribe' | 'waitForCommand' | 'close' | 'dispose'>;
 const compatibleOPM: OPM = opmAdapter;

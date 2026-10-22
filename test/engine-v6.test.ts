@@ -192,6 +192,89 @@ test('zero attack/decay updates bridge the current dB for one frame and zero rel
   assert.ok(expected.subarray(settled).every(value => Math.abs(value) < tailBound));
 });
 
+test('released voices retire once every audible carrier is silent', () => {
+  const releaseFrames = (patch: Voice, held: number): number => {
+    const synth = new Synth(16000);
+    let endedFrame = -1;
+    synth.onVoiceEnded = () => { endedFrame = synth.currentFrame; };
+    synth.noteOn(patch, 69, 1);
+    audio(synth, held);
+    synth.noteOff(1);
+    for (let block = 0; block < 400 && endedFrame < 0; block++) audio(synth, 160);
+    assert.ok(endedFrame >= held);
+    return endedFrame - held;
+  };
+  // Algorithm 0's only carrier is operator 3; slow modulator releases cannot sound through it.
+  const chain = tone();
+  chain.algorithm = 0; chain.modIndex = 1;
+  chain.ops.forEach((op, index) => { op.level = 0.5; op.adsr.r = index === 3 ? 0.05 : 2; });
+  const chainEnd = releaseFrames(chain, 1600);
+  assert.ok(chainEnd >= 800 && chainEnd < 1600, `carrier release bounds retirement (${chainEnd} frames)`);
+  // Zero-level carriers and a carrier already decayed to the floor contribute nothing.
+  const decayed = tone();
+  decayed.ops.forEach(op => { op.adsr.r = 2; });
+  decayed.ops[0].adsr = { a: 0, d: 0.02, s: 0, r: 2 };
+  const decayedEnd = releaseFrames(decayed, 1600);
+  assert.ok(decayedEnd < 800, `a silent carrier retires promptly (${decayedEnd} frames)`);
+  // An audible carrier still runs its full release.
+  const sustained = tone();
+  sustained.ops[0].adsr.r = 0.2;
+  assert.ok(releaseFrames(sustained, 1600) >= 3200);
+});
+
+test('soft-knee output is linear below the knee and bounded by HEADROOM above it', () => {
+  const render = (saturation: 'tanh' | 'soft-knee', notes: readonly number[], patch: Voice) => {
+    const synth = new Synth(16000, 8, { saturation });
+    for (const note of notes) synth.noteOn(patch, note);
+    return audio(synth, 1600);
+  };
+  // One carrier at 0.7 · 0.7 stays below the 0.5 knee: soft-knee is the
+  // linear mix that tanh would have compressed.
+  const quiet = tone();
+  const linear = render('soft-knee', [69], quiet), saturated = render('tanh', [69], quiet);
+  let compression = 0;
+  for (let frame = 0; frame < linear.length; frame++) {
+    assert.ok(Math.abs(linear[frame]) < 0.5);
+    assert.ok(Math.abs(0.7 * Math.atanh(saturated[frame] / 0.7) - linear[frame]) < 2e-7, `frame ${frame}`);
+    compression = Math.max(compression, Math.abs(linear[frame]) - Math.abs(saturated[frame]));
+  }
+  assert.ok(compression > 1e-3, 'tanh compresses the same mix');
+  // A dense full-level chord overdrives both stages; soft-knee stays below HEADROOM.
+  const loud = tone();
+  loud.ops.forEach(op => { op.level = 1; });
+  const driven = render('soft-knee', [48, 52, 55, 60, 64, 67, 71, 72], loud);
+  const peak = driven.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
+  assert.ok(peak > 0.6 && peak <= 0.7, `soft-knee peak ${peak}`);
+  assert.throws(() => new Synth(16000, 8, { saturation: 'hard' as 'tanh' }), /saturation/);
+});
+
+test('optional DC blocker removes feedback DC, keeps audio-band content and settles to exact silence', () => {
+  const patch = tone();
+  patch.feedback = 6;
+  patch.ops[0].adsr.r = 0.05;
+  const run = (dcBlock: boolean) => {
+    const synth = new Synth(16000, 8, { dcBlock });
+    synth.noteOn(patch, 69, 1);
+    return { synth, held: audio(synth, 32000).subarray(16000) };
+  };
+  const plain = run(false), blocked = run(true);
+  const mean = (values: Float32Array) => values.reduce((sum, value) => sum + value, 0) / values.length;
+  const rms = (values: Float32Array) => Math.sqrt(values.reduce((sum, value) => sum + value * value, 0) / values.length);
+  assert.ok(Math.abs(mean(plain.held)) > 0.1 * rms(plain.held), 'heavy feedback carries DC');
+  assert.ok(Math.abs(mean(blocked.held)) < 0.01 * rms(blocked.held), 'the blocker removes it');
+  // At 440 Hz the 3 Hz high-pass leaves the waveform apart from its offset.
+  const offset = Float32Array.from(plain.held, (value, index) => value - blocked.held[index]);
+  const centered = Float32Array.from(offset, value => value - mean(offset));
+  assert.ok(rms(centered) < 0.02 * rms(blocked.held));
+  blocked.synth.noteOff(1);
+  const tail = audio(blocked.synth, 48000);
+  assert.ok(tail.subarray(-16000).every(value => value === 0), 'the release and filter tail settle to exact zero');
+  const panicked = run(true).synth;
+  panicked.panic();
+  assert.ok(audio(panicked, 64).every(value => value === 0), 'panic clears the blocker state');
+  assert.throws(() => new Synth(16000, 8, { dcBlock: 1 as unknown as boolean }), /dcBlock/);
+});
+
 test('independent feedback and LFO ramp interruption matches instantaneous continuous controls across chunks', () => {
   const patch = tone(); patch.feedback = 3; patch.lfo.amDepth = 0.2; patch.lfo.pmDepth = 80;
   const ramped = new Synth(16000), stepped = new Synth(16000);

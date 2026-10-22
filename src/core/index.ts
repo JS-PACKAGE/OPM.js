@@ -54,7 +54,7 @@ export const OVERSAMPLE = 4;
 // The returned buffer includes the longest release and a short filter tail.
 export function renderNote(options: RenderNoteOptions): RenderResult;
 export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, sampleRate = 44100,
-  mixGain, tuning, stealing, quality, voicePriority = 0 }: Partial<RenderNoteOptions> = {}): RenderResult {
+  mixGain, tuning, stealing, quality, saturation, dcBlock, voicePriority = 0 }: Partial<RenderNoteOptions> = {}): RenderResult {
   voice = validateVoice(voice);
   sampleRate = sampleRateValue(sampleRate);
   note = bounded(note, 0, 127, 'note');
@@ -70,6 +70,8 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan
   if (tuning !== undefined) engine.tuning = tuning;
   if (stealing !== undefined) engine.stealing = stealing;
   if (quality !== undefined) engine.quality = quality;
+  if (saturation !== undefined) engine.saturation = saturation;
+  if (dcBlock !== undefined) engine.dcBlock = dcBlock;
   const synth = new Synth(sampleRate, 8, engine);
   const left = new Float32Array(length);
   const right = new Float32Array(length);

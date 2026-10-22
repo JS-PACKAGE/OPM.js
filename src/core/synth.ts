@@ -30,6 +30,12 @@ export interface SynthOptions {
   tuning?: TuningOptions;
   stealing?: 'oldest' | 'release-first' | 'quietest';
   quality?: QualityProfile;
+  /** Output stage: `tanh` (default) saturates the whole range; `soft-knee` is
+   * exactly linear below 0.5 and compresses only toward HEADROOM. */
+  saturation?: 'tanh' | 'soft-knee';
+  /** Remove DC and subsonic content from the mix before the output stage with a
+   * 3 Hz one-pole high-pass (default false, which preserves the original output). */
+  dcBlock?: boolean;
 }
 
 /** A valid note could not displace any higher-priority logical voice. */
@@ -171,6 +177,12 @@ interface ActiveVoice {
   envelopeStart: Float64Array; envelopeFromDb: Float64Array; envelopeEdited: Uint8Array; releaseStarts: Float64Array;
   lfoTurns: number; lfoLive: boolean;
   tunedFrequency: number;
+  /** Every operator gain is constant until release or an ADSR edit. */
+  gainsSteady: boolean;
+  /** The pitch envelope has reached a constant value folded into `increments`. */
+  pitchSettled: boolean;
+  /** Per-frame scratch: folded operator amplitudes 0..3, PM factor 4, pitch factor 5 and step 6. */
+  sineFrame: Float64Array;
   frequencyScales: Float64Array;
   amGains: Float64Array; pmFactors: Float64Array;
   waveforms: Uint8Array; noiseStates: Uint32Array; noiseTurns: Float64Array; noiseSteps: Float64Array;
@@ -182,16 +194,41 @@ interface MutableCounters {
 
 import { ALGORITHMS } from './algorithms.js';
 import { FLOOR_DB } from './envelope.js';
-import { TAU, waveformCode, periodicWaveform, fastSin, NOISE_SEED, advanceNoise } from './operator.js';
+import { TAU, waveformCode, periodicWaveform, fastSin, fastExp2, NOISE_SEED, advanceNoise } from './operator.js';
 import { preparedVoiceValue } from '../voices/normalize.js';
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 
 const HEADROOM = 0.7;
+// Linear LFO depth fade after a nonzero `lfo.delay`, in seconds.
+const LFO_DELAY_FADE = 0.02;
+// Soft-knee output stage: exactly linear up to SOFT_KNEE (−6 dBFS), then
+// y = K + (H − K)·tanh((|x| − K)/(H − K)), which matches value, slope and
+// curvature at the knee and approaches HEADROOM.
+const SOFT_KNEE = 0.5;
+function softKnee(x: number): number {
+  const magnitude = Math.abs(x);
+  if (magnitude <= SOFT_KNEE) return x;
+  const shoulder = SOFT_KNEE + (HEADROOM - SOFT_KNEE) * Math.tanh((magnitude - SOFT_KNEE) / (HEADROOM - SOFT_KNEE));
+  return x < 0 ? -shoulder : shoulder;
+}
+// Optional output DC blocker: H(z) = g·(1 − z⁻¹)/(1 − R·z⁻¹) with R = e^(−2π·fc/fs)
+// and g = (1 + R)/2 for unity gain at Nyquist. fc = 3 Hz keeps loss at 20 Hz
+// below 0.1 dB. A silent input settles the state to exact zero below DC_FLUSH.
+const DC_BLOCK_HZ = 3;
+const DC_FLUSH = 1e-10;
+function dcBlockStep(state: Float64Array, index: number, input: number, gain: number, pole: number): number {
+  let output = gain * (input - state[index]) + pole * state[index + 1];
+  if (input === 0 && output > -DC_FLUSH && output < DC_FLUSH) output = 0;
+  state[index] = input;
+  state[index + 1] = output;
+  return output;
+}
 const DEFAULT_MAX_VOICES = 8;
 const MAX_FADES = 8;
 const INV_TAU = 1 / TAU;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
-const DB_TO_LOG_GAIN = Math.LN10 / 20;
+// log2 of the amplitude per dB, for fastExp2: gain = 2^(dB * log2(10) / 20).
+const DB_TO_LOG2_GAIN = Math.LN10 * Math.LOG2E / 20;
 const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
 const DEFAULT_TUNING = normalizeTuning({});
 const EXPRESSION_RAMP = 1;
@@ -226,7 +263,9 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
   }
   const result: SynthOptions = {};
   for (const key of Reflect.ownKeys(input)) {
-    if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing' && key !== 'quality') throw new TypeError('options has an unknown field');
+    if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing' && key !== 'quality' && key !== 'saturation' && key !== 'dcBlock') {
+      throw new TypeError('options has an unknown field');
+    }
     const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
     if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`options.${key} must be data`);
     if (key === 'mixGain') {
@@ -240,6 +279,12 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
         throw new TypeError('stealing must be oldest, release-first or quietest');
       }
       result.stealing = descriptor.value;
+    } else if (key === 'saturation') {
+      if (descriptor.value !== 'tanh' && descriptor.value !== 'soft-knee') throw new TypeError('saturation must be tanh or soft-knee');
+      result.saturation = descriptor.value;
+    } else if (key === 'dcBlock') {
+      if (typeof descriptor.value !== 'boolean') throw new TypeError('dcBlock must be a boolean');
+      result.dcBlock = descriptor.value;
     } else {
       result.tuning = descriptor.value;
     }
@@ -273,7 +318,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
     envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
     lfoTurns: 0, lfoLive: false,
-    tunedFrequency: 0,
+    tunedFrequency: 0, gainsSteady: false, pitchSettled: false, sineFrame: new Float64Array(7),
     frequencyScales: new Float64Array(4),
     amGains: new Float64Array(4), pmFactors: new Float64Array(4),
     waveforms: new Uint8Array(4), noiseStates: new Uint32Array(4), noiseTurns: new Float64Array(4), noiseSteps: new Float64Array(4),
@@ -396,31 +441,55 @@ function envelopeDbAt(active: ActiveVoice, time: number, op: number): number {
 function gainAt(active: ActiveVoice, time: number, op: number): number {
   if (active.envelopeEdited[op]) {
     const db = envelopeDbAt(active, time, op);
-    return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
+    return db <= FLOOR_DB ? 0 : fastExp2(db * DB_TO_LOG2_GAIN);
   }
   const release = active.releaseTimes[op];
   if (active.releaseTime >= 0) {
     if (release === 0 || time >= active.releaseTime + release) return 0;
     const db = active.releaseDb[op] + (FLOOR_DB - active.releaseDb[op]) * ((time - active.releaseTime) / release);
-    return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
+    return db <= FLOOR_DB ? 0 : fastExp2(db * DB_TO_LOG2_GAIN);
   }
   if (time >= active.attackTimes[op] + active.decayTimes[op]) return active.sustainGain[op];
   if (time === 0 && active.attackTimes[op] > 0) return 0;
   const db = heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
-  return db <= FLOOR_DB ? 0 : Math.exp(db * DB_TO_LOG_GAIN);
+  return db <= FLOOR_DB ? 0 : fastExp2(db * DB_TO_LOG2_GAIN);
 }
 
-function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array): void {
+/** Released output is silent once every audible carrier finishes its release:
+ * modulators cannot sound through a silent carrier, and a carrier with zero
+ * static level or already at the floor stays exactly zero. Requires every
+ * operator's release to start at `time`. */
+function carrierReleaseEnd(active: ActiveVoice, time: number): number {
+  let end = time;
+  for (let index = 0; index < active.graph.carriers.length; index++) {
+    const op = active.carrierIndices[index];
+    if (active.levels[op] !== 0 && active.releaseDb[op] > FLOOR_DB) end = Math.max(end, time + active.releaseTimes[op]);
+  }
+  return end;
+}
+
+/** Returns true when every operator gain is constant until release or an ADSR edit. */
+function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array): boolean {
   const { sustainGain, gains, attackStep, decayStep, releaseStep, attackTimes, decayTimes, releaseTimes } = active;
   const oversample = subTimes.length;
   const lastTime = time + subTimes[oversample - 1];
+  let steady = true;
   for (let op = 0; op < 4; op++) {
+    // A zero static level silences the operator for the whole note (live levels
+    // only multiply it), so its envelope cannot change the output.
+    if (active.levels[op] === 0) {
+      for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = 0;
+      continue;
+    }
     if (active.envelopeEdited[op]) {
+      steady = false;
       for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = gainAt(active, time + subTimes[sub], op);
       continue;
     }
     const attack = attackTimes[op], decay = decayTimes[op], release = releaseTimes[op];
-    let step: number | undefined;
+    // Per-substep gain ratio, or −1 for exact per-substep evaluation. A number
+    // sentinel keeps the variable an unboxed double.
+    let step = -1;
     if (active.releaseTime >= 0) {
       if (release === 0 || time >= active.releaseTime + release) {
         for (let sub = 0; sub < oversample; sub++) gains[op + sub * 4] = 0;
@@ -435,9 +504,10 @@ function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array)
     } else if (time >= attack && lastTime < attack + decay) {
       step = decayStep[op];
     }
+    steady = false;
     // Re-anchor every output frame, so rounding cannot accumulate across time
     // or depend on render chunking. Boundary-crossing frames keep exact dB rules.
-    if (step !== undefined) {
+    if (step >= 0) {
       let gain = gainAt(active, time, op);
       for (let sub = 0; sub < oversample; sub++) {
         gains[op + sub * 4] = gain;
@@ -449,7 +519,262 @@ function prepareGains(active: ActiveVoice, time: number, subTimes: Float64Array)
       }
     }
   }
+  return steady;
 }
+
+/** Per-substep steps for glide, pitch envelopes and operator frequency ramps:
+ * applies the pitch factor in `frame[5]` (then advances it by `frame[6]`), the
+ * PM factor in `frame[4]` and the per-frame Hz parabola prepared by renderVoice. */
+function stepPitch(active: ActiveVoice, sub: number, oversample: number, frame: Float64Array): void {
+  const x = sub / oversample;
+  const frequencyRamping = active.ratioFrames !== 0 || active.frequencyFrames !== 0;
+  const pmTargets = active.voice.lfo.pmTargets;
+  const { baseIncrements, incrementDeltas, incrementCurves, pmFactors, steps } = active;
+  const pitchFactor = frame[5], pmFactor = frame[4];
+  for (let op = 0; op < 4; op++) {
+    const base = frequencyRamping ? baseIncrements[op] + x * (incrementDeltas[op] + x * incrementCurves[op]) : baseIncrements[op];
+    const pm = pmTargets ? pmFactors[op] : pmFactor;
+    steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, base * pitchFactor) * pm);
+  }
+  frame[5] = pitchFactor * frame[6];
+}
+
+/** A silent operator (zero envelope, level or AM gain) outputs exact zero
+ * without evaluating its oscillator; its phase still advances. */
+function sineOp(theta: number, gain: number): number {
+  return gain === 0 ? 0 : fastSin(theta) * gain;
+}
+
+/* All-sine operators with static operator levels: one output frame of
+ * oversampled samples with oscillator state held in locals. renderVoice stores
+ * the folded per-frame amplitudes and pitch factors in `sineFrame` and the
+ * frame's static steps in `steps`. Each algorithm has its own function so every
+ * oscillator call is inlined within the optimizing compiler's per-function
+ * budget (a single shared switch exceeded it, leaving calls that box doubles),
+ * and independent operators are not serialized behind masked terms. Sums keep the
+ * graph's ascending input/carrier order. Each returns false on non-finite output;
+ * a silent operator masks non-finite inputs, so the frame end also checks the
+ * state it keeps. */
+type SineFrame = (active: ActiveVoice, out: Float64Array, dynamicPitch: boolean) => boolean;
+
+function sineFrame0(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1 + v0 * m, gains[base + 1] * q1);
+    v2 = sineOp(p2 + v1 * m, gains[base + 2] * q2);
+    v3 = sineOp(p3 + v2 * m, gains[base + 3] * q3);
+    const sample = v3 * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame1(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1, gains[base + 1] * q1);
+    v2 = sineOp(p2 + (v0 * m + v1 * m), gains[base + 2] * q2);
+    v3 = sineOp(p3 + v2 * m, gains[base + 3] * q3);
+    const sample = v3 * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame2(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1, gains[base + 1] * q1);
+    v2 = sineOp(p2 + v1 * m, gains[base + 2] * q2);
+    v3 = sineOp(p3 + (v0 * m + v2 * m), gains[base + 3] * q3);
+    const sample = v3 * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame3(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1 + v0 * m, gains[base + 1] * q1);
+    v2 = sineOp(p2, gains[base + 2] * q2);
+    v3 = sineOp(p3 + (v1 * m + v2 * m), gains[base + 3] * q3);
+    const sample = v3 * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame4(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1 + v0 * m, gains[base + 1] * q1);
+    v2 = sineOp(p2, gains[base + 2] * q2);
+    v3 = sineOp(p3 + v2 * m, gains[base + 3] * q3);
+    const sample = (v1 + v3) * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame5(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    const modulation = v0 * m;
+    v1 = sineOp(p1 + modulation, gains[base + 1] * q1);
+    v2 = sineOp(p2 + modulation, gains[base + 2] * q2);
+    v3 = sineOp(p3 + modulation, gains[base + 3] * q3);
+    const sample = (v1 + v2 + v3) * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame6(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const m = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1 + v0 * m, gains[base + 1] * q1);
+    v2 = sineOp(p2, gains[base + 2] * q2);
+    v3 = sineOp(p3, gains[base + 3] * q3);
+    const sample = (v1 + v2 + v3) * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+function sineFrame7(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    v0 = sineOp(p0 + (previous + older) * feedbackScale, gains[base] * q0);
+    v1 = sineOp(p1, gains[base + 1] * q1);
+    v2 = sineOp(p2, gains[base + 2] * q2);
+    v3 = sineOp(p3, gains[base + 3] * q3);
+    const sample = (v0 + v1 + v2 + v3) * carrierGain;
+    p0 += s0; if (p0 >= TAU) p0 -= TAU; p1 += s1; if (p1 >= TAU) p1 -= TAU;
+    p2 += s2; if (p2 >= TAU) p2 -= TAU; p3 += s3; if (p3 >= TAU) p3 -= TAU;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3 + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
+const SINE_FRAMES: readonly SineFrame[] = [sineFrame0, sineFrame1, sineFrame2, sineFrame3, sineFrame4, sineFrame5, sineFrame6, sineFrame7];
 // Carrier-envelope energy avoids stealing a loud note merely at a zero crossing.
 function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
   const time = active.elapsed / sampleRate;
@@ -511,6 +836,8 @@ export class Synth {
   declare mixLeft: Float64Array;
   /** @internal */
   declare mixRight: Float64Array;
+  /** @internal One voice's oversampled samples for the current output frame. */
+  declare subSamples: Float64Array;
   /** @internal Shared post-mix decimator state, one per output channel. */
   declare filterLeft: Float64Array;
   /** @internal */
@@ -533,6 +860,16 @@ export class Synth {
   declare tuning: NormalizedTuning;
   /** @internal */
   declare stealing: NonNullable<SynthOptions['stealing']>;
+  /** @internal */
+  declare saturation: NonNullable<SynthOptions['saturation']>;
+  /** @internal */
+  declare dcBlock: boolean;
+  /** @internal DC blocker [previous input, previous output] per channel. */
+  declare dcState: Float64Array;
+  /** @internal */
+  declare dcPole: number;
+  /** @internal */
+  declare dcGain: number;
 
   constructor(sampleRate: number, maxVoices = DEFAULT_MAX_VOICES, options: SynthOptions = {}) {
     if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) {
@@ -545,6 +882,11 @@ export class Synth {
     this.mixGain = settings.mixGain ?? 1;
     this.tuning = settings.tuning === undefined ? DEFAULT_TUNING : normalizeTuning(settings.tuning);
     this.stealing = settings.stealing ?? 'oldest';
+    this.saturation = settings.saturation ?? 'tanh';
+    this.dcBlock = settings.dcBlock ?? false;
+    this.dcState = new Float64Array(4);
+    this.dcPole = Math.exp(-TAU * DC_BLOCK_HZ / sampleRate);
+    this.dcGain = (1 + this.dcPole) / 2;
     this.sampleRate = sampleRate;
     this.maxVoices = maxVoices;
     this.voices = [];
@@ -567,6 +909,7 @@ export class Synth {
     this.decimatorCoefficients = createDecimatorCoefficients(sampleRate, this.quality);
     this.mixLeft = new Float64Array(this.oversample);
     this.mixRight = new Float64Array(this.oversample);
+    this.subSamples = new Float64Array(this.oversample);
     this.filterLeft = new Float64Array(DECIMATOR_STATE_SIZE);
     this.filterRight = new Float64Array(DECIMATOR_STATE_SIZE);
     this.decimatorIdle = true;
@@ -588,6 +931,7 @@ export class Synth {
   retuneVoice(active: ActiveVoice): void {
     const frequency = tuningFrequency(active.note, this.tuning);
     active.tunedFrequency = frequency;
+    active.pitchSettled = false;
     const rate = this.sampleRate * this.oversample;
     const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
     for (let op = 0; op < 4; op++) {
@@ -732,6 +1076,8 @@ export class Synth {
     active.releaseDb.fill(0);
     active.releaseStep.fill(0);
     active.gains.fill(0);
+    active.gainsSteady = false;
+    active.pitchSettled = false;
     active.previous = active.older = active.elapsed = 0;
     active.feedbackScale = feedbackGain(voice.feedback);
     active.releaseTime = active.releaseEnd = -1;
@@ -771,17 +1117,17 @@ export class Synth {
   releaseVoice(active: ActiveVoice): void {
     const time = active.elapsed / this.sampleRate;
     active.pitchRelease = pitchEnvelopeAt(active, time);
-    let maxRelease = 0;
     for (let op = 0; op < 4; op++) {
       active.releaseDb[op] = envelopeDbAt(active, time, op);
       active.releaseStarts[op] = time;
       const release = active.releaseTimes[op];
-      maxRelease = Math.max(maxRelease, release);
       active.releaseStep[op] = release === 0 ? 0 :
         10 ** ((FLOOR_DB - active.releaseDb[op]) / (20 * release * this.sampleRate * this.oversample));
     }
     active.releaseTime = time;
-    active.releaseEnd = time + maxRelease;
+    active.gainsSteady = false;
+    active.pitchSettled = false;
+    active.releaseEnd = carrierReleaseEnd(active, time);
   }
   allNotesOff(): void {
     for (let index = 0; index < this.voices.length; index++) {
@@ -794,6 +1140,7 @@ export class Synth {
     while (this.fades.length > 0) this.freeVoices.push(this.fades.pop()!);
     this.spillLeft = this.spillRight = this.spillRemaining = 0;
     this.resetDecimator();
+    this.dcState.fill(0);
     (this as MutableCounters).lastStolenId = null;
     this.cancelVoices();
   }
@@ -888,6 +1235,7 @@ export class Synth {
         active.envelopeFromDb[op] = db;
         active.envelopeStart[op] = time;
         active.envelopeEdited[op] = 1;
+        active.gainsSteady = false;
         active.attackTimes[op] = operatorDuration(adsr.a, active.note, keyScale);
         active.decayTimes[op] = operatorDuration(adsr.d, active.note, keyScale);
         if (active.attackTimes[op] === 0 && active.decayTimes[op] === 0) active.decayTimes[op] = 1 / this.sampleRate;
@@ -899,10 +1247,7 @@ export class Synth {
           active.releaseStarts[op] = time;
         }
       }
-      if (active.releaseTime >= 0) {
-        active.releaseEnd = time;
-        for (let op = 0; op < 4; op++) active.releaseEnd = Math.max(active.releaseEnd, time + active.releaseTimes[op]);
-      }
+      if (active.releaseTime >= 0) active.releaseEnd = carrierReleaseEnd(active, time);
     }
     if (controls.expression !== undefined) {
       active.expressionFrom = active.expression;
@@ -951,6 +1296,7 @@ export class Synth {
     }
     // Reset a former PM/glide step even when modulation becomes zero.
     if (controls.pitch !== undefined || controls.modulation !== undefined) {
+      active.pitchSettled = false;
       const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
       for (let op = 0; op < 4; op++) {
         active.increments[op] = Math.min(TAU * 0.45, active.baseIncrements[op] * factor);
@@ -970,8 +1316,7 @@ export class Synth {
   // One output frame, with no temporary arrays or objects in the hot path.
   // Oversampled samples are panned into mixLeft/mixRight; the shared post-mix
   // decimator then runs once per channel instead of once per voice. Returns
-  // the last undecimated sample (for steal spill) or NaN on corrupt state;
-  // substeps accumulated before a NaN were finite and stay in the mix.
+  // the last undecimated sample (for steal spill) or NaN on corrupt state.
   /** @internal */
   renderVoice(active: ActiveVoice, fadeGain = 1): number {
     const { graph, inputIndices, carrierIndices, phases, values, increments, steps, gains, levels } = active;
@@ -982,25 +1327,43 @@ export class Synth {
     const time = active.elapsed / this.sampleRate;
     const finished = active.releaseTime >= 0 && time >= active.releaseEnd;
     const lfo = active.voice.lfo;
-    const lfoEnabled = time >= (lfo.delay ?? 0);
+    const lfoDelay = lfo.delay ?? 0;
+    const lfoEnabled = time >= lfoDelay;
+    // Depth fades in linearly over LFO_DELAY_FADE after a nonzero delay, so the
+    // gate opens without an instantaneous gain or pitch step.
+    const fade = lfoDelay > 0 && time < lfoDelay + LFO_DELAY_FADE ? (time - lfoDelay) / LFO_DELAY_FADE : 1;
+    const amDepth = active.amDepth * fade, pmDepth = active.pmDepth * fade;
     let tremolo = 0;
     if (lfoEnabled && (active.amDepth !== 0 || active.pmDepth !== 0)) {
       const clock = lfo.sync === 'global' ? this.currentFrame : active.elapsed;
       const turns = active.lfoLive ? active.lfoTurns : clock / this.sampleRate * lfo.rate + (lfo.phase ?? 0);
       tremolo = lfoValue((turns - Math.floor(turns)) * TAU, lfo.waveform);
     }
-    const amGain = !lfoEnabled || active.amDepth === 0 ? 1 : 1 - active.amDepth * (0.5 + 0.5 * tremolo);
-    const pmFactor = !lfoEnabled || active.pmDepth === 0 ? 1 : 2 ** (active.pmDepth * tremolo / 1200);
+    const amGain = !lfoEnabled || active.amDepth === 0 ? 1 : 1 - amDepth * (0.5 + 0.5 * tremolo);
+    const pmFactor = !lfoEnabled || active.pmDepth === 0 ? 1 : fastExp2(pmDepth * tremolo / 1200);
     if (lfo.amTargets || lfo.pmTargets) {
       for (let op = 0; op < 4; op++) {
         const am = lfo.amTargets?.[op] ?? 1, pm = lfo.pmTargets?.[op] ?? 1;
-        active.amGains[op] = am === 1 ? amGain : !lfoEnabled ? 1 : 1 - active.amDepth * am * (0.5 + 0.5 * tremolo);
-        active.pmFactors[op] = pm === 1 ? pmFactor : !lfoEnabled ? 1 : 2 ** (active.pmDepth * pm * tremolo / 1200);
+        active.amGains[op] = am === 1 ? amGain : !lfoEnabled ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
+        active.pmFactors[op] = pm === 1 ? pmFactor : !lfoEnabled ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
       }
     }
     const gliding = active.pitchFrames !== 0;
     const frequencyRamping = active.ratioFrames !== 0 || active.frequencyFrames !== 0;
-    const dynamicPitch = gliding || active.voice.pitchEnvelope !== undefined || frequencyRamping;
+    const envelope = active.voice.pitchEnvelope;
+    if (envelope !== undefined && !active.pitchSettled && !gliding && !frequencyRamping &&
+        (active.releaseTime >= 0 ? envelope.r === 0 || time >= active.releaseTime + envelope.r : time >= envelope.a + envelope.d)) {
+      // The envelope holds sustain or final for every later frame until release,
+      // a glide or a retune: fold its constant cents into the static increments,
+      // using the same factor and caps as the per-frame path.
+      const factor = fastExp2(pitchAt(active, active.elapsed) / 12 + pitchEnvelopeAt(active, time) / 1200);
+      for (let op = 0; op < 4; op++) {
+        increments[op] = Math.min(TAU * 0.45, active.baseIncrements[op] * factor);
+        steps[op] = increments[op];
+      }
+      active.pitchSettled = true;
+    }
+    const dynamicPitch = gliding || frequencyRamping || (envelope !== undefined && !active.pitchSettled);
     if (!dynamicPitch && active.pmDepth !== 0) {
       for (let op = 0; op < 4; op++) {
         const factor = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
@@ -1008,28 +1371,23 @@ export class Synth {
       }
     }
     const operatorRamping = (active.controlRamps & OPERATOR_RAMP) !== 0;
-    if (!finished) prepareGains(active, time, this.subTimes);
-    let output = 0;
-    const oversample = this.oversample, modIndex = active.modIndex, feedbackScale = active.feedbackScale;
-    const operatorLevels = active.operatorLevels, waveforms = active.waveforms;
-    // All-sine voices with static operator levels and shared AM take the branch-light path below.
-    const simple = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 &&
-      !operatorRamping && !lfo.amTargets;
+    if (!finished && !active.gainsSteady) active.gainsSteady = prepareGains(active, time, this.subTimes);
+    const oversample = this.oversample, frame = active.sineFrame, waveforms = active.waveforms;
+    const operatorLevels = active.operatorLevels, amGains = active.amGains, targeted = lfo.amTargets !== undefined;
     // The pitch exponent e = glide/12 + envelope/1200 is piecewise linear in time, so
     // 2^e(n + s/O) = 2^e(n) * r^s with r = 2^((e(n+1) - e(n)) / O): two pows per
     // output frame instead of O. Ramped Hz is piecewise linear, or quadratic while a
     // Hz ramp chases a ratio ramp, so the parabola through x = 0, 1/2, 1 gives
     // hz(n + x) = h0 + x * (b + c * x) with c = 2 * (h1 - 2 * hm + h0), b = h1 - h0 - c.
     // Both are exact to rounding except in a frame holding a segment corner, which
-    // is smoothed over that single frame.
-    let pitchFactor = 1, pitchStep = 1;
+    // is smoothed over that single frame. stepPitch applies them per substep.
     const incrementDeltas = active.incrementDeltas, incrementCurves = active.incrementCurves;
     if (dynamicPitch) {
       const next = active.elapsed + 1;
       const start = pitchAt(active, active.elapsed) / 12 + pitchEnvelopeAt(active, time) / 1200;
       const end = pitchAt(active, next) / 12 + pitchEnvelopeAt(active, next / this.sampleRate) / 1200;
-      pitchFactor = 2 ** start;
-      if (end !== start) pitchStep = 2 ** ((end - start) / oversample);
+      frame[5] = fastExp2(start);
+      frame[6] = end !== start ? fastExp2((end - start) / oversample) : 1;
       if (frequencyRamping) {
         for (let op = 0; op < 4; op++) {
           const scale = active.frequencyScales[op];
@@ -1043,69 +1401,72 @@ export class Synth {
         }
       }
     }
-    for (let sub = 0; sub < oversample; sub++) {
-      if (dynamicPitch) {
-        const x = sub / oversample;
-        for (let op = 0; op < 4; op++) {
-          const base = frequencyRamping ?
-            active.baseIncrements[op] + x * (incrementDeltas[op] + x * incrementCurves[op]) : active.baseIncrements[op];
-          const pm = lfo.pmTargets ? active.pmFactors[op] : pmFactor;
-          steps[op] = Math.min(TAU * 0.45, Math.min(TAU * 0.45, base * pitchFactor) * pm);
-        }
-        pitchFactor *= pitchStep;
-      }
-      let sample = 0;
-      if (!finished) {
-        if (simple) {
-          const base = sub * 4;
+    frame[4] = pmFactor;
+    // Fold static level, operator level and shared or per-operator AM once per frame.
+    if (!operatorRamping) {
+      for (let op = 0; op < 4; op++) frame[op] = levels[op] * operatorLevels[op] * (targeted ? amGains[op] : amGain);
+    }
+    let output = 0;
+    if (finished) {
+      if (dynamicPitch) for (let sub = 0; sub < oversample; sub++) stepPitch(active, sub, oversample, frame);
+    } else {
+      const subSamples = this.subSamples;
+      // All-sine voices with static operator levels take the per-algorithm frames.
+      if (waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 && !operatorRamping) {
+        if (!SINE_FRAMES[active.voice.algorithm](active, subSamples, dynamicPitch)) return NaN;
+      } else {
+        const modIndex = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
+        const carrierCount = graph.carriers.length;
+        let previous = active.previous, older = active.older;
+        for (let sub = 0; sub < oversample; sub++) {
+          const position = active.elapsed + sub / oversample;
+          if (dynamicPitch) stepPitch(active, sub, oversample, frame);
           for (let op = 0; op < 4; op++) {
-            let modulation = op === 0 ? (active.previous + active.older) * feedbackScale : 0;
+            let modulation = op === 0 ? (previous + older) * feedbackScale : 0;
             const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
             if (first >= 0) modulation += values[first] * modIndex;
             if (second >= 0) modulation += values[second] * modIndex;
-            const phase = phases[op];
-            values[op] = fastSin(phase + modulation) * gains[base + op] * levels[op] * operatorLevels[op] * amGain;
-            const next = phase + steps[op];
-            phases[op] = next < TAU ? next : next - TAU;
-          }
-        } else {
-          for (let op = 0; op < 4; op++) {
-            let modulation = op === 0 ? (active.previous + active.older) * active.feedbackScale : 0;
-            const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
-            if (first >= 0) modulation += values[first] * active.modIndex;
-            if (second >= 0) modulation += values[second] * active.modIndex;
-            const operatorLevel = operatorRamping ?
-              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, active.elapsed + sub / oversample) : active.operatorLevels[op];
-            const am = lfo.amTargets ? active.amGains[op] : amGain;
-            const code = active.waveforms[op];
-            let oscillator: number;
-            if (code === 0) oscillator = fastSin(phases[op] + modulation);
-            else if (code === 8) {
+            const factor = !operatorRamping ? frame[op] : levels[op] *
+              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, position) *
+              (targeted ? amGains[op] : amGain);
+            const amplitude = gains[op + sub * 4] * factor;
+            const code = waveforms[op];
+            let oscillator = 0;
+            if (code === 8) {
+              // Noise keeps its own clock even while silent.
               oscillator = (active.noiseStates[op] & 1) === 0 ? -1 : 1;
               const turns = active.noiseTurns[op] + active.noiseSteps[op];
               // At the minimum clock a 20 kHz hold rate needs at most two ticks.
               const ticks = Math.floor(turns);
               for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
               active.noiseTurns[op] = turns - ticks;
-            } else oscillator = periodicWaveform(phases[op] + modulation, code, steps[op] * INV_TAU);
-            const value = oscillator * gains[op + sub * 4] * levels[op] * operatorLevel * am;
+            } else if (amplitude !== 0) {
+              oscillator = code === 0 ? fastSin(phases[op] + modulation) : periodicWaveform(phases[op] + modulation, code, steps[op] * INV_TAU);
+            }
+            const value = amplitude === 0 ? 0 : oscillator * amplitude;
             values[op] = value;
             const phase = phases[op] + steps[op];
             const wrapped = phase < TAU ? phase : phase - TAU;
             phases[op] = wrapped;
             if (!Number.isFinite(value) || !Number.isFinite(wrapped)) return NaN;
           }
+          older = previous;
+          previous = values[0];
+          let sample = 0;
+          for (let j = 0; j < carrierCount; j++) sample += values[carrierIndices[j]];
+          sample *= carrierGain;
+          // Non-finite operator state always reaches a carrier through modulation or the mix.
+          if (!Number.isFinite(sample)) return NaN;
+          subSamples[sub] = sample;
         }
-        active.older = active.previous;
-        active.previous = values[0];
-        for (let j = 0; j < graph.carriers.length; j++) sample += values[carrierIndices[j]];
-        sample *= active.carrierGain;
-        // Non-finite operator state always reaches a carrier through modulation or the mix.
-        if (!Number.isFinite(sample)) return NaN;
-        mixLeft[sub] += sample * panLeft;
-        mixRight[sub] += sample * panRight;
+        active.previous = previous;
+        active.older = older;
       }
-      output = sample;
+      for (let sub = 0; sub < oversample; sub++) {
+        mixLeft[sub] += subSamples[sub] * panLeft;
+        mixRight[sub] += subSamples[sub] * panRight;
+      }
+      output = subSamples[oversample - 1];
     }
     if (active.lfoLive) {
       active.lfoTurns += active.scalarValues[1] / this.sampleRate;
@@ -1150,7 +1511,9 @@ export class Synth {
         offset + length > leftLength || offset + length > rightLength) {
       throw new RangeError('render requires an in-bounds offset and length');
     }
-    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdle) {
+    const dcState = this.dcState;
+    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdle &&
+        dcState[0] === 0 && dcState[1] === 0 && dcState[2] === 0 && dcState[3] === 0) {
       typedArrayFill.call(left, 0, offset, offset + length);
       if (right !== left) typedArrayFill.call(right, 0, offset, offset + length);
       (this as MutableCounters).currentFrame += length;
@@ -1159,6 +1522,7 @@ export class Synth {
     this.rendering = true;
     const oversample = this.oversample, coefficients = this.decimatorCoefficients;
     const mixLeft = this.mixLeft, mixRight = this.mixRight, filterLeft = this.filterLeft, filterRight = this.filterRight;
+    const softKneeMode = this.saturation === 'soft-knee', dcBlock = this.dcBlock, dcGain = this.dcGain, dcPole = this.dcPole;
     try {
       for (let frame = offset, end = offset + length; frame < end; frame++) {
         let terminalCount = 0;
@@ -1219,12 +1583,21 @@ export class Synth {
           mixedRight = mirrored ? mixedLeft : decimateSample(inputRight, filterRight, coefficients);
         }
         this.decimatorMirrored = mirrored;
-        // Saturate each stereo sum independently, preserving center dual mono.
-        left[frame] = Number.isFinite(mixedLeft) ? HEADROOM * Math.tanh(mixedLeft * this.mixGain / HEADROOM) : 0;
-        right[frame] = Number.isFinite(mixedRight) ? HEADROOM * Math.tanh(mixedRight * this.mixGain / HEADROOM) : 0;
+        if (dcBlock) {
+          // Non-finite sums bypass the filter and keep its state; they still output 0 below.
+          if (Number.isFinite(mixedLeft)) mixedLeft = dcBlockStep(dcState, 0, mixedLeft, dcGain, dcPole);
+          if (Number.isFinite(mixedRight)) mixedRight = dcBlockStep(dcState, 2, mixedRight, dcGain, dcPole);
+        }
+        // Saturate each stereo sum independently, preserving center dual mono;
+        // an equal (centered) mix reuses the left result.
+        left[frame] = !Number.isFinite(mixedLeft) ? 0 : softKneeMode ? softKnee(mixedLeft * this.mixGain) :
+          HEADROOM * Math.tanh(mixedLeft * this.mixGain / HEADROOM);
+        right[frame] = mixedRight === mixedLeft ? left[frame] : !Number.isFinite(mixedRight) ? 0 :
+          softKneeMode ? softKnee(mixedRight * this.mixGain) : HEADROOM * Math.tanh(mixedRight * this.mixGain / HEADROOM);
         if (!Number.isFinite(mixedLeft) || !Number.isFinite(mixedRight)) {
           (this as MutableCounters).errorCount++;
           this.resetDecimator();
+          this.dcState.fill(0);
         } else {
           // A silent channel goes idle once its FIR history is zero. After the
           // last source retires, history below the -96 dB floor snaps to zero.

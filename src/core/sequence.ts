@@ -263,7 +263,7 @@ interface SequenceRenderPlan {
 }
 
 function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOptions, long: boolean): SequenceRenderPlan {
-  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
+  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
   const score = prepareScore(events, { voices: config.voices as SequenceVoices | undefined }, long);
   const sampleRate = sampleRateValue(config.sampleRate === undefined ? 44100 : config.sampleRate as number);
   const maxVoices = Object.hasOwn(config, 'maxVoices') ? validateMaxVoices(config.maxVoices) : 8;
@@ -276,6 +276,8 @@ function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOp
   if (config.tuning !== undefined) engine.tuning = config.tuning as SynthOptions['tuning'];
   if (config.stealing !== undefined) engine.stealing = config.stealing as SynthOptions['stealing'];
   if (config.quality !== undefined) engine.quality = config.quality as SynthOptions['quality'];
+  if (config.saturation !== undefined) engine.saturation = config.saturation as SynthOptions['saturation'];
+  if (config.dcBlock !== undefined) engine.dcBlock = config.dcBlock as SynthOptions['dcBlock'];
   const settings = readSynthOptions(engine);
   if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);
   const { queue, length } = sequenceFrameEvents(score, sampleRate);
@@ -375,7 +377,7 @@ export function renderSequenceChunks(events: readonly SequenceEvent[], options: 
 
 /** Convenience full-buffer rendering retains the original score and allocation budgets. */
 export function renderSequence(events: readonly SequenceEvent[], options: SequenceOptions = {}): RenderResult {
-  sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality'], [], 'render sequence options');
+  sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'], [], 'render sequence options');
   const plan = renderPlan(events, options, false);
   if (plan.capacity.frames > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
   const left = new Float32Array(plan.capacity.frames);

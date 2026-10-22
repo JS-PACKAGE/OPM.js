@@ -33,7 +33,7 @@ scope.addEventListener('message', event => {
     if (type === 'start') {
       if (started) throw new Error('Render Worker already started');
       const data = sequenceOwnData(input, ['type', 'events', 'options', 'format'], ['type', 'events', 'options', 'format'], 'worker start');
-      const options = sequenceOwnData(data.options, ['sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'chunkFrames', 'maxFrames'], [], 'worker core options');
+      const options = sequenceOwnData(data.options, ['sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames'], [], 'worker core options');
       renderer = renderSequenceChunks(data.events as readonly SequenceEvent[], options as ChunkedSequenceOptions);
       encoder = createWavEncoder({ sampleRate: renderer.capacity.sampleRate, channels: 2, format: data.format as WavFormat, totalFrames: renderer.capacity.frames });
       started = true;

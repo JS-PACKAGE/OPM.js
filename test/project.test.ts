@@ -75,7 +75,7 @@ test('project rejects unknown voice/ID references, duplicate IDs and inline patc
 
 test('settings and all input budgets are enforced', () => {
   for (const settings of [{ maxVoices: 0 }, { maxVoices: 33 }, { sampleRate: 7999 }, { mixGain: 1.1 },
-    { quality: 'ultra' }, { stealing: 'random' }, { tuning: { offsets: [0] } }, { tuning: { referenceHz: Infinity } }, { unknown: true }]) {
+    { quality: 'ultra' }, { stealing: 'random' }, { saturation: 'hard' }, { dcBlock: 'yes' }, { tuning: { offsets: [0] } }, { tuning: { referenceHz: Infinity } }, { unknown: true }]) {
     assert.throws(() => parseScoreProject({ ...source(), settings }));
   }
   assert.throws(() => parseScoreProject(' '.repeat(MAX_SCORE_PROJECT_BYTES + 1)), /byte budget/);
@@ -84,6 +84,29 @@ test('settings and all input budgets are enforced', () => {
   const voices = Object.fromEntries(Array.from({ length: MAX_SCORE_PROJECT_VOICES + 1 }, (_, index) => [`voice${index}`, brass]));
   assert.throws(() => parseScoreProject({ ...source(), voices }), /voice budget/);
   assert.throws(() => parseScoreProject({ ...source(), events: [{ type: 'note', id: 1, voice: 'lead', note: 60, beat: 2000, duration: 1 }], tempoMap: [{ beat: 0, bpm: 1 }] }), /second horizon/);
+});
+
+test('soft-knee saturation and DC blocking round-trip while default projects omit the fields', () => {
+  const plain = parseScoreProject(source());
+  assert.equal(plain.settings.saturation, undefined);
+  assert.equal(plain.settings.dcBlock, undefined);
+  for (const settings of [{}, { saturation: 'tanh' }, { dcBlock: false }]) {
+    const json = serializeScoreProject(parseScoreProject({ ...source(), settings }));
+    assert.ok(!json.includes('saturation') && !json.includes('dcBlock'));
+  }
+  const knee = parseScoreProject({ ...source(), settings: { saturation: 'soft-knee', dcBlock: true } });
+  assert.equal(knee.settings.saturation, 'soft-knee');
+  assert.equal(knee.settings.dcBlock, true);
+  const restored = parseScoreProject(serializeScoreProject(knee)).settings;
+  assert.equal(restored.saturation, 'soft-knee');
+  assert.equal(restored.dcBlock, true);
+  const chord = [48, 55, 60, 64, 67, 72].map((note, index) => ({ type: 'note' as const, id: index + 1, time: 0, duration: 0.05, note }));
+  const tanh = renderSequence(chord, { sampleRate: 16000 }).left;
+  for (const settings of [{ saturation: knee.settings.saturation }, { dcBlock: knee.settings.dcBlock }]) {
+    const rendered = renderSequence(chord, { sampleRate: 16000, ...settings }).left;
+    assert.equal(rendered.length, tanh.length);
+    assert.notDeepEqual(rendered, tanh, `offline rendering applies ${Object.keys(settings)[0]}`);
+  }
 });
 
 test('note gates integrate onset and end across tempo ramps and step boundaries', () => {

@@ -687,6 +687,37 @@ test('quality and polyphony are immutable host settings whose rendered behavior 
   }
 });
 
+test('saturation and DC blocking are immutable host settings forwarded to the processor', async () => {
+  assert.equal(new OPM().saturation, 'tanh');
+  assert.equal(new OPM().dcBlock, false);
+  const options: OPMOptions = { saturation: 'soft-knee', dcBlock: true };
+  const opm = new OPM(options);
+  options.saturation = 'tanh';
+  options.dcBlock = false;
+  assert.equal(Reflect.set(opm, 'saturation', 'tanh'), false);
+  assert.equal(Reflect.set(opm, 'dcBlock', false), false);
+  assert.equal(opm.saturation, 'soft-knee');
+  assert.equal(opm.dcBlock, true);
+  try {
+    Object.assign(globalThis, { currentFrame: 0 });
+    await opm.start();
+    const reference = new Synth(sampleRate, 8, { saturation: 'soft-knee', dcBlock: true });
+    const tanh = new Synth(sampleRate, 8);
+    for (const note of [48, 55, 60, 64, 67]) {
+      const id = opm.playNote({ note });
+      reference.noteOn(brass, note, id);
+      tanh.noteOn(brass, note, id);
+    }
+    const actual = render(opm, 512);
+    const left = new Float32Array(512), right = new Float32Array(512);
+    reference.render(left, right);
+    assert.deepEqual(actual.left, left);
+    const saturated = new Float32Array(512);
+    tanh.render(saturated, new Float32Array(512));
+    assert.notDeepEqual(actual.left, saturated, 'a loud chord distinguishes the output stages');
+  } finally { await opm.dispose(); }
+});
+
 test('host quality and polyphony reject hostile options without getter or numeric coercion', () => {
   let reads = 0;
   const getter = () => { reads++; throw Error('getter ran'); };
@@ -697,6 +728,7 @@ test('host quality and polyphony reject hostile options without getter or numeri
   for (const input of [
     quality, maxVoices, Object.assign(Object.create({ quality: 'eco' }), { maxVoices: 1 }),
     { quality: 'other' }, { quality: null }, { quality: { [Symbol.toPrimitive]: getter } },
+    { saturation: 'hard' }, { saturation: null }, { dcBlock: 1 }, { dcBlock: 'true' },
     { maxVoices: 0 }, { maxVoices: 33 }, { maxVoices: 1.5 }, { maxVoices: NaN },
     { maxVoices: Infinity }, { maxVoices: '2' }, { maxVoices: true }, { maxVoices: null },
     { maxVoices: { valueOf: getter } }, { [Symbol('quality')]: 'eco' },

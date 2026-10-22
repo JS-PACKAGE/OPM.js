@@ -67,7 +67,10 @@ export function verifyFourOperator(sampleRate: number, quality: QualityProfile =
     const expected = Float64Array.from({ length: frames }, (_, frame) => independent[factor * frame + factor - 1]);
     let maximumError = 0, errorEnergy = 0, signalEnergy = 0;
     const transitionErrors = { attackDecay: 0, held: 0, release: 0, tail: 0 };
-    const releaseEnd = gate + Math.max(...voice.ops.map(op => op.adsr.r));
+    // Output is audible until the carriers finish releasing; afterwards the voice
+    // retires and sub-floor filter history may snap to zero (checked as the tail).
+    const carriers = algorithm === 4 ? [1, 3] : [3];
+    const releaseEnd = gate + Math.max(...carriers.map(op => voice.ops[op].adsr.r));
     for (let frame = 0; frame < frames; frame++) {
       const error = Math.abs(actual[frame] - expected[frame]);
       const time = frame / sampleRate;

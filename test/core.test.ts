@@ -164,6 +164,24 @@ test('nonfinite DSP state snaps to silence and increments the error count', () =
   assert.equal(synth.voices.length, 0);
 });
 
+test('a silent operator cannot hide nonfinite state from the error counter', () => {
+  for (const waveform of ['sine', 'saw'] as const) {
+    // Operator 1 is silent (level 0) and only modulates; the carrier stays audible.
+    const silent = voice({ ops: Array.from({ length: 4 }, (_, i) => ({
+      ratio: i + 1, level: i === 0 ? 0 : 0.5, detune: 0, waveform: i === 0 ? waveform : 'sine',
+      adsr: { a: 0, d: 0, s: 1, r: 0.05 },
+    })) as unknown as VoiceInput['ops'] });
+    const synth = new Synth(16000);
+    synth.noteOn({ ...silent, version: 7, name: 'silent', modIndex: 1, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } }, 60);
+    audio(synth, 16);
+    synth.voices[0].phases[0] = NaN;
+    // The shared decimator drains earlier finite history; the voice itself is retired.
+    assert.ok(audio(synth, 16).every(Number.isFinite), waveform);
+    assert.equal(synth.errorCount, 1, waveform);
+    assert.equal(synth.voices.length, 0, waveform);
+  }
+});
+
 test('native buffer bounds ignore shadow metadata and reject forged channels without advancing sound', () => {
   const synth = new Synth(8000), reference = new Synth(8000);
   synth.noteOn(voice(), 60.5);

@@ -4,7 +4,8 @@ import { lfoValue } from '../src/core/lfo.js';
 import type { LFO } from '../src/voices/schema.js';
 
 const TAU = 2 * Math.PI;
-const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 1e-12, `${actual} differs from ${expected}`);
+// Sine uses the deterministic fastSin polynomial (|error| <= 1.4e-11).
+const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - expected) < 2e-11, `${actual} differs from ${expected}`);
 
 test('waveforms follow their characteristic cycle shapes', () => {
   const phases = [0, Math.PI / 4, Math.PI / 2, Math.PI, 3 * Math.PI / 2, 7 * Math.PI / 4];

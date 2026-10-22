@@ -87,7 +87,38 @@ test('pitch-envelope release starts at the current cents value, including an int
   assert.ok(Math.abs(frequency(released, 16000, 0.41, 0.44) / 400 - 1) < 0.002, 'final cents persist for the operator release');
 });
 
-test('LFO delay gates depth without freezing note or deterministic global phase', () => {
+test('a settled pitch envelope keeps its cents through later glides, retuning, ratio edits and release', () => {
+  const patch = tone();
+  patch.ops[0].frequency = 400;
+  patch.ops[0].adsr.r = 1;
+  patch.pitchEnvelope = { a: 0.02, d: 0.03, r: 0.05, initial: -1200, peak: 600, sustain: 1200, final: -1200 };
+  const synth = new Synth(16000);
+  const id = synth.noteOn(patch, 60);
+  const near = (samples: Float32Array, from: number, to: number, hz: number, label: string) =>
+    assert.ok(Math.abs(frequency(samples, 16000, from, to) / hz - 1) < 0.002, label);
+  near(audio(synth, 3200), 0.1, 0.19, 800, 'sustain cents after the envelope settles');
+  synth.updateNote(id, { pitch: 12, glide: 0.05 });
+  near(audio(synth, 3200), 0.1, 0.19, 1600, 'glide end keeps the settled envelope');
+  synth.updateNote(id, { modulation: 0.5 });
+  near(audio(synth, 3200), 0.02, 0.19, 1600, 'modulation updates keep the settled envelope');
+  synth.updateNote(id, { operatorFrequencies: [500, null, null, null] });
+  near(audio(synth, 3200), 0.02, 0.19, 2000, 'retuned operator Hz keep the settled envelope');
+  synth.noteOff(id);
+  near(audio(synth, 3200), 0.1, 0.19, 500, 'final cents after release');
+  // A finished note returns its settled slot to the free pool; the next note must restart the attack.
+  const short = tone();
+  short.ops[0].frequency = 400;
+  short.ops.forEach(op => { op.adsr.r = 0.08; });
+  short.pitchEnvelope = patch.pitchEnvelope;
+  const single = new Synth(16000, 1);
+  single.noteOff(single.noteOn(short, 60));
+  audio(single, 6400);
+  single.noteOn(short, 60);
+  const restarted = frequency(audio(single, 1600), 16000, 0.002, 0.012);
+  assert.ok(restarted < 350, `a reused slot restarts the envelope attack (${restarted} Hz)`);
+});
+
+test('LFO delay gates depth, fades it in over 20 ms, and keeps note and global phase deterministic', () => {
   const patch = tone();
   patch.lfo = { rate: 2, amDepth: 0.8, pmDepth: 0, waveform: 'sine', delay: 0.125, phase: 0.1 };
   const delayed = new Synth(16000), dry = new Synth(16000), wet = new Synth(16000);
@@ -96,7 +127,16 @@ test('LFO delay gates depth without freezing note or deterministic global phase'
   wet.noteOn({ ...patch, lfo: { ...patch.lfo, delay: 0 } }, 69);
   assert.deepEqual(audio(delayed, 2000), audio(dry, 2000));
   audio(wet, 2000);
-  closeAudio(audio(delayed, 1280).subarray(128), audio(wet, 1280).subarray(128));
+  const opened = audio(delayed, 1280), unfaded = audio(wet, 1280), plain = audio(dry, 1280);
+  // The depth ramps from zero: the first 4 ms move a fraction of the full AM change.
+  let early = 0, full = 0;
+  for (let frame = 0; frame < 64; frame++) {
+    early += Math.abs(opened[frame] - plain[frame]);
+    full += Math.abs(unfaded[frame] - plain[frame]);
+  }
+  assert.ok(full > 0 && early < 0.3 * full, `fade-in ${early / full}`);
+  // After the 320-frame fade and filter settling the delayed voice matches the undelayed one.
+  closeAudio(opened.subarray(448), unfaded.subarray(448));
   const global = new Synth(16000), note = new Synth(16000);
   audio(global, 1280);
   global.noteOn({ ...patch, lfo: { ...patch.lfo, sync: 'global' } }, 69);

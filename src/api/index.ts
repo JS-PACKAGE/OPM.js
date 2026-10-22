@@ -87,6 +87,10 @@ export interface OPMOptions {
   stealing?: SynthOptions['stealing'];
   /** Immutable synthesis profile; standard preserves the default sound. */
   quality?: QualityProfile;
+  /** Immutable output stage; tanh preserves the default sound. */
+  saturation?: SynthOptions['saturation'];
+  /** Immutable 3 Hz output DC blocker before the output stage; default false. */
+  dcBlock?: boolean;
   /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
   maxVoices?: number;
   /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
@@ -298,6 +302,8 @@ function replyData(data: unknown): Exclude<OPMEvent, ErrorEvent | ContextEvent> 
 export class OPM {
   declare readonly sampleRate: number | undefined;
   get quality(): QualityProfile { return this._synthOptions.quality!; }
+  get saturation(): NonNullable<SynthOptions['saturation']> { return this._synthOptions.saturation!; }
+  get dcBlock(): boolean { return this._synthOptions.dcBlock!; }
   get maxVoices(): number { return this._maxVoices; }
   /** @internal */
   declare private _maxVoices: number;
@@ -352,8 +358,8 @@ export class OPM {
   declare private _disposePromise: Promise<void> | null;
 
   constructor(options: OPMOptions = {}) {
-    const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, quality, maxVoices, interruption, workletUrl } = ownData(options,
-      ['sampleRate', 'context', 'destination', 'onEvent', 'mixGain', 'tuning', 'stealing', 'quality', 'maxVoices', 'interruption', 'workletUrl'], 'OPM options') as OPMOptions;
+    const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, quality, saturation, dcBlock, maxVoices, interruption, workletUrl } = ownData(options,
+      ['sampleRate', 'context', 'destination', 'onEvent', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'maxVoices', 'interruption', 'workletUrl'], 'OPM options') as OPMOptions;
     if (sampleRate !== undefined && (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 96000)) {
       throw new RangeError('sampleRate must be an integer in 8000..96000');
     }
@@ -364,6 +370,8 @@ export class OPM {
     if (onEvent !== undefined && typeof onEvent !== 'function') throw new TypeError('onEvent must be a function');
     if (stealing !== undefined && !['oldest', 'release-first', 'quietest'].includes(stealing)) throw new RangeError('Invalid stealing policy');
     if (quality !== undefined && quality !== 'eco' && quality !== 'standard' && quality !== 'high') throw new RangeError('Invalid quality profile');
+    if (saturation !== undefined && saturation !== 'tanh' && saturation !== 'soft-knee') throw new RangeError('Invalid saturation mode');
+    if (dcBlock !== undefined && typeof dcBlock !== 'boolean') throw new TypeError('dcBlock must be a boolean');
     if (maxVoices !== undefined) validateMaxVoices(maxVoices);
     if (interruption !== undefined && interruption !== 'cancel' && interruption !== 'preserve') throw new RangeError('Invalid interruption policy');
     if (workletUrl !== undefined && typeof workletUrl !== 'string' && !(workletUrl instanceof URL)) {
@@ -373,7 +381,8 @@ export class OPM {
     this._workletUrl = workletUrl instanceof URL ? new URL(workletUrl.href) : workletUrl;
     if (workletUrl !== undefined) workletModuleUrl(this._workletUrl);
     this._synthOptions = { mixGain: mixGainValue(mixGain === undefined ? 1 : mixGain),
-      tuning: normalizeTuning(tuning === undefined ? {} : tuning), stealing: stealing ?? 'oldest', quality: quality ?? 'standard' };
+      tuning: normalizeTuning(tuning === undefined ? {} : tuning), stealing: stealing ?? 'oldest', quality: quality ?? 'standard',
+      saturation: saturation ?? 'tanh', dcBlock: dcBlock ?? false };
     this._maxVoices = maxVoices ?? 8;
     this._interruption = interruption ?? 'cancel';
     this.sampleRate = sampleRate;

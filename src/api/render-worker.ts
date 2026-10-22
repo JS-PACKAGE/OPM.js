@@ -64,7 +64,7 @@ const typedArrayByteLength = Object.getOwnPropertyDescriptor(Object.getPrototype
 
 /** Browser-only, backpressured offline rendering; importing this module allocates nothing. */
 export async function renderSequenceInWorker(events: readonly SequenceEvent[], options: WorkerRenderOptions): Promise<WorkerRenderResult> {
-  const data = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'chunkFrames', 'maxFrames', 'signal', 'format', 'sink', 'onProgress', 'startupTimeoutMs', 'phaseDiagnostics', 'onPhase', 'workerUrl'], ['sink'], 'worker render options');
+  const data = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal', 'format', 'sink', 'onProgress', 'startupTimeoutMs', 'phaseDiagnostics', 'onPhase', 'workerUrl'], ['sink'], 'worker render options');
   const sink = sequenceOwnData(data.sink, ['write', 'close', 'abort'], ['write'], 'WAV sink');
   for (const key of ['write', 'close', 'abort']) if (sink[key] !== undefined && typeof sink[key] !== 'function') throw new TypeError(`sink.${key} must be a function`);
   if (typeof sink.write !== 'function') throw new TypeError('sink.write must be a function');
@@ -81,7 +81,7 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
     try { aborted.call(signal); } catch { throw new TypeError('signal must be an AbortSignal'); }
   }
   const engine: SynthOptions = {};
-  for (const key of ['mixGain', 'tuning', 'stealing', 'quality'] as const) if (data[key] !== undefined) Object.defineProperty(engine, key, { value: data[key], enumerable: true });
+  for (const key of ['mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'] as const) if (data[key] !== undefined) Object.defineProperty(engine, key, { value: data[key], enumerable: true });
   const settings = readSynthOptions(engine);
   if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);
   const coreOptions: ChunkedSequenceOptions = { ...settings };

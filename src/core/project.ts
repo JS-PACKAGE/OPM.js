@@ -28,6 +28,10 @@ export interface ScoreProjectSettings {
   readonly mixGain: number;
   readonly tuning: NormalizedTuning;
   readonly stealing: NonNullable<SynthOptions['stealing']>;
+  /** Present only for `soft-knee`; omitted means the default `tanh`. */
+  readonly saturation?: 'soft-knee';
+  /** Present only when enabled; omitted means no output DC blocker. */
+  readonly dcBlock?: true;
 }
 /** Version 1 is self-contained: every note names a patch stored in voices. */
 export interface ScoreProject {
@@ -66,7 +70,7 @@ export function compileBeatSequence(events: readonly BeatSequenceEvent[], option
 }
 
 function settingsSnapshot(input: unknown): ScoreProjectSettings {
-  const data = sequenceOwnData(input, ['sampleRate', 'quality', 'maxVoices', 'mixGain', 'tuning', 'stealing'], [], 'project settings');
+  const data = sequenceOwnData(input, ['sampleRate', 'quality', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'saturation', 'dcBlock'], [], 'project settings');
   const { sampleRate, maxVoices, ...synth } = data;
   const settings = readSynthOptions(synth as SynthOptions);
   return Object.freeze({
@@ -76,6 +80,9 @@ function settingsSnapshot(input: unknown): ScoreProjectSettings {
     mixGain: settings.mixGain ?? 1,
     tuning: normalizeTuning(settings.tuning === undefined ? {} : settings.tuning),
     stealing: settings.stealing ?? 'oldest',
+    // Stored only when non-default, so default projects keep their earlier JSON.
+    ...(settings.saturation === 'soft-knee' ? { saturation: settings.saturation } : {}),
+    ...(settings.dcBlock === true ? { dcBlock: true as const } : {}),
   });
 }
 

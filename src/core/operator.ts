@@ -3,12 +3,12 @@ import type { OperatorWaveform } from '../voices/schema.js';
 export const TAU = 2 * Math.PI;
 const INV_PI = 1 / Math.PI;
 /**
- * Deterministic sine used by sine operators. Reduce x = k*pi + a with
- * a in [-pi/2, pi/2], so sin(x) = (-1)^k sin(a), then evaluate an odd degree-13
- * polynomial. It is the Taylor series with the a^13 coefficient lowered
- * (1.58e-10 instead of 1/13!) so the peak at a = pi/2 stays below 1:
- * |error| <= 2.0e-10 (about -194 dB, below Float32 resolution) and |result| <= 1,
- * plus ~|x|*1e-16 from reducing by a double-precision pi (negligible for FM phases).
+ * Deterministic sine used by sine operators. Reduce x = k*pi + a
+ * with a in [-pi/2, pi/2], so sin(x) = (-1)^k sin(a), then evaluate an odd
+ * degree-11 near-minimax polynomial (absolute error, fitted by iteratively
+ * reweighted least squares on [0, pi/2]): |error| <= 1.4e-11 (about -217 dB,
+ * far below Float32 resolution) and |result| <= 1, plus ~|x|*1e-16 from reducing
+ * by a double-precision pi (negligible for FM phases).
  * Pure arithmetic keeps results identical across JS engines, unlike Math.sin
  * whose last bits are implementation-defined. Non-finite input yields NaN, which
  * Synth reports through its error counter. */
@@ -16,10 +16,34 @@ export function fastSin(x: number): number {
   const k = Math.round(x * INV_PI);
   const a = x - k * Math.PI;
   const z = a * a;
-  const p = a * (1 + z * (-0.16666666666666666 + z * (0.008333333333333333 + z * (-0.0001984126984126984 +
-    z * (2.7557319223985893e-6 + z * (-2.505210838544172e-8 + z * 1.5815631986383464e-10))))));
+  const p = a * (0.9999999998898513 + z * (-0.16666666541437986 + z * (0.008333329264428698 +
+    z * (-0.0001984070285951439 + z * (2.751885549387275e-6 + z * -2.3794711094838732e-8)))));
   // ToInt32 wraps modulo 2^32, which preserves parity of any exactly representable k.
   return (k & 1) === 0 ? p : -p;
+}
+
+const EXP2_RANGE = 64;
+// Powers of two by repeated exact doubling/halving (IEEE-exact, unlike `**`,
+// whose accuracy ECMAScript leaves implementation-defined).
+const EXP2_INTEGERS = new Float64Array(2 * EXP2_RANGE + 1);
+EXP2_INTEGERS[EXP2_RANGE] = 1;
+for (let n = 1; n <= EXP2_RANGE; n++) {
+  EXP2_INTEGERS[EXP2_RANGE + n] = EXP2_INTEGERS[EXP2_RANGE + n - 1] * 2;
+  EXP2_INTEGERS[EXP2_RANGE - n] = EXP2_INTEGERS[EXP2_RANGE - n + 1] / 2;
+}
+/**
+ * Deterministic 2^x for audio-rate pitch and gain curves. Split x = n + f with
+ * integer n and f in [-1/2, 1/2]; 2^f = 1 + f*q(f) is a degree-9 near-minimax
+ * polynomial with relative error <= 2e-14, scaled exactly by a table power 2^n.
+ * Outside |n| <= 64 (and for non-finite x) it defers to the ** operator. */
+export function fastExp2(x: number): number {
+  const n = Math.round(x);
+  if (!(n >= -EXP2_RANGE && n <= EXP2_RANGE)) return 2 ** x;
+  const f = x - n;
+  const p = 1 + f * (0.6931471805598848 + f * (0.24022650695722692 + f * (0.05550410866843088 +
+    f * (0.009618129181193839 + f * (0.0013333557622879529 + f * (0.00015403440862087186 +
+    f * (1.5252991540055915e-5 + f * (1.3258340763777297e-6 + f * 1.0148052384218113e-7))))))));
+  return p * EXP2_INTEGERS[n + EXP2_RANGE];
 }
 export function sineOperator(phase: number, modulation: number, gain: number): number {
   return fastSin(phase + modulation) * gain;

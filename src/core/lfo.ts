@@ -1,11 +1,14 @@
 import type { LFO } from '../voices/schema.js';
+import { fastSin } from './operator.js';
 
 const TAU = 2 * Math.PI;
 
-/** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1. */
+/** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1.
+ * Sine uses the operators' deterministic polynomial (|error| <= 1.4e-11), so LFO
+ * output does not depend on the engine's Math.sin. */
 export function lfoValue(phase: number, waveform: LFO['waveform']): number {
   if (!Number.isFinite(phase)) throw new RangeError('LFO phase must be finite');
-  if (waveform === 'sine') return Math.sin(phase);
+  if (waveform === 'sine') return fastSin(phase);
   const cycles = phase / TAU;
   const unit = cycles - Math.floor(cycles);
   switch (waveform) {
