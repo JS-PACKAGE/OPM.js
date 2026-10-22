@@ -527,6 +527,8 @@ export interface WorkerRenderPhaseDiagnostics {
 }
 export interface WorkerRenderOptions extends ChunkedSequenceOptions {
     format?: WavFormat;
+    /** Deterministic TPDF dither for `pcm16`/`pcm24` output (default false); see `encodeWav`. */
+    dither?: boolean;
     sink: WavSink;
     onProgress?: (progress: WorkerRenderProgress) =&gt; void;
     /** Optional module-ready deadline only; integer milliseconds in 1..2147483647. */
@@ -710,11 +712,14 @@ export declare function prepareArrangementDefinition(input: unknown, voices?: Se
 export {};
 </code></pre></section>
 <section><h2 id="declaration-coredecimatordts">core/decimator.d.ts</h2><pre><code class="language-typescript">export type QualityProfile = &#39;eco&#39; | &#39;standard&#39; | &#39;high&#39;;
+/** Index of the state slot holding the last decimated sample. */
+export declare const DECIMATOR_OUTPUT = 3;
 export declare const DECIMATOR_STATE_SIZE: number;
 export declare function qualityOversample(quality: QualityProfile): number;
 export declare function createDecimatorCoefficients(sampleRate: number, quality?: QualityProfile): Float64Array;
-export declare function decimateSample(input: number, state: Float64Array, coefficients: Float64Array): number;
-/** Largest buffered sample magnitude, excluding counter/position bookkeeping. */
+export declare function decimateFrame(inputs: Float64Array, state: Float64Array, coefficients: Float64Array): void;
+/** Largest buffered sample magnitude, excluding ring positions and the derived
+ * DECIMATOR_OUTPUT slot (a function of the history, overwritten every frame). */
 export declare function decimatorPeak(state: Float64Array): number;
 </code></pre></section>
 <section><h2 id="declaration-coreenvelopedts">core/envelope.d.ts</h2><pre><code class="language-typescript">import type { ADSR } from &#39;../voices/schema.js&#39;;
@@ -816,6 +821,11 @@ export declare const OVERSAMPLE = 4;
 export declare function renderNote(options: RenderNoteOptions): RenderResult;
 </code></pre></section>
 <section><h2 id="declaration-corelfodts">core/lfo.d.ts</h2><pre><code class="language-typescript">import type { LFO } from &#39;../voices/schema.js&#39;;
+/** Integer LFO shape codes are resolved once at note admission, never per frame. */
+export declare function lfoWaveformCode(waveform: LFO[&#39;waveform&#39;]): number;
+/** LFO shape at a unit phase in [0, 1) for the audio loop: a small branch-only
+ * body that inlines into the per-frame voice path. */
+export declare function lfoAt(unit: number, code: number): number;
 /** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1.
  * Sine uses the operators&#39; deterministic polynomial (|error| &lt;= 1.4e-11), so LFO
  * output does not depend on the engine&#39;s Math.sin. */
@@ -1224,17 +1234,22 @@ export declare function normalizeTuning(input: TuningOptions): NormalizedTuning;
 export declare function tuningFrequency(note: number, tuning: NormalizedTuning): number;
 </code></pre></section>
 <section><h2 id="declaration-corewavdts">core/wav.d.ts</h2><pre><code class="language-typescript">export type WavFormat = &#39;pcm16&#39; | &#39;pcm24&#39; | &#39;float32&#39;;
+/** `dither: true` adds deterministic TPDF dither (±1 LSB triangular noise) before
+ * rounding to `pcm16`/`pcm24`, trading truncation distortion in quiet passages and
+ * fades for a constant noise floor; digital silence becomes that noise. */
 export interface WavOptions {
     left: Float32Array;
     right?: Float32Array;
     sampleRate: number;
     format?: WavFormat;
+    dither?: boolean;
 }
 export interface WavEncoderOptions {
     sampleRate: number;
     channels: 1 | 2;
     format?: WavFormat;
     totalFrames: number;
+    dither?: boolean;
 }
 export interface WavChunk {
     left: Float32Array;

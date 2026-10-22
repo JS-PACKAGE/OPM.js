@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createDecimatorCoefficients, decimateSample, decimatorPeak, DECIMATOR_STATE_SIZE } from '../src/core/decimator.js';
+import { createDecimatorCoefficients, decimateFrame, decimatorPeak, DECIMATOR_OUTPUT, DECIMATOR_STATE_SIZE } from '../src/core/decimator.js';
 import { butterworthFilterMagnitude, fourierBin } from './fm-reference-fixtures.js';
 import { filterResponse, filterImpulseBounds, filterGroupDelayFrames } from './decimator-reference.js';
 
@@ -17,11 +17,11 @@ export function verifyDecimator(sampleRate: number) {
       measuredDb: null, phaseError: null,
     };
     const offset = Math.ceil(sampleRate / 4), samples = new Float64Array(sampleRate);
-    const state = new Float64Array(DECIMATOR_STATE_SIZE);
+    const state = new Float64Array(DECIMATOR_STATE_SIZE), inputs = new Float64Array(4);
     for (let frame = 0; frame < offset + sampleRate; frame++) {
-      let output = 0;
-      for (let sub = 0; sub < 4; sub++) output = decimateSample(Math.sin(2 * Math.PI * sourceHz * (4 * frame + sub) / (4 * sampleRate)), state, coefficients);
-      if (frame >= offset) samples[frame - offset] = output;
+      for (let sub = 0; sub < 4; sub++) inputs[sub] = Math.sin(2 * Math.PI * sourceHz * (4 * frame + sub) / (4 * sampleRate));
+      decimateFrame(inputs, state, coefficients);
+      if (frame >= offset) samples[frame - offset] = state[DECIMATOR_OUTPUT];
     }
     const measured = fourierBin(samples, sampleRate, signedFoldedHz);
     assert.ok(Math.abs(measured.amplitude - expected.magnitude) < 2e-9, 'actual filter magnitude matches the direct half-band transfer');
@@ -38,12 +38,13 @@ export function verifyDecimator(sampleRate: number) {
     return { fraction, sourceHz, expectedDb: db(expected.magnitude), butterworthDb: db(butterworth),
       measuredDb: db(measured.amplitude), phaseError };
   });
-  const reference = filterImpulseBounds(), state = new Float64Array(DECIMATOR_STATE_SIZE);
+  const reference = filterImpulseBounds(), state = new Float64Array(DECIMATOR_STATE_SIZE), inputs = new Float64Array(4);
   let energy = 0, firstMoment = 0, maxError = 0;
   for (let i = 0; i < 4096; i++) {
-    // The cascade emits on the fourth substep; compare it with that phase of the full-rate impulse.
-    let sample = 0;
-    for (let sub = 0; sub < 4; sub++) sample = decimateSample(i === 0 && sub === 0 ? 1 : 0, state, coefficients);
+    // The cascade emits once per four substeps; compare it with the fourth-substep phase of the full-rate impulse.
+    inputs[0] = i === 0 ? 1 : 0;
+    decimateFrame(inputs, state, coefficients);
+    const sample = state[DECIMATOR_OUTPUT];
     const expected = reference.impulse[4 * i + 3] ?? 0;
     maxError = Math.max(maxError, Math.abs(sample - expected));
     energy += sample ** 2; firstMoment += i * sample ** 2;

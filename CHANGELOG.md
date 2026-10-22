@@ -2,6 +2,46 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+No voice-format or worklet protocol changes. The internal render-Worker start message gains a `dither` field. API addition: opt-in WAV dither (below). Rendering only changes by rounding: on a mixed 35-preset render with edits and releases, under 0.1% of Float32 output samples differ from v1.12.0, by at most 3e-8.
+
+### WAV export dither
+
+- `encodeWav`, `createWavEncoder` and `renderSequenceInWorker` accept `dither: true` (default false).
+  - It adds deterministic TPDF dither before rounding to PCM16/PCM24: the difference of two xorshift32 uniforms, ±1 LSB triangular, with a fixed seed per encoder.
+  - Quiet passages, fades and reverb tails keep sub-LSB detail as a steady noise floor instead of truncation distortion, and digital silence becomes that noise.
+  - In tests, a 0.4 LSB sine encodes to silence without dither and to an unbiased 0.4 LSB average with it.
+  - Full scale is clamped, never wrapped.
+  - Streamed chunks continue one sequence, so they are byte-identical to full-buffer and Worker output, and a rejected chunk does not advance it.
+  - It is rejected for Float32. Undithered output is unchanged.
+
+### Faster rendering
+
+- Operator phases, increments and phase modulation are kept in half-turns, so the new deterministic `sinPi` (sin(π·u), same degree-11 polynomial with π folded into its coefficients, |error| ≤ 1.4e-11) reduces phases with two additions and no multiply by π. `fastSin(x)` is `sinPi(x/π)`. Both `sinPi` and `fastExp2` evaluate their polynomials in Estrin form, roughly halving the dependent multiply-add chain on feedback, LFO and pitch paths.
+- The sine operator kernels use module-local constants and a local copy of the polynomial: optimized code otherwise re-checks imported bindings on every operator evaluation.
+- Envelope segments carry their geometric gain from frame to frame (re-anchored to the exact dB rule every 64 frames) and skip per-operator reclassification while a frame is known to stay inside the same attack, decay or release segment.
+- A voice whose operator gains are all zero for a frame (for example a sustain-zero one-shot that was never released) only advances its phases, noise clocks and feedback history instead of evaluating oscillators; its output is still exactly zero and a later ADSR edit resumes bit-identically.
+- Voice LFO settings and per-operator targets are snapshotted at note-on into fixed numeric fields, so mixed banks with differently shaped `lfo` objects no longer make per-frame reads polymorphic.
+- The decimator takes one output frame of oversampled inputs per call; the generic waveform path skips operators with zero static level (their phase still advances and is still checked). Each note caches its all-sine frame function and pitch envelope, and the per-frame PM step and AM folding are unrolled.
+- Voices that combine sine with other periodic waveforms, but no noise, now take per-algorithm frames when their operator levels are static, like all-sine voices. Each operator has its own waveform call site, so the JIT inlines only the shapes a voice uses. All-sine voices keep their own frames. Measured against the previous step: 1.2–1.5× for 8 voices with two non-sine operators, across all seven shapes. Output is bit-identical to the generic path; a test now checks this for all eight algorithms, using a silent noise operator to force the generic loop. The old identity test compared the fast path against itself.
+- Held and centered voices now render without per-frame heap allocation. V8 boxes a double that crosses a call it did not inline, and a merge with such a result boxes every sample that flows through it, even while that branch never runs. Before this change, eight held voices at 48 kHz produced about 7.5 MB/s of short-lived numbers, a 16-voice bank cycling through every preset about 17 MB/s, and eight voices with a square operator about 92 MB/s. All of these meant frequent young-generation GCs on the audio thread.
+  - The decimator stores each output in its state, and `render` reads it from there.
+  - `renderVoice` returns a status flag.
+  - The DC blocker, steal fades and pitch-envelope frames no longer pass or merge per-frame doubles across calls.
+  - The generic waveform path scales sine and non-sine oscillators in separate branches, and the waveform dispatcher types every case as a number. Non-sine waveform voices measured up to about 10% faster.
+  - Exact envelope evaluation (64-frame re-anchoring, segment entry and boundary substeps) goes through `storeGain`, which takes no doubles and returns none. 32 voices retriggering every block previously allocated about 3.4 MB/s there.
+  - Waveform voices can still allocate when the JIT's inlining budget leaves a shape or the LFO's `fastExp2` out of line: eight voices with one square operator and vibrato measured about 48 MB/s in their frames.
+  - Output is bit-identical.
+- Measured on Apple M5 / Node 26 against v1.12.0 (best of seven interleaved CPU-time runs, 48 kHz, 1 s per case):
+  - `standard` 1 voice 1.63×; 8 held voices 1.62×; 8 steady voices 1.69×; attack/decay 1.85×; 32 voices 1.54×.
+  - `high` 8 voices 1.56×; `eco` 8 voices 1.52×.
+  - Pitch envelope 1.52×; per-operator LFO targets 1.78×.
+  - Square operator 2.08×, and other non-sine shapes 1.6–2.0×.
+  - A 16-voice mixed all-sine bank 2.04×.
+  - A 16-voice run cycling through all 35 bundled presets with releases measured about 1.6×, and retriggered noise hi-hats about 1.65×.
+  - These are single-machine Node results, not browser AudioWorklet or device measurements.
+
 ## v1.12.0
 
 Package version 1.12.0, a GitHub release (not on npm). No voice-format (still v7) or worklet message-protocol changes. API additions: optional `saturation` (`'tanh'` default, `'soft-knee'`) and `dcBlock` settings for `Synth`, `OPM` (`opm.saturation`, `opm.dcBlock`), `renderNote`, sequence/Worker rendering and score-project settings. Behavior changes: half-band FIR decimation with post-mix filtering, polyBLEP/polyBLAMP operator shapes, released notes end once their audible carriers are silent, and `lfo.delay` fades depth in over 20 ms. Measured on Apple M5 / Node 26 against v1.11.1 (best of five interleaved CPU-time runs, 48 kHz, 2 s per case): `standard` 8 held voices 1.51×, 32 voices 1.89×, `high` 8 voices 1.73×, `eco` 8 voices 1.39×, attack/decay 1.41×, pitch envelopes 2.10×, per-operator LFO targets 1.93×, square operator 1.36×, noise hi-hat 2.11×, 16-voice mixed bundled presets 1.64×; a single held voice is unchanged within noise. Security: read-only scoped static reviews of the `src/core` and option-intake changes found no evidence-backed issue (see [SECURITY.md](./SECURITY.md#4-review-record)). Physical-device, MIDI-hardware and human-listening acceptance remain unverified.

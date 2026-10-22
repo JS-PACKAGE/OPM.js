@@ -584,7 +584,9 @@ if (process.argv[2]) {
 
 checkout 匯入改為 `./dist/core/index.js`、`./dist/voices/brass.js` 與 `./dist/voices/dx7.js`。`encodeWav({left,right?,sampleRate,format='pcm16'})` 回傳小端序 RIFF 位元組，format 可為 pcm16／pcm24／float32；省略 right 為單聲道。所有格式的 Float32Array 樣本須有限且在 −1–1，超界拒絕而非削波；立體聲長度須相同。取樣率整數 8000–192000，上限 4,000,000 影格。只傳這些自有資料欄位：整個 renderNote 結果有額外欄位，會被拒絕。編碼不會自動寫檔；短預覽可使用有明確記憶體預算的 Blob，長檔案須直接寫 sink。
 
-增量 `createWavEncoder({sampleRate,channels:1|2,format,totalFrames})` 由 `opm.js/core` 匯出：先寫一次 `header()`，每次 `encode({left,right?})` 消費 1–65536 影格並回傳有界位元組，最後寫 `finalize()`（精確影格數與 RIFF padding）。它不保留完整 PCM／輸出，不受完整 buffer 的四百萬影格限制；仍受 RIFF32 大小與 24 小時加 release 預算限制。
+增量 `createWavEncoder({sampleRate,channels:1|2,format,totalFrames,dither?})` 由 `opm.js/core` 匯出：先寫一次 `header()`，每次 `encode({left,right?})` 消費 1–65536 影格並回傳有界位元組，最後寫 `finalize()`（精確影格數與 RIFF padding）。它不保留完整 PCM／輸出，不受完整 buffer 的四百萬影格限制；仍受 RIFF32 大小與 24 小時加 release 預算限制。
+
+`encodeWav`、`createWavEncoder` 與 `renderSequenceInWorker` 都接受 `dither: true`：在捨入成 PCM16／PCM24 前加入可重現的 TPDF dither（±1 LSB 三角分佈雜訊）。小聲段落、淡出與殘響尾巴低於 1 LSB 的細節會保留成穩定的底噪，而不是截斷失真；代價是數位靜音也會變成這層底噪。預設關閉，float32 會拒絕；分塊編碼延續同一個雜訊序列，所以串流與整段編碼的位元組相同。
 
 瀏覽器長檔案用 `renderSequenceInWorker(score,{sampleRate,chunkFrames,quality,format,sink,signal,onProgress})`，sink 提供 `write(bytes)` 與可選 close／abort，write 可回傳 Promise 施加 backpressure；最多一塊編碼資料未確認。progress 提供 frames／totalFrames／bytesWritten／errors，結果為 capacity／format／bytesWritten／diagnostics。AbortSignal 取消立即終止 Worker 並拒絕，不等待卡住的 write／abort；sink 負責回滾／失效化未完成寫入。此 helper 僅限瀏覽器，純核心／Node 離線工具仍可用。可指定同源靜態 workerUrl，預設為樹內 `worker/render.js`。增量 WAV 契約與可執行的 Worker file sink／取消配方見[宿主整合](./host-integration.md)，長 PCM 消費配方見[串流樂譜](./streaming-sequences.md)。
 

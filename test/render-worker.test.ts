@@ -45,16 +45,17 @@ test('static render pipeline, real worker backpressure and cancellation boundari
   });
   try {
     await t.test('all formats write complete chunk-independent audio and close once', async () => {
-      for (const format of ['pcm16', 'pcm24', 'float32'] as const) {
+      const cases = [['pcm16', false], ['pcm16', true], ['pcm24', false], ['pcm24', true], ['float32', false]] as const;
+      for (const [format, dither] of cases) {
         const parts: Uint8Array[] = [];
         const progress: WorkerRenderProgress[] = [];
         let closed = 0;
-        const result = await renderSequenceInWorker(score, { ...config, format, sink: { write(bytes) { parts.push(bytes); }, close() { closed++; }, abort() { assert.fail('successful render aborted'); } }, onProgress(value) { progress.push(value); } });
+        const result = await renderSequenceInWorker(score, { ...config, format, dither, sink: { write(bytes) { parts.push(bytes); }, close() { closed++; }, abort() { assert.fail('successful render aborted'); } }, onProgress(value) { progress.push(value); } });
         const bytes = new Uint8Array(result.bytesWritten);
         let offset = 0;
         for (const part of parts) { bytes.set(part, offset); offset += part.byteLength; }
         const rendered = renderSequence(score, { sampleRate: 8000 });
-        assert.deepEqual(bytes, encodeWav({ left: rendered.left, right: rendered.right, sampleRate: 8000, format }));
+        assert.deepEqual(bytes, encodeWav({ left: rendered.left, right: rendered.right, sampleRate: 8000, format, dither }));
         assert.equal(closed, 1);
         assert.equal(result.diagnostics.renderedFrames, result.capacity.frames);
         assert.equal(progress.at(-1)!.frames, result.capacity.frames);

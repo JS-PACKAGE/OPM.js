@@ -1,15 +1,20 @@
 export type WavFormat = 'pcm16' | 'pcm24' | 'float32';
+/** `dither: true` adds deterministic TPDF dither (±1 LSB triangular noise) before
+ * rounding to `pcm16`/`pcm24`, trading truncation distortion in quiet passages and
+ * fades for a constant noise floor; digital silence becomes that noise. */
 export interface WavOptions {
     left: Float32Array;
     right?: Float32Array;
     sampleRate: number;
     format?: WavFormat;
+    dither?: boolean;
 }
 export interface WavEncoderOptions {
     sampleRate: number;
     channels: 1 | 2;
     format?: WavFormat;
     totalFrames: number;
+    dither?: boolean;
 }
 export interface WavChunk {
     left: Float32Array;

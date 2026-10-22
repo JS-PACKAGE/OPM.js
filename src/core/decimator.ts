@@ -27,11 +27,12 @@ const PRE2 = [P1, P2, P3, P4];
 const Q1 = 0.29440468859312763, Q2 = -0.05103558374381977, Q3 = 0.006633361103115076;
 const PRE4 = [Q1, Q2, Q3];
 
-// State: [input counter, ring write position per later stage (3 slots), the
-// current frame's oversampled inputs (8 slots), then each stage's doubled ring
-// of N samples]. Writing every input at p and p+N keeps the newest N inputs
-// contiguous, so taps are read without wrapping.
-const HEADER = 4, FRAME = HEADER, RINGS = FRAME + 8;
+// State: [ring write position per stage (3 slots), the last output, then each
+// stage's doubled ring of N samples]. Writing every input at p and p+N keeps the
+// newest N inputs contiguous, so taps are read without wrapping.
+/** Index of the state slot holding the last decimated sample. */
+export const DECIMATOR_OUTPUT = 3;
+const OUTPUT = DECIMATOR_OUTPUT, HEADER = 4, RINGS = HEADER;
 const ringSize = (taps: readonly number[]) => 2 * (4 * taps.length - 1);
 // Sized for the deepest (high) cascade; shallower profiles use a prefix.
 export const DECIMATOR_STATE_SIZE = RINGS + ringSize(PRE4) + ringSize(PRE2) + ringSize(FINAL);
@@ -42,7 +43,7 @@ export function qualityOversample(quality: QualityProfile): number {
 }
 
 // Describes the cascade, input stage first: [oversampling factor, then per
-// stage: unique tap count M, g_1..g_M]. decimateSample dispatches on the
+// stage: unique tap count M, g_1..g_M]. decimateFrame dispatches on the
 // factor and uses the same g_k through its unrolled kernels.
 export function createDecimatorCoefficients(sampleRate: number, quality: QualityProfile = 'standard'): Float64Array {
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new RangeError('sampleRate must be positive and finite');
@@ -63,28 +64,27 @@ export function createDecimatorCoefficients(sampleRate: number, quality: Quality
 const STANDARD_FINAL = RINGS + ringSize(PRE2);
 const HIGH_PRE2 = RINGS + ringSize(PRE4), HIGH_FINAL = HIGH_PRE2 + ringSize(PRE2);
 
-// Frame kernels are written out by hand: the synth's voice loop is too large
-// for the JIT to inline helper calls here, so each profile runs as one call
-// with integer ring positions. s[c] is the centre of an oldest-first window.
-function ecoFrame(s: Float64Array): number {
-  let p = s[1] | 0;
+// Frame kernels are written out by hand with integer ring positions. s[c] is
+// the centre of an oldest-first window; x holds the frame's inputs.
+function ecoFrame(x: Float64Array, s: Float64Array): void {
+  let p = s[0] | 0;
   for (let k = 0; k < 2; k++) {
-    const x = s[FRAME + k];
-    s[RINGS + p] = x; s[RINGS + p + 35] = x;
+    const v = x[k];
+    s[RINGS + p] = v; s[RINGS + p + 35] = v;
     p = p === 34 ? 0 : p + 1;
   }
-  s[1] = p;
+  s[0] = p;
   const c = RINGS + p + 17;
-  return 0.5 * s[c] + E1 * (s[c - 1] + s[c + 1]) + E2 * (s[c - 3] + s[c + 3]) + E3 * (s[c - 5] + s[c + 5])
+  s[OUTPUT] = 0.5 * s[c] + E1 * (s[c - 1] + s[c + 1]) + E2 * (s[c - 3] + s[c + 3]) + E3 * (s[c - 5] + s[c + 5])
     + E4 * (s[c - 7] + s[c + 7]) + E5 * (s[c - 9] + s[c + 9]) + E6 * (s[c - 11] + s[c + 11])
     + E7 * (s[c - 13] + s[c + 13]) + E8 * (s[c - 15] + s[c + 15]) + E9 * (s[c - 17] + s[c + 17]);
 }
 
-function standardFrame(s: Float64Array): number {
-  let p = s[1] | 0, q = s[2] | 0;
+function standardFrame(x: Float64Array, s: Float64Array): void {
+  let p = s[0] | 0, q = s[1] | 0;
   for (let k = 0; k < 4; k++) {
-    const x = s[FRAME + k];
-    s[RINGS + p] = x; s[RINGS + p + 15] = x;
+    const v = x[k];
+    s[RINGS + p] = v; s[RINGS + p + 15] = v;
     p = p === 14 ? 0 : p + 1;
     if ((k & 1) === 0) continue;
     const c = RINGS + p + 7;
@@ -93,19 +93,19 @@ function standardFrame(s: Float64Array): number {
     s[STANDARD_FINAL + q] = y; s[STANDARD_FINAL + q + 47] = y;
     q = q === 46 ? 0 : q + 1;
   }
-  s[1] = p; s[2] = q;
+  s[0] = p; s[1] = q;
   const c = STANDARD_FINAL + q + 23;
-  return 0.5 * s[c] + F1 * (s[c - 1] + s[c + 1]) + F2 * (s[c - 3] + s[c + 3]) + F3 * (s[c - 5] + s[c + 5])
+  s[OUTPUT] = 0.5 * s[c] + F1 * (s[c - 1] + s[c + 1]) + F2 * (s[c - 3] + s[c + 3]) + F3 * (s[c - 5] + s[c + 5])
     + F4 * (s[c - 7] + s[c + 7]) + F5 * (s[c - 9] + s[c + 9]) + F6 * (s[c - 11] + s[c + 11])
     + F7 * (s[c - 13] + s[c + 13]) + F8 * (s[c - 15] + s[c + 15]) + F9 * (s[c - 17] + s[c + 17])
     + F10 * (s[c - 19] + s[c + 19]) + F11 * (s[c - 21] + s[c + 21]) + F12 * (s[c - 23] + s[c + 23]);
 }
 
-function highFrame(s: Float64Array): number {
-  let p = s[1] | 0, q = s[2] | 0, r = s[3] | 0;
+function highFrame(x: Float64Array, s: Float64Array): void {
+  let p = s[0] | 0, q = s[1] | 0, r = s[2] | 0;
   for (let k = 0; k < 8; k++) {
-    const x = s[FRAME + k];
-    s[RINGS + p] = x; s[RINGS + p + 11] = x;
+    const v = x[k];
+    s[RINGS + p] = v; s[RINGS + p + 11] = v;
     p = p === 10 ? 0 : p + 1;
     if ((k & 1) === 0) continue;
     const c = RINGS + p + 5;
@@ -119,31 +119,29 @@ function highFrame(s: Float64Array): number {
     s[HIGH_FINAL + r] = z; s[HIGH_FINAL + r + 47] = z;
     r = r === 46 ? 0 : r + 1;
   }
-  s[1] = p; s[2] = q; s[3] = r;
+  s[0] = p; s[1] = q; s[2] = r;
   const c = HIGH_FINAL + r + 23;
-  return 0.5 * s[c] + F1 * (s[c - 1] + s[c + 1]) + F2 * (s[c - 3] + s[c + 3]) + F3 * (s[c - 5] + s[c + 5])
+  s[OUTPUT] = 0.5 * s[c] + F1 * (s[c - 1] + s[c + 1]) + F2 * (s[c - 3] + s[c + 3]) + F3 * (s[c - 5] + s[c + 5])
     + F4 * (s[c - 7] + s[c + 7]) + F5 * (s[c - 9] + s[c + 9]) + F6 * (s[c - 11] + s[c + 11])
     + F7 * (s[c - 13] + s[c + 13]) + F8 * (s[c - 15] + s[c + 15]) + F9 * (s[c - 17] + s[c + 17])
     + F10 * (s[c - 19] + s[c + 19]) + F11 * (s[c - 21] + s[c + 21]) + F12 * (s[c - 23] + s[c + 23]);
 }
 
-// Called once per oversampled input. Inputs are only buffered until the last
-// one of an output frame, which runs the whole cascade and returns the
-// decimated sample; other calls return 0. Keeping this path tiny lets callers
-// inline it. Admission resets all entries; release must drain all entries,
-// not retire at an output crossing.
-export function decimateSample(input: number, state: Float64Array, coefficients: Float64Array): number {
-  const counter = state[0], factor = coefficients[0];
-  state[FRAME + counter] = input;
-  if (counter + 1 < factor) {
-    state[0] = counter + 1;
-    return 0;
-  }
-  state[0] = 0;
-  return factor === 4 ? standardFrame(state) : factor === 2 ? ecoFrame(state) : highFrame(state);
+// Decimates one output frame from its `factor` oversampled inputs (oldest first),
+// running the whole cascade once, and stores it in state[DECIMATOR_OUTPUT].
+// Admission resets all entries; release must drain all entries, not retire at an
+// output crossing. Nothing is returned: callers read the output with a typed-array
+// load, because V8 boxes a double returned from a call it did not inline, and a
+// merge with such a result would box every frame's sample.
+export function decimateFrame(inputs: Float64Array, state: Float64Array, coefficients: Float64Array): void {
+  const factor = coefficients[0];
+  if (factor === 4) standardFrame(inputs, state);
+  else if (factor === 2) ecoFrame(inputs, state);
+  else highFrame(inputs, state);
 }
 
-/** Largest buffered sample magnitude, excluding counter/position bookkeeping. */
+/** Largest buffered sample magnitude, excluding ring positions and the derived
+ * DECIMATOR_OUTPUT slot (a function of the history, overwritten every frame). */
 export function decimatorPeak(state: Float64Array): number {
   let peak = 0;
   for (let index = HEADER; index < state.length; index++) peak = Math.max(peak, Math.abs(state[index]));

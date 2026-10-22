@@ -130,20 +130,34 @@ test('fastSin is bounded, accurate and odd across reduction boundaries', () => {
   for (const bad of [NaN, Infinity, -Infinity]) assert.ok(Number.isNaN(fastSin(bad)));
 });
 
-test('all-sine fast path renders identically to the generic path', () => {
-  const base: VoiceInput = { ...tone(), algorithm: 4, feedback: 3, modIndex: 4,
-    lfo: { rate: 5, amDepth: 0.4, pmDepth: 20, waveform: 'sine' },
-    ops: [0, 1, 2, 3].map(i => ({ ratio: i + 1, level: 0.5, detune: i, adsr: { a: 0.01, d: 0.1, s: 0.6, r: 0.05 } })) as unknown as Voice['ops'] };
-  // Explicit unit AM targets select the generic loop with mathematically identical gains.
-  const generic: VoiceInput = { ...base, lfo: { rate: 5, amDepth: 0.4, pmDepth: 20, waveform: 'sine', amTargets: [1, 1, 1, 1] } };
+test('sine and waveform frames render identically to the generic path', () => {
+  const lfo = { rate: 5, amDepth: 0.4, pmDepth: 20, waveform: 'sine' } as const;
   const render = (voice: VoiceInput): Float32Array => {
     const synth = new Synth(48000, 4);
     synth.noteOn(voice, 57);
     return audio(synth, 4800);
   };
-  const fast = render(base), slow = render(generic);
-  assert.ok(energy(fast) > 1e-4);
-  assert.deepEqual(fast, slow);
+  const shapes: OperatorWaveform[][] = [
+    ['sine', 'sine', 'sine', 'sine'], ['sine', 'square', 'sine', 'saw'],
+    ['half', 'abs', 'quarter', 'camel'], ['alternating', 'sine', 'square', 'sine'],
+  ];
+  for (const waveforms of shapes) {
+    for (const algorithm of [0, 1, 2, 3, 4, 5, 6, 7] as const) {
+      // One zero-level operator outputs exact zero on both paths; making it noise
+      // selects the generic loop without changing any other operator's arithmetic.
+      // Rotating it over operators 0..2 leaves every operator audible in some run
+      // (operator 3 is a carrier in every algorithm).
+      for (const silent of [0, 1, 2]) {
+        const voice = (generic: boolean): VoiceInput => ({ ...tone(), algorithm, feedback: 3, modIndex: 4, lfo,
+          ops: waveforms.map((waveform, i) => ({ ratio: i + 1, level: i === silent ? 0 : 0.5, detune: i,
+            waveform: generic && i === silent ? 'noise' : waveform, noiseRate: 8000,
+            adsr: { a: 0.01, d: 0.1, s: 0.6, r: 0.05 } })) as unknown as Voice['ops'] });
+        const fast = render(voice(false)), slow = render(voice(true));
+        assert.ok(energy(fast) > 1e-4);
+        assert.deepEqual(fast, slow, `algorithm ${algorithm}, ${waveforms.join('/')}, silent ${silent}`);
+      }
+    }
+  }
 });
 
 test('legacy versions retain restrictions and canonicalize to v7 with identical sine samples', () => {

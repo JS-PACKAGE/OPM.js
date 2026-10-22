@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, validateNoteControls } from '../src/core/synth.js';
 import type { NoteControls } from '../src/core/synth.js';
-import { DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateSample, decimatorPeak } from '../src/core/decimator.js';
+import { DECIMATOR_OUTPUT, DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateFrame, decimatorPeak } from '../src/core/decimator.js';
 import type { QualityProfile } from '../src/core/decimator.js';
 import type { ADSR, Voice } from '../src/voices/schema.js';
 import { filterByFourier, filterResponse, halfBandStages } from './decimator-reference.js';
@@ -45,10 +45,12 @@ test('profile decimators meet the direct half-band transfer with a flat passband
     for (const fraction of [0.1, 0.25, 0.4, 0.625, 0.9]) {
       const hz = fraction * sampleRate, folded = hz - Math.round(hz / sampleRate) * sampleRate;
       const coefficients = createDecimatorCoefficients(sampleRate, quality), state = new Float64Array(DECIMATOR_STATE_SIZE);
+      const inputs = new Float64Array(factor);
       let real = 0, imaginary = 0;
       for (let frame = 0; frame < sampleRate + 2048; frame++) {
-        let output = 0;
-        for (let sub = 0; sub < factor; sub++) output = decimateSample(Math.sin(2 * Math.PI * hz * (frame + sub / factor) / sampleRate), state, coefficients);
+        for (let sub = 0; sub < factor; sub++) inputs[sub] = Math.sin(2 * Math.PI * hz * (frame + sub / factor) / sampleRate);
+        decimateFrame(inputs, state, coefficients);
+        const output = state[DECIMATOR_OUTPUT];
         if (frame >= 2048) {
           const phase = 2 * Math.PI * folded * (frame - 2048) / sampleRate;
           real += output * Math.cos(phase); imaginary += output * Math.sin(phase);
@@ -59,7 +61,8 @@ test('profile decimators meet the direct half-band transfer with a flat passband
       assert.ok(Math.abs(measured - expected) < 2e-9, `${quality} at ${fraction} Fs`);
       if (fraction <= 0.4) assert.ok(Math.abs(20 * Math.log10(measured)) < 0.01, 'passband is flat to .40 Fs');
       else assert.ok(measured < (quality === 'eco' ? 10 ** (-60 / 20) : 10 ** (-80 / 20)), 'folded products below .40 Fs are rejected');
-      for (let sample = 0; sample < 4096; sample++) decimateSample(0, state, coefficients);
+      inputs.fill(0);
+      for (let frame = 0; frame < 4096 / factor; frame++) decimateFrame(inputs, state, coefficients);
       assert.equal(decimatorPeak(state), 0, 'entire finite filter history drains to exact zero');
     }
   }

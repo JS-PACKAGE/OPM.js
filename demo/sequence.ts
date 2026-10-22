@@ -247,8 +247,9 @@ bind('render', () => {
     mixGain: input('mix-gain').valueAsNumber, tuning: tuning(),
     stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest',
     quality: select('quality').value as QualityProfile });
+  const format = select('wav-format').value as WavFormat;
   const bytes = encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate,
-    format: select('wav-format').value as WavFormat });
+    format, dither: input('wav-dither').checked && format !== 'float32' });
   wavURL = URL.createObjectURL(new Blob([bytes as Uint8Array<ArrayBuffer>], { type: 'audio/wav' }));
   download.href = wavURL;
   download.download = 'opm-sequence.wav';
@@ -362,6 +363,7 @@ async function workerExport(toFile: boolean): Promise<void> {
     const result = await renderSequenceInWorker(toFile ? longScore : score, {
       voices: new Map([['lead', patch()]]), sampleRate: toFile ? 96000 : 48000, chunkFrames: 4096,
       quality: select('quality').value as QualityProfile, format: select('wav-format').value as WavFormat,
+      dither: input('wav-dither').checked && select('wav-format').value !== 'float32',
       signal: controller.signal, maxFrames: toFile ? 8_000_000 : 48000 * 12,
       sink: file ? { write: bytes => file!.write(bytes as Uint8Array<ArrayBuffer>),
         close: async () => { await file!.close(); fileSettled = true; }, abort: abortFile } : {

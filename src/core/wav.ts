@@ -1,8 +1,11 @@
 import { sequenceOwnData } from './sequence.js';
 
 export type WavFormat = 'pcm16' | 'pcm24' | 'float32';
-export interface WavOptions { left: Float32Array; right?: Float32Array; sampleRate: number; format?: WavFormat }
-export interface WavEncoderOptions { sampleRate: number; channels: 1 | 2; format?: WavFormat; totalFrames: number }
+/** `dither: true` adds deterministic TPDF dither (±1 LSB triangular noise) before
+ * rounding to `pcm16`/`pcm24`, trading truncation distortion in quiet passages and
+ * fades for a constant noise floor; digital silence becomes that noise. */
+export interface WavOptions { left: Float32Array; right?: Float32Array; sampleRate: number; format?: WavFormat; dither?: boolean }
+export interface WavEncoderOptions { sampleRate: number; channels: 1 | 2; format?: WavFormat; totalFrames: number; dither?: boolean }
 export interface WavChunk { left: Float32Array; right?: Float32Array }
 export interface WavEncoder {
   readonly totalFrames: number;
@@ -24,14 +27,17 @@ const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
 const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
 
-interface Layout { sampleRate: number; channels: 1 | 2; format: WavFormat; frames: number; sampleBytes: number; blockAlign: number; dataBytes: number; headerBytes: number; padding: number; byteLength: number }
+interface Layout { sampleRate: number; channels: 1 | 2; format: WavFormat; dither: boolean; frames: number; sampleBytes: number; blockAlign: number; dataBytes: number; headerBytes: number; padding: number; byteLength: number }
 function layout(input: unknown): Layout {
-  const data = sequenceOwnData(input, ['sampleRate', 'channels', 'format', 'totalFrames'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
+  const data = sequenceOwnData(input, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const { sampleRate, channels, totalFrames } = data;
   const format = data.format === undefined ? 'pcm16' : data.format;
+  const dither = data.dither === undefined ? false : data.dither;
   if (!Number.isInteger(sampleRate) || (sampleRate as number) < 8000 || (sampleRate as number) > 192000) throw new RangeError('sampleRate must be an integer in 8000..192000');
   if (channels !== 1 && channels !== 2) throw new RangeError('channels must be1 or2');
   if (format !== 'pcm16' && format !== 'pcm24' && format !== 'float32') throw new RangeError('format must be pcm16, pcm24 or float32');
+  if (typeof dither !== 'boolean') throw new TypeError('dither must be a boolean');
+  if (dither && format === 'float32') throw new RangeError('dither requires pcm16 or pcm24');
   if (!Number.isSafeInteger(totalFrames) || (totalFrames as number) < 0 || (totalFrames as number) > Math.ceil((24 * 60 * 60 + 10.01) * (sampleRate as number))) throw new RangeError('totalFrames must be a safe bounded nonnegative integer');
   const sampleBytes = format === 'pcm16' ? 2 : format === 'pcm24' ? 3 : 4;
   const blockAlign = channels * sampleBytes;
@@ -41,7 +47,7 @@ function layout(input: unknown): Layout {
   const padding = dataBytes & 1;
   const byteLength = headerBytes + dataBytes + padding;
   if (byteLength - 8 > 0xffffffff) throw new RangeError('WAV exceeds RIFF32 size');
-  return { sampleRate: sampleRate as number, channels, format, frames: totalFrames as number, sampleBytes, blockAlign, dataBytes, headerBytes, padding, byteLength };
+  return { sampleRate: sampleRate as number, channels, format, dither, frames: totalFrames as number, sampleBytes, blockAlign, dataBytes, headerBytes, padding, byteLength };
 }
 function headerBytes(config: Layout): Uint8Array {
   const bytes = new Uint8Array(config.headerBytes);
@@ -67,19 +73,33 @@ function channels(input: unknown, expected?: 1 | 2): { left: Float32Array; right
   if (expected !== undefined && (right === undefined ? 1 : 2) !== expected) throw new RangeError('WAV chunk channel count must match encoder');
   return { left: left as Float32Array, right: right as Float32Array | undefined, frames };
 }
+// TPDF dither from xorshift32 (Marsaglia): fixed seed per encoder, so chunked and
+// full-buffer encodings of the same audio are byte-identical and reproducible.
+const DITHER_SEED = 0x9e3779b9;
+// The difference of two independent uniform [0, 1) draws is triangular on (−1, 1) LSB.
+function tpdf(state: Uint32Array): number {
+  let s = state[0];
+  s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+  const a = s >>> 0;
+  s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+  state[0] = s;
+  return (a - (s >>> 0)) * 2 ** -32;
+}
 // Capture each native sample once, including shared buffers; no metadata getters run.
-function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout): void {
+function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, dither: Uint32Array | null): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   for (let frame = 0; frame < frames; frame++) {
     for (let channel = 0; channel < config.channels; channel++, offset += config.sampleBytes) {
       const value = channel === 0 ? left[frame] : right![frame];
       if (!Number.isFinite(value) || value < -1 || value > 1) throw new RangeError('WAV samples must be finite and in -1..1');
-      if (config.format === 'float32') view.setFloat32(offset, value, true);
-      else if (config.format === 'pcm16') view.setInt16(offset, Math.round(value * (value < 0 ? 32768 : 32767)), true);
-      else {
-        const sample = Math.round(value * (value < 0 ? 8388608 : 8388607));
-        bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255; bytes[offset + 2] = (sample >> 16) & 255;
-      }
+      if (config.format === 'float32') { view.setFloat32(offset, value, true); continue; }
+      const pcm16 = config.format === 'pcm16';
+      const scaled = value * (value < 0 ? (pcm16 ? 32768 : 8388608) : (pcm16 ? 32767 : 8388607));
+      // Without dither the rounded scaled value is always in range; dither may cross full scale.
+      const sample = dither === null ? Math.round(scaled) :
+        Math.min(pcm16 ? 32767 : 8388607, Math.max(pcm16 ? -32768 : -8388608, Math.round(scaled + tpdf(dither))));
+      if (pcm16) view.setInt16(offset, sample, true);
+      else { bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255; bytes[offset + 2] = (sample >> 16) & 255; }
     }
   }
 }
@@ -90,6 +110,7 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   let emittedHeader = false;
   let framesEncoded = 0;
   let finished = false;
+  const dither = config.dither ? Uint32Array.of(DITHER_SEED) : null;
   return Object.freeze({
     totalFrames: config.frames, byteLength: config.byteLength,
     get framesEncoded() { return framesEncoded; }, get finished() { return finished; },
@@ -103,7 +124,10 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
       if (chunk.frames < 1 || chunk.frames > MAX_CHUNK_FRAMES) throw new RangeError('WAV chunk must contain1..65536 frames');
       if (framesEncoded + chunk.frames > config.frames) throw new RangeError('WAV frame overrun');
       const bytes = new Uint8Array(chunk.frames * config.blockAlign);
-      encodeInto(bytes, 0, chunk.left, chunk.right, chunk.frames, config);
+      // Dither a copy of the state: a chunk rejected midway must not shift later noise.
+      const next = dither === null ? null : Uint32Array.of(dither[0]);
+      encodeInto(bytes, 0, chunk.left, chunk.right, chunk.frames, config, next);
+      if (next !== null) dither![0] = next[0];
       framesEncoded += chunk.frames;
       return bytes;
     },
@@ -117,12 +141,12 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
 
 /** Full-buffer WAV convenience export; defaultPCM16, at most4000000 frames. */
 export function encodeWav(input: WavOptions): Uint8Array {
-  const data = sequenceOwnData(input, ['left', 'right', 'sampleRate', 'format'], ['left', 'sampleRate'], 'WAV input');
+  const data = sequenceOwnData(input, ['left', 'right', 'sampleRate', 'format', 'dither'], ['left', 'sampleRate'], 'WAV input');
   const chunk = channels({ left: data.left, right: data.right });
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
-  const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, totalFrames: chunk.frames });
+  const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const bytes = new Uint8Array(config.byteLength);
   bytes.set(headerBytes(config));
-  encodeInto(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config);
+  encodeInto(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? Uint32Array.of(DITHER_SEED) : null);
   return bytes;
 }

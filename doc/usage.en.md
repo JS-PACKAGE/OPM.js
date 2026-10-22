@@ -544,7 +544,9 @@ Checkout imports use `./dist/core/index.js`, `./dist/voices/brass.js`, and `./di
 
 ### Incremental WAV and browser Worker export
 
-`createWavEncoder({sampleRate,channels:1|2,format?,totalFrames})` emits `header()` once, accepts 1–65536 frames per `encode({left,right?})`, then requires exact frame accounting in `finalize()` (which emits any RIFF padding). It retains no PCM/output chunks. RIFF32 must remain below 4 GiB, with at most 24 hours plus release budget; there is no full-buffer 4-million-frame limit.
+`createWavEncoder({sampleRate,channels:1|2,format?,totalFrames,dither?})` emits `header()` once, accepts 1–65536 frames per `encode({left,right?})`, then requires exact frame accounting in `finalize()` (which emits any RIFF padding). It retains no PCM/output chunks. RIFF32 must remain below 4 GiB, with at most 24 hours plus release budget; there is no full-buffer 4-million-frame limit.
+
+`dither: true`, accepted by `encodeWav`, `createWavEncoder` and `renderSequenceInWorker`, adds deterministic TPDF dither (±1 LSB triangular noise) before rounding to PCM16/PCM24. Quiet passages, fades and reverb tails then keep their sub-LSB detail as a steady noise floor instead of truncation distortion, at the cost of turning digital silence into that noise. It is off by default, rejected for Float32, and continues one sequence across chunks, so streamed and full-buffer bytes match.
 
 For a small runnable encoder example in `opm-app`, save as `incremental.mjs` and run `node incremental.mjs`:
 

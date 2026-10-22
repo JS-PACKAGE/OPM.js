@@ -35,6 +35,8 @@ export interface WorkerRenderPhaseDiagnostics {
 }
 export interface WorkerRenderOptions extends ChunkedSequenceOptions {
   format?: WavFormat;
+  /** Deterministic TPDF dither for `pcm16`/`pcm24` output (default false); see `encodeWav`. */
+  dither?: boolean;
   sink: WavSink;
   onProgress?: (progress: WorkerRenderProgress) => void;
   /** Optional module-ready deadline only; integer milliseconds in 1..2147483647. */
@@ -53,7 +55,7 @@ export interface WorkerRenderResult {
   readonly diagnostics: Readonly<{ errors: number; processedEvents: number; renderedFrames: number; phases?: WorkerRenderPhaseDiagnostics }>;
 }
 /** @internal Static worker protocol: ready before start, one unacknowledged byte chunk. */
-export type RenderWorkerRequest = { type: 'start'; events: readonly SequenceEvent[]; options: ChunkedSequenceOptions; format: WavFormat } | { type: 'ack'; index: number };
+export type RenderWorkerRequest = { type: 'start'; events: readonly SequenceEvent[]; options: ChunkedSequenceOptions; format: WavFormat; dither: boolean } | { type: 'ack'; index: number };
 /** @internal */
 export type RenderWorkerResponse = { type: 'ready'; protocol: 1 }
   | { type: 'chunk'; index: number; bytes: Uint8Array; frames: number; errors: number; processedEvents: number }
@@ -64,7 +66,7 @@ const typedArrayByteLength = Object.getOwnPropertyDescriptor(Object.getPrototype
 
 /** Browser-only, backpressured offline rendering; importing this module allocates nothing. */
 export async function renderSequenceInWorker(events: readonly SequenceEvent[], options: WorkerRenderOptions): Promise<WorkerRenderResult> {
-  const data = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal', 'format', 'sink', 'onProgress', 'startupTimeoutMs', 'phaseDiagnostics', 'onPhase', 'workerUrl'], ['sink'], 'worker render options');
+  const data = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal', 'format', 'dither', 'sink', 'onProgress', 'startupTimeoutMs', 'phaseDiagnostics', 'onPhase', 'workerUrl'], ['sink'], 'worker render options');
   const sink = sequenceOwnData(data.sink, ['write', 'close', 'abort'], ['write'], 'WAV sink');
   for (const key of ['write', 'close', 'abort']) if (sink[key] !== undefined && typeof sink[key] !== 'function') throw new TypeError(`sink.${key} must be a function`);
   if (typeof sink.write !== 'function') throw new TypeError('sink.write must be a function');
@@ -90,7 +92,9 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
   const score = snapshot.events as unknown as readonly SequenceEvent[];
   const capacity = estimateSequenceCapacity(score, coreOptions);
   const format = (data.format === undefined ? 'pcm16' : data.format) as WavFormat;
-  const fileBytes = createWavEncoder({ sampleRate: capacity.sampleRate, channels: 2, format, totalFrames: capacity.frames }).byteLength;
+  // The encoder validates both; the Worker receives exactly the checked values.
+  const fileBytes = createWavEncoder({ sampleRate: capacity.sampleRate, channels: 2, format, totalFrames: capacity.frames, dither: data.dither as boolean | undefined }).byteLength;
+  const dither = data.dither === true;
   const page = typeof globalThis.location === 'object' ? new URL(globalThis.location.href) : null;
   if (!page || typeof Worker !== 'function') throw new Error('renderSequenceInWorker requires a browser with module Worker support');
   const loopback = page.hostname === 'localhost' || page.hostname.endsWith('.localhost') || page.hostname === '[::1]' || /^127(?:\.\d{1,3}){3}$/.test(page.hostname);
@@ -198,7 +202,7 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
           state = 'rendering';
           // Startup ends here, before score preparation or any synthesis in the Worker.
           setPhase('rendering');
-          if (!settled) worker!.postMessage({ type: 'start', events: score, options: coreOptions, format } satisfies RenderWorkerRequest);
+          if (!settled) worker!.postMessage({ type: 'start', events: score, options: coreOptions, format, dither } satisfies RenderWorkerRequest);
           return;
         }
         if (state !== 'rendering') throw new Error('Render Worker violated readiness or backpressure');

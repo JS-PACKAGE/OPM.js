@@ -45,6 +45,53 @@ for (const format of ['pcm16', 'pcm24', 'float32'] as const) test(`${format} chu
   }
 });
 
+const decode24 = (bytes: Uint8Array, offset: number): number => ((bytes[offset] | bytes[offset + 1] << 8 | bytes[offset + 2] << 16) << 8) >> 8;
+
+for (const format of ['pcm16', 'pcm24'] as const) test(`${format} TPDF dither is chunk-independent, unbiased and clamped`, () => {
+  const lsb = format === 'pcm16' ? 1 / 32767 : 1 / 8388607;
+  const read = (bytes: Uint8Array, i: number): number => format === 'pcm16' ? new DataView(bytes.buffer).getInt16(44 + 2 * i, true) : decode24(bytes, 44 + 3 * i);
+  // A 0.4 LSB sine rounds to digital silence; dither keeps it in the average.
+  const frames = 48000, left = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) left[i] = 0.4 * lsb * Math.sin(2 * Math.PI * 441 * i / 48000);
+  const plain = encodeWav({ left, sampleRate: 48000, format });
+  const dithered = encodeWav({ left, sampleRate: 48000, format, dither: true });
+  let plainMax = 0, correlation = 0, power = 0;
+  for (let i = 0; i < frames; i++) {
+    const reference = Math.sin(2 * Math.PI * 441 * i / 48000);
+    plainMax = Math.max(plainMax, Math.abs(read(plain, i)));
+    correlation += read(dithered, i) * reference;
+    power += reference * reference;
+    assert.ok(Math.abs(read(dithered, i)) <= 1, 'TPDF noise stays within ±1 LSB of a sub-LSB signal');
+  }
+  assert.equal(plainMax, 0, 'undithered sub-LSB audio truncates to silence');
+  // E[Q(x + d)] = x for TPDF d, so the recovered amplitude estimates 0.4 LSB.
+  assert.ok(Math.abs(correlation / power - 0.4) < 0.03, `recovered amplitude ${correlation / power}`);
+  // Streaming continues one dither sequence: byte-identical to full encoding.
+  // A chunk rejected midway (valid sample, then NaN) must not shift later noise.
+  const encoder = createWavEncoder({ sampleRate: 48000, channels: 1, format, totalFrames: frames, dither: true });
+  const parts = [encoder.header()];
+  assert.throws(() => encoder.encode({ left: Float32Array.of(0.5, Number.NaN) }), /finite/);
+  for (let start = 0; start < frames; start += 7000) parts.push(encoder.encode({ left: left.subarray(start, Math.min(frames, start + 7000)) }));
+  parts.push(encoder.finalize());
+  assert.deepEqual(join(parts), dithered);
+  assert.deepEqual(encodeWav({ left, sampleRate: 48000, format, dither: true }), dithered, 'deterministic');
+  // Full scale never wraps around.
+  const extremes = new Float32Array(4000).map((_, i) => i % 2 ? 1 : -1);
+  const clipped = encodeWav({ left: extremes, sampleRate: 48000, format, dither: true });
+  const top = format === 'pcm16' ? 32767 : 8388607;
+  for (let i = 0; i < extremes.length; i++) {
+    const value = read(clipped, i);
+    assert.ok(i % 2 ? value >= top - 1 && value <= top : value >= -top - 1 && value <= -top, `sample ${i} = ${value}`);
+  }
+});
+
+test('dither options validate', () => {
+  const left = Float32Array.of(0);
+  assert.throws(() => encodeWav({ left, sampleRate: 48000, format: 'float32', dither: true }), /dither requires pcm16 or pcm24/);
+  assert.throws(() => createWavEncoder({ sampleRate: 48000, channels: 1, totalFrames: 1, dither: 1 as unknown as boolean }), /dither must be a boolean/);
+  assert.deepEqual(encodeWav({ left, sampleRate: 48000, format: 'float32', dither: false }), encodeWav({ left, sampleRate: 48000, format: 'float32' }));
+});
+
 test('monoPCM24 pads RIFF but not the data chunk', () => {
   const encoder = createWavEncoder({ sampleRate: 8000, channels: 1, format: 'pcm24', totalFrames: 1 });
   const header = encoder.header();

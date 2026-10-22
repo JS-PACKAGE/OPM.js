@@ -30,7 +30,7 @@ For θ = phase + modulation and fractional turns `t = frac(θ / (2π))`, the per
 
 | Shape | Formula |
 | --- | --- |
-| sine | `sin(θ)` via the deterministic `fastSin` polynomial |
+| sine | `sin(θ)` via the deterministic `sinPi` polynomial |
 | half | `max(0, sin(θ))` |
 | abs | `abs(sin(θ))` |
 | quarter | `abs(sin(θ))` when `frac(θ/π) < 0.5`, otherwise zero |

@@ -34,6 +34,8 @@ export interface WorkerRenderPhaseDiagnostics {
 }
 export interface WorkerRenderOptions extends ChunkedSequenceOptions {
     format?: WavFormat;
+    /** Deterministic TPDF dither for `pcm16`/`pcm24` output (default false); see `encodeWav`. */
+    dither?: boolean;
     sink: WavSink;
     onProgress?: (progress: WorkerRenderProgress) => void;
     /** Optional module-ready deadline only; integer milliseconds in 1..2147483647. */

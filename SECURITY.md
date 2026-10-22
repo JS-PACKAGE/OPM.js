@@ -257,6 +257,26 @@ v1.11.1 review: SecFastSin approved a scoped static review of the `fastSin` poly
 
 v1.12.0 review: SecPortV112 approved a scoped static review (checklist C plus option intake) of the per-algorithm sine frames, steady-gain and settled-pitch caching, carrier-based retirement, LFO delay fade, `fastSin`/`fastExp2`, soft-knee saturation, the DC blocker and `saturation`/`dcBlock` intake across Synth, OPM, sequence, Worker and project settings, with no evidence-backed vulnerability. Its informational hardening items were applied (the DC blocker state resets on a non-finite mix; the `fastExp2` power-of-two table is built by exact doubling). Remaining low/info notes: the all-sine frames check modulator finiteness at frame end, so a transient non-finite modulator value behind zero downstream gains is not counted (no reachable trigger from validated finite envelopes; output and state are unaffected); `renderNote` destructures its options rather than reading own data (pre-existing; values are still validated by `readSynthOptions`); and OPM throws `RangeError` where the core throws `TypeError` for an invalid `saturation`, matching the existing `stealing` behavior. The reviewer ran no runtime gates; the integration owner ran the build, tests, typecheck, `sound-quality`, `voice-quality`, `npm run security -- --package-smoke` and a headless Chromium OfflineAudioContext smoke of the synth and effects worklets for every quality profile with both output stages.
 
+Unreleased performance review: SecPerfRound2 approved a scoped static checklist C review of half-turn phases and `sinPi`, Estrin `fastExp2`, the geometric envelope carry with segment-end and voice-level fast paths, the all-zero-gain silent frame, note-on LFO/kernel/pitch-envelope snapshots and the per-frame decimator API, with no evidence-backed vulnerability. Its hardening items were applied: the LFO waveform code is resolved before a voice slot is taken, and the silent frame also counts non-finite folded amplitudes. The reviewer ran no runtime gates; the integration owner ran tests, typecheck, build, `npm run security -- --package-smoke`, `npm run sound-quality`, bit-identity scripts against the previous step and a Chrome core/worklet/Worker smoke.
+
+Unreleased allocation follow-up: SecAllocReview approved a scoped static checklist C review of the 4-slot decimator header with `DECIMATOR_OUTPUT`, void `decimateFrame` and `dcBlockStep`, boolean `renderVoice` with an internal fade gain, `prepareGains`/`preparePitch` without per-frame double arguments, and per-branch generic operator values. All ring offsets stay within `DECIMATOR_STATE_SIZE` (150); non-finite voices and mixes are still counted as errors and silenced with state reset; fade gain and determinism are unchanged; no loops or allocations were added; and peak/settle/idle logic correctly excludes the derived output slot. Its comment suggestion was applied. A ring-layout assertion was not added because the per-quality bit-identity and impulse tests already exercise every ring. The later change in `periodicWaveform`, adding unary `+` to number-valued cases, is an identity on numbers. Its non-finite input guard is unchanged, and bit-identity scripts confirmed the output. The later `storeGain` wrapper writes `gainAt` at the same time expression (`elapsed / sampleRate`, plus `subTimes[sub]`) into the gain arrays prepareGains already wrote, at in-bounds indices; it adds no state, loops or validation paths. Bit-identity scripts confirmed the output.
+
+Unreleased waveform-frame review: SecWaveFrames approved a scoped static checklist C review of `waveFrame0`–`waveFrame7`. These are per-algorithm frames for noise-free voices that mix sine with other periodic shapes. The review also covered the `frameKernel` selection and rename.
+- Each frame keeps the sine frames' per-sample and end-of-frame finiteness checks, and writes state back only after they pass.
+- Waveform codes are written only at admission (0 selects sine frames, 1–7 wave frames, 8 the generic loop).
+- Per-frame work is fixed and allocation-free.
+- Topology and state updates match the generic loop, and the strengthened identity test checks this for all eight algorithms.
+- Its comment suggestion, that non-sine operators mask non-finite phases exactly as the generic loop does, was applied.
+
+Unreleased WAV dither review: SecDither reviewed the opt-in `dither` option.
+- Approved on security.
+  - Dithered samples are clamped, so neither `setInt16` nor 24-bit packing can wrap.
+  - The xorshift32 state cannot reach zero.
+  - The option is validated through `sequenceOwnData`, without prototype or getter leaks, and rejected for Float32.
+  - The Worker requires an own boolean `dither` field, as it does `format`.
+  - Undithered output is unchanged.
+- Its Low determinism finding was fixed: a chunk rejected midway used to advance the dither state, so later bytes diverged from `encodeWav`. `encode()` now dithers a copy of the state and commits it only after the chunk succeeds, and a regression test covers this.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)
