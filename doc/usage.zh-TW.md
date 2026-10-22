@@ -158,7 +158,7 @@ npx --no-install opm-assets check https://your-host.example/opm-1.10.0/
 
 | API | 用法與限制 |
 | --- | --- |
-| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain=1, tuning={}, stealing='oldest', interruption='cancel', quality='standard', maxVoices=8 }={})` | 整數 sampleRate 8000–96000 Hz；maxVoices 為整數 1–32，預設 8。quality／maxVoices 建構後不可變，close／重啟仍保留。借用 context 不會被關閉／暫停；省略 destination 接到其 destination，null 不自動接線。workletUrl 可改變同源完整 worklet 模組樹的位置，但不放寬安全來源、CSP 或 MIME 限制。 |
+| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain=1, tuning={}, stealing='oldest', interruption='cancel', quality='standard', saturation='tanh', dcBlock=false, maxVoices=8 }={})` | 整數 sampleRate 8000–96000 Hz；maxVoices 為整數 1–32，預設 8。quality／saturation／dcBlock／maxVoices 建構後不可變，close／重啟仍保留。借用 context 不會被關閉／暫停；省略 destination 接到其 destination，null 不自動接線。workletUrl 可改變同源完整 worklet 模組樹的位置，但不放寬安全來源、CSP 或 MIME 限制。 |
 | `await opm.start()`／`await opm.resume()` | 在使用者互動中啟動／恢復並等待，再播放。並行啟動會合併；既有 context 被瀏覽器暫停後可恢復。 |
 | `opm.connect(destination)`／`opm.disconnect(destination?)` | 對已啟動的輸出接線／斷線，回傳 opm；目的節點必須來自相同 context。省略斷線目的地會移除所有輸出連線。 |
 | `opm.loadVoice(name, voice)` | 啟動前即可驗證、複製並註冊音色；名稱為 1–64 個 ASCII 英文字母、數字、`_` 或 `-`，registry 最多 128 筆。覆蓋只影響未來音符。 |
@@ -325,7 +325,7 @@ v1.9 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平�
 
 ### 共用樂譜、全域調音與安全恢復
 
-mixGain 是有限 0–1（預設 1），在 **tanh 前**縮放；下游 GainNode 只控制聆聽音量，無法還原已產生的飽和失真。tuning 替換完整設定：referenceHz（A4）20–20000 Hz，offsets 可省略表示零，否則為恰好 128 個 −4800..4800 的有限音分。小數 MIDI 線性插值相鄰偏移，127 使用自身端點。即時調音保留 phase／包絡與原音符 key scaling。
+mixGain 是有限 0–1（預設 1），在**輸出級前**縮放；下游 GainNode 只控制聆聽音量，無法還原已產生的飽和失真。saturation 預設 `'tanh'`，對所有音量套用 `0.7 · tanh(x / 0.7)`；`'soft-knee'` 在 `|x| ≤ 0.5` 完全線性，只在其上平滑壓縮趨近 0.7。`dcBlock: true`（預設 false）在輸出級前以 3 Hz 一階高通去除 DC 與次低頻偏移（例如強 feedback 造成的），20 Hz 損失小於 0.1 dB。tuning 替換完整設定：referenceHz（A4）20–20000 Hz，offsets 可省略表示零，否則為恰好 128 個 −4800..4800 的有限音分。小數 MIDI 線性插值相鄰偏移，127 使用自身端點。即時調音保留 phase／包絡與原音符 key scaling。
 
 保留 quick-start 的 play／status，將 module script 替換為：
 
@@ -460,7 +460,7 @@ console.log(left.some(sample => sample !== 0), synth.errorCount);
 
 在同一目錄執行 `node render.mjs`，預期顯示 `true 0`。中央聲像為左右相同，其他位置產生立體聲；此例只產生記憶體 PCM，不會自動播放或寫檔。checkout 匯入改為 `./dist/core/index.js` 與 `./dist/voices/brass.js`。使用 `.mjs` 或 `"type":"module"`，沒有 CommonJS 入口。
 
-`new Synth(sampleRate,maxVoices=8,{mixGain,tuning,stealing,quality='standard'}={})` 需要有限 8000–192000 Hz 與整數 1–32 聲部（預設 8）；noteOn 接受有限小數 MIDI 0–127、嚴格力度／聲像、voicePriority 0–127（預設 0）及未占用正安全 ID。滿額且所有聲部優先權較高時拋出 `VoiceAdmissionError`，保留既有聲部。noteOff／updateNote 回傳 boolean；allNotesOff 自然 release，panic 移除所有尾音；設定 gain／tuning 不重設 phase／包絡。onVoiceEnded 每音符一次 stolen／ended／error／cancelled；lastStolenId 無搶音時為 null。
+`new Synth(sampleRate,maxVoices=8,{mixGain,tuning,stealing,quality='standard',saturation='tanh',dcBlock=false}={})` 需要有限 8000–192000 Hz 與整數 1–32 聲部（預設 8）；noteOn 接受有限小數 MIDI 0–127、嚴格力度／聲像、voicePriority 0–127（預設 0）及未占用正安全 ID。滿額且所有聲部優先權較高時拋出 `VoiceAdmissionError`，保留既有聲部。noteOff／updateNote 回傳 boolean；allNotesOff 自然 release，panic 移除所有尾音；設定 gain／tuning 不重設 phase／包絡。onVoiceEnded 每音符一次 stolen／ended／error／cancelled；lastStolenId 無搶音時為 null。放開後，音符在所有可聽 carrier 完成 release 時結束；較長的 modulator release 不會延長它。
 
 `prepareVoice(input)` 一次嚴格驗證並建立不可變的可信任快照；不能用型別斷言或自製物件偽造。`Synth.noteOn` 可重用此快照，原始音色輸入則仍逐次驗證。核心預先配置 `maxVoices + 9` 個狀態槽（maxVoices 個邏輯聲部、八個淡出與一個入列暫存槽；預設 17 個），重用預備音色不需每音符配置 Float64 狀態陣列，但這不是整個 JavaScript／瀏覽器零配置保證。`synth.updateNote(id, controls)` 使用前述控制範圍，成功回傳 true，未知／已終止 ID 回傳 false。
 
@@ -485,7 +485,7 @@ console.log(samples.length, sampleRate, diagnostics.errors);
 
 執行 `node render-note.mjs`；checkout 改用 `./dist/...` 匯入。`renderNote({voice,note=60,duration=0.5,velocity=1,pan=0,sampleRate=44100})` 回傳 `{samples,left,right,sampleRate,diagnostics:{errors}}`，`samples === left`。要求完整 Schema 音色；有限的音色數值會限制到範圍，但無效版本／algorithm／feedback 仍拒絕。有限 note／duration／velocity／pan 分別限制至 0–127／0–30 秒／0–1／−1–1；note 可為小數，sampleRate 必須是整數 8000–96000。
 
-renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／35-tap 半帶 FIR）、standard（預設 4×／15 → 47-tap 半帶 FIR 串接）或 high（8×／11 → 15 → 47-tap）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
+renderNote 也接受嚴格 mixGain／tuning／stealing／quality／saturation／dcBlock，與 renderSequence、分塊渲染及 Worker 共用。quality 為 eco（2×／35-tap 半帶 FIR）、standard（預設 4×／15 → 47-tap 半帶 FIR 串接）或 high（8×／11 → 15 → 47-tap）；不是無混疊或即時期限保證。模式取捨見[聲學品質](./acoustic-quality.md)，CPU 須在目標宿主測量。
 
 此函式與 Synth 使用相同包絡、LFO、濾波、力度、聲像及飽和路徑。長度為 `ceil((duration+最長有效release+0.01)*sampleRate)`，包含 note-dependent rate scaling，上限 4,000,000 影格。飽和前聲像增益為 `sqrt(2)*cos/sin((pan+1)*pi/4)`；飽和後不保證感知音量恆定。
 
@@ -523,7 +523,7 @@ renderNote 也接受嚴格 mixGain／tuning／stealing／quality，與 renderSeq
 | `ops[i].frequency`／`ops[i].rateKeyScale` | v5 可選固定頻率 1–20000 Hz（ratio 仍必填）、速率鍵位縮放 0–4；ADSR 時間乘 `2 ** (-scale*(note-60)/12)` 並限制為最多 10 秒。 |
 | `ops[i].waveform`／`ops[i].noiseRate` | v7 可選的振盪波形：`sine`（預設）、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`；`noiseRate` 為 20–20000 Hz 的保持式雜訊時脈（預設 8000），僅在波形為 `noise` 時有意義。雜訊運算子沒有音高。 |
 | `pitchEnvelope` | v5 可選 `{a,d,r,initial,peak,sustain,final}`；時間 0–10 秒、音高 −4800..4800 音分；release 從目前音高連續開始。 |
-| `lfo.delay`／`lfo.sync`／`lfo.phase` | v5 可選 0–10 秒、note／global、0–1 圈，預設 0／note／0；delay 門控深度，不停止 phase 時鐘。 |
+| `lfo.delay`／`lfo.sync`／`lfo.phase` | v5 可選 0–10 秒、note／global、0–1 圈，預設 0／note／0；delay 門控深度，之後以 20 ms 線性淡入，不停止 phase 時鐘。 |
 | `lfo.amTargets`／`lfo.pmTargets` | v6 可選各四個 0–1 權重；boolean 輸入正規化為數字。省略為 `[1,1,1,1]`，依運算子順序套用。 |
 
 單一音色可省略 version／name／lfo／modIndex，仍需 algorithm／feedback 與四個完整運算子。預設目前格式、modIndex 4、LFO off／sine，輸出統一版本 7；舊版 1–6 嚴格保留原始形狀，不得挾帶後來欄位。內建音色與 DX7 匯出也採 canonical v7。所有路徑拒絕錯誤型別、未知欄位、存取器及稀疏陣列，嚴格路徑另拒絕超界數字。鍵位縮放依原音符；pan 屬於音符。完整組合語意見[表情音色參考](./expressive-voices.md)。

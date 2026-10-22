@@ -205,6 +205,10 @@ export interface OPMOptions {
     stealing?: SynthOptions[&#39;stealing&#39;];
     /** Immutable synthesis profile; standard preserves the default sound. */
     quality?: QualityProfile;
+    /** Immutable output stage; tanh preserves the default sound. */
+    saturation?: SynthOptions[&#39;saturation&#39;];
+    /** Immutable 3 Hz output DC blocker before the output stage; default false. */
+    dcBlock?: boolean;
     /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
     maxVoices?: number;
     /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
@@ -249,6 +253,8 @@ export type StopOptions = ScheduledNoteOptions &amp; {
 export declare class OPM {
     readonly sampleRate: number | undefined;
     get quality(): QualityProfile;
+    get saturation(): NonNullable&lt;SynthOptions[&#39;saturation&#39;]&gt;;
+    get dcBlock(): boolean;
     get maxVoices(): number;
     /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
     get voices(): ReadonlyMap&lt;string, NormalizedVoice&gt;;
@@ -810,7 +816,9 @@ export declare const OVERSAMPLE = 4;
 export declare function renderNote(options: RenderNoteOptions): RenderResult;
 </code></pre></section>
 <section><h2 id="declaration-corelfodts">core/lfo.d.ts</h2><pre><code class="language-typescript">import type { LFO } from &#39;../voices/schema.js&#39;;
-/** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1. */
+/** Radian phase; sine and triangle start at zero rising, saw at -1, square at +1.
+ * Sine uses the operators&#39; deterministic polynomial (|error| &lt;= 1.4e-11), so LFO
+ * output does not depend on the engine&#39;s Math.sin. */
 export declare function lfoValue(phase: number, waveform: LFO[&#39;waveform&#39;]): number;
 </code></pre></section>
 <section><h2 id="declaration-coremidi-filedts">core/midi-file.d.ts</h2><pre><code class="language-typescript">import type { BeatSequenceEvent } from &#39;./sequence.js&#39;;
@@ -914,6 +922,10 @@ export interface ScoreProjectSettings {
     readonly mixGain: number;
     readonly tuning: NormalizedTuning;
     readonly stealing: NonNullable&lt;SynthOptions[&#39;stealing&#39;]&gt;;
+    /** Present only for `soft-knee`; omitted means the default `tanh`. */
+    readonly saturation?: &#39;soft-knee&#39;;
+    /** Present only when enabled; omitted means no output DC blocker. */
+    readonly dcBlock?: true;
 }
 /** Version 1 is self-contained: every note names a patch stored in voices. */
 export interface ScoreProject {
@@ -1122,6 +1134,12 @@ export interface SynthOptions {
     tuning?: TuningOptions;
     stealing?: &#39;oldest&#39; | &#39;release-first&#39; | &#39;quietest&#39;;
     quality?: QualityProfile;
+    /** Output stage: `tanh` (default) saturates the whole range; `soft-knee` is
+     * exactly linear below 0.5 and compresses only toward HEADROOM. */
+    saturation?: &#39;tanh&#39; | &#39;soft-knee&#39;;
+    /** Remove DC and subsonic content from the mix before the output stage with a
+     * 3 Hz one-pole high-pass (default false, which preserves the original output). */
+    dcBlock?: boolean;
 }
 /** A valid note could not displace any higher-priority logical voice. */
 export declare class VoiceAdmissionError extends Error {
@@ -1273,7 +1291,7 @@ export declare function copyAssets(options: CopyAssetsOptions): Promise&lt;Asset
 export declare function checkDeployment(baseUrl: string | URL, options?: CheckDeploymentOptions): Promise&lt;DeploymentCheck&gt;;
 </code></pre></section>
 <section><h2 id="declaration-versiondts">version.d.ts</h2><pre><code class="language-typescript">/** Package version; scripts/security-check.ts fails if it differs from package.json. */
-export declare const VERSION = &quot;1.11.1&quot;;
+export declare const VERSION = &quot;1.12.0&quot;;
 </code></pre></section>
 <section><h2 id="declaration-voicesbrassdts">voices/brass.d.ts</h2><pre><code class="language-typescript">import type { Voice } from &#39;./schema.js&#39;;
 export declare const brass: Voice;

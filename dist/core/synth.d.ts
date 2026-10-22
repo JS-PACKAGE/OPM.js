@@ -32,6 +32,12 @@ export interface SynthOptions {
     tuning?: TuningOptions;
     stealing?: 'oldest' | 'release-first' | 'quietest';
     quality?: QualityProfile;
+    /** Output stage: `tanh` (default) saturates the whole range; `soft-knee` is
+     * exactly linear below 0.5 and compresses only toward HEADROOM. */
+    saturation?: 'tanh' | 'soft-knee';
+    /** Remove DC and subsonic content from the mix before the output stage with a
+     * 3 Hz one-pole high-pass (default false, which preserves the original output). */
+    dcBlock?: boolean;
 }
 /** A valid note could not displace any higher-priority logical voice. */
 export declare class VoiceAdmissionError extends Error {

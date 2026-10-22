@@ -30,7 +30,7 @@ For θ = phase + modulation and fractional turns `t = frac(θ / (2π))`, the per
 
 | Shape | Formula |
 | --- | --- |
-| sine | `sin(θ)`; the unchanged legacy fast path |
+| sine | `sin(θ)` via the deterministic `fastSin` polynomial |
 | half | `max(0, sin(θ))` |
 | abs | `abs(sin(θ))` |
 | quarter | `abs(sin(θ))` when `frac(θ/π) < 0.5`, otherwise zero |
@@ -65,7 +65,7 @@ Pitch cents combine multiplicatively with original operator Hz, detune, live sem
 
 `lfo` requires `rate` (0–20 Hz), `amDepth` (0–1) and `pmDepth` (0–1200 cents); single-input omission disables modulation. `waveform` defaults to `sine`, with `triangle`, rising `saw`, and `square` also supported.
 
-- `delay`: optional 0–10 seconds, default zero. Gates both AM and PM depth until that note's elapsed time reaches delay; the phase clock **continues** during delay. This is a depth gate, not a gradual fade-in.
+- `delay`: optional 0–10 seconds, default zero. Gates both AM and PM depth until that note's elapsed time reaches delay, then fades the depth in linearly over 20 ms so the gate opens without an instantaneous gain or pitch step; the phase clock **continues** during delay. A zero delay applies full depth from admission.
 - `sync`: `note` (default) resets the clock at note admission. `global` uses `Synth.currentFrame`, including rendered silence, so separately admitted notes share a deterministic frame clock. Neither uses wall time. Panic does not rewind the global clock.
 - `phase`: optional 0–1 turns, default zero; 1 wraps to 0. At rate zero this can produce static AM/PM offset.
 - `amTargets`, `pmTargets`: optional readonly four-element tuples in operator order, each entry a finite **0–1** depth multiplier or a boolean (`false` → 0, `true` → 1). Normalization stores immutable numeric `LFOTargets`; `LFOInput` accepts `LFOTargetsInput`. Each omitted tuple acts as `[1, 1, 1, 1]`, preserving the old sound. Zero disables that modulation for the selected operator; fractional weights reduce it independently of operator level. Dense own-data elements are required; getters, holes, extra fields and malformed values reject.

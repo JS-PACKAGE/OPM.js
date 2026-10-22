@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis with a default eight-voice budget (configurable up to 32), multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** v1.11.1 (package 1.11.1) is the latest [GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.11.1), a performance patch over [v1.11](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.11) (faster sine operators; no API or format changes). v1.11 added: voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. Voice v1–v6 inputs remain accepted; runtime dependencies remain empty. The previous [v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6.
+> **Status:** v1.12.0 (package 1.12.0) is the latest [GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.12.0): roughly 1.4–2.1× faster multi-voice rendering than [v1.11.1](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.11.1), linear-phase half-band FIR decimation after the stereo mix, polyBLEP/polyBLAMP square, saw and half-wave operators, optional `saturation: 'soft-knee'` and `dcBlock` output settings, release-tail retirement at the audible carriers' end and a de-clicked LFO delay; see the [CHANGELOG](./CHANGELOG.md). v1.11 added voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. Voice v1–v6 inputs remain accepted; runtime dependencies remain empty. The previous [v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6.
 >
 > GitHub release distribution and npm registry publication are separate. Use the release tarball or a source checkout; no npm publication is implied. See the [compatibility policy](./doc/compatibility.md).
 
@@ -53,7 +53,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 - **Part-scoped performance policies** — sustain, poly/mono legato, last/high/low priority, per-key and per-part live controls, voice limits, and an optional user-granted **Web MIDI** adapter
 - **Prepared immutable patches and pooled DSP state** — reuse bounded voice slots instead of allocating typed state on every admission
 - **Incremental PCM16/PCM24/Float32 WAV export** with static Worker rendering, progress, cancellation and sink backpressure; approximate six-to-four-operator DX7 import
-- **Pre-saturation mix gain and global tuning** — reference A4 and interpolated 128-note cents offsets
+- **Pre-saturation mix gain, optional soft-knee output stage and DC blocker, and global tuning** — reference A4 and interpolated 128-note cents offsets
 - **DSP quality profiles** — eco 2×, default standard 4× and high 8× oversampling with linear-phase half-band FIR decimation; bounded state and explicit CPU/aliasing tradeoffs
 - **Atomic voice-bank replacement, removal and JSON export** preserving queued/sounding patch snapshots
 - **TypeScript declarations** for browser, core, and voice-module exports
@@ -243,7 +243,7 @@ All times are in seconds unless stated otherwise. Browser and Node examples inte
 
 | Call | Contract |
 | --- | --- |
-| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain = 1, tuning = {}, stealing = 'oldest', interruption = 'cancel', quality = 'standard', maxVoices = 8 } = {})` | Optional integer sample rate 8000–96000 Hz; voice limit 1–32 (default 8; each voice costs CPU). Quality and polyphony are immutable and survive node recreation. Borrow an existing `AudioContext`; OPM never closes or suspends it. Omit `destination` to use its destination, or use `null` for explicit routing. Optional `workletUrl` relocates the complete secure same-origin worklet module tree without relaxing CSP/MIME checks. |
+| `new OPM({ sampleRate, context, destination, workletUrl, onEvent, mixGain = 1, tuning = {}, stealing = 'oldest', interruption = 'cancel', quality = 'standard', saturation = 'tanh', dcBlock = false, maxVoices = 8 } = {})` | Optional integer sample rate 8000–96000 Hz; voice limit 1–32 (default 8; each voice costs CPU). Quality, saturation, DC blocking and polyphony are immutable and survive node recreation (`opm.saturation` and `opm.dcBlock` report them). Borrow an existing `AudioContext`; OPM never closes or suspends it. Omit `destination` to use its destination, or use `null` for explicit routing. Optional `workletUrl` relocates the complete secure same-origin worklet module tree without relaxing CSP/MIME checks. |
 | `await opm.start()` / `await opm.resume()` | Initialize/resume the context and worklet from a user gesture; concurrent starts coalesce. Existing contexts are resumed after browser suspension. Await before playing. |
 | `opm.connect(destination)` / `opm.disconnect(destination?)` | Connect/disconnect the started worklet output; return `opm`. Omitted disconnect destination removes all output connections. Destination must belong to the same context. |
 | `opm.loadVoice(name, voice)` | Strictly validate/copy a voice; register/replace a name for future notes, at most 128 entries. Name: 1–64 ASCII letters, digits, `_`, or `-`. Works before `start()`. |
@@ -279,7 +279,7 @@ Any non-running context stops lookahead scheduling, as does a reset; `onError` r
 
 | Call or property | Contract |
 | --- | --- |
-| `new Synth(sampleRate, maxVoices = 8, options = {})` | Required finite sample rate 8000–192000 Hz; integer voice limit 1–32. Options are `{ mixGain, tuning, stealing, quality }`, identical to OPM. No Web Audio is required. |
+| `new Synth(sampleRate, maxVoices = 8, options = {})` | Required finite sample rate 8000–192000 Hz; integer voice limit 1–32. Options are `{ mixGain, tuning, stealing, quality, saturation, dcBlock }`, identical to OPM. No Web Audio is required. |
 | `prepareVoice(voice)` | Strictly validate, detach and deeply freeze an opaque `PreparedVoice` once for repeated core admissions; forged lookalikes cannot bypass validation. |
 | `synth.noteOn(voiceOrPrepared, note, id?, { velocity = 1, pan = 0, voicePriority = 0 } = {})` | Raw voices validate/copy each call; prepared patches reuse validated data. Finite fractional MIDI 0–127; explicit positive safe-integer ID unique among active notes; velocity 0–1; pan −1–1; `voicePriority` an integer 0–127. A full synth with no equal-or-lower-priority victim throws `VoiceAdmissionError` before changing state or consuming an ID. |
 | `synth.noteOff(id)` | Begin release at current rendered time; return `true`, or `false` for unknown/already-released IDs. |
@@ -288,8 +288,8 @@ Any non-running context stops lookahead scheduling, as does a reset; `onError` r
 | `synth.setMixGain(gain)` / `synth.setTuning(tuning)` | Replace mix drive / tuning without phase or envelope reset; return no value. |
 | `synth.render(left, right, offset = 0, length = nativeLeftLength - offset)` | Write native `Float32Array`s; nonnegative safe-integer offset/length must fit both actual buffers. Shadow metadata/methods cannot enlarge work; proxies/forgeries and coercible nonnumbers reject. Split calls at offline events. Center pan is dual mono. |
 | `synth.currentFrame`, `synth.errorCount`, `synth.lastStolenId` | Cumulative frames, numerical-failure count, and stolen ID (`null` when the last successful note-on stole none). |
-| `synth.onVoiceEnded = (id, reason) => …` | Exactly-once terminal notification (`stolen`, `ended`, `error`, `cancelled`). Slots recycle before callbacks; replacements first render next frame. Recursive `render()` rejects. A stolen note's fade can outlive its notification. |
-| `renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, voicePriority = 0, sampleRate = 44100, mixGain = 1, tuning = {}, stealing = 'oldest', quality = 'standard' })` | Return `{ samples, left, right, sampleRate, diagnostics: { errors } }`, with `samples === left`. Complete voice required; finite note/duration/velocity/pan clamp to 0–127/0–30/0–1/−1–1. Integer sample rate 8000–96000; synth options and integer `voicePriority` 0–127 validate strictly. |
+| `synth.onVoiceEnded = (id, reason) => …` | Exactly-once terminal notification (`stolen`, `ended`, `error`, `cancelled`). Slots recycle before callbacks; replacements first render next frame. Recursive `render()` rejects. A stolen note's fade can outlive its notification. A released note ends once every audible carrier (nonzero level, above the envelope floor when released) finishes its release; the shared decimator drains its tail. Modulator releases and already-silent carriers cannot sound and do not extend it. |
+| `renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan = 0, voicePriority = 0, sampleRate = 44100, mixGain = 1, tuning = {}, stealing = 'oldest', quality = 'standard', saturation = 'tanh', dcBlock = false })` | Return `{ samples, left, right, sampleRate, diagnostics: { errors } }`, with `samples === left`. Complete voice required; finite note/duration/velocity/pan clamp to 0–127/0–30/0–1/−1–1. Integer sample rate 8000–96000; synth options and integer `voicePriority` 0–127 validate strictly. |
 | `encodeWav({ left, right?, sampleRate, format = 'pcm16' })` | Return little-endian RIFF/WAVE `Uint8Array`: PCM16, PCM24 or Float32. Omit right for mono. Native Float32 channels must contain finite samples in −1–1 and match lengths. Invalid amplitudes reject rather than clip; integer rate 8000–192000, full-buffer budget 4,000,000 frames. |
 | `createWavEncoder({ sampleRate, channels, format = 'pcm16', totalFrames })` | Incremental RIFF32 output: `header()` once, `encode({ left, right? })` for 1–65536 frames per chunk, then `finalize()` at exactly the declared frame count. Channels: 1 or 2. Bounded encoded chunks and <4 GiB files, independent of the full-buffer frame limit. |
 
@@ -309,7 +309,11 @@ Other core exports: `normalizeVoice(voice)` makes a strict detached copy; `envel
 
 ### Mix gain and tuning
 
-`mixGain` is finite 0–1 (default 1), applied **before** final `tanh` saturation; lowering a downstream GainNode cannot undo saturation distortion. Zero mutes PCM without stopping note progression. Host gain remains responsible for listening volume.
+`mixGain` is finite 0–1 (default 1), applied **before** the output stage; lowering a downstream GainNode cannot undo saturation distortion. Zero mutes PCM without stopping note progression. Host gain remains responsible for listening volume.
+
+`saturation` selects that immutable output stage. The default `'tanh'` is `HEADROOM · tanh(x / HEADROOM)`, which colors every level (a single sine at 0.25 already carries third harmonic near −40 dB). `'soft-knee'` passes `|x| ≤ 0.5` (−6 dBFS) through exactly and above the knee uses `0.5 + 0.2 · tanh((|x| − 0.5) / 0.2)`, matching value, slope and curvature at the knee and approaching `HEADROOM`. Both stages bound output by `HEADROOM`; `'soft-knee'` changes the sound of loud mixes only above the knee and is not the default.
+
+`dcBlock: true` adds an immutable one-pole high-pass, `H(z) = g·(1 − z⁻¹)/(1 − R·z⁻¹)` with `R = e^(−2π·3 Hz/fs)` and `g = (1 + R)/2`, to each mix channel before the output stage. FM with feedback or detuned 1:1 ratios produces DC and subsonic offsets (heavy op-1 feedback alone puts about 15% of the RMS level in DC), which waste headroom and shift the saturation operating point; the filter removes them while losing under 0.1 dB at 20 Hz. It is off by default, so default output is unchanged. Its state decays to exact zero after silence, and `panic()` clears it.
 
 `tuning: { referenceHz = 440, offsets }` replaces the complete global tuning. Reference A4 is 20–20000 Hz; omitted offsets mean zero, otherwise supply exactly 128 finite cents offsets in −4800..4800. Inputs are detached/frozen. Fractional MIDI interpolates neighboring offsets, with MIDI 127 using its own endpoint. Retuning preserves phase/envelopes and does not change the original note used for key scaling. `normalizeTuning` and `tuningFrequency` are also core exports.
 
@@ -335,7 +339,7 @@ const wav = encodeWav({ left: offline.left, right: offline.right, sampleRate: of
 // playback.stop(); // idempotent; affects only that playback's original node
 ```
 
-`playSequence` returns `{ ids: ReadonlyMap<scoreId, noteId>, stop() }`; acceptance still arrives through OPM events. It is not an atomic reservation against other callers filling the worklet queue. `prepareSequence(events, { voices })` exposes the immutable resolved score; `renderSequence(events, { voices, sampleRate, maxVoices = 8, mixGain, tuning, stealing, quality })` returns stereo PCM with conservative release-tail capacity, including live ADSR edits, and enforces 4,000,000 frames. `maxVoices` is an integer 1–32. Live/offline sample parity assumes matching settings, rate, frame origin and no competing notes. Longer scores use the separate chunked/streaming helpers.
+`playSequence` returns `{ ids: ReadonlyMap<scoreId, noteId>, stop() }`; acceptance still arrives through OPM events. It is not an atomic reservation against other callers filling the worklet queue. `prepareSequence(events, { voices })` exposes the immutable resolved score; `renderSequence(events, { voices, sampleRate, maxVoices = 8, mixGain, tuning, stealing, quality, saturation, dcBlock })` returns stereo PCM with conservative release-tail capacity, including live ADSR edits, and enforces 4,000,000 frames. `maxVoices` is an integer 1–32. Live/offline sample parity assumes matching settings, rate, frame origin and no competing notes. Longer scores use the separate chunked/streaming helpers.
 
 #### Long scores without aggregate PCM
 
@@ -359,7 +363,7 @@ console.log(frames, energy, render.diagnostics.errors);
 
 ### Portable score projects and MIDI files (introduced in v1.9)
 
-`parseScoreProject(source: string | object)` returns a canonical frozen `ScoreProject` with `version: 1`, beat `events`, normalized `tempoMap`, `timeSignature`, named complete `voices`, and synthesis `settings` (`sampleRate`, `quality`, `maxVoices`, `mixGain`, `tuning`, `stealing`). `serializeScoreProject(project)` emits bounded canonical JSON. Projects are limited to 8 MiB, 65,536 events and 128 voices (256 KiB total voice JSON); notes refer to stored voice names, with omitted voice requiring stored `brass`. Missing tempo/meter/settings normalize to 120 BPM, 4/4 and the normal synthesis defaults.
+`parseScoreProject(source: string | object)` returns a canonical frozen `ScoreProject` with `version: 1`, beat `events`, normalized `tempoMap`, `timeSignature`, named complete `voices`, and synthesis `settings` (`sampleRate`, `quality`, `maxVoices`, `mixGain`, `tuning`, `stealing`, plus `saturation` only when it is `'soft-knee'` and `dcBlock` only when it is `true`, so default projects serialize as before). `serializeScoreProject(project)` emits bounded canonical JSON. Projects are limited to 8 MiB, 65,536 events and 128 voices (256 KiB total voice JSON); notes refer to stored voice names, with omitted voice requiring stored `brass`. Missing tempo/meter/settings normalize to 120 BPM, 4/4 and the normal synthesis defaults.
 
 ```js
 import { parseScoreProject, serializeScoreProject, compileBeatSequence } from 'opm.js/core';
@@ -550,7 +554,7 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 | `ops[i].waveform` | Optional v7 `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise` |
 | `ops[i].noiseRate` | Optional v7 20–20000 Hz, default 8000; ignored unless waveform is `noise` |
 | `pitchEnvelope` | Optional v5 `{a,d,r,initial,peak,sustain,final}`; times 0–10 seconds, levels −4800..4800 cents, continuous linear-cents release |
-| `lfo.delay`, `lfo.sync`, `lfo.phase` | Optional v5 0–10 seconds, `'note'`/`'global'` (default note), 0–1 turns (default 0); delay gates depth, not the phase clock |
+| `lfo.delay`, `lfo.sync`, `lfo.phase` | Optional v5 0–10 seconds, `'note'`/`'global'` (default note), 0–1 turns (default 0); delay gates depth (then fades it in over 20 ms), not the phase clock |
 | `lfo.amTargets`, `lfo.pmTargets` | Optional v6 four-element depth factors 0–1; input booleans normalize to 0/1; absent targets mean all 1 |
 
 See the [expressive voice reference](./doc/expressive-voices.md) for pitch composition, fixed-frequency behavior and synchronization. Ratio remains required even when frequency is supplied. Preserve the source patch version when importing older banks; changing a version number alone does not add unsupported fields to its legacy shape.

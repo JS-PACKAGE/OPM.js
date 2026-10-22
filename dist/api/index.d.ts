@@ -102,6 +102,10 @@ export interface OPMOptions {
     stealing?: SynthOptions['stealing'];
     /** Immutable synthesis profile; standard preserves the default sound. */
     quality?: QualityProfile;
+    /** Immutable output stage; tanh preserves the default sound. */
+    saturation?: SynthOptions['saturation'];
+    /** Immutable 3 Hz output DC blocker before the output stage; default false. */
+    dcBlock?: boolean;
     /** Logical polyphony, an integer in 1..32; default 8. Release tails occupy voices. */
     maxVoices?: number;
     /** Cancel all voices/events on interruption, or preserve direct-note state until resume. */
@@ -146,6 +150,8 @@ export type StopOptions = ScheduledNoteOptions & {
 export declare class OPM {
     readonly sampleRate: number | undefined;
     get quality(): QualityProfile;
+    get saturation(): NonNullable<SynthOptions['saturation']>;
+    get dcBlock(): boolean;
     get maxVoices(): number;
     /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
     get voices(): ReadonlyMap<string, NormalizedVoice>;

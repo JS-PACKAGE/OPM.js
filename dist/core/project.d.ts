@@ -20,6 +20,10 @@ export interface ScoreProjectSettings {
     readonly mixGain: number;
     readonly tuning: NormalizedTuning;
     readonly stealing: NonNullable<SynthOptions['stealing']>;
+    /** Present only for `soft-knee`; omitted means the default `tanh`. */
+    readonly saturation?: 'soft-knee';
+    /** Present only when enabled; omitted means no output DC blocker. */
+    readonly dcBlock?: true;
 }
 /** Version 1 is self-contained: every note names a patch stored in voices. */
 export interface ScoreProject {

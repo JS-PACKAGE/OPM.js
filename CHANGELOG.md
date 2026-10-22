@@ -2,7 +2,23 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.12.0
+
+Package version 1.12.0, a GitHub release (not on npm). No voice-format (still v7) or worklet message-protocol changes. API additions: optional `saturation` (`'tanh'` default, `'soft-knee'`) and `dcBlock` settings for `Synth`, `OPM` (`opm.saturation`, `opm.dcBlock`), `renderNote`, sequence/Worker rendering and score-project settings. Behavior changes: half-band FIR decimation with post-mix filtering, polyBLEP/polyBLAMP operator shapes, released notes end once their audible carriers are silent, and `lfo.delay` fades depth in over 20 ms. Measured on Apple M5 / Node 26 against v1.11.1 (best of five interleaved CPU-time runs, 48 kHz, 2 s per case): `standard` 8 held voices 1.51×, 32 voices 1.89×, `high` 8 voices 1.73×, `eco` 8 voices 1.39×, attack/decay 1.41×, pitch envelopes 2.10×, per-operator LFO targets 1.93×, square operator 1.36×, noise hi-hat 2.11×, 16-voice mixed bundled presets 1.64×; a single held voice is unchanged within noise. Security: read-only scoped static reviews of the `src/core` and option-intake changes found no evidence-backed issue (see [SECURITY.md](./SECURITY.md#4-review-record)). Physical-device, MIDI-hardware and human-listening acceptance remain unverified.
+
+### Faster rendering and settled state
+
+- All-sine voices with static operator levels render each output frame in a per-algorithm function with oscillator state in locals (independent operators are no longer serialized), with level, operator level and shared or per-operator LFO AM folded once per frame; per-operator `amTargets` voices now take this path too. Silent operators (zero envelope, level or AM gain) skip their oscillator while their phase advances.
+- Envelope gains are not recomputed once every operator has reached a constant sustain or silent release, and operators with zero static level are silent from admission. A pitch envelope that has reached its sustain (or final) value is folded into the static increments until release, a glide or a retune.
+- `fastSin` is now a degree-11 near-minimax polynomial (|error| ≤ 1.4e-11, |result| ≤ 1), also used by the sine LFO; deterministic `fastExp2` (relative error ≤ 2e-14) replaces `Math.exp`/`**` for envelope dB, LFO PM and per-frame pitch factors. Output differs from the previous checkout by about 1e-10.
+- Against the post-mix FIR checkout (88e55a2) the same harness measured 1.3–1.85× (for example `standard` 8 voices 1.48×, `high` 8 voices 1.65×, 32 voices 1.66×).
+
+### Output stage options and voice lifecycle
+
+- Optional `saturation: 'soft-knee'` is exactly linear up to 0.5 (−6 dBFS) and compresses only toward `HEADROOM` above it, matching value, slope and curvature at the knee; the default `tanh` is unchanged and still colors every level (third harmonic near −40 dB at 0.25 peak).
+- Optional `dcBlock: true` applies a 3 Hz one-pole high-pass per channel before the output stage (under 0.1 dB loss at 20 Hz), removing DC from heavy feedback; its state settles to exact zero and `panic()` clears it. Score projects store either setting only when non-default, so default project JSON is unchanged.
+- Behavior change: a released voice ends once every audible carrier (nonzero level, above the envelope floor at release) finishes its release; slower modulator releases and already-silent carriers no longer hold the voice. The four-operator reference fixtures now compare waveforms until the carriers' release end, with the tail still bounded by the floor allowance.
+- Behavior change: after a nonzero `lfo.delay`, AM and PM depth ramp in linearly over 20 ms instead of switching on in one sample; a zero delay is unchanged. A centered mix reuses the left output-stage result for the right channel.
 
 ### Half-band FIR decimation
 
@@ -19,7 +35,7 @@ Square and saw operators now add two-sample polyBLEP residuals at their jumps, a
 
 - Voices are now panned and summed to left/right at the oversampled rate, and one shared decimator per output channel runs after the mix, instead of one decimator per voice. A centered (dual-mono) mix filters once until the channel inputs differ. Measured against per-voice half-band FIR decimation with a 128-frame `Synth.render` loop at 48 kHz (median of three interleaved runs, one Node 22 process on one cloud x64 host): `standard` 8 voices 0.677 → 0.611 ms/block (−10%), 32 voices 2.772 → 2.477 ms (−11%); `high` 8 voices 1.115 → 0.996 ms (−11%), 32 voices 4.626 → 4.154 ms (−10%); `eco` 32 voices unchanged; a single voice costs about 0.01 ms/block more (mix-buffer overhead). Against the earlier per-voice Butterworth decimator the gains were 9–19%.
 - Behavior change: note gain, expression, pan and steal fades now apply before the decimator, so a hard gain step is band-limited by it and rings through the half-band FIR (at most 26 output frames) instead of cutting instantly at the output rate. Ramps are within s·p·Σk|h[k]|/4 of the former output-rate product.
-- Voices retire on their envelope end (all operator releases finished) and report `ended` without waiting for filter history; the shared decimator drains the tail; once nothing is sounding, history below the −96 dB floor snaps to exact zero.
+- Voices retire on their envelope end (audible carrier releases finished, above) and report `ended` without waiting for filter history; the shared decimator drains the tail; once nothing is sounding, history below the −96 dB floor snaps to exact zero.
 
 ## v1.11.1
 

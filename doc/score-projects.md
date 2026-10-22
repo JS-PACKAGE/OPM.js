@@ -24,7 +24,7 @@ const json = serializeScoreProject(project);
 const replay = parseScoreProject(json);
 ```
 
-The parser accepts a JSON string or a plain own-data object. `version`, `events` and `voices` are required. Omitted tempo, meter and settings normalize to 120 BPM, 4/4, 44100 Hz, `standard`, eight voices, mixGain 1, `oldest` stealing and 440 Hz with zero tuning offsets. Canonical output contains all settings and the 128-entry tuning table. Voice names are sorted, controls use stable key order, and saved defaults are explicit. Event array order is retained for deterministic simultaneous-event ordering.
+The parser accepts a JSON string or a plain own-data object. `version`, `events` and `voices` are required. Omitted tempo, meter and settings normalize to 120 BPM, 4/4, 44100 Hz, `standard`, eight voices, mixGain 1, `oldest` stealing and 440 Hz with zero tuning offsets. Canonical output contains all settings and the 128-entry tuning table, except two opt-in output settings: `saturation` is stored only as `"soft-knee"` and `dcBlock` only as `true`; omission means the defaults (`tanh`, no DC blocker), so default projects keep their earlier JSON. Voice names are sorted, controls use stable key order, and saved defaults are explicit. Event array order is retained for deterministic simultaneous-event ordering.
 
 Every note uses a stored voice name. Omitted note voice means `brass`, which must also be stored. Inline patches are rejected inside projects; standalone `compileBeatSequence` accepts them. Voice definitions normalize through the existing voice-version validator, including supported legacy patch inputs; project files themselves must specify version 1. No external bank or URL is referenced.
 
