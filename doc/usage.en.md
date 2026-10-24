@@ -2,9 +2,9 @@
 
 [繁體中文](./usage.zh-TW.md) · [Project README](../README.md)
 
-The latest GitHub release is **v1.13.0 (package 1.13.0)**: roughly 1.5–2× faster allocation-free rendering, non-sine waveform frames and opt-in TPDF WAV dither, following v1.12's post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes, optional soft-knee saturation and DC blocker. Portable Arrangement projects, expressive MIDI files, 32-voice polyphony and Worker export remain supported. GitHub distribution does not imply npm registry publication.
+The latest GitHub release is **v1.13.1 (package 1.13.1)**: voice format v8 adds an optional per-operator sustain rate `adsr.sr` (held-note decay, like OPM D2R), a sample-and-hold `noise` LFO and a voice-level `pan`; `.opm` import maps D2R and the noise LFO, and DX7 import maps the sample-and-hold LFO. v1.13.0 brought roughly 1.5–2× faster allocation-free rendering, non-sine waveform frames and opt-in TPDF WAV dither, following v1.12's post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes, optional soft-knee saturation and DC blocker. GitHub distribution does not imply npm registry publication.
 
-Voice-format versions are independent of package versions: the current source uses canonical voice v8 (sustain rate, voice pan and noise LFO). The v1.13.0 release used voice version 7, the historical v1.10 release used v6, and the immutable v1.6 release used v5. Explicit legacy voice versions 1–7 retain their original input shapes and normalize to v8.
+Voice-format versions are independent of package versions: v1.13.1 uses canonical voice v8 (sustain rate, voice pan and noise LFO). Releases v1.11 through v1.13.0 used voice version 7, the historical v1.10 release used v6, and the immutable v1.6 release used v5. Explicit legacy voice versions 1–7 retain their original input shapes and normalize to v8.
 
 **Release scope:** [portable Arrangement projects](./score-projects.md#portable-arrangement-projects), opt-in [expressive MIDI files and loss summaries](./midi-files.md), [measured capacity candidates](./acoustic-quality.md) and the [cross-feature contract table](./host-integration.md#cross-feature-contracts) are included in v1.10. Physical/mobile/MIDI and human listening results remain unverified until genuine original observations are supplied.
 
@@ -39,35 +39,35 @@ Voice-format versions are independent of package versions: the current source us
 
 ## Acquire and install
 
-No source checkout or consumer build toolchain is required. With Node.js 22+ and npm, create a new application and install the attached [GitHub v1.13.0 package](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.0) directly:
+No source checkout or consumer build toolchain is required. With Node.js 22+ and npm, create a new application and install the attached [GitHub v1.13.1 package](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.1) directly:
 
 ```sh
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.0/opm.js-1.13.0.tgz
+npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.1/opm.js-1.13.1.tgz
 ```
 
-For an existing app, run only the install command in its root. The v1.13.0 tarball includes these synchronized guides; the original v1.8 tag and archive remain immutable. The public npm registry is **not assumed** to have `opm.js`.
+For an existing app, run only the install command in its root. The v1.13.1 tarball includes these synchronized guides; the original v1.8 tag and archive remain immutable. The public npm registry is **not assumed** to have `opm.js`.
 
-Alternatively, build a tarball from a [repository checkout (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.0). From the **OPM.js repository root**, with Node.js 22+ and npm installed:
+Alternatively, build a tarball from a [repository checkout (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.1). From the **OPM.js repository root**, with Node.js 22+ and npm installed:
 
 ```sh
 npm ci
 npm pack
 ```
 
-`npm pack` runs the package's `prepack` build and creates `opm.js-1.13.0.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
+`npm pack` runs the package's `prepack` build and creates `opm.js-1.13.1.tgz`; do not separately build first. From that repository root, make a **new sibling application** (the repository directory must be named `OPM.js` for this relative path):
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.13.0.tgz
+npm install ../OPM.js/opm.js-1.13.1.tgz
 ```
 
-For an existing app, run `npm install /actual/path/to/opm.js-1.13.0.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, 13 demo entry scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, HTML pages, or the Vite example. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
+For an existing app, run `npm install /actual/path/to/opm.js-1.13.1.tgz` in its root instead; `npm init` is unnecessary. Consumer apps need no development dependencies. The package contains minified `.js` modules, matching `.js.map` source maps with embedded TypeScript sources, generated `.d.ts` declarations, 13 demo entry scripts, and documentation/legal files, but not separate TypeScript source files, development scripts/tests, HTML pages, or the Vite example. Node uses `opm.js/core` and `opm.js/voices/brass.js`; browsers without an import map/bundler use served URLs.
 
 ## Browser quick start
 
@@ -77,7 +77,7 @@ For the existing checkout demos, from the **OPM.js repository root** run:
 python3 -m http.server 8000
 ```
 
-Open `http://localhost:8000/index.html` for 13 checkout-only HTML examples: notes, lookahead melody, live modulation, shared context, WAV, playground, audition, [shared scores/interruption recovery](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/sequence.html), instrument/MIDI, sound design, audio buses, adaptive arrangement and original songs. Python 3 only serves local assets. Committed `dist/` needs no installation/build; after source/helper changes run `npm ci` then `npm run build`. Use HTTPS or localhost with ES modules/AudioWorklet, never `file://`.
+Open `http://localhost:8000/index.html` for 13 checkout-only HTML examples: notes, lookahead melody, live modulation, shared context, WAV, playground, audition, [shared scores/interruption recovery](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/sequence.html), instrument/MIDI, sound design, audio buses, adaptive arrangement and original songs. Python 3 only serves local assets. Committed `dist/` needs no installation/build; after source/helper changes run `npm ci` then `npm run build`. Use HTTPS or localhost with ES modules/AudioWorklet, never `file://`.
 
 To create an app page, from the **opm-app root** created above, use the installed CLI to atomically copy the entire distribution and license into a **new** static directory:
 
@@ -85,7 +85,7 @@ To create an app page, from the **opm-app root** created above, use the installe
 npx --no-install opm-assets copy public/opm
 ```
 
-Use a fresh destination; the CLI never overwrites differing host files and reuses an identical existing deployment. For upgrades, use a release-specific path (for example `public/audio/opm-1.13.0`) and update page imports together. `--no-install` prevents automatic registry fetching. POSIX manual equivalent: create `public/opm`, copy `node_modules/opm.js/dist/.` into it, and copy `node_modules/opm.js/LICENSE` to `public/opm/LICENSE`.
+Use a fresh destination; the CLI never overwrites differing host files and reuses an identical existing deployment. For upgrades, use a release-specific path (for example `public/audio/opm-1.13.1`) and update page imports together. `--no-install` prevents automatic registry fetching. POSIX manual equivalent: create `public/opm`, copy `node_modules/opm.js/dist/.` into it, and copy `node_modules/opm.js/LICENSE` to `public/opm/LICENSE`.
 
 Save this complete page as **`opm-app/public/index.html`**:
 
@@ -134,7 +134,7 @@ Use your actual asset-base URL with its trailing slash; loopback HTTP is also su
 
 Without npm, instead copy the checkout's **complete** `dist/` contents to `site/opm/`, copy its `LICENSE` to `site/opm/LICENSE`, save the same page as `site/index.html`, then from the directory containing `site/` serve it with `python3 -m http.server 8000 --directory site`. Keep `api/`, `core/`, `worklet/`, `worker/`, and `voices/` together, including companion modules, maps and declarations. Do not relocate just one worklet/Worker file. Modules preserve source paths instead of using hashed chunks. The browser imports the served `./opm/api/index.js` URL, not the bare npm name. Static-copy deployment avoids relying on a bundler to discover either module graph.
 
-For an installed-package Vite app, follow [the standalone Vite guide (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/vite/README.md): install the release tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
+For an installed-package Vite app, follow [the standalone Vite guide (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/vite/README.md): install the release tarball and copy the complete distribution plus license. Vite is an optional host development tool, not an OPM.js runtime dependency or consumer build requirement. Keep worklet assets out of SPA fallback rewrites, use JavaScript MIME types, and configure CSP for your module/worklet deployment; do not loosen production policy just to run an inline example. Publication prerequisites are documented in [publishing](./publishing.md); this guide does not imply a registry release or configured npm authentication.
 
 ## Browser API and lifecycle
 

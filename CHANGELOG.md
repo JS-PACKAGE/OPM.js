@@ -2,9 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.13.1
 
-Voice format v8. Explicit v1–v7 voices keep their original shapes and normalize to v8; voices that use none of the new fields render bit-identically (all 21 previous presets × eco/standard/high × MIDI 36/60/84 match v1.13.0 sample for sample). No worklet protocol changes beyond accepting the new fields through the existing validators.
+Package version 1.13.1, a GitHub release (not on npm), CI-verified on Node 22/24/26, Chromium, Firefox and WebKit. Voice format v8. Explicit v1–v7 voices keep their original shapes and normalize to v8; voices that use none of the new fields render bit-identically (all 21 previous presets × eco/standard/high × MIDI 36/60/84 match v1.13.0 sample for sample). No worklet protocol changes beyond accepting the new fields through the existing validators.
 
 ### Voice format v8
 
@@ -27,7 +27,7 @@ Voice format v8. Explicit v1–v7 voices keep their original shapes and normaliz
 
 ### Documentation
 
-- README, the English and 繁體中文 usage guides now point installation and checkout at the v1.13.0 release instead of the v1.10 archive, and the API reference intro describes v1.13. The Roadmap gains v1.12 and v1.13 entries.
+- README, the English and 繁體中文 usage guides now point installation and checkout at this release instead of the v1.10 archive. The Roadmap gains v1.12 and v1.13 entries.
 
 ## v1.13.0
 

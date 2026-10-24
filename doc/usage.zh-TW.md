@@ -2,9 +2,9 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/JS-PACKAGE/OPM.js)
 
-最新 GitHub Release 為 **v1.13.0（套件 1.13.0）**：渲染時不配置記憶體、速度約快 1.5–2 倍、非正弦波形 frames，以及選用的 TPDF WAV 抖動；延續 v1.12 的混音後半帶 FIR 降採樣、polyBLEP／polyBLAMP 運算子波形、選用的 soft-knee 飽和與 DC blocker。保留可攜 Arrangement 專案、MIDI 檔案表情保留、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
+最新 GitHub Release 為 **v1.13.1（套件 1.13.1）**：新增音色格式 v8——每個運算子選用的延音衰減速率 `adsr.sr`（按住時持續衰減，對應 OPM 的 D2R）、取樣保持（sample-and-hold）雜訊 LFO，以及音色層級聲像 `pan`；`.opm` 匯入會對應 D2R 與雜訊 LFO，DX7 的 S&H LFO 對應雜訊 LFO。v1.13.0 帶來渲染時不配置記憶體、速度約快 1.5–2 倍、非正弦波形 frames 與選用的 TPDF WAV 抖動；延續 v1.12 的混音後半帶 FIR 降採樣、polyBLEP／polyBLAMP 運算子波形、選用的 soft-knee 飽和與 DC blocker。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
 
-音色格式版本與套件版本獨立：目前原始碼採 canonical v8（延音衰減速率、音色聲像與雜訊 LFO）；v1.13.0 發行版使用音色格式版本 7，歷史 v1.10 與 v1.7 使用 v6，不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–7 仍保留各自原有輸入格式，並正規化為 v8。
+音色格式版本與套件版本獨立：v1.13.1 採 canonical v8（延音衰減速率、音色聲像與雜訊 LFO）；v1.11–v1.13.0 使用音色格式版本 7，歷史 v1.10 與 v1.7 使用 v6，不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–7 仍保留各自原有輸入格式，並正規化為 v8。
 
 **本次 Release 範圍：**[可攜 Arrangement 專案](./score-projects.md#portable-arrangement-projects)、選用的 [MIDI 檔案表情保留與損失摘要](./midi-files.md)、[實測容量候選](./acoustic-quality.md)及[跨功能契約總覽](./host-integration.md#cross-feature-contracts)包含於 v1.10。實體手機／MIDI 與人工聽感仍須真正的原始觀察才能完成驗收，不能用自動播放冒充通過。
 
@@ -51,24 +51,24 @@
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.0/opm.js-1.13.0.tgz
+npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.1/opm.js-1.13.1.tgz
 ```
 
-v1.13.0 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從 [v1.13.0 checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.0) 自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
+v1.13.1 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從 [v1.13.1 checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.1) 自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
 
 ```sh
 npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.13.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
+此 checkout 的套件版本產生 `opm.js-1.13.1.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.13.0.tgz
+npm install ../OPM.js/opm.js-1.13.1.tgz
 ```
 
 既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、13 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、13 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。
@@ -79,7 +79,7 @@ npm install ../OPM.js/opm.js-1.13.0.tgz
 python3 -m http.server 8000
 ```
 
-開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
+開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
 
 ## 瀏覽器靜態部署
 
@@ -143,16 +143,16 @@ public/opm/
 
 Worker 為同源 HTTP(S) 靜態 module，不使用 blob／data／eval；正式 CSP 的 `worker-src`／`script-src` 應允許 `'self'`，資產須有正確 JavaScript MIME。不要把 worker 請求改寫為 SPA HTML。
 
-使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
+使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
 
 已安裝套件也提供 `opm-assets`，可取代手動複製。從 `opm-app` 根目錄使用**尚不存在**的目的目錄：
 
 ```sh
-npx --no-install opm-assets copy public/opm-1.13.0
-npx --no-install opm-assets check https://your-host.example/opm-1.13.0/
+npx --no-install opm-assets copy public/opm-1.13.1
+npx --no-install opm-assets check https://your-host.example/opm-1.13.1/
 ```
 
-第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.13.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
+第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.13.1/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
 
 ## 瀏覽器 API 與自訂音色
 

@@ -286,6 +286,8 @@ Unreleased voice v8 review: SecVoiceV8 approved a scoped static review of checkl
 - Its informational hardening item was applied: each path now probes `sr` once (one `hasOwn` or one `ownKeys` snapshot), so a main-thread proxy cannot answer the version gate and the read differently.
 - The reviewer ran no runtime gates; the integration owner's tests, bit-identity A/B and smoke checks are recorded in CHANGELOG.
 
+v1.13.1 release: covered by the SecVoiceV8 record above (approved, hardening applied); the release adds only version numbers and documentation beyond that reviewed source. Commit `ae7b5e6` passed Node 22/24/26 and Chromium/Firefox/WebKit CI.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)
