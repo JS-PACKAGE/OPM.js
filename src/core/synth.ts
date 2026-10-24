@@ -112,15 +112,22 @@ export function validateNoteControls(input: NoteControls): NoteControls {
         if (!element || !Object.hasOwn(element, 'value')) throw new TypeError(`${key} must contain data`);
         const item: unknown = element.value;
         if (key === 'operatorADSR') {
+          // One ownKeys snapshot decides whether `sr` is present, so a proxy cannot
+          // answer the key count and the field loop differently.
+          const keys = item && typeof item === 'object' ? Reflect.ownKeys(item) : [];
+          const hasSr = keys.includes('sr');
           if (!item || typeof item !== 'object' || Array.isArray(item) ||
               (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) ||
-              Reflect.ownKeys(item).length !== 4) throw new TypeError('operatorADSR requires full plain ADSR objects');
+              keys.length !== (hasSr ? 5 : 4)) throw new TypeError('operatorADSR requires full plain ADSR objects');
           const adsr: ADSR = { a: 0, d: 0, s: 0, r: 0 };
-          for (const field of ['a', 'd', 's', 'r'] as const) {
+          // `sr` is optional: omitted holds the sustain level, as in a voice.
+          for (const field of ['a', 'd', 's', 'r', 'sr'] as const) {
+            if (field === 'sr' && !hasSr) break;
             const data = Object.getOwnPropertyDescriptor(item, field);
             if (!data || !Object.hasOwn(data, 'value')) throw new TypeError('operatorADSR must contain data');
             const number: unknown = data.value;
-            if (typeof number !== 'number' || !Number.isFinite(number) || number < 0 || number > (field === 's' ? 1 : 10)) {
+            const [min, max] = field === 's' ? [0, 1] : field === 'sr' ? [0.01, 100] : [0, 10];
+            if (typeof number !== 'number' || !Number.isFinite(number) || number < min || number > max) {
               throw new RangeError('operatorADSR has an out-of-range value');
             }
             adsr[field] = number;
@@ -157,7 +164,9 @@ interface ActiveVoice {
   inputIndices: Int8Array; carrierIndices: Uint8Array;
   baseIncrements: Float64Array; incrementDeltas: Float64Array; incrementCurves: Float64Array; increments: Float64Array; steps: Float64Array; sustainDb: Float64Array; sustainGain: Float64Array;
   attackStep: Float64Array; decayStep: Float64Array; releaseStep: Float64Array; gains: Float64Array;
-  /** Geometric segment gain at the next frame start, valid while `envelopeSegment` (1 attack, 2 decay, 3 release) matches. */
+  /** Held decay after attack + decay: seconds per 96 dB (0 holds) and its per-substep ratio. */
+  sustainTimes: Float64Array; sustainStep: Float64Array;
+  /** Geometric segment gain at the next frame start, valid while `envelopeSegment` (1 attack, 2 decay, 3 release, 4 sustain decay) matches. */
   envelopeGain: Float64Array; envelopeSegment: Uint8Array;
   /** Exclusive frame index up to which each operator certainly stays inside its current
    * geometric segment, with its per-substep ratio; zeroed by release and ADSR edits. */
@@ -172,7 +181,8 @@ interface ActiveVoice {
   lastFadeGain?: number; carrierGain: number; phases: Float64Array; values: Float64Array;
   releaseDb: Float64Array; previous: number; older: number; pitchRelease: number;
   feedbackScale: number; elapsed: number; releaseTime: number; releaseEnd: number;
-  velocity: number; expression: number; pan: number;
+  /** Note pan; `voicePan` is the patch's offset, summed and clamped by updatePan. */
+  velocity: number; expression: number; pan: number; voicePan: number;
   expressionFrom: number; expressionTarget: number; expressionStart: number; expressionFrames: number;
   panFrom: number; panTarget: number; panStart: number; panFrames: number;
   modulation: number; modulationFrom: number; modulationTarget: number; modulationStart: number; modulationFrames: number;
@@ -183,7 +193,8 @@ interface ActiveVoice {
   ratios: Float64Array; ratioFrom: Float64Array; ratioTargets: Float64Array; ratioStart: number; ratioFrames: number;
   frequencies: Float64Array; frequencyFrom: Float64Array; frequencyTargets: Float64Array; frequencyStart: number; frequencyFrames: number;
   envelopeStart: Float64Array; envelopeFromDb: Float64Array; envelopeEdited: Uint8Array; releaseStarts: Float64Array;
-  lfoTurns: number; lfoLive: boolean;
+  /** Live-rate LFO: turns in [0, 1) and the completed integer cycles (noise sample index). */
+  lfoTurns: number; lfoCycle: number; lfoLive: boolean;
   /** Note-on snapshot of the voice LFO: delay, rate, phase, global sync and waveform code. */
   lfoDelay: number; lfoRate: number; lfoPhase: number; lfoGlobal: boolean; lfoCode: number;
   /** Per-operator LFO depth scales (1 when the voice omits targets). */
@@ -280,9 +291,17 @@ function feedbackGain(value: number): number {
   return value <= 1 ? value * 2 ** -7 : 2 ** (value - 8);
 }
 
-/** @internal Scale once per admission; low-note durations never exceed the voice's ten-second budget. */
-export function operatorDuration(seconds: number, note: number, rateKeyScale = 0): number {
-  return Math.min(10, seconds * 2 ** (-rateKeyScale * (note - 60) / 12));
+/** @internal Scale once per admission; low-note a/d/r durations never exceed the voice's
+ * ten-second budget (`cap` 100 for the held sustain rate). */
+export function operatorDuration(seconds: number, note: number, rateKeyScale = 0, cap = 10): number {
+  return Math.min(cap, seconds * 2 ** (-rateKeyScale * (note - 60) / 12));
+}
+
+/** Held decay (`sr`, seconds per 96 dB; undefined holds) and its per-substep gain ratio at `rate`. */
+function setSustainRate(active: ActiveVoice, op: number, seconds: number | undefined, note: number, rateKeyScale: number | undefined, rate: number): void {
+  const sustain = seconds === undefined ? 0 : operatorDuration(seconds, note, rateKeyScale, 100);
+  active.sustainTimes[op] = sustain;
+  active.sustainStep[op] = sustain === 0 ? 1 : 10 ** (FLOOR_DB / (20 * sustain * rate));
 }
 
 function validateMixGain(gain: number): void {
@@ -335,6 +354,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     baseIncrements: new Float64Array(4), incrementDeltas: new Float64Array(4), incrementCurves: new Float64Array(4), increments: new Float64Array(4), steps: new Float64Array(4),
     sustainDb: new Float64Array(4), sustainGain: new Float64Array(4),
     attackStep: new Float64Array(4), decayStep: new Float64Array(4), releaseStep: new Float64Array(4),
+    sustainTimes: new Float64Array(4), sustainStep: new Float64Array(4),
     envelopeGain: new Float64Array(4), envelopeSegment: new Uint8Array(4),
     envelopeUntil: new Float64Array(4), envelopeRatio: new Float64Array(4), envelopeFastUntil: 0,
     attackTimes: new Float64Array(4), decayTimes: new Float64Array(4), releaseTimes: new Float64Array(4),
@@ -344,7 +364,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     leftGain: 0, rightGain: 0, lastSample: 0, fadeRemaining: 0, lastFadeGain: 1, carrierGain: 0,
     phases: new Float64Array(4), values: new Float64Array(4), releaseDb: new Float64Array(4),
     previous: 0, older: 0, pitchRelease: 0, feedbackScale: 0,
-    elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0,
+    elapsed: 0, releaseTime: -1, releaseEnd: -1, velocity: 1, expression: 1, pan: 0, voicePan: 0,
     expressionFrom: 1, expressionTarget: 1, expressionStart: 0, expressionFrames: 0,
     panFrom: 0, panTarget: 0, panStart: 0, panFrames: 0,
     modulation: 1, modulationFrom: 1, modulationTarget: 1, modulationStart: 0, modulationFrames: 0,
@@ -355,7 +375,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     ratios: new Float64Array(4), ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
     frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
     envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
-    lfoTurns: 0, lfoLive: false,
+    lfoTurns: 0, lfoCycle: 0, lfoLive: false,
     lfoDelay: 0, lfoRate: 0, lfoPhase: 0, lfoGlobal: false, lfoCode: 0,
     amTargeted: false, pmTargeted: false, amTargets: new Float64Array(4), pmTargets: new Float64Array(4),
     tunedFrequency: 0, gainsSteady: false, silentGains: false, pitchSettled: false, sineFrame: new Float64Array(7),
@@ -446,9 +466,10 @@ function advanceControls(active: ActiveVoice): void {
 
 function updatePan(active: ActiveVoice): void {
   const gain = active.velocity * active.expression;
-  const angle = (active.pan + 1) * Math.PI / 4;
-  active.leftGain = active.pan === 1 ? 0 : active.pan === 0 ? gain : gain * Math.SQRT2 * Math.cos(angle);
-  active.rightGain = active.pan === -1 ? 0 : active.pan === 0 ? gain : gain * Math.SQRT2 * Math.sin(angle);
+  const pan = Math.max(-1, Math.min(1, active.pan + active.voicePan));
+  const angle = (pan + 1) * Math.PI / 4;
+  active.leftGain = pan === 1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * Math.cos(angle);
+  active.rightGain = pan === -1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * Math.sin(angle);
 }
 function removeAt<T>(items: T[], index: number): T {
   const removed = items[index];
@@ -457,9 +478,12 @@ function removeAt<T>(items: T[], index: number): T {
   return removed;
 }
 
-function heldDb(time: number, attack: number, decay: number, sustainDb: number): number {
+/** Held dB: linear attack from the floor, decay to sustain, then (when `sustain` > 0)
+ * a fall of 96 dB per `sustain` seconds, clamped at the floor. */
+function heldDb(time: number, attack: number, decay: number, sustainDb: number, sustain: number): number {
   if (attack > 0 && time < attack) return FLOOR_DB * (1 - time / attack);
   if (decay > 0 && time < attack + decay) return sustainDb * ((time - attack) / decay);
+  if (sustain > 0 && time > attack + decay) return Math.max(FLOOR_DB, sustainDb + FLOOR_DB * ((time - attack - decay) / sustain));
   return sustainDb;
 }
 
@@ -469,13 +493,15 @@ function envelopeDbAt(active: ActiveVoice, time: number, op: number): number {
     if (release === 0 || time >= start + release) return FLOOR_DB;
     return active.releaseDb[op] + (FLOOR_DB - active.releaseDb[op]) * ((time - start) / release);
   }
-  if (!active.envelopeEdited[op]) return heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
+  if (!active.envelopeEdited[op]) return heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op], active.sustainTimes[op]);
   const elapsed = time - active.envelopeStart[op], attack = active.attackTimes[op], decay = active.decayTimes[op];
   // A zero attack still preserves the boundary value: the new decay starts at
   // the interrupted dB instead of jumping to full scale.
   if (attack > 0 && elapsed < attack) return active.envelopeFromDb[op] * (1 - elapsed / attack);
   const from = attack > 0 ? 0 : active.envelopeFromDb[op];
   if (decay > 0 && elapsed < attack + decay) return from + (active.sustainDb[op] - from) * (elapsed - attack) / decay;
+  const held = elapsed - attack - decay, sustain = active.sustainTimes[op];
+  if (sustain > 0 && held > 0) return Math.max(FLOOR_DB, active.sustainDb[op] + FLOOR_DB * (held / sustain));
   return active.sustainDb[op];
 }
 
@@ -490,9 +516,9 @@ function gainAt(active: ActiveVoice, time: number, op: number): number {
     const db = active.releaseDb[op] + (FLOOR_DB - active.releaseDb[op]) * ((time - active.releaseTime) / release);
     return db <= FLOOR_DB ? 0 : fastExp2(db * DB_TO_LOG2_GAIN);
   }
-  if (time >= active.attackTimes[op] + active.decayTimes[op]) return active.sustainGain[op];
+  if (active.sustainTimes[op] === 0 && time >= active.attackTimes[op] + active.decayTimes[op]) return active.sustainGain[op];
   if (time === 0 && active.attackTimes[op] > 0) return 0;
-  const db = heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op]);
+  const db = heldDb(time, active.attackTimes[op], active.decayTimes[op], active.sustainDb[op], active.sustainTimes[op]);
   return db <= FLOOR_DB ? 0 : fastExp2(db * DB_TO_LOG2_GAIN);
 }
 
@@ -534,7 +560,7 @@ function fillGains(active: ActiveVoice, oversample: number): void {
  * Takes no double arguments: a non-inlined call would box them every frame. */
 function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: number): boolean {
   const { sustainGain, gains, attackStep, decayStep, releaseStep, attackTimes, decayTimes, releaseTimes, envelopeGain, envelopeSegment } = active;
-  const { envelopeUntil, envelopeRatio } = active;
+  const { envelopeUntil, envelopeRatio, sustainTimes, sustainStep, sustainDb } = active;
   const oversample = subTimes.length, elapsed = active.elapsed, time = elapsed / sampleRate;
   // Frames on the anchor grid restart a geometric segment from the exact dB rule,
   // so rounding from the running product is bounded and independent of chunking.
@@ -578,8 +604,16 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
         if (release === 0 || time >= active.releaseTime + release) step = -2;
         else if (lastTime < active.releaseTime + release) { step = releaseStep[op]; segment = 3; end = active.releaseTime + release; }
       } else if (time >= attack + decay) {
-        step = -2;
-        gain = sustainGain[op];
+        const sustain = sustainTimes[op];
+        if (sustain === 0) {
+          step = -2;
+          gain = sustainGain[op];
+        } else {
+          // Held decay is one more dB-linear segment; past the floor the gain stays zero.
+          const floorAt = attack + decay + sustain * ((sustainDb[op] - FLOOR_DB) / -FLOOR_DB);
+          if (time >= floorAt) step = -2;
+          else if (lastTime < floorAt) { step = sustainStep[op]; segment = 4; end = floorAt; }
+        }
       } else if (time > 0 && lastTime < attack) {
         step = attackStep[op]; segment = 1; end = attack;
       } else if (time >= attack && lastTime < attack + decay) {
@@ -1457,6 +1491,7 @@ export class Synth {
       active.releaseTimes[i] = operatorDuration(op.adsr.r, note, op.rateKeyScale);
       attackStep[i] = attack === 0 ? 1 : 10 ** (-FLOOR_DB / (20 * attack * rate));
       decayStep[i] = decay === 0 ? 1 : 10 ** (sustainDb[i] / (20 * decay * rate));
+      setSustainRate(active, i, op.adsr.sr, note, op.rateKeyScale, rate);
     }
     active.id = id;
     active.voicePriority = voicePriority;
@@ -1478,6 +1513,7 @@ export class Synth {
     active.velocity = velocity;
     active.expression = 1;
     active.pan = pan;
+    active.voicePan = voice.pan ?? 0;
     active.expressionFrom = active.expressionTarget = 1;
     active.expressionStart = active.expressionFrames = 0;
     active.panFrom = active.panTarget = pan;
@@ -1521,7 +1557,7 @@ export class Synth {
     active.envelopeFromDb.fill(FLOOR_DB);
     active.envelopeEdited.fill(0);
     active.releaseStarts.fill(0);
-    active.lfoTurns = 0;
+    active.lfoTurns = active.lfoCycle = 0;
     active.lfoLive = false;
     active.pitchRelease = 0;
     active.silentGains = false;
@@ -1646,8 +1682,9 @@ export class Synth {
     const frames = (controls.ramp ?? 0) * this.sampleRate;
     if (controls.lfoRate !== undefined && !active.lfoLive) {
       const clock = active.lfoGlobal ? this.currentFrame : active.elapsed;
-      active.lfoTurns = clock / this.sampleRate * active.scalarValues[1] + active.lfoPhase;
-      active.lfoTurns -= Math.floor(active.lfoTurns);
+      const turns = clock / this.sampleRate * active.scalarValues[1] + active.lfoPhase, whole = Math.floor(turns);
+      active.lfoTurns = turns - whole;
+      active.lfoCycle = whole;
       active.lfoLive = true;
     }
     for (let field = 0; field < SCALAR_FIELDS.length; field++) {
@@ -1708,6 +1745,7 @@ export class Synth {
         active.sustainDb[op] = adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(adsr.s));
         active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : 10 ** (active.sustainDb[op] / 20);
         active.releaseTimes[op] = operatorDuration(adsr.r, active.note, keyScale);
+        setSustainRate(active, op, adsr.sr, active.note, keyScale, this.sampleRate * this.oversample);
         if (active.releaseTime >= 0) {
           active.releaseDb[op] = db;
           active.releaseStarts[op] = time;
@@ -1803,7 +1841,8 @@ export class Synth {
     if (lfoEnabled && (active.amDepth !== 0 || active.pmDepth !== 0)) {
       const clock = active.lfoGlobal ? this.currentFrame : active.elapsed;
       const turns = active.lfoLive ? active.lfoTurns : clock / this.sampleRate * active.lfoRate + active.lfoPhase;
-      tremolo = lfoAt(turns - Math.floor(turns), active.lfoCode);
+      const whole = Math.floor(turns);
+      tremolo = lfoAt(turns - whole, active.lfoCode, whole + active.lfoCycle);
     }
     const amGain = !lfoEnabled || active.amDepth === 0 ? 1 : 1 - amDepth * (0.5 + 0.5 * tremolo);
     const pmFactor = !lfoEnabled || active.pmDepth === 0 ? 1 : fastExp2(pmDepth * tremolo / 1200);
@@ -1956,7 +1995,9 @@ export class Synth {
     }
     if (active.lfoLive) {
       active.lfoTurns += active.scalarValues[1] / this.sampleRate;
-      active.lfoTurns -= Math.floor(active.lfoTurns);
+      const whole = Math.floor(active.lfoTurns);
+      active.lfoTurns -= whole;
+      active.lfoCycle += whole;
     }
     if (frequencyRamping) {
       const x = (oversample - 1) / oversample;

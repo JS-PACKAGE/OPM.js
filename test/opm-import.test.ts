@@ -26,9 +26,9 @@ test('original text recipes normalize, serialize, prepare and render determinist
   const voices = importOPM(source), bytes = new TextEncoder().encode(source);
   assert.equal(voices.length, 3); assert.deepEqual(importOPM(bytes), voices);
   for (const voice of voices) {
-    assert.equal(voice.version, 7);
+    assert.equal(voice.version, 8);
     assert.deepEqual(validateVoice(JSON.parse(JSON.stringify(voice))), validateVoice(voice));
-    assert.equal(prepareVoice(voice).version, 7);
+    assert.equal(prepareVoice(voice).version, 8);
     const options = { voice, duration: 0.08, sampleRate: 8000 };
     const rendered = renderNote(options);
     assert.ok(rendered.left.every(Number.isFinite));
@@ -100,11 +100,14 @@ test('manual modulation tables, waveforms and clamping produce stable descriptio
   for (let ams = 0; ams < 4; ams++) {
     const voice = importOPM(patch({ lfo: [0, 127, 0, ams, 0], ch: [192, 0, 0, ams, 0, 120, 0] }))[0];
     assert.equal(voice.lfo.amDepth, 1 - 10 ** (-[0, 23.90625, 47.8125, 95.625][ams] * 127 / 128 / 20));
-    assert.equal(voice.lfo.waveform, ['saw', 'square', 'triangle', 'sine'][ams]);
+    assert.equal(voice.lfo.waveform, ['saw', 'square', 'triangle', 'noise'][ams]);
   }
   const source = patch({ name: 'Lossy patch!', ne: 1, slot: 0, lfo: [255, 127, 127, 3, 31], ops: operators(2, [1, 1, 1, 1]) });
   const description = describeOPM(source)[0];
   assert.equal(description.program, 0); assert.equal(importOPM(source)[0].lfo.rate, 20);
+  // D2R becomes the v8 sustain rate on the same curve as the other rates; zero holds.
+  assert.deepEqual(importOPM(source)[0].ops.map(op => op.adsr.sr), Array(4).fill(10 * 2 ** (-1 / 3)));
+  assert.ok(importOPM(patch())[0].ops.every(op => !Object.hasOwn(op.adsr, 'sr')));
   for (const term of ['D2R', 'SLOT', 'noise extension', 'Noise rate clamped', 'LFO rate clamped', 'Noise LFO', 'Name sanitized']) assert.ok(description.warnings.some(warning => warning.includes(term)), term);
   assert.equal(new Set(description.warnings).size, description.warnings.length);
   assert.ok(description.warnings.length <= 20 && description.warnings.every(warning => warning.length < 256));

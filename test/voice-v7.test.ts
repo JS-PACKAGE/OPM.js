@@ -9,7 +9,7 @@ import type { OperatorWaveform, Voice, VoiceInput } from '../src/voices/schema.j
 import { originalPresets } from '../src/voices/original.js';
 
 function tone(waveform: OperatorWaveform = 'sine', noiseRate = 8000): Voice {
-  return { version: 7, name: 'v7-test', algorithm: 7, feedback: 0, modIndex: 0,
+  return { version: 8, name: 'v7-test', algorithm: 7, feedback: 0, modIndex: 0,
     lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
     ops: [0, 1, 2, 3].map(i => ({ ratio: 1, level: i === 0 ? 0.8 : 0, detune: 0,
       waveform, noiseRate, adsr: { a: 0, d: 0, s: 1, r: 0.04 } })) as Voice['ops'] };
@@ -160,14 +160,14 @@ test('sine and waveform frames render identically to the generic path', () => {
   }
 });
 
-test('legacy versions retain restrictions and canonicalize to v7 with identical sine samples', () => {
+test('legacy versions retain restrictions and canonicalize to v8 with identical sine samples', () => {
   const current = tone();
   current.ops.forEach(op => { delete op.waveform; delete op.noiseRate; });
   const expected = renderNote({ voice: current, note: 65, duration: 0.08, sampleRate: 22050 }).left;
   for (const version of [1, 2, 3, 4, 5, 6] as const) {
     const legacy = { ...current, version, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } } as VoiceInput;
-    assert.equal(normalizeVoice(legacy).version, 7);
-    assert.equal(validateVoice(legacy).version, 7);
+    assert.equal(normalizeVoice(legacy).version, 8);
+    assert.equal(validateVoice(legacy).version, 8);
     assert.deepEqual(renderNote({ voice: validateVoice(legacy), note: 65, duration: 0.08, sampleRate: 22050 }).left, expected);
     for (const field of [{ waveform: 'sine' }, { noiseRate: 8000 }]) {
       const invalid = structuredClone(legacy); Object.assign(invalid.ops[0], field);
@@ -176,6 +176,21 @@ test('legacy versions retain restrictions and canonicalize to v7 with identical 
     }
   }
   assert.deepEqual(renderNote({ voice: tone(), note: 65, duration: 0.08, sampleRate: 22050 }).left, expected);
+});
+
+test('explicit v7 operator waveforms normalize to v8', () => {
+  for (const waveform of ['sine', 'half', 'abs', 'quarter', 'alternating', 'camel', 'square', 'saw', 'noise'] as const) {
+    const current = tone(waveform);
+    const { pan: _pan, ...patch } = current;
+    const legacy: VoiceInput = { ...patch, version: 7,
+      lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+      ops: current.ops.map(op => ({ ...op, adsr: { a: op.adsr.a, d: op.adsr.d, s: op.adsr.s, r: op.adsr.r } })) as unknown as
+        Extract<VoiceInput, { version: 7 }>['ops'] };
+    for (const convert of [normalizeVoice, validateVoice]) {
+      assert.equal(convert(legacy).version, 8);
+      assert.deepEqual(convert(legacy), current);
+    }
+  }
 });
 
 test('17-bit noise recurrence is maximal length and deterministic', () => {

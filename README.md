@@ -44,8 +44,8 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 ## Features
 
 - **4-operator FM synthesis** with 8 connection algorithms and hardware-style feedback
-- **Per-operator dB-domain ADSR**, level/rate key scaling, velocity sensitivity and optional fixed-Hz oscillators
-- **Per-voice pitch envelope and LFO** with four AM / PM waveforms, delay, phase, note/global synchronization and per-operator depth targets
+- **Per-operator dB-domain ADSR** with optional held-note sustain decay, level/rate key scaling, velocity sensitivity and optional fixed-Hz oscillators
+- **Per-voice pitch envelope, pan and LFO** with five AM / PM waveforms (including deterministic sample-and-hold noise), delay, phase, note/global synchronization and per-operator depth targets
 - **Configurable 1–32-voice polyphony** (default 8; larger budgets are opt-in) with oldest, release-first or quietest stealing, per-note **voice priority** that protects melodies, and at most eight bounded ~5 ms stealing fades
 - **Smooth live timbre controls** — independent pitch, expression/pan/modulation/level, feedback, ratio/fixed-Hz and LFO ramps; editable ADSR anchored at current dB
 - **Audio-clock scores and musical Transport** — pause/resume, seek, loop, BPM/tempo maps with **linear tempo ramps**, beat/bar conversion, quantization and swing helpers
@@ -71,7 +71,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 ### Try the checkout
 
-Obtain the [v1.10 source archive or checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.10) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
+Obtain the [v1.13.0 source archive or checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.0) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
 
 The committed `dist/` is ready to use; trying the demos needs no npm installation or build. With Python 3 available, run from that repository root:
 
@@ -83,18 +83,18 @@ Open **http://localhost:8000/index.html** for the English example catalog:
 
 | Example | Demonstrates |
 | --- | --- |
-| [Basic notes and voices](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
-| [Melody and chord scheduling](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
-| [Live expression and per-voice LFO](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
-| [Shared AudioContext and routing](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
-| [Offline synthesis and WAV](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
-| [Advanced playground](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
-| [Preset and DX7 audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
-| [Scores, Transport and performance](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
-| [Adaptive game music](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
-| [Playable instrument and Web MIDI](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
-| [Independent buses and stems](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
-| [FM sound designer](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
+| [Basic notes and voices](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
+| [Melody and chord scheduling](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
+| [Live expression and per-voice LFO](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
+| [Shared AudioContext and routing](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
+| [Offline synthesis and WAV](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
+| [Advanced playground](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
+| [Preset and DX7 audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
+| [Scores, Transport and performance](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
+| [Adaptive game music](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
+| [Playable instrument and Web MIDI](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
+| [Independent buses and stems](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
+| [FM sound designer](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
 
 Click a playback button to start audio. Stop the server with Ctrl+C when finished. Do not open the HTML through `file://`. Pages and runtime messages are English; TypeScript helpers live in `demo/`.
 
@@ -102,13 +102,13 @@ If `dist/` is missing or you have changed `src/` or `demo/` TypeScript, regenera
 
 ### Install into an npm project
 
-Download [opm.js-1.10.0.tgz from the v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz), then install it from your application's root:
+Download [opm.js-1.13.0.tgz from the v1.13.0 release](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.0/opm.js-1.13.0.tgz), then install it from your application's root:
 
 ```sh
-npm install /actual/path/to/opm.js-1.10.0.tgz
+npm install /actual/path/to/opm.js-1.13.0.tgz
 ```
 
-No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The v1.10 asset includes these synchronized guides; the original v1.8 tag and archive remain unchanged.
+No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The v1.13.0 asset includes these synchronized guides; the original v1.8 tag and archive remain unchanged.
 
 To build a local tarball instead, run from the `OPM.js` source checkout with Node.js 22+ and npm:
 
@@ -117,19 +117,19 @@ npm ci
 npm pack
 ```
 
-`npm pack` builds automatically and produces `opm.js-1.10.0.tgz`. To create a new application beside the checkout:
+`npm pack` builds automatically and produces `opm.js-1.13.0.tgz`. To create a new application beside the checkout:
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.10.0.tgz
+npm install ../OPM.js/opm.js-1.13.0.tgz
 ```
 
 For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.
 
-For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
+For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
 
 ### Use in a browser
 
@@ -224,7 +224,7 @@ To run the same script from a checkout instead, change the imports to `./dist/co
 
 ## API reference
 
-The following reference describes v1.10. Historical release archives remain unchanged. The [compiler-generated reference](./doc/api.html) includes every public root/core/voice/tool export and its full declarations; it is refreshed by `npm run build`. See the [cross-feature contract table](./doc/host-integration.md#cross-feature-contracts) for IDs, lifecycle observations, ownership and persistence.
+The following reference describes v1.13; contracts added since v1.10 are documented in their sections. Historical release archives remain unchanged. The [compiler-generated reference](./doc/api.html) includes every public root/core/voice/tool export and its full declarations; it is refreshed by `npm run build`. See the [cross-feature contract table](./doc/host-integration.md#cross-feature-contracts) for IDs, lifecycle observations, ownership and persistence.
 
 All times are in seconds unless stated otherwise. Browser and Node examples intentionally use different import styles:
 
@@ -463,11 +463,11 @@ const audio = renderNote({ voice: brass, note: 60, duration: 0.7, velocity: 0.8,
 await writeFile('brass.wav', encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate }));
 ```
 
-`importDX7(bytes)` from `opm.js/voices/dx7.js` returns complete normalized version 7 voices. It accepts exactly one standard framed/checksummed 163-byte single-voice or 4104-byte 32-voice bank SysEx message (`Uint8Array`), rejecting invalid framing, length, checksum, or non-7-bit data. `describeDX7(bytes)` returns per-voice `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; selected/dropped numbers refer to DX7 operators 1–6, source algorithms to 1–32, and converted algorithms to 0–7.
+`importDX7(bytes)` from `opm.js/voices/dx7.js` returns complete normalized version 8 voices. It accepts exactly one standard framed/checksummed 163-byte single-voice or 4104-byte 32-voice bank SysEx message (`Uint8Array`), rejecting invalid framing, length, checksum, or non-7-bit data. `describeDX7(bytes)` returns per-voice `{name,sourceAlgorithm,algorithm,selectedOperators,droppedOperators,warnings}`; selected/dropped numbers refer to DX7 operators 1–6, source algorithms to 1–32, and converted algorithms to 0–7.
 
-This remains an **approximate six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained; operator velocity/rate scaling, pitch envelopes and LFO delay/sync are musical heuristics. Pitch-envelope stages are reduced; unsupported descending saw/sample-and-hold waveforms are substituted with warnings. Dropped operators/routing, oscillator sync, transpose, per-operator AM and envelope details still differ; the converter reduces selected operators' AM sensitivity to one shared depth, not selective v6 targets. Inspect descriptions and [expressive conversion limits](./doc/expressive-voices.md) before loading. The checkout-only [audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/audition.html) uses original synthetic fixtures, not copied patches or a six-operator reference engine.
+This remains an **approximate six-to-four-operator conversion**, not DX7 synthesis/emulation. Fixed-Hz operators are retained; operator velocity/rate scaling, pitch envelopes and LFO delay/sync are musical heuristics. Pitch-envelope stages are reduced; unsupported descending saw becomes rising saw with a warning. Sample-and-hold (source wave 5) maps to the deterministic `noise` LFO with warning `Sample-and-hold LFO uses a deterministic per-cycle pseudo-random level, not Yamaha random values.` Dropped operators/routing, oscillator sync, transpose, per-operator AM and envelope details still differ; the converter reduces selected operators' AM sensitivity to one shared depth, not selective v6 targets. Inspect descriptions and [expressive conversion limits](./doc/expressive-voices.md) before loading. The checkout-only [audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/audition.html) uses original synthetic fixtures, not copied patches or a six-operator reference engine.
 
-`importOPM(source)` from `opm.js/voices/opm.js` accepts decimal VOPM/MXDRV-family `.opm` text (`string` or Latin-1 `Uint8Array`) and returns complete normalized v7 voices. `describeOPM(source)` returns `{name,program,algorithm,operators,warnings}` for each patch. Names are sanitized and deterministically de-duplicated; source program numbers are metadata, not an automatic MIDI map. Input is bounded to 262144 bytes, 128 patches and 512 bytes per line, with strict integer ranges and complete unique sections. This is an **approximate conversion, not register-level YM2151 emulation**: held decay, rate scaling, detune, feedback and LFO differ, PAN is ignored, and C2 noise is an OPM.js extension. See [OPM conversion formulas and limits](./doc/expressive-voices.md#opm-text-import).
+`importOPM(source)` from `opm.js/voices/opm.js` accepts decimal VOPM/MXDRV-family `.opm` text (`string` or Latin-1 `Uint8Array`) and returns complete normalized v8 voices. `describeOPM(source)` returns `{name,program,algorithm,operators,warnings}` for each patch. Names are sanitized and deterministically de-duplicated; source program numbers are metadata, not an automatic MIDI map. Input is bounded to 262144 bytes, 128 patches and 512 bytes per line, with strict integer ranges and complete unique sections. Nonzero D2R maps to `adsr.sr = max(0.01, 10 * 2 ** (-D2R / 3))` seconds; zero holds. WF 3 maps to the deterministic `noise` LFO, not the hardware LFSR. PAN remains ignored because converters often write a fixed default (64), not L/R bits; set voice or note pan explicitly. This is an **approximate conversion, not register-level YM2151 emulation**: held decay, rate scaling, detune, feedback and LFO differ, and C2 noise is an OPM.js extension. See [OPM conversion formulas and limits](./doc/expressive-voices.md#opm-text-import).
 
 ## Optimized distribution
 
@@ -512,11 +512,13 @@ Independent references cover Bessel-series high-index PM, contractive delayed fe
 
 ## Voice format
 
-A voice has four operators, an algorithm (0–7), and integer patch feedback (0–7). This is a canonical version 7 entry. Single objects may omit `version`, `name`, `modIndex` (4), and `lfo` (off/sine). Explicit versions 1–6 retain their original shapes and normalize to 7: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude LFO waveform, v1–4 exclude expressive v5 fields, v1–5 exclude v6 LFO targets, and v1–6 exclude operator waveform/noise rate.
+> Voice format v8 (sustain rate, voice pan, noise LFO) is in the source tree after v1.13.0 and ships with the next release; the v1.13.0 tarball implements v7 and rejects the v8 fields.
+
+A voice has four operators, an algorithm (0–7), and integer patch feedback (0–7). This is a canonical version 8 entry with an illustrative sustain rate. Single objects may omit `version` (current: 8), `name`, `modIndex` (4), and `lfo` (off/sine). Explicit versions 1–7 retain their original shapes and normalize to 8: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude LFO waveform, v1–4 exclude expressive v5 fields, v1–5 exclude v6 LFO targets, versions 1–6 exclude operator waveform/noise rate, and versions 1–7 exclude sustain rate, voice pan and noise LFO.
 
 ```json
 {
-  "version": 7,
+  "version": 8,
   "name": "brass",
   "algorithm": 4,
   "feedback": 3,
@@ -524,7 +526,7 @@ A voice has four operators, an algorithm (0–7), and integer patch feedback (0�
   "lfo": { "rate": 5.2, "amDepth": 0, "pmDepth": 12, "waveform": "sine" },
   "ops": [
     { "ratio": 1.0, "level": 0.8, "detune": 0, "velocitySensitivity": 12,
-      "adsr": { "a": 0.01, "d": 0.2, "s": 0.6, "r": 0.1 },
+      "adsr": { "a": 0.01, "d": 0.2, "s": 0.6, "r": 0.1, "sr": 2 },
       "keyScale": { "breakpoint": 60, "leftDbPerOctave": 0, "rightDbPerOctave": 6 } },
     { "ratio": 1.0, "level": 0.6, "detune": 3,
       "adsr": { "a": 0.01, "d": 0.15, "s": 0.5, "r": 0.1 } },
@@ -540,29 +542,37 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 
 | Voice field | Allowed values |
 | --- | --- |
-| `version`, `name` | Version 7; legacy 1–6 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |
+| `version`, `name` | Version 8; legacy 1–7 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |
 | `algorithm`, `feedback` | Integers 0–7 |
 | `ratio`, `level`, `detune` | 0.125–32, 0–1, −1200–1200 cents |
 | `adsr.a`, `adsr.d`, `adsr.s`, `adsr.r` | Attack/decay/release: 0–10 seconds; sustain: 0–1 |
+| `adsr.sr` | Optional v8 0.01–100 seconds per full 96 dB of held-note decay after attack/decay; omitted holds sustain |
+| `pan` | Optional v8 −1..1, default 0; added to note pan, clamped to −1..1 before equal-power panning |
 | `modIndex` | 0–16 |
 | `lfo.rate`, `lfo.amDepth`, `lfo.pmDepth` | 0–20 Hz, 0–1, 0–1200 cents |
-| `lfo.waveform` | `sine` (default), `triangle`, `saw`, `square`; v4+ shape only |
+| `lfo.waveform` | `sine` (default), `triangle`, `saw`, `square` (v4+); `noise` sample-and-hold (v8) |
 | `ops[i].keyScale` | Optional; `breakpoint`: MIDI integer 0–127; `leftDbPerOctave`, `rightDbPerOctave`: 0–24 dB/octave |
 | `ops[i].velocitySensitivity` | Optional since v3: 0–48 dB attenuation at velocity zero; omitted is 0 |
 | `ops[i].frequency` | Optional v5 fixed frequency 1–20000 Hz; overrides note-derived ratio frequency, with detune/live pitch/PM still applied |
-| `ops[i].rateKeyScale` | Optional v5 0–4: ADSR times multiply by `2 ** (-rateKeyScale * (note - 60) / 12)`, clamped to 10 seconds; default 0 |
-| `ops[i].waveform` | Optional v7 `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise` |
-| `ops[i].noiseRate` | Optional v7 20–20000 Hz, default 8000; ignored unless waveform is `noise` |
+| `ops[i].rateKeyScale` | Optional v5 0–4: ADSR times multiply by `2 ** (-rateKeyScale * (note - 60) / 12)`, capped at 10 seconds for a/d/r and 100 seconds for sr; default 0 |
+| `ops[i].waveform` | Introduced in v7: optional `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise` |
+| `ops[i].noiseRate` | Introduced in v7: optional 20–20000 Hz, default 8000; ignored unless waveform is `noise` |
 | `pitchEnvelope` | Optional v5 `{a,d,r,initial,peak,sustain,final}`; times 0–10 seconds, levels −4800..4800 cents, continuous linear-cents release |
 | `lfo.delay`, `lfo.sync`, `lfo.phase` | Optional v5 0–10 seconds, `'note'`/`'global'` (default note), 0–1 turns (default 0); delay gates depth (then fades it in over 20 ms), not the phase clock |
 | `lfo.amTargets`, `lfo.pmTargets` | Optional v6 four-element depth factors 0–1; input booleans normalize to 0/1; absent targets mean all 1 |
 
 See the [expressive voice reference](./doc/expressive-voices.md) for pitch composition, fixed-frequency behavior and synchronization. Ratio remains required even when frequency is supplied. Preserve the source patch version when importing older banks; changing a version number alone does not add unsupported fields to its legacy shape.
 
+Sustain rate is linear in dB (exponential in amplitude): after attack/decay, `sr` specifies seconds to lose a full 96 dB while held. At the −96 dB floor the output is exact zero until release; release begins at the decayed level. Omission preserves the previous held-sustain behavior bit-identically. This supports piano/pluck/bell tails (OPM-style D2R). Public `envelopeAt(time, gate, adsr)` and live `updateNote({ operatorADSR })` honor optional `sr` with the same range; omission holds sustain. Strict `normalizeVoice`/`prepareVoice` reject out-of-range values; bank `validateVoice`/`parseVoiceBank` clamp finite values, including `sr` and pan.
+
+The noise LFO holds one deterministic pseudo-random level in [−1, 1) per cycle, using a stateless integer hash of the cycle index, not a hardware LFSR. `lfoValue(phase, 'noise')` selects cycle `floor(phase / (2 * Math.PI))`; offline/chunked rendering and global sync are reproducible, and note sync restarts the same sequence for each note. AM/PM depths and targets apply normally.
+
+Explicit versions 1–7 reject these additions with `adsr.sr requires voice version 8`, `voice pan requires voice version 8`, or `noise LFO requires voice version 8`. Canonical JSON orders `pan` between `modIndex` and `lfo`, omitting it when absent.
+
 Periodic shapes use phase plus modulation. Voices without noise and with static operator levels render through per-algorithm frames, with identical output to the general loop. Noise uses a deterministic 17-bit bipolar sample-and-hold sequence reset at every admission/slot reuse. Ratio, fixed Hz, detune, pitch and PM do not pitch noise; live ratio/frequency controls remain valid but have no audible pitch effect. Envelope, velocity, level, key scaling, AM and graph roles still apply. Noise on any operator is an OPM.js extension, not hardware-fidelity emulation. Square/saw use polyBLEP and half uses polyBLAMP edge correction, but these shapes and noise can still alias, especially under FM; see [shape formulas and noise details](./doc/expressive-voices.md#oscillator-shapes-and-noise). Original presets include `noise-snare`, `noise-hihat` and `explosion`.
 
 
-Key scaling attenuates operator level by `10 ** (-slope * abs(note - breakpoint) / 12 / 20)` on the corresponding side; omitted scaling is flat. Velocity sensitivity additionally multiplies it by `10 ** (-sensitivity * (1 - velocity) / 20)`, changing carrier loudness and modulator brightness. Final note velocity still multiplies the output; default sensitivity 0 preserves legacy sound. Pan belongs to the note, not the voice.
+Key scaling attenuates operator level by `10 ** (-slope * abs(note - breakpoint) / 12 / 20)` on the corresponding side; omitted scaling is flat. Velocity sensitivity additionally multiplies it by `10 ** (-sensitivity * (1 - velocity) / 20)`, changing carrier loudness and modulator brightness. Final note velocity still multiplies the output; default sensitivity 0 preserves legacy sound. Voice pan is added to playNote/sequence/performance/live note pan controls; the sum is clamped to −1..1 before the existing equal-power pan law.
 
 ### Voice banks
 
@@ -613,6 +623,8 @@ The guides include complete browser loader examples with HTTP-status checks and 
 - [x] v1.0 — 4-operator FM engine, eight algorithms, feedback, ADSR, LFO, detune, browser API, and offline rendering
 - [x] v1.2 — key scaling, approximate DX7 SysEx voice import, and WAV export (regression tests and actual browser demo/import/download verified; see CHANGELOG for evidence and limits)
 - [x] v1.11 — voice v7 waveforms and noise, stereo chorus/reverb, MIDI program maps and RPN, `.opm` import (regression tests, a real-browser audio smoke, passing Node 22/24/26 and Chromium/Firefox/WebKit CI, and demo coverage; physical-device and human-listening acceptance are unverified)
+- [x] v1.12 — post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes, optional soft-knee saturation and DC blocker (regression tests and demo coverage; physical-device and human-listening acceptance are unverified)
+- [x] v1.13 — ≈1.5–2× faster allocation-free rendering, non-sine waveform frames, opt-in TPDF WAV dither (regression tests and demo coverage; physical-device and human-listening acceptance are unverified)
 
 ## Limitations
 

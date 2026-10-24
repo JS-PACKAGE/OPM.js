@@ -1,6 +1,6 @@
 import type { Voice } from './schema.js';
 
-export const brass: Voice = { version: 7, name: 'brass',
+export const brass: Voice = { version: 8, name: 'brass',
 algorithm: 4,
 feedback: 3,
 modIndex: 4,

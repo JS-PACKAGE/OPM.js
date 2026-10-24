@@ -2,6 +2,33 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+Voice format v8. Explicit v1–v7 voices keep their original shapes and normalize to v8; voices that use none of the new fields render bit-identically (all 21 previous presets × eco/standard/high × MIDI 36/60/84 match v1.13.0 sample for sample). No worklet protocol changes beyond accepting the new fields through the existing validators.
+
+### Voice format v8
+
+- **Sustain rate `adsr.sr`** (optional, 0.01–100 s): after attack and decay, a held note keeps falling 96 dB per `sr` seconds (dB-linear), clamps at the −96 dB floor and then outputs exact zero until release; the release starts from the decayed level. Omitted holds the sustain level as before. Rate key scaling applies, capped at 100 s. Live `operatorADSR` edits and `envelopeAt` accept it. This is the held-note decay of OPM-style D2R, for pianos, plucks and bells that fade while held.
+  - The renderer treats it as one more geometric envelope segment, with the same 64-frame exact re-anchoring and segment-end fast path as attack, decay and release, so output stays chunk independent.
+- **LFO `waveform: 'noise'`**: sample-and-hold. Each LFO cycle holds one pseudo-random level in [−1, 1) from a stateless integer hash of the cycle index, so offline, chunked and `sync: 'global'` renders are reproducible; `sync: 'note'` restarts the same sequence per note. `lfoValue(phase, 'noise')` matches it.
+- **Voice `pan`** (optional, −1..1): a patch-level stereo offset added to each note's pan, clamped to −1..1 before the equal-power law. Canonical JSON places it between `modIndex` and `lfo` and omits it when absent.
+- v1–v7 inputs reject all three fields. Strict parsing rejects out-of-range values; bank parsing clamps them, as for every other field. The JSON Schema is now "canonical voice v8".
+
+### Importers
+
+- `.opm`: nonzero D2R now maps to `adsr.sr` on the same heuristic curve as the other rates (previously dropped), and LFO waveform 3 maps to the noise LFO (previously sine). PAN is still ignored: converters commonly write a fixed default (64) instead of the register L/R bits, so the field does not reliably encode placement.
+- DX7: the sample-and-hold LFO maps to the noise LFO (previously sine).
+
+### Presets and examples
+
+- Two original presets: `struck_keys` (held notes fade through sustain rates, modulators faster than carriers) and `stepped_lead` (7 Hz global noise-LFO AM on the modulators steps brightness). Existing presets carry `version: 8` labels with unchanged parameters.
+- The sound-design page adds per-operator sustain rate, voice pan and the noise LFO; patch import/export is v8. The sequence page offers the noise LFO.
+- The sequence page exposes the v1.12 output-stage settings: an `Output stage` choice (`saturation: 'tanh' | 'soft-knee'`) and a `DC blocker` checkbox (`dcBlock`), applied to live playback, offline WAV, chunked and Worker renders and recorded in its acceptance settings.
+
+### Documentation
+
+- README, the English and 繁體中文 usage guides now point installation and checkout at the v1.13.0 release instead of the v1.10 archive, and the API reference intro describes v1.13. The Roadmap gains v1.12 and v1.13 entries.
+
 ## v1.13.0
 
 Package version 1.13.0, a GitHub release (not on npm). No voice-format (still v7) or worklet protocol changes. The internal render-Worker start message gains a `dither` field. API addition: opt-in WAV dither (below). Rendering only changes by rounding: on a mixed 35-preset render with edits and releases, under 0.1% of Float32 output samples differ from v1.12.0, by at most 3e-8.

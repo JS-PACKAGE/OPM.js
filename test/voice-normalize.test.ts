@@ -81,12 +81,12 @@ test('current LFO inputs default to sine and preserve every supported waveform',
     assert.equal(normalizeVoice(input).lfo.waveform, 'sine');
   }
   assert.equal(validateVoice({ ...voice(), lfo }).lfo.waveform, 'sine');
-  for (const waveform of ['sine', 'triangle', 'saw', 'square'] as const) {
+  for (const waveform of ['sine', 'triangle', 'saw', 'square', 'noise'] as const) {
     const source = { ...voice(), lfo: { ...lfo, waveform } };
     assert.equal(normalizeVoice(source).lfo.waveform, waveform);
     assert.equal(validateVoice(source).lfo.waveform, waveform);
   }
-  for (const waveform of ['noise', '', null, undefined, 0, {}, []]) {
+  for (const waveform of ['invalid', '', null, undefined, 0, {}, []]) {
     const source = { ...voice(), lfo: { ...lfo, waveform } };
     assert.throws(() => normalizeVoice(source as unknown as VoiceInput));
     assert.throws(() => validateVoice(source));
@@ -118,7 +118,7 @@ test('prepared identity is trusted only after validation and snapshots are deepl
   assert.equal(prepared.ops[0].adsr.s, brass.ops[0].adsr.s);
   assert.throws(() => Object.assign(prepared.lfo, { waveform: 'triangle' }), TypeError);
   assert.throws(() => Object.assign(prepared.ops[0].adsr, { s: 0 }), TypeError);
-  assert.throws(() => preparedVoiceValue({ ...voice(), lfo: { ...voice().lfo, waveform: 'noise' } } as unknown as VoiceInput));
+  assert.throws(() => preparedVoiceValue({ ...voice(), lfo: { ...voice().lfo, waveform: 'invalid' } } as unknown as VoiceInput));
 });
 
 test('current targets accept booleans and bounded weights as detached immutable numeric tuples', () => {

@@ -9,14 +9,25 @@ const close = (actual: number, expected: number) => assert.ok(Math.abs(actual - 
 
 test('waveforms follow their characteristic cycle shapes', () => {
   const phases = [0, Math.PI / 4, Math.PI / 2, Math.PI, 3 * Math.PI / 2, 7 * Math.PI / 4];
-  const expected: Record<LFO['waveform'], number[]> = {
+  const expected: Record<Exclude<LFO['waveform'], 'noise'>, number[]> = {
     sine: [0, Math.SQRT1_2, 1, 0, -1, -Math.SQRT1_2],
     triangle: [0, 0.5, 1, 0, -1, -0.5],
     saw: [-1, -0.75, -0.5, 0, 0.5, 0.75],
     square: [1, 1, 1, -1, -1, -1],
   };
-  for (const waveform of Object.keys(expected) as LFO['waveform'][]) {
+  for (const waveform of Object.keys(expected) as (keyof typeof expected)[]) {
     phases.forEach((phase, index) => close(lfoValue(phase, waveform), expected[waveform][index]));
+  }
+});
+
+test('noise is deterministic, bounded and held for each cycle', () => {
+  for (let cycle = -16; cycle <= 16; cycle++) {
+    const phase = (cycle + 0.125) * TAU;
+    const value = lfoValue(phase, 'noise');
+    assert.ok(value >= -1 && value < 1);
+    assert.equal(lfoValue(phase, 'noise'), value);
+    assert.equal(lfoValue((cycle + 0.875) * TAU, 'noise'), value);
+    assert.notEqual(lfoValue((cycle + 1.125) * TAU, 'noise'), value);
   }
 });
 

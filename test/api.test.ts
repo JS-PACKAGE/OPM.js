@@ -599,7 +599,7 @@ test('command waits use intrinsic AbortSignal state and never execute signal sha
 
 test('named edits retain detached frozen ownership and register every expressive field by content', async () => {
   Object.assign(globalThis, { currentFrame: 0 });
-  const base: Voice = { version: 7, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
+  const base: Voice = { version: 8, name: 'live', algorithm: 7, feedback: 0, modIndex: 0,
   lfo: { rate: 7, pmDepth: 0.1, amDepth: 0.1, waveform: 'sine' },
   ops: [
     { ratio: 1, level: 0.8, detune: 0, adsr: { a: 0.01, d: 0.03, s: 0.7, r: 0.02 } },
@@ -839,7 +839,7 @@ test('registry size is bounded, replacement frees capacity, and disposed bank op
 
 test('valid array banks cannot export beyond the UTF-8 output budget', async () => {
   const opm = new OPM();
-  const detailed: Voice = { version: 7, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,
+  const detailed: Voice = { version: 8, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,
   lfo: { rate: 19.123456789012345, amDepth: 0.12345678901234567, pmDepth: 1199.1234567890123,
     waveform: 'triangle', delay: 9.123456789012345, sync: 'global', phase: 0.12345678901234567,
     amTargets: [0.12345678901234567, 0.12345678901234567, 0.12345678901234567, 0.12345678901234567],

@@ -20,8 +20,11 @@
       <select id="stealing"><option value="oldest">Oldest</option><option value="release-first">Release first, oldest tie</option><option value="quietest">Quietest carrier envelope, oldest tie</option></select>
       <label for="quality">DSP quality (apply after Dispose)</label>
       <select id="quality"><option value="standard">Standard: 4× / eighth order</option><option value="eco">Eco: 2× / fourth order</option><option value="high">High: 8× / eighth order</option></select>
+      <label for="saturation">Output stage (apply after Dispose)</label>
+      <select id="saturation"><option value="tanh">tanh (default)</option><option value="soft-knee">Soft-knee (linear below 0.5)</option></select>
+      <label><input id="dcBlock" type="checkbox">DC blocker (3 Hz high-pass; apply after Dispose)</label>
       <label for="waveform">LFO waveform (next patch)</label>
-      <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option></select>
+      <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option><option value="noise">noise (sample and hold)</option></select>
       <label for="reference">Reference A4 (Hz)</label>
       <input id="reference" type="number" min="20" max="20000" step="0.1" value="440">
       <label for="cents">MIDI 60 tuning offset (cents; fractional notes interpolate)</label>

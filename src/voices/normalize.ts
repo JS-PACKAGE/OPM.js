@@ -34,7 +34,7 @@ function field(value: object, key: PropertyKey): unknown {
 // Copy only approved own data fields: callers may mutate or reuse their voice after noteOn.
 export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   const input: unknown = source;
-  object(input, ['algorithm', 'feedback', 'ops'], ['name', 'lfo', 'version', 'modIndex', 'pitchEnvelope'], 'voice');
+  object(input, ['algorithm', 'feedback', 'ops'], ['name', 'lfo', 'version', 'modIndex', 'pitchEnvelope', 'pan'], 'voice');
   const algorithm = field(input, 'algorithm');
   const feedback = field(input, 'feedback');
   if (!Number.isInteger(algorithm) || typeof algorithm !== 'number' || algorithm < 0 || algorithm > 7 ||
@@ -45,11 +45,12 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  const version = field(input, 'version') ?? 7;
-  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4, 5, 6, 7].includes(field(input, 'version') as number)) {
+  const version = field(input, 'version') ?? 8;
+  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4, 5, 6, 7, 8].includes(field(input, 'version') as number)) {
     throw new RangeError('Unsupported voice version');
   }
   if ((version as number) < 5 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
+  if ((version as number) < 8 && Object.hasOwn(input, 'pan')) throw new TypeError('voice pan requires voice version 8');
   const rawOps = field(input, 'ops');
   if (!Array.isArray(rawOps) || rawOps.length !== 4) throw new TypeError('ops must contain four operators');
   if (Reflect.ownKeys(rawOps).length !== 5) throw new TypeError('ops has unknown fields');
@@ -58,13 +59,16 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
     const op: unknown = descriptor.value;
-    if (op && typeof op === 'object' && version !== 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate requires voice version 7');
+    if (op && typeof op === 'object' && (version as number) < 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate requires voice version 7');
     object(op, ['ratio', 'level', 'detune', 'adsr'],
-      version === 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :
+      (version as number) >= 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :
       version === 1 ? [] : version === 2 ? ['keyScale'] : version === 5 || version === 6 ?
         ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale'] : ['keyScale', 'velocitySensitivity'], 'operator');
     const adsr = field(op, 'adsr');
-    object(adsr, ['a', 'd', 's', 'r'], [], 'adsr');
+    object(adsr, ['a', 'd', 's', 'r'], ['sr'], 'adsr');
+    // One own-property probe, so a proxy cannot answer the gate and the read differently.
+    const hasSr = Object.hasOwn(adsr, 'sr');
+    if (hasSr && (version as number) < 8) throw new TypeError('adsr.sr requires voice version 8');
     ops[i] = {
       ratio: number(field(op, 'ratio'), 'ratio'),
       level: number(field(op, 'level'), 'level'),
@@ -74,6 +78,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
         s: number(field(adsr, 's'), 's'), r: number(field(adsr, 'r'), 'r'),
       },
     };
+    if (hasSr) ops[i].adsr.sr = number(field(adsr, 'sr'), 'sr');
     if (Object.hasOwn(op, 'velocitySensitivity')) {
       ops[i].velocitySensitivity = number(field(op, 'velocitySensitivity'), 'velocitySensitivity');
     }
@@ -102,14 +107,16 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
       pmDepth: number(field(rawLfo, 'pmDepth'), 'pmDepth'),
       waveform: Object.hasOwn(rawLfo, 'waveform') ? lfoWaveform(field(rawLfo, 'waveform')) : 'sine',
     };
+    if ((version as number) < 8 && lfo.waveform === 'noise') throw new RangeError('noise LFO requires voice version 8');
     if (Object.hasOwn(rawLfo, 'delay')) lfo.delay = number(field(rawLfo, 'delay'), 'delay');
     if (Object.hasOwn(rawLfo, 'sync')) lfo.sync = lfoSync(field(rawLfo, 'sync'));
     if (Object.hasOwn(rawLfo, 'phase')) lfo.phase = number(field(rawLfo, 'phase'), 'phase');
     if (Object.hasOwn(rawLfo, 'amTargets')) lfo.amTargets = lfoTargets(field(rawLfo, 'amTargets'));
     if (Object.hasOwn(rawLfo, 'pmTargets')) lfo.pmTargets = lfoTargets(field(rawLfo, 'pmTargets'));
   }
-  const voice: NormalizedVoice = { version: 7, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
+  const voice: NormalizedVoice = { version: 8, algorithm: algorithm as Algorithm, feedback: feedback as Algorithm, ops: ops as NormalizedVoice['ops'], lfo,
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4 };
+  if (Object.hasOwn(input, 'pan')) voice.pan = number(field(input, 'pan'), 'pan');
   if (name !== undefined) voice.name = name as string;
   if (Object.hasOwn(input, 'pitchEnvelope')) {
     const envelope = field(input, 'pitchEnvelope');

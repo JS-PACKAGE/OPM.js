@@ -1,9 +1,16 @@
 export type Algorithm = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
-export interface ADSR {
+/** v1–v7 envelope: no sustain rate. */
+export interface LegacyADSR {
     a: number;
     d: number;
     s: number;
     r: number;
+    sr?: never;
+}
+/** `sr` (v8, optional): seconds for a held level to fall the full 96 dB after
+ * decay; omitted holds the sustain level until release. */
+export interface ADSR extends Omit<LegacyADSR, 'sr'> {
+    sr?: number;
 }
 export type LFOTargets = readonly [number, number, number, number];
 export type LFOTargetsInput = readonly [number | boolean, number | boolean, number | boolean, number | boolean];
@@ -18,22 +25,31 @@ export interface LegacyLFO {
     amTargets?: never;
     pmTargets?: never;
 }
+export type LegacyLFOWaveform = 'sine' | 'triangle' | 'saw' | 'square';
+/** v8 adds `noise`: a deterministic pseudo-random level held for each LFO cycle. */
+export type LFOWaveform = LegacyLFOWaveform | 'noise';
 export interface LegacyLFOV4 extends Omit<LegacyLFO, 'waveform'> {
-    waveform: 'sine' | 'triangle' | 'saw' | 'square';
+    waveform: LegacyLFOWaveform;
 }
 export interface LegacyLFOV5 extends Omit<LegacyLFOV4, 'delay' | 'sync' | 'phase'> {
     delay?: number;
     sync?: 'note' | 'global';
     phase?: number;
 }
-export interface LFO extends Omit<LegacyLFOV5, 'amTargets' | 'pmTargets'> {
+export interface LegacyLFOV7 extends Omit<LegacyLFOV5, 'amTargets' | 'pmTargets'> {
     amTargets?: LFOTargets;
     pmTargets?: LFOTargets;
 }
-export type LFOInput = Omit<LFO, 'waveform' | 'amTargets' | 'pmTargets'> & {
-    waveform?: LFO['waveform'];
+export interface LFO extends Omit<LegacyLFOV7, 'waveform'> {
+    waveform: LFOWaveform;
+}
+export type LegacyLFOInput = Omit<LegacyLFOV7, 'waveform' | 'amTargets' | 'pmTargets'> & {
+    waveform?: LegacyLFOWaveform;
     amTargets?: LFOTargetsInput;
     pmTargets?: LFOTargetsInput;
+};
+export type LFOInput = Omit<LegacyLFOInput, 'waveform'> & {
+    waveform?: LFOWaveform;
 };
 export interface PitchEnvelope {
     a: number;
@@ -54,7 +70,7 @@ export interface LegacyOperator {
     ratio: number;
     level: number;
     detune: number;
-    adsr: ADSR;
+    adsr: LegacyADSR;
     keyScale?: never;
     velocitySensitivity?: never;
     frequency?: never;
@@ -72,9 +88,12 @@ export interface LegacyOperatorV6 extends Omit<LegacyOperatorV3, 'frequency' | '
     frequency?: number;
     rateKeyScale?: number;
 }
-export interface Operator extends Omit<LegacyOperatorV6, 'waveform' | 'noiseRate'> {
+export interface LegacyOperatorV7 extends Omit<LegacyOperatorV6, 'waveform' | 'noiseRate'> {
     waveform?: OperatorWaveform;
     noiseRate?: number;
+}
+export interface Operator extends Omit<LegacyOperatorV7, 'adsr'> {
+    adsr: ADSR;
 }
 export type FourOperators<T = Operator> = [T, T, T, T];
 interface VoiceBase {
@@ -82,29 +101,36 @@ interface VoiceBase {
     algorithm: Algorithm;
     feedback: Algorithm;
     modIndex?: number;
+    pan?: never;
 }
 /** Strict single-voice input; omitted version uses the current shape. */
-export type VoiceInput = (VoiceBase & {
-    version?: 7;
+export type VoiceInput = (Omit<VoiceBase, 'pan'> & {
+    version?: 8;
+    pan?: number;
     lfo?: LFOInput;
     pitchEnvelope?: PitchEnvelope;
     ops: readonly [Operator, Operator, Operator, Operator];
 }) | (VoiceBase & {
+    version: 7;
+    lfo?: LegacyLFOInput;
+    pitchEnvelope?: PitchEnvelope;
+    ops: readonly [LegacyOperatorV7, LegacyOperatorV7, LegacyOperatorV7, LegacyOperatorV7];
+}) | (VoiceBase & {
     version: 6;
-    lfo?: LFOInput;
+    lfo?: LegacyLFOInput;
     pitchEnvelope?: PitchEnvelope;
     ops: readonly [LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6];
 }) | (VoiceBase & {
     version: 5;
     lfo?: Omit<LegacyLFOV5, 'waveform'> & {
-        waveform?: LFO['waveform'];
+        waveform?: LegacyLFOWaveform;
     };
     pitchEnvelope?: PitchEnvelope;
     ops: readonly [LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6, LegacyOperatorV6];
 }) | (VoiceBase & {
     version: 4;
     lfo?: Omit<LegacyLFOV4, 'waveform'> & {
-        waveform?: LFO['waveform'];
+        waveform?: LegacyLFOWaveform;
     };
     pitchEnvelope?: never;
     ops: readonly [LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3, LegacyOperatorV3];
@@ -124,15 +150,28 @@ export type VoiceInput = (VoiceBase & {
     pitchEnvelope?: never;
     ops: readonly [LegacyOperator, LegacyOperator, LegacyOperator, LegacyOperator];
 });
+/** `pan` (v8, optional, -1..1): voice-level stereo offset added to each note's pan, clamped to -1..1. */
 export interface Voice {
+    version: 8;
+    name: string;
+    algorithm: Algorithm;
+    feedback: Algorithm;
+    modIndex: number;
+    pan?: number;
+    lfo: LFO;
+    pitchEnvelope?: PitchEnvelope;
+    ops: FourOperators;
+}
+export interface LegacyVoiceV7 {
     version: 7;
     name: string;
     algorithm: Algorithm;
     feedback: Algorithm;
     modIndex: number;
-    lfo: LFO;
+    pan?: never;
+    lfo: LegacyLFOV7;
     pitchEnvelope?: PitchEnvelope;
-    ops: FourOperators;
+    ops: FourOperators<LegacyOperatorV7>;
 }
 export interface LegacyVoice {
     version: 1;
@@ -156,7 +195,7 @@ export interface LegacyVoiceV4 extends Omit<LegacyVoiceV3, 'version' | 'lfo'> {
     version: 4;
     lfo: LegacyLFOV4;
 }
-export interface LegacyVoiceV6 extends Omit<Voice, 'version' | 'ops'> {
+export interface LegacyVoiceV6 extends Omit<LegacyVoiceV7, 'version' | 'ops'> {
     version: 6;
     ops: FourOperators<LegacyOperatorV6>;
 }
@@ -165,16 +204,17 @@ export interface LegacyVoiceV5 extends Omit<LegacyVoiceV6, 'version' | 'lfo'> {
     lfo: LegacyLFOV5;
 }
 export interface NormalizedVoice {
-    version: 7;
+    version: 8;
     name?: string;
     algorithm: Algorithm;
     feedback: Algorithm;
     modIndex: number;
+    pan?: number;
     lfo: LFO;
     pitchEnvelope?: PitchEnvelope;
     ops: FourOperators;
 }
-export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5 | LegacyVoiceV6;
+export type CompleteVoiceInput = Voice | LegacyVoice | LegacyVoiceV2 | LegacyVoiceV3 | LegacyVoiceV4 | LegacyVoiceV5 | LegacyVoiceV6 | LegacyVoiceV7;
 export type FrozenVoice = Readonly<Omit<Voice, 'lfo' | 'ops' | 'pitchEnvelope'>> & {
     readonly lfo: Readonly<LFO>;
     readonly pitchEnvelope?: Readonly<PitchEnvelope>;
@@ -195,9 +235,10 @@ export type PreparedVoice = Readonly<Omit<NormalizedVoice, 'lfo' | 'ops' | 'pitc
 export { prepareVoice } from './normalize.js';
 export declare const MAX_BANK_BYTES = 262144;
 export declare const MAX_BANK_VOICES = 128;
-type LimitKey = 'noiseRate' | 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'frequency' | 'rateKeyScale' | 'a' | 'd' | 's' | 'r' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'delay' | 'phase' | 'initial' | 'peak' | 'sustain' | 'final' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
+type LimitKey = 'noiseRate' | 'ratio' | 'level' | 'detune' | 'velocitySensitivity' | 'frequency' | 'rateKeyScale' | 'a' | 'd' | 's' | 'r' | 'sr' | 'pan' | 'modIndex' | 'rate' | 'amDepth' | 'pmDepth' | 'delay' | 'phase' | 'initial' | 'peak' | 'sustain' | 'final' | 'breakpoint' | 'leftDbPerOctave' | 'rightDbPerOctave';
 export declare const LIMITS: Readonly<Record<LimitKey, readonly [number, number]>>;
 export declare function bounded(value: unknown, min: number, max: number, label?: string): number;
+/** Callers gate `noise` to voice version 8. */
 export declare function lfoWaveform(value: unknown): LFO['waveform'];
 export declare function lfoSync(value: unknown): NonNullable<LFO['sync']>;
 export declare function operatorWaveform(value: unknown): OperatorWaveform;

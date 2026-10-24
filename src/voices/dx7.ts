@@ -123,7 +123,7 @@ const clampRatio = (ratio: number): number => Math.max(0.125, Math.min(32, ratio
 const amplitude = (level: number): number => level === 0 ? 0 : 10 ** ((level - 99) * 0.75 / 20);
 // Musical heuristics, not Yamaha's envelope-rate or output-level transfer curves.
 const seconds = (rate: number): number => Math.min(10, 10 * 2 ** (-rate / 10));
-const DX7_LFO_WAVES: readonly LFO['waveform'][] = ['triangle', 'saw', 'saw', 'square', 'sine', 'sine'];
+const DX7_LFO_WAVES: readonly LFO['waveform'][] = ['triangle', 'saw', 'saw', 'square', 'sine', 'noise'];
 // The manual specifies levels 0/50/99 as -4/0/+4 octaves; intermediate
 // linear cents and seconds below are explicit musical approximations.
 const pitchCents = (level: number): number => (level - 50) * 4800 / (level < 50 ? 50 : 49);
@@ -219,7 +219,7 @@ export function importDX7(input: Uint8Array): Voice[] {
     const { algorithm, selected } = selection(data);
     let amSensitivity = 0;
     for (const number of selected) amSensitivity = Math.max(amSensitivity, data[operatorOffset(number) + 14] / 3);
-    const voice: Voice = { version: 7, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
+    const voice: Voice = { version: 8, name, algorithm, feedback: data[135] as Algorithm, modIndex: 4,
     ops: selected.map(number => convertOperator(data, number)) as Voice['ops'],
     lfo: {
       rate: data[137] / 99 * 20,
@@ -268,7 +268,7 @@ export function describeDX7(input: Uint8Array): DX7ImportDescription[] {
     }
     if (data[144] !== 24) warnings.push('Transpose ignored; transpose playback MIDI notes explicitly.');
     if (data[142] === 1) warnings.push('Descending saw LFO is replaced by rising saw; modulation direction changes.');
-    if (data[142] === 5) warnings.push('Sample-and-hold LFO is unsupported and replaced by sine.');
+    if (data[142] === 5) warnings.push('Sample-and-hold LFO uses a deterministic per-cycle pseudo-random level, not Yamaha random values.');
     if (data[140]) warnings.push('Per-operator amplitude modulation sensitivity becomes voice-wide AM using the maximum retained sensitivity.');
     return {
       name, sourceAlgorithm: data[134] + 1, algorithm,

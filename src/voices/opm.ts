@@ -30,7 +30,7 @@ const DT2 = [0, 600, 781, 950];
 const DT1 = [0, 1, 2, 3, 0, -1, -2, -3];
 const PMS = [0, 5, 10, 20, 50, 100, 400, 700];
 const AMS = [0, 23.90625, 47.8125, 95.625];
-const WAVES: readonly LFO['waveform'][] = ['saw', 'square', 'triangle', 'sine'];
+const WAVES: readonly LFO['waveform'][] = ['saw', 'square', 'triangle', 'noise'];
 const CLOCK = 3579545;
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
@@ -111,14 +111,18 @@ function parse(source: unknown): Patch[] {
 // Original monotone musical heuristic, not hardware envelope timings.
 // RR first becomes the manual's input rate 2*RR+1; zero AR/D1R is infinite.
 const seconds = (rate: number): number => rate === 0 ? 10 : Math.min(10, 10 * 2 ** (-rate / 3));
+// The same curve for nonzero D2R as seconds per 96 dB (voice v8 `adsr.sr`); zero holds.
+const sustainSeconds = (rate: number): number => Math.max(0.01, 10 * 2 ** (-rate / 3));
 const gain = (db: number): number => 10 ** (-db / 20);
+// PAN stays unmapped: converters commonly write a fixed default (64) rather than
+// the register RL bits, so file values do not reliably encode L/R placement.
 function convert(patch: Patch): { voice: Voice; description: OPMImportDescription } {
   const lfo = patch.sections.get('LFO')!, ch = patch.sections.get('CH')!;
   const warnings = new Set<string>([
     'Approximate OPM conversion, not register-level YM2151 emulation; no hardware-fidelity claim.',
     'Envelope times, fixed-cent DT1, key-rate scaling, feedback and modulation index use musical approximations.',
     'LFO depth and deterministic global phase approximate hardware modulation; AM/PM waveform phase relationships differ.',
-    'PAN is ignored; choose playback pan explicitly.',
+    'PAN is ignored (files often carry a converter default, not L/R bits); set voice or note pan explicitly.',
     'Raw MUL uses the hardware multiplier table, not the VOPM GUI doubled display convention.',
   ]);
   if (patch.renamed) warnings.add('Name sanitized, shortened or de-duplicated to the voice-name rule.');
@@ -130,7 +134,7 @@ function convert(patch: Patch): { voice: Voice; description: OPMImportDescriptio
   // reorder to hardware register order M1,M2,C1,C2. SLOT uses key-on order.
   const ops = LABELS.map((label, index): Operator => {
     const [ar, d1r, d2r, rr, d1l, tl, ks, mul, dt1, dt2] = patch.sections.get(label)!;
-    if (d2r) warnings.add(`${label}: D2R held-note decay omitted; sustain holds D1L until release.`);
+    if (d2r) warnings.add(`${label}: D2R mapped to an approximate sustain rate (adsr.sr).`);
     if (!(ch[5] & (8 << index))) warnings.add(`${label}: disabled SLOT bit mapped to zero level.`);
     if (ar === 0 || d1r === 0) warnings.add(`${label}: infinite zero-rate stage clamped to ten seconds.`);
     const op: Operator = {
@@ -138,6 +142,7 @@ function convert(patch: Patch): { voice: Voice; description: OPMImportDescriptio
       detune: DT1[dt1] + DT2[dt2], rateKeyScale: ks / 3 * 4,
       adsr: { a: seconds(ar), d: seconds(d1r), s: gain(d1l === 15 ? 93 : d1l * 3), r: seconds(2 * rr + 1) },
     };
+    if (d2r) op.adsr.sr = sustainSeconds(d2r);
     if (label === 'C2' && ch[6]) {
       // Interpret the manual's noise divider as an inverted 32-step countdown.
       // Its printed equation does not spell out raw-register zero encoding.
@@ -153,9 +158,9 @@ function convert(patch: Patch): { voice: Voice; description: OPMImportDescriptio
   // low-nibble interpolation within each doubling high-nibble interval.
   const rate = CLOCK / 2 ** 32 * 2 ** (lfo[0] >> 4) * (1 + (lfo[0] & 15) / 16);
   if (rate > 20) warnings.add('LFO rate clamped to 20 Hz.');
-  if (lfo[3] === 3) warnings.add('Noise LFO unsupported; substituted deterministic sine.');
+  if (lfo[3] === 3) warnings.add('Noise LFO uses a deterministic per-cycle sample-and-hold, not the hardware LFSR.');
   const voice: Voice = {
-    version: 7, name: patch.name, algorithm: ch[2] as Algorithm, feedback: ch[1] as Algorithm,
+    version: 8, name: patch.name, algorithm: ch[2] as Algorithm, feedback: ch[1] as Algorithm,
     // Level is linear amplitude for carriers and phase sources; retain the
     // same TL attenuation for both with the engine's default four-radian index.
     modIndex: 4, ops,
@@ -167,7 +172,7 @@ function convert(patch: Patch): { voice: Voice; description: OPMImportDescriptio
     description: { name: patch.name, program: patch.program, algorithm: voice.algorithm, operators: [...LABELS], warnings: [...warnings] } };
 }
 
-/** Import bounded decimal VOPM/MXDRV-family text patches as approximate v7 voices. */
+/** Import bounded decimal VOPM/MXDRV-family text patches as approximate v8 voices. */
 export function importOPM(source: string | Uint8Array): Voice[] {
   return parse(source).map(patch => convert(patch).voice);
 }

@@ -172,7 +172,7 @@ test('a silent operator cannot hide nonfinite state from the error counter', () 
       adsr: { a: 0, d: 0, s: 1, r: 0.05 },
     })) as unknown as VoiceInput['ops'] });
     const synth = new Synth(16000);
-    synth.noteOn({ ...silent, version: 7, name: 'silent', modIndex: 1, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } }, 60);
+    synth.noteOn({ ...silent, version: 8, name: 'silent', modIndex: 1, lfo: { rate: 0, amDepth: 0, pmDepth: 0 } }, 60);
     audio(synth, 16);
     synth.voices[0].phases[0] = NaN;
     // The shared decimator drains earlier finite history; the voice itself is retired.

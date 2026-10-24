@@ -2,9 +2,9 @@
 
 [English](./usage.en.md) · [專案 README](../README.md) · [原始碼儲存庫](https://github.com/JS-PACKAGE/OPM.js)
 
-GitHub Release **v1.10（套件 1.10.0）**加入可攜 Arrangement 專案、選用的 MIDI 檔案表情保留與損失摘要、依工作負載限定的容量候選，以及有界本機 MIDI 擷取／驗收活動準備。保留 canonical v6 音色、表情控制、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
+最新 GitHub Release 為 **v1.13.0（套件 1.13.0）**：渲染時不配置記憶體、速度約快 1.5–2 倍、非正弦波形 frames，以及選用的 TPDF WAV 抖動；延續 v1.12 的混音後半帶 FIR 降採樣、polyBLEP／polyBLAMP 運算子波形、選用的 soft-knee 飽和與 DC blocker。保留可攜 Arrangement 專案、MIDI 檔案表情保留、32 聲部與 Worker 匯出。GitHub 發佈不表示 npm 已上架。Node.js 需 22+；README 是公開契約。
 
-音色格式版本與套件版本獨立：已發佈的 v1.10 與歷史 v1.7 使用 canonical v6；目前 v1.11 checkout 使用 canonical v7（新增每個運算子的 `waveform` 與 `noiseRate`）；不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–6 仍保留各自原有輸入格式，並正規化為 v7。
+音色格式版本與套件版本獨立：目前原始碼採 canonical v8（延音衰減速率、音色聲像與雜訊 LFO）；v1.13.0 發行版使用音色格式版本 7，歷史 v1.10 與 v1.7 使用 v6，不可變的歷史 v1.6 Release 使用 v5。明確指定的舊音色版本 1–7 仍保留各自原有輸入格式，並正規化為 v8。
 
 **本次 Release 範圍：**[可攜 Arrangement 專案](./score-projects.md#portable-arrangement-projects)、選用的 [MIDI 檔案表情保留與損失摘要](./midi-files.md)、[實測容量候選](./acoustic-quality.md)及[跨功能契約總覽](./host-integration.md#cross-feature-contracts)包含於 v1.10。實體手機／MIDI 與人工聽感仍須真正的原始觀察才能完成驗收，不能用自動播放冒充通過。
 
@@ -51,24 +51,24 @@ GitHub Release **v1.10（套件 1.10.0）**加入可攜 Arrangement 專案、選
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.10/opm.js-1.10.0.tgz
+npm install https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.0/opm.js-1.13.0.tgz
 ```
 
-v1.10 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從原始碼自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
+v1.13.0 Release tarball 包含這份同步文件；原 v1.8 標籤與套件維持不變。若要從 [v1.13.0 checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.0) 自行封裝，以下另一路徑先在 **OPM.js 儲存庫根目錄** 執行，`npm pack` 會自行執行建置（`prepack`），不必預先重複執行 `npm run build`：
 
 ```sh
 npm ci
 npm pack
 ```
 
-此 checkout 的套件版本產生 `opm.js-1.10.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
+此 checkout 的套件版本產生 `opm.js-1.13.0.tgz`。以下從儲存庫根目錄建立**同層的新專案** `opm-app`，假設 checkout 目錄名為 `OPM.js`；若名稱不同，請調整安裝指令中的路徑。若已用上面的 Release 路徑安裝，請跳過這段：
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.10.0.tgz
+npm install ../OPM.js/opm.js-1.13.0.tgz
 ```
 
 既有專案只需在該目錄以 Release URL 或 tarball 的實際路徑執行 `npm install`，不需 `npm init`。此流程不假設已上架 npm registry；使用端不需建置依賴。封裝含 `dist` 的最小化 `.js` 模組、內嵌 TypeScript 原始碼的 `.js.map`、`.d.ts`、13 個 demo entry scripts、文件與法律檔案，不含獨立 TypeScript 原始碼檔案、tests、開發 scripts、13 個 HTML 範例頁面或 Vite 範例；維護指令應在 checkout 執行。
@@ -79,7 +79,7 @@ npm install ../OPM.js/opm.js-1.10.0.tgz
 python3 -m http.server 8000
 ```
 
-開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
+開啟 `http://localhost:8000/index.html` 查看 13 個範例：基本音符、前瞻排程、即時調變、共用 context、WAV、進階控制台、試聽、[共用樂譜／中斷恢復](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/sequence.html)、自適應音樂、表情樂器／MIDI、音色設計、音訊匯流排與原創歌曲。HTML 頁面僅供 checkout 使用，頁面訊息為英文。Python 3 只提供本機 HTTP；既有 `dist` 不需安裝建置，原始碼／helper 改動後才執行 `npm ci`、`npm run build`。需 ES modules／AudioWorklet 與 HTTPS 或 localhost，不能用 `file://`。
 
 ## 瀏覽器靜態部署
 
@@ -143,16 +143,16 @@ public/opm/
 
 Worker 為同源 HTTP(S) 靜態 module，不使用 blob／data／eval；正式 CSP 的 `worker-src`／`script-src` 應允許 `'self'`，資產須有正確 JavaScript MIME。不要把 worker 請求改寫為 SPA HTML。
 
-使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
+使用 Vite 的獨立、子路徑部署範例見 [examples/vite/README.md（僅供 checkout）](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.0/examples/vite/README.md)：它安裝 tarball 並複製完整 `dist` 與 LICENSE，不依賴 npm registry 是否已上架。正式站點須提供正確 JavaScript MIME、真正的資產 404，且不得把 worklet 請求改寫成 SPA HTML；設定 CSP 時應使用外部 module script 與適當來源政策，不要為了範例的行內 script 放寬正式站點防護。部署安全細節見 [SECURITY.md](../SECURITY.md)。
 
 已安裝套件也提供 `opm-assets`，可取代手動複製。從 `opm-app` 根目錄使用**尚不存在**的目的目錄：
 
 ```sh
-npx --no-install opm-assets copy public/opm-1.10.0
-npx --no-install opm-assets check https://your-host.example/opm-1.10.0/
+npx --no-install opm-assets copy public/opm-1.13.0
+npx --no-install opm-assets check https://your-host.example/opm-1.13.0/
 ```
 
-第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.10.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
+第二行請換成實際部署 URL；本機可用 loopback HTTP。若採此目錄，頁面匯入路徑也須改為 `./opm-1.13.0/api/index.js`。copy 原子複製完整 dist／LICENSE、逐檔雜湊並建立 manifest，絕不覆寫既有目錄；check 比對實際回應的狀態、JavaScript MIME、`nosniff` 與 SHA-256，拒絕 redirect／SPA fallback，但不驗證頁面 CSP 或啟動音訊。一般 Python HTTP server 不提供 `nosniff`，不符合預設 check；正式主機須設定此標頭。完整契約見[宿主整合](./host-integration.md#other-bundlers-and-ssr-hosts)。
 
 ## 瀏覽器 API 與自訂音色
 
@@ -497,7 +497,7 @@ renderNote 也接受嚴格 mixGain／tuning／stealing／quality／saturation／
 
 ```json
 {
-  "version": 6,
+  "version": 8,
   "name": "simple",
   "algorithm": 7,
   "feedback": 0,
@@ -514,19 +514,21 @@ renderNote 也接受嚴格 mixGain／tuning／stealing／quality／saturation／
 
 | 欄位 | 範圍 |
 | --- | --- |
-| `version`／`name` | 目前 canonical 版本 7；explicit 1–6 僅接受各自原有欄位。v1 無 keyScale，v1／2 無 velocitySensitivity，v1–3 無 waveform，v1–4 不接受 v5 欄位；v5 不接受 v6 targets；v1–6 不接受運算子 `waveform`／`noiseRate`。名稱為 1–64 ASCII 字母／數字／底線／連字號。 |
+| `version`／`name` | 目前 canonical 版本 8；明確指定的版本 1–7 僅接受各自原有欄位。v1 無 keyScale，v1／2 無 velocitySensitivity，v1–3 無 waveform，v1–4 不接受 v5 欄位；v5 不接受 v6 targets；版本 1–6 不接受運算子 `waveform`／`noiseRate`；版本 1–7 不接受 `adsr.sr`、音色 `pan` 與雜訊 LFO。名稱為 1–64 ASCII 字母／數字／底線／連字號。 |
 | `algorithm`／`feedback`／`modIndex` | 前兩者是 0–7 的整數；調變強度 `modIndex` 是 0–16。 |
 | 四個 `ops` 各項 | 必須提供 `ratio` 0.125–32、`level` 0–1、`detune` -1200–1200 音分，以及 `adsr` 的 `a`、`d`、`s`、`r`；`a`／`d`／`r` 是 0–10 秒，`s` 是 0–1。 |
-| `lfo` | rate 0–20 Hz、amDepth 0–1、pmDepth 0–1200 音分；waveform 為 sine（預設）、triangle、saw 或 square。 |
+| `ops[i].adsr.sr` | v8 可選，0.01–100 秒／完整 96 dB；attack／decay 後持續按住時以 dB 線性衰減（振幅為指數曲線），到 −96 dB 下限後輸出精確零直到 release；release 從已衰減音量開始。省略則維持 sustain，與舊行為逐位元相同。`envelopeAt` 與即時 `operatorADSR` 也支援此欄位。 |
+| 音色 `pan` | v8 可選，−1..1，預設 0；加上 playNote／序列／演奏／即時控制的音符 pan，總和限制為 −1..1 後套用等功率聲像。標準 JSON 排在 `modIndex` 與 `lfo` 之間，未指定時省略。 |
+| `lfo` | rate 0–20 Hz、amDepth 0–1、pmDepth 0–1200 音分；waveform 為 sine（預設）、triangle、saw、square 或 v8 的 noise（取樣保持）。 |
 | `ops[i].keyScale` | 可省略表示平坦；breakpoint 為 MIDI 整數 0–127，leftDbPerOctave／rightDbPerOctave 為 0–24 dB／八度。 |
 | `ops[i].velocitySensitivity` | 從版本 3 起可選，0–48 dB，省略為 0；定義 velocity=0 時的運算子衰減。 |
-| `ops[i].frequency`／`ops[i].rateKeyScale` | v5 可選固定頻率 1–20000 Hz（ratio 仍必填）、速率鍵位縮放 0–4；ADSR 時間乘 `2 ** (-scale*(note-60)/12)` 並限制為最多 10 秒。 |
-| `ops[i].waveform`／`ops[i].noiseRate` | v7 可選的振盪波形：`sine`（預設）、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`；`noiseRate` 為 20–20000 Hz 的保持式雜訊時脈（預設 8000），僅在波形為 `noise` 時有意義。雜訊運算子沒有音高。 |
+| `ops[i].frequency`／`ops[i].rateKeyScale` | v5 可選固定頻率 1–20000 Hz（ratio 仍必填）、速率鍵位縮放 0–4；ADSR 時間乘 `2 ** (-scale*(note-60)/12)`，a／d／r 上限 10 秒，sr 上限 100 秒。 |
+| `ops[i].waveform`／`ops[i].noiseRate` | v7 引入的可選振盪波形：`sine`（預設）、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`；`noiseRate` 為 20–20000 Hz 的保持式雜訊時脈（預設 8000），僅在波形為 `noise` 時有意義。雜訊運算子沒有音高。 |
 | `pitchEnvelope` | v5 可選 `{a,d,r,initial,peak,sustain,final}`；時間 0–10 秒、音高 −4800..4800 音分；release 從目前音高連續開始。 |
 | `lfo.delay`／`lfo.sync`／`lfo.phase` | v5 可選 0–10 秒、note／global、0–1 圈，預設 0／note／0；delay 門控深度，之後以 20 ms 線性淡入，不停止 phase 時鐘。 |
 | `lfo.amTargets`／`lfo.pmTargets` | v6 可選各四個 0–1 權重；boolean 輸入正規化為數字。省略為 `[1,1,1,1]`，依運算子順序套用。 |
 
-單一音色可省略 version／name／lfo／modIndex，仍需 algorithm／feedback 與四個完整運算子。預設目前格式、modIndex 4、LFO off／sine，輸出統一版本 7；舊版 1–6 嚴格保留原始形狀，不得挾帶後來欄位。內建音色與 DX7 匯出也採 canonical v7。所有路徑拒絕錯誤型別、未知欄位、存取器及稀疏陣列，嚴格路徑另拒絕超界數字。鍵位縮放依原音符；pan 屬於音符。完整組合語意見[表情音色參考](./expressive-voices.md)。
+單一音色可省略 version／name／lfo／modIndex，仍需 algorithm／feedback 與四個完整運算子。預設目前版本 8、modIndex 4、LFO off／sine，輸出統一版本 8；舊版 1–7 嚴格保留原始形狀，不得挾帶後來欄位。內建音色與 DX7 匯入也採 canonical v8。所有路徑拒絕錯誤型別、未知欄位、存取器及稀疏陣列；嚴格的 `normalizeVoice`／`prepareVoice` 拒絕超界數字，音色庫 `validateVoice`／`parseVoiceBank` 則限制有限數值至範圍內（包含 sr 與 pan）。鍵位縮放依原音符。雜訊 LFO 以週期索引的無狀態整數雜湊，產生 [−1, 1) 內每週期保持的確定性偽隨機值，並非硬體 LFSR；離線／分塊與 global 同步可重現，note 同步則每音符重新開始相同序列。`lfoValue(phase, 'noise')` 選用 `floor(phase / (2 * Math.PI))` 週期；AM／PM 深度與目標照常套用。完整組合語意見[表情音色參考](./expressive-voices.md)。
 
 `parseVoiceBank()` 由 `opm.js/voices/schema.js`（瀏覽器靜態樹中為 `./opm/voices/schema.js`）匯出，可接受 JSON 字串或音色陣列，要求 **1–128 筆完整音色**且名稱不重複，回傳 `Map<name, voice>`，其音色為已驗證且凍結的完整物件。字串輸入最多 256 KiB（UTF-8）；陣列輸入也有數量限制。和 `validateVoice()`、`renderNote()` 相同，此路徑將**有限但超界**的數值限制在範圍內，與嚴格的單音色 `normalizeVoice()` 不同；不合法的 `version`／`algorithm`／`feedback`、非有限數值、錯誤型別、未知欄位仍會拒絕。`schema.js` 也提供 `validateVoice(voice)`、有限數值邊界函式 `bounded(value, min, max, label = 'number')`、`LIMITS`、`MAX_BANK_BYTES` 與 `MAX_BANK_VOICES`。
 
@@ -596,9 +598,9 @@ Worker 在模組載入／解析／求值後送出 `{type:'ready',protocol:1}`，
 
 [第 08 範例（僅供 checkout）](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/sequence.html) 提供真正 Transport／Performance、控制／品質／銀行／WAV 格式預覽與長檔案 Worker sink／取消。長檔案僅用 File System Access，不聚合成 Blob；短預覽有明確 8 MiB 記憶體預算。
 
-`importDX7(Uint8Array)` 只接受單個框架／checksum 正確的 **163-byte 單音色**或 **4104-byte／32 音色銀行**；拒絕原始、串接或非 7-bit payload，輸出完整版本 6 音色。describeDX7 回傳 name／sourceAlgorithm／algorithm／selectedOperators／droppedOperators／warnings；原 algorithm 1–32、轉換後 0–7，operator 編號依 DX7 的 1–6。
+`importDX7(Uint8Array)` 只接受單個框架／checksum 正確的 **163-byte 單音色**或 **4104-byte／32 音色銀行**；拒絕原始、串接或非 7-bit payload，輸出完整版本 8 音色。describeDX7 回傳 name／sourceAlgorithm／algorithm／selectedOperators／droppedOperators／warnings；原 algorithm 1–32、轉換後 0–7，operator 編號依 DX7 的 1–6。
 
-這仍是**六運算子轉四運算子的有損音樂啟發式轉換**，不是 DX7 合成／模擬。固定 Hz 運算子會保留；力度／速率鍵位縮放、減少階段的 pitch envelope 與 LFO delay／sync 採近似。下降 saw／sample-and-hold 波形以其他波形替代並附 warning；路由、oscillator sync、transpose 與包絡細節仍有損。轉換器將所選運算子的 AM sensitivity 簡化成共用深度，不保留逐運算子 AM，也不映射至選擇性 v6 amTargets。先看 descriptions、[表情音色與轉換限制](./expressive-voices.md)及[音色品質](./voice-quality.md)再試聽；不可信任檔案／下載仍須先限制大小。
+這仍是**六運算子轉四運算子的有損音樂啟發式轉換**，不是 DX7 合成／模擬。固定 Hz 運算子會保留；力度／速率鍵位縮放、減少階段的 pitch envelope 與 LFO delay／sync 採近似。下降 saw 改為上升 saw 並附警告；來源波形 5（取樣保持）改為雜訊 LFO，附警告 `Sample-and-hold LFO uses a deterministic per-cycle pseudo-random level, not Yamaha random values.` 路由、oscillator sync、transpose 與包絡細節仍有損。轉換器將所選運算子的 AM sensitivity 簡化成共用深度，不保留逐運算子 AM，也不映射至選擇性 v6 amTargets。先看 descriptions、[表情音色與轉換限制](./expressive-voices.md)及[音色品質](./voice-quality.md)再試聽；不可信任檔案／下載仍須先限制大小。
 
 ## 品質與發佈驗收
 

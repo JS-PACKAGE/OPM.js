@@ -44,7 +44,7 @@ LFO settings are per-voice `lfo` fields; there is no global `setLFO()` method.
 
 ## Voice format
 
-A voice is JSON: four operators × (required ratio, optional `frequency` override, level, detune, ADSR, optional level/rate key scaling, optional `waveform`/`noiseRate`) + algorithm + feedback + LFO with optional per-operator targets + optional pitch envelope. Canonical v7 accepts legacy v1–v6 original shapes. See README "Voice format"; format changes must bump `version` and update README.
+A voice is JSON: four operators × (required ratio, optional `frequency` override, level, detune, ADSR with optional sustain rate `sr`, optional level/rate key scaling, optional `waveform`/`noiseRate`) + algorithm + feedback + optional voice pan + LFO (including deterministic sample-and-hold `noise`) with optional per-operator targets + optional pitch envelope. Canonical v8 accepts legacy versions 1–7 in their original shapes. See README "Voice format"; format changes must bump `version` and update README.
 
 ## DSP correctness rules
 

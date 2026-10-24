@@ -1,6 +1,6 @@
-# Voice v7 and expressive controls
+# Voice v8 and expressive controls
 
-Voice format version **7** is independent of the npm package version. `normalizeVoice` accepts an omitted version as v7; explicit v1–v6 retain their original field restrictions. Normalized, prepared, imported and bank voices emit v7. Canonical bank entries require `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and exactly four `ops`; the exported JSON schema describes that canonical shape, including numeric LFO target tuples.
+Voice format version **8** is independent of the npm package version. `normalizeVoice` accepts an omitted version as v8; explicit versions 1–7 retain their original field restrictions. Normalized, prepared, imported and bank voices emit v8. Canonical bank entries require `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and exactly four `ops`; the exported JSON schema, titled "OPM.js canonical voice v8", describes that canonical shape, including numeric LFO target tuples.
 
 Inputs must use plain objects and dense own-data operator/target arrays. Unknown fields, accessors, malformed enums, nonfinite numbers and unsupported versions are rejected without evaluating getters. `normalizeVoice` rejects out-of-range numbers; the bank-oriented `validateVoice`/`parseVoiceBank` clamp finite numeric values to the documented bounds. Integer selectors and MIDI breakpoints must still be integers. LFO target tuples are detached and frozen even in normalized voices. `prepareVoice` and bank validation return detached, deeply frozen snapshots, including the optional pitch envelope. A cloned prepared patch must be validated again; a copied shape does not confer trusted identity.
 
@@ -18,11 +18,44 @@ Inputs must use plain objects and dense own-data operator/target arrays. Unknown
 | Operator `keyScale` | Optional `{breakpoint,leftDbPerOctave,rightDbPerOctave}`: breakpoint integer MIDI 0–127, each attenuation 0–24 dB/octave. |
 | Operator `velocitySensitivity` | Optional 0–48 dB attenuation at velocity zero; default zero. Final note velocity gain remains independent. |
 | Operator `frequency` | Optional **1–20000 Hz**, replacing tuned note frequency × ratio. Detune, live pitch/glide, pitch envelope and LFO pitch modulation still apply. Changing MIDI note or tuning does not transpose fixed Hz, but optional key/rate scaling still responds to the played note. |
-| Operator `rateKeyScale` | Optional 0–4; default zero. Each ADSR duration becomes `min(10, seconds * 2 ** (-rateKeyScale * (note - 60) / 12))`. Fractional notes interpolate continuously; zero durations stay zero. Durations are prepared at admission and do not follow live pitch bends or tuning changes. |
-| Operator `waveform` | Optional v7 `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`. |
-| Operator `noiseRate` | Optional v7 20–20000 Hz, default 8000. Ignored unless waveform is `noise`. |
+| Operator `rateKeyScale` | Optional 0–4; default zero. Each a/d/r duration becomes `min(10, seconds * 2 ** (-rateKeyScale * (note - 60) / 12))`; optional `sr` uses the same multiplier with a 100-second cap. Fractional notes interpolate continuously; zero durations stay zero. Durations are prepared at admission and do not follow live pitch bends or tuning changes. |
+| Operator `waveform` | Introduced in v7: optional `sine` (default), `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`. |
+| Operator `noiseRate` | Introduced in v7: optional 20–20000 Hz, default 8000. Ignored unless waveform is `noise`. |
 
 Explicit v1 rejects key scaling and velocity sensitivity; v2 adds key scaling; v3 adds velocity sensitivity; v4 adds LFO waveform. All explicit v1–v4 reject `frequency`, `rateKeyScale`, `pitchEnvelope`, and LFO `delay`/`sync`/`phase`, rather than silently dropping them. V5 adds those expressive fields, represented by `LegacyVoiceV5` and `LegacyLFOV5`. All explicit v1–v5 reject LFO `amTargets`/`pmTargets`. V6 adds those per-operator targets; leaving them absent preserves the legacy all-operator modulation behavior without adding default fields to snapshots.
+
+### Version 8: sustain rate, noise LFO and voice pan
+
+All three additions require version 8 (or omitted `version`). Explicit versions 1–7 reject them with `adsr.sr requires voice version 8`, `voice pan requires voice version 8`, and `noise LFO requires voice version 8`, respectively. `normalizeVoice` and `prepareVoice` strictly reject out-of-range values; bank `validateVoice`/`parseVoiceBank` clamp finite values to the same bounds.
+
+- **Operator `adsr.sr`**: optional 0.01–100 seconds per full 96 dB of held-note decay, beginning after attack and decay. The slope is linear in dB (exponential amplitude), clamps at the −96 dB floor, then outputs exact zero until release. Release starts from the decayed level. Omission holds sustain until release, bit-identical to the previous behavior. This is useful for piano/pluck/bell tails and OPM-style D2R. `rateKeyScale` scales sr like a/d/r but caps it at 100 seconds instead of 10. Public `envelopeAt(time, gate, adsr)` and live `updateNote({ operatorADSR })` also accept sr with the same range; omitted sr means hold.
+- **LFO `waveform: 'noise'`**: one deterministic pseudo-random value in [−1, 1) per cycle, held until the next cycle. A stateless integer hash of the cycle index makes offline/chunked renders and global sync reproducible; note sync restarts the same sequence for every note. `lfoValue(phase, 'noise')` uses cycle `floor(phase / (2 * Math.PI))`. AM/PM depths and targets work as for other shapes. This is not a hardware LFSR and is distinct from operator noise.
+- **Voice `pan`**: optional −1..1, default 0. It is added to each note's pan (playNote, sequence, performance and live pan controls); the sum is clamped to −1..1, then uses the existing equal-power pan law. Canonical JSON puts `pan` between `modIndex` and `lfo` and omits it when absent.
+
+This complete JSON patch can be passed to `playNote({ voice: patch, note: 60 })`, `normalizeVoice(patch)`, or wrapped in an array for bank parsing:
+
+```json
+{
+  "version": 8,
+  "name": "held_pluck",
+  "algorithm": 4,
+  "feedback": 0,
+  "modIndex": 4,
+  "pan": -0.2,
+  "lfo": {
+    "rate": 7, "amDepth": 0.2, "pmDepth": 0,
+    "waveform": "noise", "sync": "global",
+    "amTargets": [1, 0, 1, 0]
+  },
+  "ops": [
+    { "ratio": 2, "level": 0.3, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.4, "r": 0.2, "sr": 1.5 } },
+    { "ratio": 1, "level": 0.5, "detune": 0, "adsr": { "a": 0.01, "d": 0.3, "s": 0.6, "r": 0.3, "sr": 8 } },
+    { "ratio": 3, "level": 0.2, "detune": 0, "adsr": { "a": 0.01, "d": 0.2, "s": 0.3, "r": 0.2, "sr": 2 } },
+    { "ratio": 1, "level": 0.4, "detune": 0, "adsr": { "a": 0.01, "d": 0.3, "s": 0.5, "r": 0.3, "sr": 9 } }
+  ]
+}
+```
+
 
 ### Oscillator shapes and noise
 
@@ -43,7 +76,7 @@ Phase reduction uses fractional turns, including negative and very large finite 
 
 Noise is an original deterministic 17-bit maximal-length LFSR (`x^17+x^3+1`), seeded with `0x1ffff` at every note admission, including pooled slot reuse. The low bit produces bipolar ±1 and advances on the `noiseRate` time-domain hold clock, independent of output sample rate. Identical admissions reproduce the sequence. Ratio, fixed frequency, detune, tuning, pitch envelopes, live pitch and modulator PM do not pitch noise; existing `operatorRatios`/`operatorFrequencies` controls remain valid but have no audible pitch effect on it. Envelope, key/rate scaling, velocity, level, AM and graph routing still apply; noise can be either a modulator or carrier.
 
-This OPM-NE-inspired musical extension allows noise on **any operator of any voice**, unlike hardware restricted to the last operator of channel 8. It is not a Yamaha/YM2151 fidelity claim. Explicit v1–v6 reject operator `waveform` or `noiseRate` with a version-7 requirement; `LegacyVoiceV6` preserves the prior shape. Prepared snapshots, bank JSON, content-keyed registration and worklet validation retain both new fields.
+This OPM-NE-inspired musical extension allows noise on **any operator of any voice**, unlike hardware restricted to the last operator of channel 8. It is not a Yamaha/YM2151 fidelity claim. Explicit versions 1–6 reject operator `waveform` or `noiseRate` with a version-7 requirement; `LegacyVoiceV6` preserves the prior shape. Prepared snapshots, bank JSON, content-keyed registration and worklet validation retain both fields.
 
 
 ### Pitch envelope
@@ -63,7 +96,7 @@ Pitch cents combine multiplicatively with original operator Hz, detune, live sem
 
 ### LFO
 
-`lfo` requires `rate` (0–20 Hz), `amDepth` (0–1) and `pmDepth` (0–1200 cents); single-input omission disables modulation. `waveform` defaults to `sine`, with `triangle`, rising `saw`, and `square` also supported.
+`lfo` requires `rate` (0–20 Hz), `amDepth` (0–1) and `pmDepth` (0–1200 cents); single-input omission disables modulation. `waveform` defaults to `sine`, with `triangle`, rising `saw`, `square`, and v8 `noise` sample-and-hold also supported.
 
 - `delay`: optional 0–10 seconds, default zero. Gates both AM and PM depth until that note's elapsed time reaches delay, then fades the depth in linearly over 20 ms so the gate opens without an instantaneous gain or pitch step; the phase clock **continues** during delay. A zero delay applies full depth from admission.
 - `sync`: `note` (default) resets the clock at note admission. `global` uses `Synth.currentFrame`, including rendered silence, so separately admitted notes share a deterministic frame clock. Neither uses wall time. Panic does not rewind the global clock.
@@ -94,7 +127,7 @@ The same note-control APIs accept these optional fields independently:
 | `lfoRate`, `amDepth`, `pmDepth` | 0–20 Hz, 0–1, 0–1200 cents respectively; update the admitted note's LFO independently. |
 | `operatorRatios` | Readonly four-element tuple of finite 0.125–32 ratios. Fixed-Hz operators retain these ratios but ignore them until restored to ratio mode. |
 | `operatorFrequencies` | Readonly four-element tuple, each entry finite 1–20000 Hz or `null` to restore tuned note × ratio. Fixed Hz ignores MIDI/tuning transposition; detune, live pitch, pitch envelope and LFO PM still apply. |
-| `operatorADSR` | Readonly four-element tuple of complete `{a,d,s,r}` objects using the patch ADSR bounds. Parameters are replaced, not interpolated by `ramp`. |
+| `operatorADSR` | Readonly four-element tuple of complete `{a,d,s,r}` objects with optional `sr`, using the patch ADSR bounds (sr: 0.01–100 seconds; omitted holds sustain). Parameters are replaced, not interpolated by `ramp`. |
 
 `ramp` gives feedback, LFO and frequency/ratio updates independent linear timelines. It must accompany a rampable scalar or tuple control; `operatorADSR` alone with `ramp` rejects. Interrupted updates start at the current value; omitted controls keep their existing timelines. Live `lfoRate` integrates phase without resetting the current phase, including interrupted rate ramps. Tuples and nested ADSRs are strict own-data snapshots detached and frozen before scheduling.
 
@@ -108,13 +141,13 @@ Updating a held operator's ADSR restarts attack from its current dB level, then 
 - Keyboard rate scaling maps source 0–7 to OPM 0–4. This is a continuous musical approximation, not Yamaha's grouped-key/rate transfer function.
 - Pitch envelope retains L4 → L1 → L3 → L4. L2 is omitted; R2/R3 durations are merged and capped at ten seconds. Levels interpolate piecewise linearly through source 0/50/99 = −4800/0/+4800 cents. Rates use the existing `min(10, 10 * 2 ** (-rate / 10))` seconds heuristic, not measured hardware timing. A fully neutral pitch envelope is omitted.
 - LFO delay maps source 0–99 to 0–10 seconds; sync on maps to note and sync off to deterministic global phase. Delay shaping and free-running/random hardware phase are not reproduced.
-- Triangle, rising saw, square and sine retain their waveform family. Descending saw becomes rising saw; sample-and-hold becomes sine. Both substitutions are explicitly reported by `describeDX7`.
+- Triangle, rising saw, square and sine retain their waveform family. Descending saw becomes rising saw with a warning. Source wave 5 (sample-and-hold) maps to `noise`, with `describeDX7` warning `Sample-and-hold LFO uses a deterministic per-cycle pseudo-random level, not Yamaha random values.`
 
 Operator selection, envelope/output response, topology, feedback placement, velocity and level scaling remain approximations. Oscillator phase carry, source transpose, positive keyboard scaling, per-operator AM and nonzero final amplitude-envelope levels are not preserved. `describeDX7` reports these losses separately from the strict usable voice shape.
 
 ## OPM text import
 
-`importOPM(source: string | Uint8Array): Voice[]` and `describeOPM(source: string | Uint8Array): OPMImportDescription[]` live in `opm.js/voices/opm.js`. They convert decimal VOPM/MXDRV-family text patches into complete v7 voices through normal normalization. This is approximate conversion, **not register-level YM2151 emulation**, with no hardware-fidelity claim.
+`importOPM(source: string | Uint8Array): Voice[]` and `describeOPM(source: string | Uint8Array): OPMImportDescription[]` live in `opm.js/voices/opm.js`. They convert decimal VOPM/MXDRV-family text patches into complete v8 voices through normal normalization. This is approximate conversion, **not register-level YM2151 emulation**, with no hardware-fidelity claim.
 
 Format references: the [published MiOPM text-layout header](https://raw.githubusercontent.com/vampirefrog/libfmvoice/master/tests/test.opm), [VOPM unofficial manual](https://tanalin.com/en/articles/third-party/vopm-manual/) and [OPM application manual](https://archive.org/details/yamaha-ym2151-technical-reference), especially figures 2.5–2.16. Only format/parameter documentation was used; no emulator or converter implementation was copied. The VOPM GUI multiplier description is doubled relative to hardware MUL: this importer conservatively uses raw hardware values. The published text example contains an out-of-range KS value; hardware KS 0–3 is enforced rather than guessing its meaning. No physical or listening comparison has been performed.
 
@@ -134,10 +167,11 @@ Ranges: LFRQ 0–255; AMD/PMD 0–127; WF 0–3; NFRQ 0–31; PAN byte 0–255 (
 ### Conversion formulas
 
 - **Routing:** CON 0–7 corresponds directly to OPM.js algorithms 0–7. File order M1/C1/M2/C2 is signal order, **not** register-slot order M1/M2/C1/C2. The manual's diagrams give: 0 M1→C1→M2→C2; 1 (M1+C1)→M2→C2; 2 C1→M2 then (M1+M2)→C2; 3 M1→C1 then (C1+M2)→C2; 4 two chains M1→C1 and M2→C2; 5 M1 modulates the other three; 6 M1→C1 plus independent M2/C2; 7 all carriers. Feedback stays on M1, with FL retained but the engine's musical strength curve.
-- **Envelope:** the original bounded heuristic `T(rate) = min(10, 10 * 2 ** (-rate / 3))` seconds gives `a=T(AR)`, `d=T(D1R)`, `r=T(2*RR+1)`. Zero AR/D1R represents infinity and is clamped to ten seconds with a warning. RR's doubled-plus-one input-rate convention follows the manual; the times are not chip timings. Sustain is linear gain `10 ** (-3*D1L/20)`; D1L=15 uses −93 dB instead of −45 dB. The engine interpolates envelope levels in dB. D2R cannot be represented by ADSR: held-note second decay is omitted, D1L holds until release, and every nonzero D2R gets an operator-specific warning.
+- **Envelope:** the original bounded heuristic `T(rate) = min(10, 10 * 2 ** (-rate / 3))` seconds gives `a=T(AR)`, `d=T(D1R)`, `r=T(2*RR+1)`. Zero AR/D1R represents infinity and is clamped to ten seconds with a warning. RR's doubled-plus-one input-rate convention follows the manual; the times are not chip timings. Sustain is linear gain `10 ** (-3*D1L/20)`; D1L=15 uses −93 dB instead of −45 dB. The engine interpolates envelope levels in dB. Nonzero D2R maps to `adsr.sr = max(0.01, 10 * 2 ** (-D2R / 3))` seconds, with warning `<OP>: D2R mapped to an approximate sustain rate (adsr.sr).` D2R 0 omits sr and holds until release.
 - **Level:** `level = 10 ** (-0.75*TL/20)` for both carriers and modulators. Operator output amplitude also drives phase modulation, so this preserves TL attenuation without carrier-only renormalization. `modIndex=4` retains the default four-radian modulation scale, not a hardware transfer curve.
 - **Pitch/scaling:** MUL 0→ratio 0.5; 1–15→their integer ratios. DT1 becomes fixed cents `[0,1,2,3,0,-1,-2,-3]`, a small symmetric approximation to the chip's key-dependent table. DT2 adds `[0,600,781,950]` cents (manual figure 2.7). Their sum stays within ±1200. KS maps linearly to `rateKeyScale=KS*4/3`: octave-based duration scaling around MIDI 60, not hardware grouped-key rates.
-- **LFO:** fixed reference clock `f=3579545 Hz`; `rate = f/2**32 * 2**(LFRQ>>4) * (1+(LFRQ&15)/16)`, fitting manual figure 2.16, capped at 20 Hz with a warning. PM sensitivity maxima are `[0,5,10,20,50,100,400,700]` cents; `pmDepth=PMSmax*PMD/128`. AM sensitivity maxima are `[0,23.90625,47.8125,95.625]` dB; `amDepth=1-10**(-AMSmax*AMD/128/20)`. These endpoint-depth mappings approximate the engine's linear-gain/cents LFO, not the chip's attenuation/frequency transfer function. Per-operator AMS-EN becomes `amTargets`. WF 0/1/2 becomes saw/square/triangle; 3 (noise) substitutes deterministic sine with a warning. AM/PM waveform phase relationships and global phase differ from hardware; clock selection and free-running chip state are not retained.
+- **LFO:** fixed reference clock `f=3579545 Hz`; `rate = f/2**32 * 2**(LFRQ>>4) * (1+(LFRQ&15)/16)`, fitting manual figure 2.16, capped at 20 Hz with a warning. PM sensitivity maxima are `[0,5,10,20,50,100,400,700]` cents; `pmDepth=PMSmax*PMD/128`. AM sensitivity maxima are `[0,23.90625,47.8125,95.625]` dB; `amDepth=1-10**(-AMSmax*AMD/128/20)`. These endpoint-depth mappings approximate the engine's linear-gain/cents LFO, not the chip's attenuation/frequency transfer function. Per-operator AMS-EN becomes `amTargets`. WF 0/1/2 becomes saw/square/triangle; WF 3 becomes `noise`, with warning `Noise LFO uses a deterministic per-cycle sample-and-hold, not the hardware LFSR.` AM/PM waveform phase relationships and global phase differ from hardware; clock selection and free-running chip state are not retained.
 - **Noise:** NE replaces C2 (op4) with `waveform:'noise'`; its approximate rate is `f/(32*(32-NFRQ))`, capped to 20–20000 Hz with a clamp warning. The manual prints a noise-divider equation but does not spell out raw zero encoding: this conversion conservatively assumes an inverted 32-step countdown and always warns about that approximation when NE is on. It does not reproduce a chip noise spectrum. OPM.js noise on any channel is an extension: the hardware channel-8 restriction, LFSR and special noise envelope are not reproduced.
+- **Pan:** PAN is still ignored because converters commonly write a fixed default (64), not RL bits. The warning is `PAN is ignored (files often carry a converter default, not L/R bits); set voice or note pan explicitly.`
 
 `describeOPM` returns `{name,program,algorithm,operators,warnings}`. `operators` lists source labels in destination order. Warnings are deterministic, de-duplicated and bounded by the fixed four-operator conversion, including every approximation/substitution/clamp above. Program numbers are metadata only; wire imported names into a MIDI program map explicitly. Patches, not file programs, are de-duplicated by name.

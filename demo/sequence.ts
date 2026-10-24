@@ -75,7 +75,8 @@ const acceptance = installAcceptanceHarness({
     const future = opm!.playNote({ voice: 'lead', note: 67, time: 5 });
     record({ type: 'acceptance-stimulus', held, future, futureDelaySeconds: 5 });
     return { revision: 'held-plus-five-second-v1', patch: opm!.voices.get('lead'),
-      synth: { quality: opm!.quality, maxVoices: opm!.maxVoices, ...sessionSettings },
+      synth: { quality: opm!.quality, saturation: opm!.saturation, dcBlock: opm!.dcBlock,
+        maxVoices: opm!.maxVoices, ...sessionSettings },
       hostGain: gain!.gain.value, stimulus: { heldNote: 60.5, futureNote: 67, futureDelaySeconds: 5, velocity: 1 } };
   },
   end: () => { opm?.panic(); },
@@ -118,6 +119,8 @@ function update(): void {
   select('interruption').disabled = Boolean(opm?.node);
   select('stealing').disabled = Boolean(opm?.node);
   select('quality').disabled = Boolean(opm?.node);
+  select('saturation').disabled = Boolean(opm?.node);
+  input('dcBlock').disabled = Boolean(opm?.node);
 }
 async function action(fn: () => void | Promise<void>): Promise<void> {
   if (busy || leaving) return;
@@ -161,7 +164,9 @@ bind('start', async () => {
       stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest' };
     opm = new OPM({ context, destination: analyser, ...sessionSettings,
       interruption: select('interruption').value as 'cancel' | 'preserve',
-      quality: select('quality').value as QualityProfile, onEvent: receive });
+      quality: select('quality').value as QualityProfile,
+      saturation: select('saturation').value as 'tanh' | 'soft-knee', dcBlock: input('dcBlock').checked,
+      onEvent: receive });
   }
   await resume;
   await opm.start();
@@ -246,7 +251,8 @@ bind('render', () => {
   const audio = renderSequence(score, { voices: new Map([['lead', patch()]]), sampleRate: context?.sampleRate ?? 48000,
     mixGain: input('mix-gain').valueAsNumber, tuning: tuning(),
     stealing: select('stealing').value as 'oldest' | 'release-first' | 'quietest',
-    quality: select('quality').value as QualityProfile });
+    quality: select('quality').value as QualityProfile,
+    saturation: select('saturation').value as 'tanh' | 'soft-knee', dcBlock: input('dcBlock').checked });
   const format = select('wav-format').value as WavFormat;
   const bytes = encodeWav({ left: audio.left, right: audio.right, sampleRate: audio.sampleRate,
     format, dither: input('wav-dither').checked && format !== 'float32' });
@@ -261,7 +267,8 @@ bind('render-long', async () => {
   const cancel = document.querySelector<HTMLButtonElement>('#cancel-render')!;
   cancel.disabled = false;
   const options = { voices: new Map([['lead', patch()]]), sampleRate: 96000, chunkFrames: 4096,
-    quality: select('quality').value as QualityProfile };
+    quality: select('quality').value as QualityProfile,
+    saturation: select('saturation').value as 'tanh' | 'soft-knee', dcBlock: input('dcBlock').checked };
   const capacity = estimateSequenceCapacity(longScore, options);
   record({ type: 'chunk-render-capacity', ...capacity });
   const chunks = renderSequenceChunks(longScore, options);
@@ -363,6 +370,7 @@ async function workerExport(toFile: boolean): Promise<void> {
     const result = await renderSequenceInWorker(toFile ? longScore : score, {
       voices: new Map([['lead', patch()]]), sampleRate: toFile ? 96000 : 48000, chunkFrames: 4096,
       quality: select('quality').value as QualityProfile, format: select('wav-format').value as WavFormat,
+      saturation: select('saturation').value as 'tanh' | 'soft-knee', dcBlock: input('dcBlock').checked,
       dither: input('wav-dither').checked && select('wav-format').value !== 'float32',
       signal: controller.signal, maxFrames: toFile ? 8_000_000 : 48000 * 12,
       sink: file ? { write: bytes => file!.write(bytes as Uint8Array<ArrayBuffer>),

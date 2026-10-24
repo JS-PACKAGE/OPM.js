@@ -56,8 +56,8 @@ Use `loadVoice()`, `normalizeVoice()`, `validateVoice()` or `parseVoiceBank()` a
 | Single-voice API | Required fields and exactly four complete operators; finite numeric values and documented ranges; unknown fields and accessors reject |
 | Voice-bank JSON string | At most 262,144 UTF-8 bytes (256 KiB), then JSON parsing and bank validation |
 | Voice-bank array | 1–128 complete versioned voices, unique validated names, and frozen normalized copies |
-| Legacy versions 1–6 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude expressive fields, v1–5 exclude per-operator LFO targets, v1–6 exclude operator `waveform`/`noiseRate`; all normalize to v7. `noiseRate` is 20–20000 Hz |
-| `.opm` text patches | `importOPM`/`describeOPM`: at most 262,144 bytes, 128 patches and 512 bytes per line; NUL bytes, unknown/duplicate/missing sections, non-decimal or out-of-range fields reject with a line number; results pass the normal v7 validation path |
+| Legacy versions 1–7 | Original shapes only: v1 excludes key scaling, v1/2 exclude velocity sensitivity, v1–3 exclude waveform, v1–4 exclude expressive fields, v1–5 exclude per-operator LFO targets, v1–6 exclude operator `waveform`/`noiseRate`, v1–7 exclude `adsr.sr`, voice `pan` and the `noise` LFO; all normalize to v8. `noiseRate` is 20–20000 Hz, `adsr.sr` 0.01–100 s, `pan` −1..1 |
+| `.opm` text patches | `importOPM`/`describeOPM`: at most 262,144 bytes, 128 patches and 512 bytes per line; NUL bytes, unknown/duplicate/missing sections, non-decimal or out-of-range fields reject with a line number; results pass the normal v8 validation path |
 | MIDI program/drum maps | `programVoices`/`drumVoices`: plain data objects or native Maps, at most 128 entries, canonical integer keys 0–127 and valid voice names; accessors and extra Map properties reject. RPN 0 state is per channel and bounded to 0–48 semitones |
 | PreparedVoice | Immutable detached core snapshot, including nested pitch envelopes; only private identity membership grants trust, never a structural brand/copy |
 | Tuning / score / controls | A4 20–20000 Hz, 128 bounded cents offsets; strict dense four-element level/ratio/Hz/ADSR and LFO-target tuples; short scores retain 128-note/256-slot/60-second bounds; long scores have separate event/time/chunk limits and immutable own-data snapshots |
@@ -278,6 +278,13 @@ Unreleased WAV dither review: SecDither reviewed the opt-in `dither` option.
 - Its Low determinism finding was fixed: a chunk rejected midway used to advance the dither state, so later bytes diverged from `encodeWav`. `encode()` now dithers a copy of the state and commits it only after the chunk succeeds, and a regression test covers this.
 
 v1.13.0 release: covered by the SecPerfRound2, SecAllocReview, SecWaveFrames and SecDither records above (all approved, findings applied). The release adds no further source changes beyond the version number.
+
+Unreleased voice v8 review: SecVoiceV8 approved a scoped static review of checklist **A**, **C** and the **B** paths that reach voice/control validation, for `adsr.sr`, voice `pan`, the `noise` LFO, the 5-key `operatorADSR`, the held-decay envelope segment, `lfoCycle`/`lfoNoise`, the pan clamp and the `.opm`/DX7 mappings, with no evidence-backed vulnerability.
+- Both validation paths reject accessors, symbol and unknown keys, and legacy versions carrying the new fields; the strict path rejects and the bank path clamps out-of-range values; prepared snapshots stay frozen.
+- The smallest key-scaled sustain rate (about 1.9e-9 s) is still positive; its per-substep ratio underflows to exactly zero, never NaN, and the floor clamp keeps every dB value finite.
+- Work per frame stays fixed and allocation-free; the new segment uses the existing anchor grid, so output stays chunk independent. `lfoCycle` over a 24-hour render stays far below 2^53, so the hash inputs are exact.
+- Its informational hardening item was applied: each path now probes `sr` once (one `hasOwn` or one `ownKeys` snapshot), so a main-thread proxy cannot answer the version gate and the read differently.
+- The reviewer ran no runtime gates; the integration owner's tests, bit-identity A/B and smoke checks are recorded in CHANGELOG.
 
 ## Non-goals
 

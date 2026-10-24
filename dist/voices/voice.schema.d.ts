@@ -27,6 +27,12 @@ export declare const voiceSchema: {
             minimum: number;
             maximum: number;
         };
+        pan: {
+            type: string;
+            minimum: number;
+            maximum: number;
+            description: string;
+        };
         pitchEnvelope: {
             type: string;
             additionalProperties: boolean;
@@ -116,6 +122,7 @@ export declare const voiceSchema: {
                 waveform: {
                     type: string;
                     enum: string[];
+                    description: string;
                 };
                 rate: {
                     type: string;
@@ -234,6 +241,12 @@ export declare const voiceSchema: {
                                 type: string;
                                 minimum: number;
                                 maximum: number;
+                            };
+                            sr: {
+                                type: string;
+                                minimum: number;
+                                maximum: number;
+                                description: string;
                             };
                         };
                     };

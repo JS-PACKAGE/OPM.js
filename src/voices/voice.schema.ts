@@ -1,6 +1,6 @@
 export const voiceSchema = {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "OPM.js canonical voice v7",
+  "title": "OPM.js canonical voice v8",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -14,7 +14,7 @@ export const voiceSchema = {
   ],
   "properties": {
     "version": {
-      "const": 7
+      "const": 8
     },
     "name": {
       "type": "string",
@@ -34,6 +34,10 @@ export const voiceSchema = {
       "type": "number",
       "minimum": 0,
       "maximum": 16
+    },
+    "pan": {
+      "type": "number", "minimum": -1, "maximum": 1,
+      "description": "Voice-level stereo offset added to each note's pan and clamped to -1..1; omitted means zero."
     },
     "pitchEnvelope": {
       "type": "object",
@@ -74,7 +78,8 @@ export const voiceSchema = {
         },
         "waveform": {
           "type": "string",
-          "enum": ["sine", "triangle", "saw", "square"]
+          "enum": ["sine", "triangle", "saw", "square", "noise"],
+          "description": "noise holds a deterministic pseudo-random level in -1..1 for each LFO cycle."
         },
         "rate": {
           "type": "number",
@@ -115,7 +120,7 @@ export const voiceSchema = {
           },
           "rateKeyScale": {
             "type": "number", "minimum": 0, "maximum": 4,
-            "description": "Multiply ADSR seconds by 2^(-rateKeyScale*(note-60)/12), capped at 10 seconds."
+            "description": "Multiply envelope seconds by 2^(-rateKeyScale*(note-60)/12), capped at 10 seconds (100 for sr)."
           },
           "velocitySensitivity": {
             "type": "number",
@@ -177,6 +182,12 @@ export const voiceSchema = {
                 "type": "number",
                 "minimum": 0,
                 "maximum": 10
+              },
+              "sr": {
+                "type": "number",
+                "minimum": 0.01,
+                "maximum": 100,
+                "description": "Sustain rate: seconds for the held level to fall the full 96 dB after decay; omitted holds the sustain level until release."
               }
             }
           }

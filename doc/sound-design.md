@@ -7,11 +7,11 @@
 | Area | Controls |
 | --- | --- |
 | Topology | Algorithm 0–7 with a live signal graph (arrows run from modulator to recipient; carriers reach the output), operator-1 feedback 0–7, modulation index |
-| Operators | Ratio, level, detune, waveform, noise hold rate (20–20000 Hz) and four-stage ADSR for each operator |
-| LFO | Rate, AM depth, PM cents, waveform, delay, note/global sync, phase, and a 0–1 AM and PM **target weight per operator** (the selective-LFO fields) |
+| Operators | Ratio, level, detune, waveform, noise hold rate (20–20000 Hz), ADSR and "Sustain rate seconds per 96 dB (0 holds)" for each operator |
+| LFO | Rate, AM depth, PM cents, waveform (including `noise (sample and hold)`), delay, note/global sync, phase, and a 0–1 AM and PM **target weight per operator** (the selective-LFO fields) |
 | Envelopes | A dB-versus-time plot of each operator for a chosen gate length. It evaluates the engine's own `envelopeAt`, so segments that are straight in dB are exponential in amplitude, and −96 dB is the engine floor. |
 | Starting points | Every bundled recipe, with its provenance, intended register, velocity range and host trim shown beside it |
-| Audio | DSP profile (`eco` / `standard` / `high`), note, velocity, host gain |
+| Audio | DSP profile (`eco` / `standard` / `high`), note, velocity, host gain, and Voice pan (−1..1) |
 
 ## Live edits versus retriggers
 
@@ -20,7 +20,7 @@ A held note is edited natively where the engine has a live control, and retrigge
 | Edit | Behavior while a note is held |
 | --- | --- |
 | Operator ratio | `operatorRatios` ramp (20 ms) |
-| Any ADSR stage | `operatorADSR`, re-anchored at the current dB level |
+| Any ADSR stage, including sustain rate | `operatorADSR`, re-anchored at the current dB level; 0 in the sustain-rate control omits `sr` (hold), otherwise 0.01–100 seconds per 96 dB |
 | Feedback | `feedback` ramp (20 ms) |
 | LFO rate, AM depth, PM depth | `lfoRate`, `amDepth`, `pmDepth` ramp |
 | Algorithm, selective target weights, level, detune, operator/LFO waveform, noise rate, delay/sync/phase, modulation index | The note is released and retriggered, because these are fixed when a note is admitted |
@@ -30,9 +30,11 @@ The envelope plot shows a fresh note. Key-rate scaling, pitch envelopes, velocit
 
 ## Patch JSON
 
-The page exports and imports one canonical version 7 patch (at most 16 KiB). Import uses the strict single-voice path: unknown fields, accessors, non-finite numbers and out-of-range values are rejected visibly, and legacy versions 1–6 are normalized to version 7. The exported file can be passed straight to `opm.playNote({ voice: patch, note: 60 })` or loaded with `opm.loadVoice(name, patch)`. Nothing is uploaded; use the bank tools for many voices at once.
+The page exports and imports one canonical version 8 patch (at most 16 KiB). Import uses the strict single-voice path: unknown fields, accessors, non-finite numbers and out-of-range values are rejected visibly, and legacy versions 1–7 are normalized to version 8. The exported file can be passed straight to `opm.playNote({ voice: patch, note: 60 })` or loaded with `opm.loadVoice(name, patch)`. Nothing is uploaded; use the bank tools for many voices at once.
 
 Choose `noise` for an unpitched deterministic held-noise oscillator; noise rate is ignored for periodic shapes. Ratio/fixed-Hz/live pitch controls do not pitch noise, but envelopes, levels, velocity, key scaling and AM still apply. Noise can modulate or act as a carrier on any operator, an OPM.js extension rather than a hardware-fidelity claim. Square/saw (polyBLEP) and half (polyBLAMP) are edge-corrected, but they and noise are not alias-free despite per-voice oversampling. The recipe selector automatically includes original `noise-snare`, `noise-hihat` and `explosion` starting points; see [oscillator formulas](./expressive-voices.md#oscillator-shapes-and-noise).
+
+Use sustain rate for notes that fade while held: after attack/decay it falls linearly in dB to the −96 dB floor, then exact zero; release starts from the decayed level. Voice pan adds to note pan, clamped to −1..1 before equal-power panning. The noise LFO holds a deterministic pseudo-random value per cycle, not operator noise or a hardware LFSR. `struck_keys` demonstrates held-note sustain decay; `stepped_lead` uses a 7 Hz global noise LFO on its modulators for stepped brightness. All presets remain listening-unverified.
 
 
 ## Designing with selective LFO

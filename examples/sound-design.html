@@ -17,6 +17,7 @@
     <label>Algorithm (0–7) <select id="algorithm"></select></label>
     <label>Feedback (operator 1) <input id="feedback" type="number" min="0" max="7" step="1"></label>
     <label>Modulation index <input id="mod-index" type="number" min="0" max="16" step="0.1"></label>
+    <label>Voice pan (offset added to note pan) <input id="voice-pan" type="number" min="-1" max="1" step="0.05" value="0"></label>
     <label>Quality <select id="quality"><option>eco</option><option selected>standard</option><option>high</option></select></label>
     <label>MIDI note <input id="note" type="number" min="0" max="127" step="1" value="60"></label>
     <label>Velocity <input id="velocity" type="number" min="0" max="1" step="0.05" value="0.65"></label>
@@ -31,7 +32,7 @@
     <label>Rate Hz <input id="lfo-rate" type="number" min="0" max="20" step="0.1"></label>
     <label>AM depth <input id="am-depth" type="number" min="0" max="1" step="0.01"></label>
     <label>PM cents <input id="pm-depth" type="number" min="0" max="1200" step="1"></label>
-    <label>Waveform <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option></select></label>
+    <label>Waveform <select id="waveform"><option>sine</option><option>triangle</option><option>saw</option><option>square</option><option value="noise">noise (sample and hold)</option></select></label>
     <label>Delay seconds <input id="lfo-delay" type="number" min="0" max="10" step="0.01"></label>
     <label>Sync <select id="lfo-sync"><option>note</option><option>global</option></select></label>
     <label>Phase cycles <input id="lfo-phase" type="number" min="0" max="1" step="0.01"></label>
@@ -39,8 +40,8 @@
   <h2>Envelope in dB / seconds</h2>
   <label>Preview gate seconds <input id="preview-gate" type="number" min="0.01" max="20" step="0.1" value="2"></label>
   <svg id="envelopes" viewBox="0 0 640 260" role="img" aria-label="Four operator fresh-note envelopes"></svg>
-  <p id="envelope-info">ADSR times are seconds, sustain is linear amplitude; straight segments in dB imply exponential amplitude. −96 dB is the engine floor; start/release end become exact zero. Preview is a fresh note, not an oscilloscope: live ADSR edits re-anchor from current dB; key-rate scaling, pitch envelopes, velocity and LFO may alter the actual note.</p>
-  <h2>Canonical patch JSON</h2><p>Single patch, maximum 16 KiB. Strict validation rejects unknown fields, invalid numbers and non-data objects; legacy input is normalized to version 7. Each operator supports periodic shapes or deterministic held noise. Noise rate is ignored for other waveforms; ratio/fixed-Hz/pitch controls do not pitch noise. Waveform/rate changes retrigger held notes. Square, saw and noise can alias despite oversampling. Export can be passed directly to <code>opm.playNote({ voice: patch, note: 60 })</code>.</p>
+  <p id="envelope-info">ADSR times are seconds, sustain is linear amplitude; straight segments in dB imply exponential amplitude. A nonzero sustain rate keeps falling 96 dB per that many seconds while the key is held, like a piano or plucked string; 0 holds the sustain level. −96 dB is the engine floor; start/release end become exact zero. Preview is a fresh note, not an oscilloscope: live ADSR edits re-anchor from current dB; key-rate scaling, pitch envelopes, velocity and LFO may alter the actual note.</p>
+  <h2>Canonical patch JSON</h2><p>Single patch, maximum 16 KiB. Strict validation rejects unknown fields, invalid numbers and non-data objects; legacy input is normalized to version 8. Each operator supports periodic shapes or deterministic held noise. Noise rate is ignored for other waveforms; ratio/fixed-Hz/pitch controls do not pitch noise. Waveform/rate and voice pan changes retrigger held notes. Square, saw and noise can alias despite oversampling. Export can be passed directly to <code>opm.playNote({ voice: patch, note: 60 })</code>.</p>
   <textarea id="patch-json" aria-label="Patch JSON" maxlength="16384" spellcheck="false"></textarea>
   <div class="actions"><button id="import-patch" type="button">Import JSON</button><button id="export-patch" type="button">Export canonical JSON</button><input id="patch-file" type="file" accept="application/json,.json" aria-label="Import patch file"></div>
 </main><script type="module" src="../dist/demo/sound-design.js"></script></body></html>
