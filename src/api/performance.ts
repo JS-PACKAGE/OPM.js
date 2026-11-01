@@ -84,6 +84,16 @@ function number(input: unknown, min: number, max: number, label: string, integer
   return input;
 }
 
+// Own-property reads: an omitted control must not fall through to Object.prototype.
+const pitchOf = (controls: NoteControls): number => Object.hasOwn(controls, 'pitch') ? controls.pitch! : 0;
+const frequencyOf = (op: { frequency?: number }): number | null => Object.hasOwn(op, 'frequency') ? op.frequency! : null;
+
+/** Compose owned values before callers add and validate their final gate defaults. */
+function controlValues(p: Part, controls: NoteControls, offset: number): NoteControls {
+  // The trailing key defines own data; assigning pitch afterwards could reach an inherited setter.
+  return { ...p.controls, ...controls, pitch: offset + pitchOf(p.controls) + pitchOf(controls) };
+}
+
 /** Device-agnostic key policy. No context, timers, MIDI driver or global panic is created. */
 export function createPerformance(opm: OPM, options: PerformanceOptions = {}): Performance {
   const raw = sequenceOwnData(options, ['parts', 'maxKeys', 'maxKeysPerPart', 'onError'], [], 'performance options');
@@ -91,7 +101,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
   const maxKeys = number(raw.maxKeys === undefined ? 128 : raw.maxKeys, 1, 128, 'maxKeys', true);
   const perPart = number(raw.maxKeysPerPart === undefined ? 128 : raw.maxKeysPerPart, 1, 128, 'maxKeysPerPart', true);
   if (raw.onError !== undefined && typeof raw.onError !== 'function') throw new TypeError('onError must be a function');
-  const onError = raw.onError as ((error: Error) => void) | undefined;
+  let onError = raw.onError as ((error: Error) => void) | undefined;
   const parts: Part[] = Array.from({ length: count }, () => ({
     config: { voice: 'brass', mode: 'poly', legato: false, priority: 'last', glide: 0, pan: 0, expression: 1,
       voiceLimit: undefined, voicePriority: 0 },
@@ -136,7 +146,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     const old = current(p);
     if (old?.[1].key === target.key) return false;
     return !old || old[1].voice !== p.config.voice || !p.config.legato ||
-      Math.abs(target.note - old[1].anchor + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0)) > 48;
+      Math.abs(target.note - old[1].anchor + pitchOf(p.controls) + pitchOf(target.controls)) > 48;
   }
   function gateCapacity(p: Part): void {
     if (gates.size >= 128) throw new RangeError('Performance gate capacity exceeded; wait for release tails');
@@ -147,26 +157,27 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     }
   }
   function controlsFor(p: Part, controls: NoteControls, offset: number): NoteControls {
-    const result = { ...p.controls, ...controls };
-    result.pitch = offset + (p.controls.pitch ?? 0) + (controls.pitch ?? 0);
-    return validateNoteControls(result);
+    return validateNoteControls(controlValues(p, controls, offset));
   }
   function baseline(p: Part): NoteControls {
     const voice = typeof p.config.voice === 'string' ? opm.voices.get(p.config.voice)! : p.config.voice;
+    // Preserve the first patch read when a configured named voice has been removed.
+    const feedback = voice.feedback;
+    const ops = voice.ops;
     return {
       pitch: 0, glide: 0, expression: p.config.expression, gain: 1, pan: p.config.pan, modulation: 1, ramp: 0,
-      feedback: voice.feedback, lfoRate: voice.lfo.rate, amDepth: voice.lfo.amDepth, pmDepth: voice.lfo.pmDepth,
+      feedback, lfoRate: voice.lfo.rate, amDepth: voice.lfo.amDepth, pmDepth: voice.lfo.pmDepth,
       operatorLevels: [1, 1, 1, 1],
-      operatorRatios: voice.ops.map(op => op.ratio) as [number, number, number, number],
-      operatorFrequencies: voice.ops.map(op => op.frequency ?? null) as [number | null, number | null, number | null, number | null],
-      operatorADSR: voice.ops.map(op => op.adsr) as unknown as NoteControls['operatorADSR'],
+      operatorRatios: [ops[0].ratio, ops[1].ratio, ops[2].ratio, ops[3].ratio],
+      operatorFrequencies: [frequencyOf(ops[0]), frequencyOf(ops[1]), frequencyOf(ops[2]), frequencyOf(ops[3])],
+      operatorADSR: [ops[0].adsr, ops[1].adsr, ops[2].adsr, ops[3].adsr],
     };
   }
   function retargetControls(p: Part, gate: Gate, key: Key, offset: number): NoteControls {
-    const result = { ...controlsFor(p, key.controls, offset), glide: p.config.glide };
+    const result: NoteControls = { ...controlValues(p, key.controls, offset), glide: p.config.glide };
     for (const field of Object.keys(gate.controls) as (keyof NoteControls)[]) {
       if (field !== 'pitch' && field !== 'glide' && !Object.hasOwn(result, field)) {
-        Object.defineProperty(result, field, { value: gate.baseline[field], enumerable: true, configurable: true });
+        Object.defineProperty(result, field, { __proto__: null, value: gate.baseline[field], enumerable: true, configurable: true } as PropertyDescriptor);
       }
     }
     return validateNoteControls(result);
@@ -212,7 +223,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     gates.set(id, { part: p, voice: p.config.voice, anchor: key.note, key: key.key, releasing: false, offset: 0, controls: key.controls, baseline: baseline(p) });
     key.gateId = id;
     try {
-      opm.updateNote(id, { expression: p.config.expression, ...controlsFor(p, key.controls, 0) });
+      opm.updateNote(id, validateNoteControls({ expression: p.config.expression, ...controlValues(p, key.controls, 0) }));
     }
     catch (error) {
       const gate = gates.get(id);
@@ -238,7 +249,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       throw error;
     }
     const offset = old ? target.note - old[1].anchor : 0;
-    const pitch = offset + (p.controls.pitch ?? 0) + (target.controls.pitch ?? 0);
+    const pitch = offset + pitchOf(p.controls) + pitchOf(target.controls);
     if (old && old[1].voice === p.config.voice && p.config.legato && Math.abs(pitch) <= 48) {
       const generation = epoch;
       const controls = retargetControls(p, old[1], target, offset);
@@ -272,6 +283,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     return failure;
   }
   function observe(event: OPMEvent): void {
+    const listener = onError;
     if (event.type === 'reset') {
       epoch++;
       for (const p of parts) clear(p, false);
@@ -280,7 +292,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       epoch++;
       for (const p of parts) {
         const failure = clear(p, true);
-        if (failure !== undefined) onError?.(failure instanceof Error ? failure : new Error(String(failure)));
+        if (failure !== undefined) listener?.(failure instanceof Error ? failure : new Error(String(failure)));
       }
     } else if (event.type === 'note' && ['ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) {
       if (admitting) {
@@ -296,8 +308,8 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       const gate = gates.get(event.id);
       if (!gate) return;
       if (gate.key !== null) removeKey(gate.part, gate.key);
-      try { release(event.id, gate); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); }
-      onError?.(new Error(`Performance control rejected: ${event.reason ?? 'unspecified'}`));
+      try { release(event.id, gate); } catch (error) { listener?.(error instanceof Error ? error : new Error(String(error))); }
+      listener?.(new Error(`Performance control rejected: ${event.reason ?? 'unspecified'}`));
     }
   }
   const unsubscribe = opm.subscribe(observe);
@@ -462,6 +474,7 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
     dispose() {
       if (disposed) return;
       disposed = true;
+      onError = undefined;
       epoch++;
       unsubscribe();
       let failure: unknown;

@@ -319,3 +319,35 @@ test('interruption and missed windows cancel owned playback instead of replaying
     interrupted.dispose();
   } finally { await opm.close(); }
 });
+
+test('a stopped stream preserves an in-flight startup failure without admitting notes', async () => {
+  const entered = Promise.withResolvers<void>();
+  const module = Promise.withResolvers<void>();
+  const context = new Context();
+  context.audioWorklet.addModule = () => { entered.resolve(); return module.promise; };
+  const observed: OPMEvent[] = [];
+  const failures: Error[] = [];
+  const opm = new OPM({ context: context as unknown as AudioContext, onEvent: event => observed.push(event) });
+  const stream = streamSequence(opm, [{ type: 'note', id: 1, time: 1, duration: 0.1, note: 60 }],
+    { onError: error => failures.push(error) });
+  const reason = new Error('Module load failed after stream stop');
+  try {
+    const pending = stream.start();
+    await entered.promise;
+    stream.stop();
+    const rejected = assert.rejects(pending, error => error === reason);
+    module.reject(reason);
+    await rejected;
+    assert.equal(failures.length, 1);
+    assert.equal(failures[0], reason);
+    assert.equal(stream.running, false);
+    assert.equal(stream.ids.size, 0);
+    assert.equal(observed.some(event => event.type === 'note' && event.state === 'accepted'), false);
+    await assert.rejects(stream.start(), /cancelled/);
+  } finally {
+    module.resolve();
+    stream.dispose();
+    await opm.close();
+    await context.close();
+  }
+});

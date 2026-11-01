@@ -114,10 +114,11 @@ function controllerMappings(input: unknown): ReadonlyMap<number, ControllerMappi
     if (typeof data.min !== 'number' || typeof data.max !== 'number' || !Number.isFinite(data.min) || !Number.isFinite(data.max) || data.min > data.max) {
       throw new RangeError('mapping min/max must be finite and ordered');
     }
+    // Own `operator` slot: the reads below must not be answered by an inherited value.
     const mapping: ControllerMapping = {
       controller: data.controller, field: data.field as ControllerMapping['field'],
       min: data.min, max: data.max, ramp: data.ramp as number,
-      ...(data.operator === undefined ? {} : { operator: data.operator as number }),
+      operator: data.operator === undefined ? undefined : data.operator as number,
       ...(Object.hasOwn(data, 'reset') ? { reset: data.reset as number | null } : {}),
     };
     mappingControls(mapping, mapping.min);
@@ -161,7 +162,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
   if (typeof rawRange !== 'number' || !Number.isFinite(rawRange) || rawRange < 0 || rawRange > 48) throw new RangeError('pitchBendRange must be finite in 0..48');
   const range: number = rawRange;
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
-  const onError = config.onError as ((error: Error) => void) | undefined;
+  let onError = config.onError as ((error: Error) => void) | undefined;
   let allowed: Set<string> | undefined;
   if (config.inputIds !== undefined) {
     const ids = transportArray(config.inputIds, MAX_INPUTS, 'inputIds');
@@ -308,13 +309,16 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
   function attach(input: MidiInputLike): void {
     if (listeners.has(input.id) || allowed && !allowed.has(input.id) || input.state === 'disconnected') return;
     if (listeners.size >= MAX_INPUTS) { report(new RangeError('MIDI adapter input capacity exceeded')); return; }
+    const openError = onError;
     const listener = (event: MidiMessageEventLike) => receive(input.id, event.data);
     listeners.set(input.id, { input, listener });
     input.addEventListener('midimessage', listener);
     // Some implementations require an explicit open for listener-based delivery.
-    try { void input.open?.().catch(report); } catch (error) { report(error); }
+    try {
+      void input.open?.().catch(error => { openError?.(error instanceof Error ? error : new Error(String(error))); });
+    } catch (error) { openError?.(error instanceof Error ? error : new Error(String(error))); }
   }
-  function detach(id: string): void {
+  function detach(id: string, detachError = onError): void {
     const entry = listeners.get(id);
     if (!entry) return;
     listeners.delete(id);
@@ -323,7 +327,8 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     const channels = sustained.get(id);
     sustained.delete(id);
     if (channels) for (const channel of channels) {
-      try { performance.sustain(channel, [...sustained.values()].some(set => set.has(channel))); } catch (error) { report(error); }
+      try { performance.sustain(channel, [...sustained.values()].some(set => set.has(channel))); }
+      catch (error) { detachError?.(error instanceof Error ? error : new Error(String(error))); }
     }
   }
   function refresh(): void {
@@ -333,6 +338,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       if (input.state === 'disconnected') continue;
       live.add(input.id);
       attach(input);
+      if (disposed) return;
     }
     // A removed or disconnected port must not leave notes hanging.
     for (const id of [...listeners.keys()]) if (!live.has(id)) detach(id);
@@ -344,15 +350,24 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     get snapshot(): MidiAdapterSnapshot {
       return Object.freeze({ inputs: Object.freeze([...listeners.keys()]), heldKeys, ignoredMessages: ignored, disposed });
     },
-    releaseAll() { releaseWhere(() => true); },
+    releaseAll() {
+      try { releaseWhere(() => true); }
+      finally { if (disposed && ownedKeys.size === 0) onError = undefined; }
+    },
     dispose() {
       if (disposed) return;
+      const disposeError = onError;
       disposed = true;
-      access.removeEventListener('statechange', refresh);
-      for (const id of [...listeners.keys()]) detach(id);
-      held.clear();
-      heldKeys = 0;
-      for (const state of rpn) Object.assign(state, midiRpnState(range));
+      try {
+        access.removeEventListener('statechange', refresh);
+        for (const id of [...listeners.keys()]) detach(id, disposeError);
+        held.clear();
+        heldKeys = 0;
+        for (const state of rpn) Object.assign(state, midiRpnState(range));
+      } finally {
+        // Failed note releases remain retryable through releaseAll().
+        if (ownedKeys.size === 0) onError = undefined;
+      }
     },
   });
 }

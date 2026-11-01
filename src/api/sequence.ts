@@ -1,6 +1,6 @@
 import type { OPM, OPMEvent } from './index.js';
 import { MAX_SEQUENCE_SECONDS, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS, prepareSequence, prepareLongSequence, sequenceOwnData, sequenceFrameEvents, sequenceWindowCapacity } from '../core/sequence.js';
-import type { SequenceEvent, SequenceFrameEvent } from '../core/sequence.js';
+import type { SequenceEvent, SequenceFrameEvent, SequenceSnapshot } from '../core/sequence.js';
 
 export interface PlaySequenceOptions {
   /** Absolute AudioContext origin; omitted means currentTime at submission. */
@@ -118,14 +118,15 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
   const origin = config.at;
   if (origin !== undefined && (typeof origin !== 'number' || !Number.isFinite(origin) || origin < 0)) throw new RangeError('at must be finite and nonnegative');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
-  const onError = config.onError as ((error: Error) => void) | undefined;
+  let onError = config.onError as ((error: Error) => void) | undefined;
+  let startOnError: typeof onError;
   const signal = config.signal as AbortSignal | undefined;
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   if (aborted) {
     try { aborted.call(signal); } catch { throw new TypeError('signal must be an AbortSignal'); }
   }
   // Validation is eager, before start() can initialize or post to an AudioWorklet.
-  const score = prepareLongSequence(events, { voices: opm.voices });
+  let score: SequenceSnapshot | undefined = prepareLongSequence(events, { voices: opm.voices });
   const preflight = sequenceFrameEvents(score, opm.context?.sampleRate ?? 44100);
   const density = sequenceWindowCapacity(preflight.queue, opm.context?.sampleRate ?? 44100, horizon);
   if (density.peakWindowSlots > maxSlots || density.peakWindowNotes > MAX_SEQUENCE_NOTES) {
@@ -153,6 +154,8 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
     if (cancelled) return;
     cancelled = true;
     running = false;
+    score = undefined;
+    onError = undefined;
     clearTimeout(timer);
     timer = undefined;
     unsubscribe?.();
@@ -172,9 +175,9 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
     queue = [];
     if (failure !== undefined) throw failure;
   }
-  function fail(error: unknown): void {
+  function fail(error: unknown, listener = onError): void {
     try { stop(); } catch { /* Preserve the scheduling failure. */ }
-    onError?.(error instanceof Error ? error : new Error(String(error)));
+    listener?.(error instanceof Error ? error : new Error(String(error)));
   }
   function observe(event: OPMEvent): void {
     if (event.type === 'reset') {
@@ -257,14 +260,17 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
       if (starting) return starting;
       if (begun) return Promise.resolve();
       begun = true;
+      // A stopped startup may still reject; preserve its final error notification.
+      startOnError = onError;
       const pending = opm.start().then(() => {
-        if (cancelled || aborted?.call(signal)) { stop(); return; }
+        if (cancelled || aborted?.call(signal)) { stop(); startOnError = undefined; return; }
         context = opm.context;
         node = opm.node;
         if (!context || !node || context.state !== 'running') throw new Error('Sequence requires a running AudioContext');
         const at = origin === undefined ? context.currentTime : origin as number;
         if (at < context.currentTime || at > context.currentTime + MAX_SEQUENCE_SECONDS) throw new RangeError('Sequence origin must be current or at most60 seconds ahead');
-        queue = sequenceFrameEvents(score, context.sampleRate, at).queue;
+        queue = sequenceFrameEvents(score!, context.sampleRate, at).queue;
+        score = undefined;
         for (const event of queue) if (!Number.isSafeInteger(event.frame)) throw new RangeError('Sequence exceeds safe sample frames');
         const density = sequenceWindowCapacity(queue, context.sampleRate, horizon);
         if (density.peakWindowSlots > maxSlots || density.peakWindowNotes > MAX_SEQUENCE_NOTES) {
@@ -274,7 +280,13 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
         running = true;
         if (signal) EventTarget.prototype.addEventListener.call(signal, 'abort', stop, { once: true });
         pump();
-      }).catch(error => { fail(error); throw error; });
+        startOnError = undefined;
+      }).catch(error => {
+        const listener = startOnError;
+        startOnError = undefined;
+        fail(error, listener);
+        throw error;
+      });
       starting = pending;
       return pending;
     },

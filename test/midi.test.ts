@@ -5,6 +5,7 @@ import { createMidiAdapter, requestMidiAccess } from '../src/api/midi.js';
 import type { MidiAccessLike, MidiAdapterOptions, MidiControllerMapping, MidiInputLike, MidiMessageEventLike } from '../src/api/midi.js';
 import type { NoteControls } from '../src/core/synth.js';
 import { installWorkletHarness, startedEngine, renderFrames } from './worklet-harness.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 import { examples } from '../src/voices/examples.js';
 
 const restore = await installWorkletHarness();
@@ -241,6 +242,135 @@ test('dispose removes listeners and releases only adapter-owned keys', async () 
     assert.deepEqual(held(performance, 0), [72]);
     assert.equal(adapter.snapshot.disposed, true);
   } finally { performance.dispose(); await opm.dispose(); }
+});
+
+test('a pending port-open rejection still notifies once after disposal without restoring input ownership', async () => {
+  const opm = await startedEngine();
+  const performance = createPerformance(opm);
+  const access = new FakeAccess();
+  let rejectOpen!: (error: Error) => void;
+  const opening = new Promise<void>((_resolve, reject) => { rejectOpen = reject; });
+  class PendingInput extends FakeInput {
+    override open() { this.opened++; return opening; }
+  }
+  const input = new PendingInput('pending');
+  access.inputs.set(input.id, input);
+  const failures: Error[] = [];
+  const receivers: unknown[] = [];
+  const adapter = createMidiAdapter(performance, access, {
+    onError: function (this: unknown, error) { receivers.push(this); failures.push(error); },
+  });
+  try {
+    input.send(0x90, 60, 100);
+    const hostKey = performance.noteOn(0, 72);
+    adapter.dispose();
+    const snapshot = adapter.snapshot;
+    assert.equal(access.listening, 0);
+    assert.equal(input.listeners.size, 0);
+    const error = new Error('port disconnected while opening');
+    rejectOpen(error);
+    await opening.catch(() => {});
+    assert.deepEqual(failures, [error]);
+    assert.deepEqual(receivers, [undefined]);
+    assert.deepEqual(adapter.snapshot, snapshot);
+    access.change();
+    input.send(0x90, 61, 100);
+    assert.deepEqual(held(performance, 0), [72]);
+    assert.ok(performance.getPart(0).keys.some(key => key.key === hostKey));
+    assert.deepEqual(failures, [error]);
+    performance.noteOff(0, hostKey);
+    renderFrames(opm, 16000);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('reentrant disposal preserves each entered pedal-cleanup failure across channels', async () => {
+  const opm = await startedEngine();
+  const performance = createPerformance(opm, { parts: 2 });
+  const access = new FakeAccess();
+  const input = new FakeInput('pedals');
+  access.inputs.set(input.id, input);
+  const failures: Error[] = [];
+  const receivers: unknown[] = [];
+  const adapter = createMidiAdapter(performance, access, {
+    parts: 2,
+    onError: function (this: unknown, error) {
+      receivers.push(this);
+      failures.push(error);
+      adapter.dispose();
+    },
+  });
+  try {
+    input.send(0xb0, 64, 127);
+    input.send(0xb1, 64, 127);
+    assert.equal(performance.getPart(0).sustain, true);
+    assert.equal(performance.getPart(1).sustain, true);
+    performance.dispose();
+    input.state = 'disconnected';
+    access.change();
+    assert.deepEqual(failures.map(error => error.message), ['Performance is disposed', 'Performance is disposed']);
+    assert.deepEqual(receivers, [undefined, undefined]);
+    assert.deepEqual(adapter.snapshot, { inputs: [], heldKeys: 0, ignoredMessages: 0, disposed: true });
+    assert.equal(access.listening, 0);
+    assert.equal(input.listeners.size, 0);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('a reentrant releaseAll preserves disposal failures from every attached pedal input', async () => {
+  const opm = await startedEngine();
+  const performance = createPerformance(opm, { parts: 1 });
+  const access = new FakeAccess();
+  const inputs = [new FakeInput('left-pedal'), new FakeInput('right-pedal')];
+  for (const input of inputs) access.inputs.set(input.id, input);
+  const failures: Error[] = [];
+  const adapter = createMidiAdapter(performance, access, {
+    parts: 1,
+    onError(error) { failures.push(error); adapter.releaseAll(); },
+  });
+  try {
+    for (const input of inputs) input.send(0xb0, 64, 127);
+    assert.equal(performance.getPart(0).sustain, true);
+    performance.dispose();
+    adapter.dispose();
+    assert.deepEqual(failures.map(error => error.message), ['Performance is disposed', 'Performance is disposed']);
+    assert.deepEqual(adapter.snapshot, { inputs: [], heldKeys: 0, ignoredMessages: 0, disposed: true });
+    assert.equal(access.listening, 0);
+    for (const input of inputs) assert.equal(input.listeners.size, 0);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('disposal from an opening error prevents refresh from attaching later inputs', async () => {
+  const opm = await startedEngine();
+  const performance = createPerformance(opm, { parts: 1 });
+  const access = new FakeAccess();
+  class RejectedInput extends FakeInput {
+    override open(): Promise<void> { this.opened++; throw new Error(`cannot open ${this.id}`); }
+  }
+  const inputs = [new RejectedInput('first'), new RejectedInput('second')];
+  const failures: Error[] = [];
+  const adapter = createMidiAdapter(performance, access, {
+    parts: 1,
+    onError(error) { failures.push(error); adapter.dispose(); },
+  });
+  try {
+    for (const input of inputs) access.inputs.set(input.id, input);
+    access.change();
+    assert.deepEqual(failures.map(error => error.message), ['cannot open first']);
+    assert.deepEqual(inputs.map(input => input.opened), [1, 0]);
+    for (const input of inputs) assert.equal(input.listeners.size, 0);
+    assert.equal(access.listening, 0);
+    assert.deepEqual(adapter.snapshot, { inputs: [], heldKeys: 0, ignoredMessages: 0, disposed: true });
+    inputs[1]!.send(0x90, 60, 100);
+    assert.equal(performance.getPart(0).keys.length, 0);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
 });
 
 test('MIDI access is requested only on demand and never asks for SysEx', async () => {
@@ -585,4 +715,36 @@ test('mono program changes keep the held gate until a later onset restarts the n
     assert.equal(performance.getPart(0).keys.length, 0);
     assert.throws(() => performance.configurePart(0, {}, { preserveNotes: 1 } as never), /boolean/);
   } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
+test('controller mappings ignore an operator or reset inherited from Object.prototype', async () => {
+  const controllerMap: MidiControllerMapping[] = [
+    { controller: 16, field: 'pan', min: -1, max: 1, ramp: 0 },
+    { controller: 17, field: 'operatorRatios', operator: 1, min: 0.5, max: 8, ramp: 0 },
+    { controller: 18, field: 'feedback', min: 0, max: 7, ramp: 0, reset: 3 },
+  ];
+  async function run(key?: string, inherited?: unknown): Promise<unknown> {
+    const opm = await startedEngine();
+    const performance = createPerformance(opm);
+    const access = new FakeAccess();
+    const input = new FakeInput('keys');
+    access.inputs.set(input.id, input);
+    const errors: string[] = [];
+    const play = (): unknown => {
+      const adapter = createMidiAdapter(performance, access, { controllerMap, onError: error => errors.push(error.message) });
+      try {
+        input.send(0x90, 60, 100);
+        for (const [controller, value] of [[16, 127], [17, 127], [18, 64], [121, 0]] as const) input.send(0xb0, controller, value);
+        return structuredClone(performance.getPartControls(0));
+      } finally { adapter.dispose(); }
+    };
+    try {
+      const controls = key === undefined ? play() : withNamedAccessor(key, play, inherited).value;
+      return { controls, errors };
+    } finally { performance.dispose(); await opm.dispose(); }
+  }
+  const clean = await run();
+  for (const [key, inherited] of [['operator', 2], ['operator', 0], ['reset', 7], ['min', 0], ['field', 'pitch']] as const) {
+    assert.deepStrictEqual(await run(key, inherited), clean, `${key} ${String(inherited)}`);
+  }
 });

@@ -6,6 +6,7 @@ import { createTransport, beatsToSeconds, secondsToBeats, beatToBarBeat, barBeat
 import type { BeatSequenceEvent, MusicalTransport } from '../src/api/transport.js';
 import { renderSequence } from '../src/core/index.js';
 import type { VoiceInput } from '../src/voices/schema.js';
+import { withNamedAccessorAsync } from './named-accessors-harness.js';
 
 interface Port { postMessage(message: unknown): void; close(): void; onmessage?: ((event: { data: unknown }) => void) | null }
 interface ProcessorInstance {
@@ -245,46 +246,86 @@ test('seeking into ramped automation reconstructs current values and remaining r
   } finally { transport.dispose(); await opm.dispose(); }
 });
 
+// Returns the hook's setter hits: the reconstruction must define its controls as own data.
+async function seekRestoration(destination: number, hookKey?: string, inherited?: unknown): Promise<number> {
+  const opm = await engine();
+  const adsr = [{ a: 0, d: 0, s: 0.6, r: 0.008 }, { a: 0, d: 0, s: 1, r: 0.008 },
+    { a: 0, d: 0, s: 1, r: 0.008 }, { a: 0, d: 0, s: 1, r: 0.008 }] as const;
+  const transport = createTransport(opm, [note(4),
+    { type: 'control', id: 1, beat: 0, controls: {
+      feedback: 7, lfoRate: 8, amDepth: 0.6, pmDepth: 600, gain: 0.5, operatorRatios: [2, 2, 2, 2], ramp: 1,
+    } },
+    { type: 'control', id: 1, beat: 0.25, controls: { operatorFrequencies: [330, null, null, null], ramp: 1 } },
+    { type: 'control', id: 1, beat: 0.5, controls: { operatorADSR: adsr } },
+    { type: 'control', id: 1, beat: 1.5, controls: { operatorFrequencies: [null, null, null, null] } },
+  ], { startupLead: 0 });
+  try {
+    const begin = async (): Promise<void> => { transport.seek(destination); await transport.start(); };
+    let setterHits = 0;
+    if (hookKey === undefined) await begin();
+    else setterHits = (await withNamedAccessorAsync(hookKey, begin, inherited)).setterHits;
+    const progress = destination / 2;
+    const ratio = 1 + progress;
+    const expected = renderSequence([
+      { type: 'note', id: 1, time: 0, duration: (4 - destination) / 2, note: 69, voice },
+      { type: 'control', id: 1, time: 0, controls: {
+        pitch: 0, expression: 1, pan: 0, modulation: 1, operatorLevels: [1, 1, 1, 1],
+        feedback: 7 * progress, lfoRate: 8 * progress, amDepth: 0.6 * progress, pmDepth: 600 * progress,
+        gain: 1 + (0.5 - 1) * progress,
+        operatorRatios: [ratio, ratio, ratio, ratio],
+        operatorFrequencies: [destination === 1 ? 330 : null, null, null, null], operatorADSR: adsr,
+      } },
+      ...(destination === 1 ? [
+        { type: 'control' as const, id: 1, time: 0, controls: { feedback: 7, ramp: 0.5 } },
+        { type: 'control' as const, id: 1, time: 0, controls: { lfoRate: 8, ramp: 0.5 } },
+        { type: 'control' as const, id: 1, time: 0, controls: { amDepth: 0.6, ramp: 0.5 } },
+        { type: 'control' as const, id: 1, time: 0, controls: { pmDepth: 600, ramp: 0.5 } },
+        { type: 'control' as const, id: 1, time: 0, controls: { gain: 0.5, ramp: 0.5 } },
+        { type: 'control' as const, id: 1, time: 0, controls: { operatorRatios: [2, 2, 2, 2] as const, ramp: 0.5 } },
+      ] : []),
+    ], { sampleRate });
+    const actual = advance(opm, transport, 3000);
+    assert.deepEqual(actual.left, expected.left.subarray(0, 3000), `${hookKey} left, beat ${destination}`);
+    assert.deepEqual(actual.right, expected.right.subarray(0, 3000), `${hookKey} right, beat ${destination}`);
+    return setterHits;
+  } finally { transport.dispose(); await opm.dispose(); }
+}
+
 for (const destination of [1, 2]) {
   test(`seek beat ${destination} restores expanded timbre ramps, fixed/ratio mode and edited ADSR`, async () => {
-    const opm = await engine();
-    const adsr = [{ a: 0, d: 0, s: 0.6, r: 0.008 }, { a: 0, d: 0, s: 1, r: 0.008 },
-      { a: 0, d: 0, s: 1, r: 0.008 }, { a: 0, d: 0, s: 1, r: 0.008 }] as const;
-    const transport = createTransport(opm, [note(4),
-      { type: 'control', id: 1, beat: 0, controls: {
-        feedback: 7, lfoRate: 8, amDepth: 0.6, pmDepth: 600, operatorRatios: [2, 2, 2, 2], ramp: 1,
-      } },
-      { type: 'control', id: 1, beat: 0.25, controls: { operatorFrequencies: [330, null, null, null], ramp: 1 } },
-      { type: 'control', id: 1, beat: 0.5, controls: { operatorADSR: adsr } },
-      { type: 'control', id: 1, beat: 1.5, controls: { operatorFrequencies: [null, null, null, null] } },
-    ], { startupLead: 0 });
-    try {
-      transport.seek(destination);
-      await transport.start();
-      const progress = destination / 2;
-      const ratio = 1 + progress;
-      const expected = renderSequence([
-        { type: 'note', id: 1, time: 0, duration: (4 - destination) / 2, note: 69, voice },
-        { type: 'control', id: 1, time: 0, controls: {
-          pitch: 0, expression: 1, pan: 0, modulation: 1, operatorLevels: [1, 1, 1, 1],
-          feedback: 7 * progress, lfoRate: 8 * progress, amDepth: 0.6 * progress, pmDepth: 600 * progress,
-          operatorRatios: [ratio, ratio, ratio, ratio],
-          operatorFrequencies: [destination === 1 ? 330 : null, null, null, null], operatorADSR: adsr,
-        } },
-        ...(destination === 1 ? [
-          { type: 'control' as const, id: 1, time: 0, controls: { feedback: 7, ramp: 0.5 } },
-          { type: 'control' as const, id: 1, time: 0, controls: { lfoRate: 8, ramp: 0.5 } },
-          { type: 'control' as const, id: 1, time: 0, controls: { amDepth: 0.6, ramp: 0.5 } },
-          { type: 'control' as const, id: 1, time: 0, controls: { pmDepth: 600, ramp: 0.5 } },
-          { type: 'control' as const, id: 1, time: 0, controls: { operatorRatios: [2, 2, 2, 2] as const, ramp: 0.5 } },
-        ] : []),
-      ], { sampleRate });
-      const actual = advance(opm, transport, 3000);
-      assert.deepEqual(actual.left, expected.left.subarray(0, 3000));
-      assert.deepEqual(actual.right, expected.right.subarray(0, 3000));
-    } finally { transport.dispose(); await opm.dispose(); }
+    await seekRestoration(destination);
   });
 }
+
+test('seek reconstruction keeps every restored control despite inherited setters', async () => {
+  for (const key of ['feedback', 'lfoRate', 'amDepth', 'pmDepth', 'gain', 'operatorRatios', 'operatorFrequencies', 'operatorADSR']) {
+    assert.equal(await seekRestoration(1, key), 0, key);
+    assert.equal(await seekRestoration(2, key), 0, key);
+  }
+});
+
+// A hook answers every omitted field with a plausible wrong value, or swallows the write of a field
+// the library assigns later; the restored audio must stay equal to the clean reconstruction.
+test('seek reconstruction and gate bookkeeping ignore values inherited from Object.prototype', async () => {
+  const slow = { a: 0, d: 0, s: 1, r: 5 };
+  const hooks: [string, unknown][] = [
+    ['pitch', 12], ['glide', 5], ['ramp', 5], ['expression', 0.1], ['pan', 1], ['modulation', 2], ['gain', 0.1],
+    ['feedback', 0], ['lfoRate', 20], ['amDepth', 1], ['pmDepth', 1200], ['operatorLevels', [0, 0, 0, 0]],
+    ['operatorRatios', [8, 8, 8, 8]], ['operatorFrequencies', [440, 440, 440, 440]], ['operatorADSR', [slow, slow, slow, slow]],
+    ['id', 99], ['controls', { expression: 0 }], ['at', 0],
+  ];
+  const failures: string[] = [];
+  for (const [key, inherited] of hooks) {
+    for (const destination of [1, 2]) {
+      try {
+        const hits = await seekRestoration(destination, key, inherited);
+        // Node's own timer lists assign `id`, so only the restored audio is judged for that key.
+        if (key !== 'id' && hits !== 0) failures.push(`${key} beat ${destination}: ${hits} setter hits`);
+      } catch (error) { failures.push(`${key} beat ${destination}: ${(error as Error).message.split('\n')[0]}`); }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
 
 test('expanded seek reconstruction rejects density before altering a running score', async () => {
   const opm = await engine();
@@ -370,6 +411,39 @@ test('preserved-context interruption and engine reset stop transport until expli
     await transport.start();
     assert.equal(transport.running, true);
   } finally { transport.dispose(); await opm.dispose(); }
+});
+
+test('disposal during failure cancellation preserves its executing error notification and snapshot', async () => {
+  const opm = await engine();
+  const failures: Error[] = [];
+  const transport = createTransport(opm, [note(4)], { startupLead: 0, onError: error => failures.push(error) });
+  let disposedDuringStop = false;
+  const unsubscribe = opm.subscribe(event => {
+    if (event.type === 'command' && event.command === 'stop' && !disposedDuringStop) {
+      disposedDuringStop = true;
+      transport.dispose();
+    }
+  });
+  try {
+    await transport.start();
+    advance(opm, transport, 128);
+    (opm.context as unknown as Context).currentTime += 1;
+    transport.pump();
+    assert.equal(disposedDuringStop, true);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0]!.message, /missed/);
+    assert.equal(transport.state, 'disposed');
+    assert.equal(transport.ids.size, 0);
+    const snapshot = transport.snapshot;
+    transport.dispose(); transport.stop(); transport.pump();
+    assert.deepEqual(transport.snapshot, snapshot);
+    await assert.rejects(transport.start(), /disposed/);
+    assert.throws(() => transport.setTempo(100), /disposed/);
+    render(opm, 1024);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+  } finally { unsubscribe(); transport.dispose(); await opm.dispose(); }
 });
 
 test('changing loop bounds preserves current beat and rebuilds future wraps', async () => {
@@ -503,6 +577,86 @@ test('unrepresentable linear tempo slopes reject before scheduling', () => {
   assert.throws(() => normalizeTempoMap(map), /slope/);
   assert.throws(() => beatsToSeconds(1, map), /slope/);
   assert.equal(beatsToSeconds(1, [{ beat: 0, bpm: 60, curve: 'linear' }, { beat: Number.MIN_VALUE, bpm: 60 }]), 1);
+});
+
+test('tempo array length descriptors cannot coerce values or bypass the point budget', () => {
+  let coercions = 0;
+  const length = { valueOf() { return ++coercions === 1 ? 1 : 1025; } };
+  const invalidLengths: unknown[] = [length, '1', 1n, NaN, Infinity, -1, 0.5];
+  for (const value of invalidLengths) {
+    const input = new Proxy([{ beat: 0, bpm: 120 }], {
+      getOwnPropertyDescriptor(target, key) {
+        if (key === 'length') return { ...Reflect.getOwnPropertyDescriptor(target, key)!, value };
+        // The old coercible length could pass admission, then grow the traversal
+        // beyond 1024 while synthesizing otherwise-valid own-data points.
+        if (typeof key === 'string' && /^\d+$/.test(key)) return {
+          value: { beat: Number(key), bpm: 120 }, configurable: true, enumerable: true, writable: true,
+        };
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    assert.throws(() => normalizeTempoMap(input), RangeError);
+  }
+  assert.equal(coercions, 0);
+});
+
+test('reused tempo snapshots remain detached while mutable copies and BPM arguments still validate', () => {
+  const input = [{ beat: 0, bpm: 120 }, { beat: 4, bpm: 60 }];
+  const snapshot = normalizeTempoMap(input);
+  input[0].bpm = 240;
+  assert.equal(beatsToSeconds(6, snapshot), 4);
+  assert.equal(secondsToBeats(4, snapshot), 6);
+  assert.equal(beatsToSeconds(6, input), 3);
+  assert.equal(secondsToBeats(4, input), 7);
+  assert.equal(Reflect.set(snapshot[0], 'bpm', 240), false);
+  for (const bpm of [0, NaN, Infinity, 1001]) assert.throws(() => normalizeTempoMap(snapshot, bpm), RangeError);
+  const malformed = [...snapshot];
+  malformed[0] = { beat: 0, bpm: 0 };
+  assert.throws(() => normalizeTempoMap(malformed), /bpm/);
+  const extra = Object.assign([...snapshot], { extra: true });
+  assert.throws(() => normalizeTempoMap(extra), /unknown/);
+});
+
+test('tempo snapshots follow inherited optional fields across context changes', () => {
+  const cases = [
+    { field: 'curve', inherited: 'linear', input: [{ beat: 0, bpm: 60 }, { beat: 4, bpm: 120 }, { beat: 8, bpm: 120 }] },
+    { field: 'endBpm', inherited: 90, input: [{ beat: 0, bpm: 60, curve: 'linear' as const }, { beat: 4, bpm: 120 }, { beat: 8, bpm: 120 }] },
+  ];
+  for (const { field, inherited, input } of cases) {
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, field);
+    const restore = () => {
+      if (original) Object.defineProperty(Object.prototype, field, original);
+      else Reflect.deleteProperty(Object.prototype, field);
+    };
+    const before = normalizeTempoMap(input);
+    try {
+      Object.defineProperty(Object.prototype, field, { value: inherited, configurable: true, writable: true });
+      assert.equal(beatsToSeconds(8, before), beatsToSeconds(8, input));
+      assert.equal(secondsToBeats(2, before), secondsToBeats(2, input));
+      const during = normalizeTempoMap(input);
+      restore();
+      assert.equal(beatsToSeconds(8, during), beatsToSeconds(8, input));
+      assert.equal(secondsToBeats(2, during), secondsToBeats(2, input));
+    } finally {
+      restore();
+    }
+  }
+});
+
+test('inverse tempo snapshots remain bit-identical across equivalent contexts', () => {
+  const input = [137, 73, 233, 91].map((bpm, beat) => ({ beat, bpm }));
+  const snapshot = normalizeTempoMap(input);
+  const seconds = beatsToSeconds(3.125, snapshot);
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, 'curve');
+  let equivalent: ReturnType<typeof normalizeTempoMap>;
+  try {
+    Object.defineProperty(Object.prototype, 'curve', { value: undefined, writable: true, configurable: true });
+    equivalent = normalizeTempoMap(input);
+  } finally {
+    if (original) Object.defineProperty(Object.prototype, 'curve', original);
+    else Reflect.deleteProperty(Object.prototype, 'curve');
+  }
+  assert.ok(Object.is(secondsToBeats(seconds, snapshot), secondsToBeats(seconds, equivalent)));
 });
 
 test('quantization and swing keep beat grids monotonic', () => {

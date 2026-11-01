@@ -1,6 +1,7 @@
 import type { OPM, OPMEvent } from './index.js';
 import { prepareLongSequence, sequenceOwnData, MAX_LONG_SEQUENCE_EVENTS, MAX_SEQUENCE_NOTES } from '../core/sequence.js';
 import type { BeatSequenceEvent, SequenceEvent, PreparedSequenceEvent } from '../core/sequence.js';
+import { ownControl } from '../core/synth.js';
 import type { NoteControls } from '../core/synth.js';
 import {
   MAX_TRANSPORT_BEATS, transportArray, transportNumber, normalizeTempoMap, normalizeTimeSignature,
@@ -88,29 +89,37 @@ function reconstructed(track: Track, beat: number, map: readonly Readonly<TempoP
     const atBeat = Math.max(track.note.time, event.time);
     if (atBeat > beat) break;
     const at = tempoSeconds(atBeat, map) - onset;
+    // Own reads: an omitted control must not fall through to Object.prototype.
+    const controls = event.controls;
+    const levels = ownControl(controls, 'operatorLevels');
+    const ratios = ownControl(controls, 'operatorRatios');
     for (let index = 0; index < values.length; index++) {
-      const target = index < 8 ? event.controls[fields[index]]
-        : index < 12 ? event.controls.operatorLevels?.[index - 8]
-        : index < 16 ? event.controls.operatorRatios?.[index - 12] : event.controls.gain;
+      const target = index < 8 ? ownControl(controls, fields[index])
+        : index < 12 ? levels?.[index - 8]
+        : index < 16 ? ratios?.[index - 12] : ownControl(controls, 'gain');
       if (target === undefined) continue;
       edited[index] = true;
-      ramps[index] = { from: sample(index, at), target, at, duration: index === 0 ? event.controls.glide ?? 0 : event.controls.ramp ?? 0 };
+      ramps[index] = { from: sample(index, at), target, at, duration: ownControl(controls, index === 0 ? 'glide' : 'ramp') ?? 0 };
     }
-    if (event.controls.operatorFrequencies !== undefined) frequencies = event.controls.operatorFrequencies;
-    if (event.controls.operatorADSR !== undefined) adsr = event.controls.operatorADSR;
+    const fixed = ownControl(controls, 'operatorFrequencies');
+    if (fixed !== undefined) frequencies = fixed;
+    const envelopes = ownControl(controls, 'operatorADSR');
+    if (envelopes !== undefined) adsr = envelopes;
   }
   const elapsed = tempoSeconds(beat, map) - onset;
+  // Conditional spreads define own data; assigning onto the literal could reach an inherited setter.
   const initial: NoteControls = {
     pitch: sample(0, elapsed), expression: sample(1, elapsed), pan: sample(2, elapsed), modulation: sample(3, elapsed),
     operatorLevels: [sample(8, elapsed), sample(9, elapsed), sample(10, elapsed), sample(11, elapsed)],
+    ...(edited[4] ? { feedback: sample(4, elapsed) } : {}), ...(edited[5] ? { lfoRate: sample(5, elapsed) } : {}),
+    ...(edited[6] ? { amDepth: sample(6, elapsed) } : {}), ...(edited[7] ? { pmDepth: sample(7, elapsed) } : {}),
+    ...(edited[12] ? { operatorRatios: [sample(12, elapsed), sample(13, elapsed), sample(14, elapsed), sample(15, elapsed)] } : {}),
+    ...(edited[16] ? { gain: sample(16, elapsed) } : {}),
+    // null resolves against the reconstructed live ratio and the engine's current tuning.
+    // The latest fixed/ratio policy wins immediately, rather than fabricating intermediate Hz.
+    ...(frequencies !== undefined ? { operatorFrequencies: frequencies } : {}),
+    ...(adsr !== undefined ? { operatorADSR: adsr } : {}),
   };
-  for (let index = 4; index < 8; index++) if (edited[index]) initial[fields[index]] = sample(index, elapsed);
-  if (edited[12]) initial.operatorRatios = [sample(12, elapsed), sample(13, elapsed), sample(14, elapsed), sample(15, elapsed)];
-  if (edited[16]) initial.gain = sample(16, elapsed);
-  // null resolves against the reconstructed live ratio and the engine's current tuning.
-  // The latest fixed/ratio policy wins immediately, rather than fabricating intermediate Hz.
-  if (frequencies !== undefined) initial.operatorFrequencies = frequencies;
-  if (adsr !== undefined) initial.operatorADSR = adsr;
   const result = [initial];
   // Scalar edits and each tuple can have independent outstanding ramp durations.
   for (let index = 0; index < 8; index++) {
@@ -178,7 +187,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
   const maxSlots = transportNumber(config.maxSlots === undefined ? 256 : config.maxSlots, 1, 256, 'maxSlots');
   if (!Number.isInteger(maxSlots)) throw new RangeError('maxSlots must be an integer');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
-  const onError = config.onError as ((error: Error) => void) | undefined;
+  let onError = config.onError as ((error: Error) => void) | undefined;
   const score = prepareBeatEvents(opm, beatEvents);
   const tracks = new Map<number, Track>();
   for (const event of score.events) if (event.type === 'note') tracks.set(event.id, { note: event, end: event.time + event.duration, controls: [] });
@@ -212,7 +221,8 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     const offset = tempoSeconds(from, tempo);
     for (const track of tracks.values()) {
       if (track.end <= from || track.end <= track.note.time || track.note.time >= to) continue;
-      const gate: Gate = { track };
+      // Own `id` slot: the later assignment must not reach an inherited setter.
+      const gate: Gate = { track, id: undefined };
       const begin = Math.max(from, track.note.time);
       const onset = at + tempoSeconds(begin, tempo) - offset;
       result.push({ at: onset, order: 1, gate });
@@ -293,9 +303,10 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     if (failure !== undefined) throw failure;
   }
   function fail(error: unknown): void {
+    const listener = onError;
     lastError = error instanceof Error ? error : new Error(String(error));
     try { cancel('stopped'); } catch { /* Preserve the original scheduling failure. */ }
-    onError?.(lastError);
+    listener?.(lastError);
   }
   const observe = (event: OPMEvent): void => {
     if (state === 'disposed') return;
@@ -355,8 +366,9 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
           const command = queue[cursor++];
           if (command.at < now - 0.5 / sampleRate) throw new Error('Transport lookahead missed a score event');
           if (queued.length >= maxSlots) throw new RangeError('Transport exceeds owned queued command capacity');
-          const at = Math.round(command.at * sampleRate) / sampleRate;
-          if (!Number.isSafeInteger(Math.round(command.at * sampleRate))) throw new RangeError('Transport exceeds safe sample frames');
+          const frame = Math.round(command.at * sampleRate);
+          if (!Number.isSafeInteger(frame)) throw new RangeError('Transport exceeds safe sample frames');
+          const at = frame / sampleRate;
           const gate = command.gate;
           if (command.order === 1) {
             if (owned.size >= MAX_SEQUENCE_NOTES) throw new RangeError('Transport exceeds outstanding note capacity');
@@ -447,7 +459,7 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     pump,
     dispose() {
       if (state === 'disposed') return;
-      try { cancel('disposed'); } finally { unsubscribe(); }
+      try { cancel('disposed'); } finally { onError = undefined; unsubscribe(); }
     },
   });
 }

@@ -64,32 +64,36 @@ export type RenderWorkerResponse = { type: 'ready'; protocol: 1 }
 
 const typedArrayByteLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), 'byteLength')!.get!;
 
-/** Browser-only, backpressured offline rendering; importing this module allocates nothing. */
+/** Browser-only, backpressured offline rendering; imports create no Worker. */
 export async function renderSequenceInWorker(events: readonly SequenceEvent[], options: WorkerRenderOptions): Promise<WorkerRenderResult> {
   const data = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal', 'format', 'dither', 'sink', 'onProgress', 'startupTimeoutMs', 'phaseDiagnostics', 'onPhase', 'workerUrl'], ['sink'], 'worker render options');
-  const sink = sequenceOwnData(data.sink, ['write', 'close', 'abort'], ['write'], 'WAV sink');
+  let sinkOwner: unknown = data.sink;
+  let sink: Record<string, unknown> | undefined = sequenceOwnData(sinkOwner, ['write', 'close', 'abort'], ['write'], 'WAV sink');
   for (const key of ['write', 'close', 'abort']) if (sink[key] !== undefined && typeof sink[key] !== 'function') throw new TypeError(`sink.${key} must be a function`);
   if (typeof sink.write !== 'function') throw new TypeError('sink.write must be a function');
   if (data.onProgress !== undefined && typeof data.onProgress !== 'function') throw new TypeError('onProgress must be a function');
-  const onProgress = data.onProgress as WorkerRenderOptions['onProgress'];
+  let onProgress = data.onProgress as WorkerRenderOptions['onProgress'];
   if (data.onPhase !== undefined && typeof data.onPhase !== 'function') throw new TypeError('onPhase must be a function');
   if (data.phaseDiagnostics !== undefined && typeof data.phaseDiagnostics !== 'boolean') throw new TypeError('phaseDiagnostics must be a boolean');
   if (data.startupTimeoutMs !== undefined && (typeof data.startupTimeoutMs !== 'number' || !Number.isInteger(data.startupTimeoutMs) || data.startupTimeoutMs < 1 || data.startupTimeoutMs > 2147483647)) throw new RangeError('startupTimeoutMs must be an integer in 1..2147483647');
-  const onPhase = data.onPhase as WorkerRenderOptions['onPhase'];
-  const timed = data.phaseDiagnostics === true || onPhase !== undefined;
+  let onPhase = data.onPhase as WorkerRenderOptions['onPhase'];
+  const phaseDiagnostics = data.phaseDiagnostics === true;
+  const startupTimeoutMs = data.startupTimeoutMs as number | undefined;
+  const timed = phaseDiagnostics || onPhase !== undefined;
   const signal = data.signal as AbortSignal | undefined;
   const aborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   if (signal !== undefined) {
     try { aborted.call(signal); } catch { throw new TypeError('signal must be an AbortSignal'); }
   }
   const engine: SynthOptions = {};
-  for (const key of ['mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'] as const) if (data[key] !== undefined) Object.defineProperty(engine, key, { value: data[key], enumerable: true });
+  for (const key of ['mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'] as const) if (data[key] !== undefined) Object.defineProperty(engine, key, { __proto__: null, value: data[key], enumerable: true } as PropertyDescriptor);
   const settings = readSynthOptions(engine);
   if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);
-  const coreOptions: ChunkedSequenceOptions = { ...settings };
-  for (const key of ['sampleRate', 'maxVoices', 'chunkFrames', 'maxFrames'] as const) if (data[key] !== undefined) Object.defineProperty(coreOptions, key, { value: data[key], enumerable: true });
-  const snapshot = prepareLongSequence(events, { voices: data.voices as ChunkedSequenceOptions['voices'] });
-  const score = snapshot.events as unknown as readonly SequenceEvent[];
+  let coreOptions: ChunkedSequenceOptions | undefined = { ...settings };
+  for (const key of ['sampleRate', 'maxVoices', 'chunkFrames', 'maxFrames'] as const) if (data[key] !== undefined) Object.defineProperty(coreOptions, key, { __proto__: null, value: data[key], enumerable: true } as PropertyDescriptor);
+  const voices = data.voices as ChunkedSequenceOptions['voices'];
+  const snapshot = prepareLongSequence(events, voices === undefined ? undefined : { voices });
+  let score: readonly SequenceEvent[] | undefined = snapshot.events as unknown as readonly SequenceEvent[];
   const capacity = estimateSequenceCapacity(score, coreOptions);
   const format = (data.format === undefined ? 'pcm16' : data.format) as WavFormat;
   // The encoder validates both; the Worker receives exactly the checked values.
@@ -133,9 +137,13 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
       if (phase === 'initializing' || phase === 'rendering' || phase === 'writing' || phase === 'closing') totals[phase] += duration;
       phase = next;
       phaseAt = now;
-      if (onPhase) external(() => onPhase(Object.freeze({ phase, elapsedMs: Math.max(0, now - startedAt), phaseElapsedMs: duration, frames, totalFrames: capacity.frames, bytesWritten, errors })));
+      const listener = onPhase;
+      if (listener) external(() => listener(Object.freeze({ phase, elapsedMs: Math.max(0, now - startedAt), phaseElapsedMs: duration, frames, totalFrames: capacity.frames, bytesWritten, errors })));
     };
     const cleanup = () => {
+      // Uncooperative sink promises may retain these closures after termination.
+      score = undefined;
+      coreOptions = undefined;
       clearTimeout(startupTimer);
       startupTimer = undefined;
       worker?.removeEventListener('message', onMessage);
@@ -149,8 +157,13 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
       settled = true;
       cleanup();
       // The sink owns rollback. Never await an uncooperative write, close or abort.
-      try { Promise.resolve(external(() => (sink.abort as WavSink['abort'])?.call(data.sink, reason))).catch(() => {}); } catch { /* Preserve the first failure. */ }
+      try { Promise.resolve(external(() => (sink!.abort as WavSink['abort'])?.call(sinkOwner, reason))).catch(() => {}); } catch { /* Preserve the first failure. */ }
       try { setPhase(cancelled ? 'cancelled' : 'failed'); } catch { /* Preserve the first failure even if its observer throws. */ }
+      // Release only after abort and the terminal notification have returned.
+      sink = undefined;
+      sinkOwner = undefined;
+      onProgress = undefined;
+      onPhase = undefined;
       reject(reason);
     };
     const onAbort = () => { fail(new DOMException('Sequence render aborted', 'AbortError'), true); };
@@ -164,22 +177,35 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
       worker!.postMessage({ type: 'ack', index: nextIndex++ } satisfies RenderWorkerRequest);
     };
     const writeChunk = async (reply: Record<string, unknown>, chunkBytes: number) => {
-      await external(() => (sink.write as WavSink['write']).call(data.sink, reply.bytes as Uint8Array));
+      let written: Promise<void> | void;
+      try {
+        written = external(() => (sink!.write as WavSink['write']).call(sinkOwner, reply.bytes as Uint8Array));
+      } finally {
+        // Only the sink owns bytes now; retain metadata, not the buffer, across await.
+        reply.bytes = undefined;
+      }
+      await written;
       if (settled) return;
       bytesWritten += chunkBytes;
       frames = reply.frames as number; errors = reply.errors as number; processedEvents = reply.processedEvents as number;
-      if (onProgress) external(() => onProgress(Object.freeze({ frames, totalFrames: capacity.frames, bytesWritten, errors })));
+      const listener = onProgress;
+      if (listener) external(() => listener(Object.freeze({ frames, totalFrames: capacity.frames, bytesWritten, errors })));
       if (!settled) acknowledge();
     };
     const closeSink = async () => {
-      await external(() => (sink.close as WavSink['close'])?.call(data.sink));
+      await external(() => (sink!.close as WavSink['close'])?.call(sinkOwner));
       if (settled) return;
       setPhase('completed');
       if (settled) return;
-      const diagnostics: { errors: number; processedEvents: number; renderedFrames: number; phases?: WorkerRenderPhaseDiagnostics } = { errors, processedEvents, renderedFrames: capacity.frames };
-      if (data.phaseDiagnostics === true) diagnostics.phases = Object.freeze({ status: 'completed', initializingMs: totals.initializing, renderingMs: totals.rendering, writingMs: totals.writing, closingMs: totals.closing, totalMs: Math.max(0, phaseAt - startedAt) });
+      // The conditional spread defines own data; assigning `phases` could reach an inherited setter.
+      const diagnostics: { errors: number; processedEvents: number; renderedFrames: number; phases?: WorkerRenderPhaseDiagnostics } = { errors, processedEvents, renderedFrames: capacity.frames,
+        ...(phaseDiagnostics ? { phases: Object.freeze({ status: 'completed' as const, initializingMs: totals.initializing, renderingMs: totals.rendering, writingMs: totals.writing, closingMs: totals.closing, totalMs: Math.max(0, phaseAt - startedAt) }) } : {}) };
       settled = true;
       cleanup();
+      sink = undefined;
+      sinkOwner = undefined;
+      onProgress = undefined;
+      onPhase = undefined;
       resolve(Object.freeze({ capacity, format, bytesWritten, diagnostics: Object.freeze(diagnostics) }));
     };
     const onMessage = (event: MessageEvent<RenderWorkerResponse>) => {
@@ -202,7 +228,12 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
           state = 'rendering';
           // Startup ends here, before score preparation or any synthesis in the Worker.
           setPhase('rendering');
-          if (!settled) worker!.postMessage({ type: 'start', events: score, options: coreOptions, format, dither } satisfies RenderWorkerRequest);
+          if (!settled) {
+            worker!.postMessage({ type: 'start', events: score!, options: coreOptions!, format, dither } satisfies RenderWorkerRequest);
+            // Native postMessage clones synchronously before returning.
+            score = undefined;
+            coreOptions = undefined;
+          }
           return;
         }
         if (state !== 'rendering') throw new Error('Render Worker violated readiness or backpressure');
@@ -238,9 +269,10 @@ export async function renderSequenceInWorker(events: readonly SequenceEvent[], o
     worker.addEventListener('messageerror', onMessageError);
     if (signal !== undefined) EventTarget.prototype.addEventListener.call(signal, 'abort', onAbort, { once: true });
     if (signal !== undefined && aborted.call(signal)) { onAbort(); return; }
-    if (data.startupTimeoutMs !== undefined) startupTimer = setTimeout(() => fail(new DOMException('Render Worker startup timed out before ready', 'TimeoutError')), data.startupTimeoutMs as number);
+    if (startupTimeoutMs !== undefined) startupTimer = setTimeout(() => fail(new DOMException('Render Worker startup timed out before ready', 'TimeoutError')), startupTimeoutMs);
     try {
-      if (onPhase) external(() => onPhase(Object.freeze({ phase: 'initializing', elapsedMs: 0, phaseElapsedMs: 0, frames, totalFrames: capacity.frames, bytesWritten, errors })));
+      const listener = onPhase;
+      if (listener) external(() => listener(Object.freeze({ phase: 'initializing', elapsedMs: 0, phaseElapsedMs: 0, frames, totalFrames: capacity.frames, bytesWritten, errors })));
     } catch (error) { fail(error); }
   });
 }

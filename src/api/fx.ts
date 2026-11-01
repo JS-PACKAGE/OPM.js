@@ -16,13 +16,14 @@ export interface OpmEffects {
 export async function createEffects(context: BaseAudioContext, options: EffectsOptions = {}): Promise<OpmEffects> {
   const data = effectsData(options, ['workletUrl', 'params', 'onEvent'], 'effects options');
   if (data.onEvent !== undefined && typeof data.onEvent !== 'function') throw new TypeError('onEvent must be a function');
-  const observer = data.onEvent as EffectsOptions['onEvent'];
-  const emit = (error: Error) => { try { observer?.(Object.freeze({ type: 'error', error })); } catch { /* Host callbacks cannot break cleanup. */ } };
+  let observer = data.onEvent as EffectsOptions['onEvent'];
+  const emit = (error: Error, listener = observer) => { try { listener?.(Object.freeze({ type: 'error', error })); } catch { /* Host callbacks cannot break cleanup. */ } };
   let node: AudioWorkletNode | null = null;
   let disposed = false;
   const dispose = () => {
     if (disposed) return;
     disposed = true;
+    observer = undefined;
     if (!node) return;
     node.onprocessorerror = null; node.port.onmessage = null; node.port.onmessageerror = null;
     try { node.port.postMessage({ type: 'close' }); } catch { /* Release local resources even after port failure. */ }
@@ -47,7 +48,8 @@ export async function createEffects(context: BaseAudioContext, options: EffectsO
     // Native module loading retains browser CSP, JavaScript MIME and import-tree checks.
     await context.audioWorklet.addModule(url);
     node = new AudioWorkletNode(context, 'opm-effects-processor', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2], channelCount: 2, channelCountMode: 'explicit', channelInterpretation: 'speakers', processorOptions: { params } });
-    const fail = (error: Error) => { dispose(); emit(error); };
+    // Release the stored observer without dropping the failure already entering cleanup.
+    const fail = (error: Error, listener = observer) => { dispose(); emit(error, listener); };
     node.onprocessorerror = () => fail(new Error('Effects AudioWorklet processor failed'));
     node.port.onmessageerror = () => fail(new Error('Effects AudioWorklet message could not be decoded'));
     node.port.onmessage = event => {
@@ -58,8 +60,8 @@ export async function createEffects(context: BaseAudioContext, options: EffectsO
     };
     const post = (message: unknown) => {
       if (disposed) throw new Error('Effects are disposed');
-      try { node!.port.postMessage(message); } catch (error) { fail(error instanceof Error ? error : new Error(String(error))); throw error; }
+      try { node!.port.postMessage(message); } catch (error) { const listener = observer; fail(error instanceof Error ? error : new Error(String(error)), listener); throw error; }
     };
     return Object.freeze({ input: node, output: node, ready: Promise.resolve(), update(params: StereoEffectsOptions) { post({ type: 'update', params: normalizeEffectsOptions(params) }); }, reset() { post({ type: 'reset' }); }, dispose });
-  } catch (error) { dispose(); emit(error instanceof Error ? error : new Error(String(error))); throw error; }
+  } catch (error) { const listener = observer; dispose(); emit(error instanceof Error ? error : new Error(String(error)), listener); throw error; }
 }

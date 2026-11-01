@@ -10,6 +10,7 @@ import { renderSequence } from '../src/core/index.js';
 import type { NoteControls } from '../src/core/synth.js';
 import { parseArrangementProject, serializeArrangementProject } from '../src/core/project.js';
 import type { ArrangementProject } from '../src/core/project.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 
 interface Port { postMessage(message: unknown): void; close(): void; onmessage?: ((event: { data: unknown }) => void) | null }
 interface ProcessorInstance {
@@ -197,6 +198,39 @@ test('tempo replacement changes only unadmitted onsets and pause releases owned 
   } finally { arrangement.dispose(); await opm.dispose(); }
 });
 
+test('disposal during failure cancellation preserves its executing error notification and snapshot', async () => {
+  const { opm, context } = await host();
+  const failures: Error[] = [];
+  const arrangement = createArrangement(opm, { layers: [pad], sections: [{ name: 'all', layers: ['pad'] }],
+    initialSection: 'all', onError: error => failures.push(error) });
+  let disposedDuringStop = false;
+  const unsubscribe = opm.subscribe(event => {
+    if (event.type === 'command' && event.command === 'stop' && !disposedDuringStop) {
+      disposedDuringStop = true;
+      arrangement.dispose();
+    }
+  });
+  try {
+    await arrangement.start();
+    run(opm, arrangement, 0.1);
+    context.currentTime += 1;
+    arrangement.pump();
+    assert.equal(disposedDuringStop, true);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0]!.message, /missed/);
+    assert.equal(arrangement.state, 'disposed');
+    const snapshot = arrangement.snapshot;
+    arrangement.dispose(); arrangement.stop(); arrangement.pump();
+    assert.deepEqual(arrangement.snapshot, snapshot);
+    assert.throws(() => arrangement.start(), /disposed/);
+    assert.throws(() => arrangement.switchSection('all'), /disposed/);
+    audio(opm, arrangement, 1024);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+  } finally { unsubscribe(); arrangement.dispose(); await opm.dispose(); }
+});
+
 test('invalid arrangements reject without scheduling anything', async () => {
   const { opm, calls } = await host();
   const base = { layers: [drums], sections: [{ name: 's', layers: ['drums'] }], initialSection: 's' };
@@ -312,6 +346,68 @@ test('crossfades leave shared gates continuous and give newly admitted notes the
   } finally { arrangement.dispose(); await opm.dispose(); }
 });
 
+// Replays one fade scenario, optionally with an inherited setter, and returns everything observable.
+async function fadeTrace(scenario: 'crossfade' | 'retarget', hookKey?: string, inherited?: unknown) {
+  const { opm, calls, stops, updates } = await host();
+  const old: ArrangementLayer = { name: 'old', length: 16, events: [
+    { type: 'note', id: 1, beat: 0, duration: 16, note: 60, voice },
+    { type: 'control', id: 1, beat: 1.5, controls: { expression: 0.5 } },
+  ] };
+  const incoming: ArrangementLayer = { name: 'new', length: 1, events: [
+    { type: 'note', id: 1, beat: 0, duration: 0.75, note: 72, voice },
+    { type: 'control', id: 1, beat: 0.25, controls: { pan: 0.5 } },
+  ] };
+  const arrangement = scenario === 'crossfade'
+    ? createArrangement(opm, { layers: [pad, old, incoming],
+      sections: [{ name: 'a', layers: ['pad', 'old'] }, { name: 'b', layers: ['pad', 'new'] }], initialSection: 'a' })
+    : createArrangement(opm, { layers: [pad, lead],
+      sections: [{ name: 'a', layers: ['pad'] }, { name: 'b', layers: ['lead'] }], initialSection: 'a' });
+  try {
+    await arrangement.start();
+    audio(opm, arrangement, 4800);
+    const play = (): Float32Array => {
+      if (scenario === 'crossfade') arrangement.switchSection('b', { quantize: 'beat', fade: 1 });
+      else { arrangement.switchSection('b', { quantize: 'beat', fade: 0.5 }); arrangement.switchSection('a', { quantize: 'beat', fade: 0.2 }); }
+      return audio(opm, arrangement, scenario === 'crossfade' ? 32000 : 24000);
+    };
+    const result = hookKey === undefined ? { value: play(), setterHits: 0 } : withNamedAccessor(hookKey, play, inherited);
+    return { pcm: result.value, setterHits: result.setterHits, calls: structuredClone(calls), stops: structuredClone(stops), updates: structuredClone(updates) };
+  } finally { arrangement.dispose(); await opm.dispose(); }
+}
+
+test('layer gain changes keep their applied time and forced start despite inherited setters', async () => {
+  for (const scenario of ['crossfade', 'retarget'] as const) {
+    const clean = await fadeTrace(scenario);
+    if (scenario === 'crossfade') assert.ok(clean.updates.length > 0, scenario);
+    for (const key of ['at', 'forcedFrom']) {
+      const polluted = await fadeTrace(scenario, key);
+      assert.equal(polluted.setterHits, 0, `${scenario} ${key}`);
+      assert.deepStrictEqual(polluted.pcm, clean.pcm, `${scenario} ${key}`);
+      assert.deepStrictEqual(polluted.updates, clean.updates, `${scenario} ${key}`);
+      assert.deepStrictEqual(polluted.calls, clean.calls, `${scenario} ${key}`);
+      assert.deepStrictEqual(polluted.stops, clean.stops, `${scenario} ${key}`);
+    }
+  }
+});
+
+// Gate and Command carry optional bookkeeping fields that are assigned or read after construction:
+// a hook may swallow the write (`id`) or answer the read (`at`, `offAt`, `cutAt`, `cutBeat`).
+test('arrangement gate and command bookkeeping ignore values inherited from Object.prototype', async () => {
+  const failures: string[] = [];
+  for (const scenario of ['crossfade', 'retarget'] as const) {
+    const clean = await fadeTrace(scenario);
+    for (const [key, inherited] of [['id', 7], ['offAt', 0], ['cutAt', 0], ['cutBeat', 1], ['at', 0], ['controls', { expression: 0 }]] as const) {
+      const polluted = await fadeTrace(scenario, key, inherited);
+      // Node's own timer lists assign `id`, so no setter count is judged for that key; the trace must still match.
+      if (key !== 'id' && polluted.setterHits !== 0) failures.push(`${scenario} ${key}: ${polluted.setterHits} setter hits`);
+      for (const field of ['pcm', 'updates', 'calls', 'stops'] as const) {
+        try { assert.deepStrictEqual(polluted[field], clean[field]); } catch { failures.push(`${scenario} ${key}: ${field} differs`); }
+      }
+    }
+  }
+  assert.deepEqual(failures, []);
+});
+
 test('layer gain composes exact simultaneous expression ramps, interrupted retargets and scope ownership in PCM', async () => {
   const { opm, calls, updates } = await host();
   const outsider = opm.playNote({ voice, note: 48, velocity: 0.2, duration: null });
@@ -349,6 +445,73 @@ test('layer gain composes exact simultaneous expression ramps, interrupted retar
     ], { sampleRate });
     assert.deepEqual(actual, expected.left.subarray(0, actual.length));
   } finally { arrangement.dispose(); opm.stop(outsider); await opm.dispose(); }
+});
+
+test('zero-fade layer gain admits valid chords after rounded startup', async () => {
+  const { opm, context, calls } = await host({ maxVoices: 32 });
+  const notes = Array.from({ length: 86 }, (_, index) => ({ id: index + 1, note: 48 + index % 12 }));
+  const layer: ArrangementLayer = { name: 'tone', length: 16,
+    events: notes.map(note => ({ type: 'note' as const, ...note, beat: 0, duration: 16, voice })) };
+  const arrangement = createArrangement(opm, { layers: [layer],
+    sections: [{ name: 'all', layers: ['tone'] }], initialSection: 'all' });
+  try {
+    // This quantum-aligned epoch puts the lead just above its rounded sample time.
+    run(opm, arrangement, 21 * 128 / sampleRate);
+    const offset = context.frame;
+    await arrangement.start();
+    const actual = audio(opm, arrangement, 4096);
+    assert.equal(arrangement.state, 'running');
+    const expected = renderSequence(notes.map(note => ({ type: 'note' as const, ...note,
+      time: calls[0]!.at, duration: 8, voice })), { sampleRate, maxVoices: 32 });
+    assert.deepEqual(actual, expected.left.subarray(offset, offset + actual.length));
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+test('positive-fade layer gain completing at a dense onset admits valid chords', async () => {
+  const { opm, updates } = await host({ maxVoices: 32 });
+  const notes = Array.from({ length: 86 }, (_, index) => ({ id: index + 1, note: 48 + index % 12 }));
+  const layer: ArrangementLayer = { name: 'tone', length: 16,
+    events: notes.map(note => ({ type: 'note' as const, ...note, beat: 1.6, duration: 4, voice })) };
+  const errors: string[] = [];
+  const arrangement = createArrangement(opm, { layers: [layer], onError: error => errors.push(error.message),
+    sections: [{ name: 'all', layers: ['tone'] }], initialSection: 'all' });
+  try {
+    await arrangement.start();
+    run(opm, arrangement, 0.1);
+    // The fade ends at a rounded sample, so it must not leave a phantom ramp on each onset.
+    assert.equal(arrangement.setLayerGain('tone', 1, { quantize: 1, fade: 0.3 }), 1);
+    const actual = audio(opm, arrangement, 16384);
+    assert.deepEqual(errors, []);
+    assert.equal(arrangement.state, 'running');
+    assert.equal(updates.length, 0);
+    assert.ok(actual.some(sample => sample !== 0));
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
+for (const fade of [0, 0.1]) test(`layer gain keeps its exact target after a completed ${fade}-second fade`, async () => {
+  const { opm, calls } = await host();
+  const layer: ArrangementLayer = { name: 'tone', length: 16,
+    events: [{ type: 'note', id: 1, beat: 0, duration: 8, note: 70, voice }] };
+  const arrangement = createArrangement(opm, { layers: [layer],
+    sections: [{ name: 'all', layers: ['tone'] }], initialSection: 'all' });
+  try {
+    await arrangement.start();
+    const chunks = [audio(opm, arrangement, 1600)];
+    const first = arrangement.setLayerGain('tone', 1e-12, { quantize: 1, fade });
+    chunks.push(audio(opm, arrangement, 9600));
+    const second = arrangement.setLayerGain('tone', 2e-12, { quantize: 1, fade: 0.5 });
+    chunks.push(audio(opm, arrangement, 16000));
+    const actual = new Float32Array(27200);
+    let offset = 0;
+    for (const chunk of chunks) { actual.set(chunk, offset); offset += chunk.length; }
+    const at = calls[0]!.at;
+    const expected = renderSequence([
+      { type: 'note', id: 1, time: at, duration: 4, note: 70, voice },
+      { type: 'control', id: 1, time: at + first / 2, controls: { gain: 1e-12, ramp: fade } },
+      { type: 'control', id: 1, time: at + second / 2, controls: { gain: 2e-12, ramp: 0.5 } },
+    ], { sampleRate });
+    assert.deepEqual(actual, expected.left.subarray(0, actual.length));
+  } finally { arrangement.dispose(); await opm.dispose(); }
 });
 
 test('owned release tails fade while authored tail expression remains independent', async () => {

@@ -1,7 +1,7 @@
 import { normalizeVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import { MAX_BANK_BYTES, MAX_BANK_VOICES, parseVoiceBank, validateVoice } from '../voices/schema.js';
-import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import type { CompleteVoiceInput, FrozenVoice, NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import { validateNoteControls, validateMaxVoices, validateVoicePriority } from '../core/synth.js';
 import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import { normalizeTuning } from '../core/tuning.js';
@@ -142,7 +142,11 @@ const MAX_COMMAND_RECEIPTS = 128;
 const MAX_COMMAND_WAITERS = 64;
 const NOTE_STATES = ['accepted', 'started', 'released', 'ended', 'stolen', 'cancelled', 'rejected'];
 const MAX_REGISTERED_VOICES = 128;
-const EVENT_OBSERVERS = new WeakMap<OPM, Set<(event: OPMEvent) => void>>();
+interface EventObserver {
+  /** Retained unsubscribe handles must not own callbacks after release/disposal. */
+  listener: ((event: OPMEvent) => void) | undefined;
+}
+const EVENT_OBSERVERS = new WeakMap<OPM, Set<EventObserver>>();
 const COMMAND_NAMES: readonly CommandName[] = ['stop', 'updateNote', 'allNotesOff', 'panic', 'setMixGain', 'setTuning'];
 const CONTEXT_STATES: readonly ContextState[] = ['running', 'suspended', 'interrupted', 'closed'];
 
@@ -191,16 +195,17 @@ function ownData(value: unknown, allowed: readonly string[], label: string): Rec
 }
 
 function frozenPatch(input: VoiceInput, name?: string): NormalizedVoice {
-  const patch = normalizeVoice(input);
-  if (name !== undefined) patch.name = name;
+  const normalized = normalizeVoice(input);
+  // A spread defines `name` as own data; assigning it could reach an inherited setter.
+  const patch = name === undefined ? normalized : { ...normalized, name };
   for (const op of patch.ops) {
     Object.freeze(op.adsr);
-    if (op.keyScale) Object.freeze(op.keyScale);
+    if (Object.hasOwn(op, 'keyScale')) Object.freeze(op.keyScale);
     Object.freeze(op);
   }
   Object.freeze(patch.ops);
   Object.freeze(patch.lfo);
-  if (patch.pitchEnvelope) Object.freeze(patch.pitchEnvelope);
+  if (Object.hasOwn(patch, 'pitchEnvelope')) Object.freeze(patch.pitchEnvelope);
   return Object.freeze(patch);
 }
 
@@ -222,7 +227,7 @@ function bankJsonData(value: unknown): unknown {
   return result;
 }
 
-function bankArrayData(value: unknown): CompleteVoiceInput[] {
+function bankArrayData(value: unknown): (CompleteVoiceInput | FrozenVoice)[] {
   if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) {
     throw new TypeError('voice bank must be a plain dense array');
   }
@@ -231,13 +236,15 @@ function bankArrayData(value: unknown): CompleteVoiceInput[] {
     throw new RangeError('Voice bank exceeds 128 voices');
   }
   if (Reflect.ownKeys(value).length !== length + 1) throw new TypeError('voice bank has unknown fields');
-  const result: CompleteVoiceInput[] = [];
+  // A null prototype keeps inherited indexed accessors out of these own-data writes.
+  const result: (CompleteVoiceInput | FrozenVoice)[] = [];
+  Object.setPrototypeOf(result, null);
   for (let index = 0; index < length; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('voice bank must contain data');
-    result.push(descriptor.value);
+    result[index] = descriptor.value;
   }
-  return result;
+  return Object.setPrototypeOf(result, Array.prototype);
 }
 
 function absoluteTime(value: unknown, context: AudioContext): number {
@@ -300,62 +307,65 @@ function replyData(data: unknown): Exclude<OPMEvent, ErrorEvent | ContextEvent> 
 
 /** Browser-facing facade. Import Synth from ../core/synth.js for offline rendering. */
 export class OPM {
-  declare readonly sampleRate: number | undefined;
+  // Real fields, not `declare`: they define own slots at construction, so an inherited
+  // accessor on Object.prototype can neither swallow a constructor write nor answer a later read.
+  readonly sampleRate: number | undefined;
   get quality(): QualityProfile { return this._synthOptions.quality!; }
   get saturation(): NonNullable<SynthOptions['saturation']> { return this._synthOptions.saturation!; }
   get dcBlock(): boolean { return this._synthOptions.dcBlock!; }
   get maxVoices(): number { return this._maxVoices; }
   /** @internal */
-  declare private _maxVoices: number;
+  private _maxVoices: number;
   /** Defensive map snapshot; loaded patches are deeply frozen. Use loadVoice to replace one. */
   get voices(): ReadonlyMap<string, NormalizedVoice> { return new Map(this._voices); }
   /** @internal */
-  declare private _voices: Map<string, NormalizedVoice>;
+  private _voices: Map<string, NormalizedVoice>;
   /** @internal */
-  declare private _voiceIds: Map<string, number>;
+  private _voiceIds: Map<string, number>;
   /** @internal Content keys avoid repeated serialization for immutable named patches. */
-  declare private _patchKeys: WeakMap<NormalizedVoice, string>;
+  private _patchKeys: WeakMap<NormalizedVoice, string>;
   /** @internal */
-  declare private _nextVoiceId: number;
+  private _nextVoiceId: number;
   /** @internal */
-  declare private _nextCommandId: number;
+  private _nextCommandId: number;
   /** @internal */
-  declare private _synthOptions: SynthOptions;
+  private _synthOptions: SynthOptions;
   /** @internal */
-  declare private _interruption: 'cancel' | 'preserve';
-  declare readonly context: AudioContext | null;
-  declare readonly node: AudioWorkletNode | null;
+  private _interruption: 'cancel' | 'preserve';
+  // Assigned through MutableAudioState in the constructor, which flow analysis cannot see.
+  readonly context!: AudioContext | null;
+  readonly node!: AudioWorkletNode | null;
   /** @internal */
-  declare private nextId: number;
-  declare onEvent?: (event: OPMEvent) => void;
+  private nextId: number;
+  onEvent?: (event: OPMEvent) => void;
   /** @internal */
-  declare private _providedContext: AudioContext | null;
+  private _providedContext: AudioContext | null;
   /** @internal */
-  declare private _destination: AudioNode | null | undefined;
+  private _destination: AudioNode | null | undefined;
   /** @internal */
-  declare private _startPromise: Promise<void> | null;
+  private _startPromise: Promise<void> | null;
   /** @internal */
-  declare private _closePromise: Promise<void> | null;
+  private _closePromise: Promise<void> | null;
   /** @internal */
-  declare private _processorFailure: Error | null;
+  private _processorFailure: Error | null;
   /** @internal */
-  declare private _diagnostics: Map<number, DiagnosticsRequest>;
+  private _diagnostics: Map<number, DiagnosticsRequest>;
   /** @internal */
-  declare private _nextRequestId: number;
+  private _nextRequestId: number;
   /** @internal */
-  declare private _contextListener: {
+  private _contextListener: {
     context: AudioContext; node: AudioWorkletNode; listener: () => void;
   } | null | undefined;
   /** @internal */
-  declare private _workletUrl: string | URL | undefined;
+  private _workletUrl: string | URL | undefined;
   /** @internal */
-  declare private _commands: Map<number, CommandReceipt>;
+  private _commands: Map<number, CommandReceipt>;
   /** @internal */
-  declare private _commandWaiterCount: number;
+  private _commandWaiterCount: number;
   /** @internal */
-  declare private _disposed: boolean;
+  private _disposed: boolean;
   /** @internal */
-  declare private _disposePromise: Promise<void> | null;
+  private _disposePromise: Promise<void> | null;
 
   constructor(options: OPMOptions = {}) {
     const { sampleRate, context, destination, onEvent, mixGain, tuning, stealing, quality, saturation, dcBlock, maxVoices, interruption, workletUrl } = ownData(options,
@@ -417,7 +427,7 @@ export class OPM {
   }
 
   /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
-  replaceVoiceBank(source: string | readonly CompleteVoiceInput[]): void {
+  replaceVoiceBank(source: string | readonly (CompleteVoiceInput | FrozenVoice)[]): void {
     if (this._disposed) throw new Error('OPM is disposed');
     if (typeof source !== 'string') {
       source = bankArrayData(source);
@@ -442,10 +452,10 @@ export class OPM {
   exportVoiceBank(): string {
     if (this._disposed) throw new Error('OPM is disposed');
     if (this._voices.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
-    const entries = [];
-    for (const patch of this._voices.values()) entries.push(validateVoice(patch));
+    const entries = Array.from(this._voices.values(), patch => validateVoice(patch));
     const output = JSON.stringify(bankJsonData(entries));
-    if (output.length > MAX_BANK_BYTES || new TextEncoder().encode(output).length > MAX_BANK_BYTES) {
+    // Validated text fields and canonical keys are ASCII, so character and UTF-8 byte counts match.
+    if (output.length > MAX_BANK_BYTES) {
       throw new RangeError('Voice bank exceeds 256 KiB');
     }
     return output;
@@ -455,15 +465,13 @@ export class OPM {
   subscribe(listener: (event: OPMEvent) => void): () => void {
     if (this._disposed) throw new Error('OPM is disposed');
     if (typeof listener !== 'function') throw new TypeError('listener must be a function');
-    const observers = EVENT_OBSERVERS.get(this) ?? new Set<(event: OPMEvent) => void>();
+    const observers = EVENT_OBSERVERS.get(this) ?? new Set<EventObserver>();
     EVENT_OBSERVERS.set(this, observers);
-    let active = true;
-    const observe = (event: OPMEvent) => { if (active) listener(event); };
-    observers.add(observe);
+    const observer: EventObserver = { listener };
+    observers.add(observer);
     return () => {
-      if (!active) return;
-      active = false;
-      observers.delete(observe);
+      observer.listener = undefined;
+      observers.delete(observer);
     };
   }
 
@@ -471,9 +479,10 @@ export class OPM {
   private _emit(event: OPMEvent): void {
     Object.freeze(event);
     const observers = EVENT_OBSERVERS.get(this);
-    if (observers) for (const observe of [...observers]) {
-      if (!observers.has(observe)) continue;
-      try { observe(event); } catch { /* Host error callbacks cannot break lifecycle cleanup. */ }
+    if (observers?.size) for (const observer of [...observers]) {
+      if (!observers.has(observer)) continue;
+      const listener = observer.listener;
+      try { listener?.(event); } catch { /* Host error callbacks cannot break lifecycle cleanup. */ }
     }
     try { this.onEvent?.(event); } catch { /* Host callbacks cannot break audio lifecycle handling. */ }
   }
@@ -840,7 +849,9 @@ export class OPM {
       if (signal !== undefined) {
         getAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
         getReason = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'reason')?.get;
-        if (getAborted.call(signal)) throw getReason?.call(signal) ?? new DOMException('Command wait aborted', 'AbortError');
+        if (getAborted.call(signal)) {
+          throw getReason ? getReason.call(signal) : new DOMException('Command wait aborted', 'AbortError');
+        }
       }
       const found = this._commands.get(commandId);
       if (!found) throw new RangeError('Unknown or expired command id');
@@ -852,23 +863,24 @@ export class OPM {
     return new Promise<CommandEvent>((resolve, reject) => {
       let active = true;
       let timer: Parameters<typeof clearTimeout>[0];
-      const finish = (outcome: CommandEvent | Error, aborted = false) => {
+      // An omitted outcome marks cancellation; its reason need not be an Error.
+      const finish = (outcome?: CommandEvent | Error) => {
         if (!active) return;
         let reason: unknown = outcome;
-        if (aborted) {
-          try { reason = getReason?.call(signal) ?? outcome; } catch (error) { reason = error; }
+        if (outcome === undefined) {
+          try { reason = getReason ? getReason.call(signal) : new DOMException('Command wait aborted', 'AbortError'); } catch (error) { reason = error; }
         }
         active = false;
         clearTimeout(timer);
         try { if (signal) EventTarget.prototype.removeEventListener.call(signal, 'abort', abort); } catch { /* Cleanup must still settle every waiter. */ }
         receipt.waiters.delete(settle);
         this._commandWaiterCount--;
-        if (aborted) reject(reason);
+        if (outcome === undefined) reject(reason);
         else if (outcome instanceof Error) reject(outcome);
         else resolve(outcome);
       };
       const settle = (outcome: CommandEvent | Error) => finish(outcome);
-      const abort = () => finish(new DOMException('Command wait aborted', 'AbortError'), true);
+      const abort = () => finish();
       this._commandWaiterCount++;
       receipt.waiters.add(settle);
       timer = setTimeout(() => finish(new DOMException('Command acknowledgement timed out', 'TimeoutError')), timeout);
@@ -919,7 +931,15 @@ export class OPM {
   dispose(): Promise<void> {
     if (this._disposePromise) return this._disposePromise;
     this._disposed = true;
-    const finish = () => { EVENT_OBSERVERS.delete(this); this.onEvent = undefined; };
+    const finish = () => {
+      const observers = EVENT_OBSERVERS.get(this);
+      if (observers) {
+        for (const observer of observers) observer.listener = undefined;
+        observers.clear();
+      }
+      EVENT_OBSERVERS.delete(this);
+      this.onEvent = undefined;
+    };
     const promise = this.close().then(finish, error => { finish(); throw error; });
     this._disposePromise = promise;
     return promise;
@@ -989,7 +1009,8 @@ export function createLookaheadScheduler(
   const horizon: number = rawHorizon;
   const interval: number = rawInterval;
   const maxNotes: number = rawMaxNotes;
-  const onError = rawOnError as (error: Error) => void;
+  let scheduleCallback: typeof schedule | undefined = schedule;
+  let onError = rawOnError as ((error: Error) => void) | undefined;
   let running = false;
   let disposed = false;
   let generation = 0;
@@ -997,15 +1018,16 @@ export function createLookaheadScheduler(
   let timer: ReturnType<typeof setTimeout> | undefined;
   let starting: Promise<void> | null = null;
   const gates = new Set<number>();
-  const observers = EVENT_OBSERVERS.get(opm) ?? new Set<(event: OPMEvent) => void>();
+  const observers = EVENT_OBSERVERS.get(opm) ?? new Set<EventObserver>();
   EVENT_OBSERVERS.set(opm, observers);
   let admitting = false;
   let admissionTerminal: number | null = null;
-  const observe = (event: OPMEvent) => {
+  const observer: EventObserver = { listener: event => {
     if (event.type === 'reset') { gates.clear(); stop(false); return; }
     if (event.type === 'context' && event.state !== 'running') {
+      const listener = onError;
       stop(false);
-      onError(new Error(`Lookahead AudioContext is ${event.state}; restart from a user gesture`));
+      listener?.(new Error(`Lookahead AudioContext is ${event.state}; restart from a user gesture`));
       return;
     }
     if (event.type !== 'note') return;
@@ -1013,24 +1035,26 @@ export function createLookaheadScheduler(
       gates.delete(event.id);
       if (admitting) admissionTerminal = event.id;
     }
-  };
+  } };
 
   function stop(reportFailure = true): void {
     running = false;
     generation++;
     clearTimeout(timer);
     timer = undefined;
-    observers.delete(observe);
+    observers.delete(observer);
     let failure: unknown;
+    const listener = onError;
     for (const id of gates) {
       try { opm.stop(id); } catch (error) { failure ??= error; }
     }
     gates.clear();
-    if (reportFailure && failure !== undefined) onError(failure instanceof Error ? failure : new Error(String(failure)));
+    if (reportFailure && failure !== undefined) listener?.(failure instanceof Error ? failure : new Error(String(failure)));
   }
 
   function pump(): void {
     if (!running) return;
+    const listener = onError;
     try {
       const context = opm.context;
       if (!context || !opm.node || context.state !== 'running') throw new Error('Lookahead AudioContext is not running');
@@ -1038,13 +1062,17 @@ export function createLookaheadScheduler(
       const from = Math.max(cursor, now);
       const to = now + horizon;
       if (from < to) {
-        const notes = schedule({ from, to, maxNotes });
-        if (!Array.isArray(notes) || notes.length > maxNotes || gates.size + notes.length > 128) {
+        const notes = scheduleCallback!({ from, to, maxNotes });
+        // One length read decides both the capacity checks and the copy loop below.
+        const count: unknown = Array.isArray(notes) ? notes.length : -1;
+        if (typeof count !== 'number' || !Number.isInteger(count) || count < 0 || count > maxNotes || gates.size + count > 128) {
           throw new RangeError('Lookahead batch or outstanding gates exceed their bounded capacity');
         }
         // Snapshot batch data and timing before admission; never invoke array/option accessors.
+        // A null prototype keeps inherited indexed accessors out of the admitted batch.
         const batch: LookaheadNote[] = [];
-        for (let index = 0; index < notes.length; index++) {
+        Object.setPrototypeOf(batch, null);
+        for (let index = 0; index < count; index++) {
           const descriptor = Object.getOwnPropertyDescriptor(notes, String(index));
           if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('Lookahead notes must be data array entries');
           const note = ownData(descriptor.value, ['voice', 'note', 'at', 'late', 'duration', 'velocity', 'pan', 'voicePriority'], 'lookahead note');
@@ -1052,8 +1080,9 @@ export function createLookaheadScheduler(
               typeof note.duration !== 'number' || !Number.isFinite(note.duration) || note.duration <= 0 || note.duration > 60) {
             throw new RangeError('Lookahead notes require an at inside the window and duration in (0, 60]');
           }
-          batch.push(note as unknown as LookaheadNote);
+          batch[index] = note as unknown as LookaheadNote;
         }
+        Object.setPrototypeOf(batch, Array.prototype);
         // A callback may stop/dispose its scheduler reentrantly.
         if (!running) return;
         cursor = to;
@@ -1069,7 +1098,7 @@ export function createLookaheadScheduler(
       timer = setTimeout(pump, interval * 1000);
     } catch (error) {
       stop(false);
-      onError(error instanceof Error ? error : new Error(String(error)));
+      listener?.(error instanceof Error ? error : new Error(String(error)));
     }
   }
 
@@ -1083,7 +1112,7 @@ export function createLookaheadScheduler(
       const pending = opm.start().then(() => {
         if (disposed || token !== generation) return;
         running = true;
-        observers.add(observe);
+        observers.add(observer);
         cursor = opm.context!.currentTime;
         pump();
       });
@@ -1093,6 +1122,15 @@ export function createLookaheadScheduler(
       return pending;
     },
     stop,
-    dispose() { disposed = true; stop(); },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      try { stop(); }
+      finally {
+        observer.listener = undefined;
+        scheduleCallback = undefined;
+        onError = undefined;
+      }
+    },
   };
 }

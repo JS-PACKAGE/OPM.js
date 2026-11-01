@@ -1,4 +1,4 @@
-import { renderSequenceChunks, sequenceOwnData } from '../core/sequence.js';
+import { renderClonedSequenceChunks, sequenceOwnData } from '../core/sequence.js';
 import type { ChunkedSequenceOptions, ChunkedSequenceRender, SequenceEvent } from '../core/sequence.js';
 import { createWavEncoder } from '../core/wav.js';
 import type { WavEncoder, WavFormat } from '../core/wav.js';
@@ -20,9 +20,8 @@ let started = false;
 let finalized = false;
 let failed = false;
 
-function send(bytes: Uint8Array): void {
+function send(bytes: Uint8Array, diagnostics = renderer!.diagnostics): void {
   waiting = true;
-  const diagnostics = renderer!.diagnostics;
   scope.postMessage({ type: 'chunk', index, bytes, frames: diagnostics.renderedFrames, errors: diagnostics.errors, processedEvents: diagnostics.processedEvents }, [bytes.buffer as ArrayBuffer]);
 }
 scope.addEventListener('message', event => {
@@ -34,7 +33,7 @@ scope.addEventListener('message', event => {
       if (started) throw new Error('Render Worker already started');
       const data = sequenceOwnData(input, ['type', 'events', 'options', 'format', 'dither'], ['type', 'events', 'options', 'format', 'dither'], 'worker start');
       const options = sequenceOwnData(data.options, ['sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames'], [], 'worker core options');
-      renderer = renderSequenceChunks(data.events as readonly SequenceEvent[], options as ChunkedSequenceOptions);
+      renderer = renderClonedSequenceChunks(data.events as readonly SequenceEvent[], options as ChunkedSequenceOptions);
       encoder = createWavEncoder({ sampleRate: renderer.capacity.sampleRate, channels: 2, format: data.format as WavFormat, totalFrames: renderer.capacity.frames, dither: data.dither as boolean });
       started = true;
       send(encoder.header());
@@ -47,7 +46,7 @@ scope.addEventListener('message', event => {
     index++;
     if (!finalized) {
       const chunk = renderer!.next();
-      if (!chunk.done) { send(encoder!.encode({ left: chunk.value.left, right: chunk.value.right })); return; }
+      if (!chunk.done) { send(encoder!.encode({ left: chunk.value.left, right: chunk.value.right }), chunk.value.diagnostics); return; }
       const padding = encoder!.finalize();
       finalized = true;
       if (padding.byteLength > 0) { send(padding); return; }

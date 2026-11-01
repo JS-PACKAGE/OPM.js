@@ -70,6 +70,8 @@ interface Gate { pattern: Pattern; track: Track; start: number; end: number; nex
 interface Command { beat: number; order: 0 | 1 | 2; gate: Gate; controls?: NoteControls; at?: number }
 interface Change { beat: number; section: string; layers: ReadonlySet<string> }
 interface GainChange { beat: number; layer: string; target: number; fade: number; from: number; at?: number; applied: boolean; forcedFrom?: number; activation?: boolean }
+// Own `at`/`forcedFrom` slots: later writes would otherwise reach inherited setters.
+const gainChange = (fields: Omit<GainChange, 'at' | 'forcedFrom'>): GainChange => ({ ...fields, at: undefined, forcedFrom: undefined });
 
 const EPSILON = 1e-9;
 
@@ -91,7 +93,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   const horizon = transportNumber(config.horizon === undefined ? 0.2 : config.horizon, 0.01, 10, 'horizon');
   const interval = transportNumber(config.interval === undefined ? Math.min(0.025, horizon / 2) : config.interval, 0.001, horizon / 2, 'interval');
   if (config.onError !== undefined && typeof config.onError !== 'function') throw new TypeError('onError must be a function');
-  const onError = config.onError as ((error: Error) => void) | undefined;
+  let onError = config.onError as ((error: Error) => void) | undefined;
 
   const patterns = new Map<string, Pattern>();
   for (let index = 0; index < definition.layers.length; index++) {
@@ -140,30 +142,42 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   let gains: GainChange[] = initialGains();
 
   function initialGains(): GainChange[] {
-    return [...patterns.values()].map(pattern => ({ beat: 0, layer: pattern.name,
+    return [...patterns.values()].map(pattern => gainChange({ beat: 0, layer: pattern.name,
       target: sections.get(initial)!.has(pattern.name) ? pattern.gain : 0, fade: 0, from: 0, applied: true }));
   }
-  function gainAt(layer: string, at: number, before?: GainChange): { value: number; target: number; remaining: number } {
+  function gainAt(layer: string, at: number, sampleRate: number, before?: GainChange): { value: number; target: number; remaining: number } {
     let value = 0;
     let target = 0;
     let remaining = 0;
+    let frame: number | undefined;
     for (const change of gains) {
       if (change === before) break;
       if (change.layer !== layer) continue;
       const begin = change.at ?? audioTime(change.beat);
       if (begin > at + EPSILON) break;
-      const progress = change.fade === 0 ? 1 : Math.max(0, Math.min(1, (at - begin) / change.fade));
-      value = change.from + (change.target - change.from) * progress;
+      // Instant changes must not acquire a ramp from sample-time rounding or lose their exact target.
+      if (change.fade === 0) {
+        target = change.target;
+        value = target;
+        remaining = 0;
+        continue;
+      }
+      // Match sample-rounded onsets without rounding fractional or subnormal durations away.
+      const frames = change.fade * sampleRate;
+      const elapsed = Math.max(0, (frame ??= Math.round(at * sampleRate)) - Math.round(begin * sampleRate));
+      const progress = Math.min(1, elapsed / frames);
+      // The affine form can lose a small target even at progress 1.
+      value = progress === 1 ? change.target : change.from + (change.target - change.from) * progress;
       target = change.target;
-      remaining = Math.max(0, begin + change.fade - at);
+      remaining = elapsed === 0 ? change.fade : Math.max(0, frames - elapsed) / sampleRate;
     }
     return { value, target, remaining };
   }
   function addGain(layer: string, target: number, beat: number, fade: number, activation = false): void {
     if (gains.length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds pending gain capacity');
     const at = audioTime(beat);
-    const from = gainAt(layer, at).value;
-    gains.push({ beat, layer, target, fade, from, applied: false, activation });
+    const from = gainAt(layer, at, context!.sampleRate).value;
+    gains.push(gainChange({ beat, layer, target, fade, from, applied: false, activation }));
     gains.sort((a, b) => a.beat - b.beat);
   }
   function applyGain(id: number, value: number, target: number, remaining: number, at: number): number {
@@ -185,7 +199,9 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     for (const change of changes) if (change.beat <= beat + EPSILON) result = change; else break;
     return result;
   }
-  function insert(command: Command): void {
+  function insert(fields: Omit<Command, 'at' | 'controls'> & Pick<Partial<Command>, 'at' | 'controls'>): void {
+    // Own `at`/`controls` slots: a read of an omitted one must not reach Object.prototype.
+    const command: Command = { at: undefined, controls: undefined, ...fields };
     if (queue.length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds queued command capacity');
     let index = queue.length;
     while (index > 0) {
@@ -229,7 +245,8 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
           if (!effective(start).layers.has(pattern.name)) continue;
           const end = base + track.end;
           if (end <= start) continue;
-          const gate: Gate = { pattern, track, start, end, nextControl: 0 };
+          // Own bookkeeping slots: later writes and omitted reads must not reach Object.prototype.
+          const gate: Gate = { pattern, track, start, end, nextControl: 0, id: undefined, offAt: undefined, cutAt: undefined, cutBeat: undefined };
           insert({ beat: start, order: 1, gate });
         }
       }
@@ -238,10 +255,11 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   function cancel(next: ArrangementState, beat = nowBeat()): void {
     if (state === 'running' && context) {
       const at = Math.max(anchor, context.currentTime);
+      const sampleRate = context.sampleRate;
       const future = gains.filter(change => change.beat > beat + EPSILON).map(change => ({ ...change, at: undefined, applied: false }));
       gains = [...patterns.keys()].map(layer => {
-        const current = gainAt(layer, at);
-        return { beat, layer, from: current.value, target: current.target, fade: current.remaining, applied: true };
+        const current = gainAt(layer, at, sampleRate);
+        return gainChange({ beat, layer, from: current.value, target: current.target, fade: current.remaining, applied: true });
       });
       gains.push(...future);
     }
@@ -261,9 +279,10 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     if (failure !== undefined) throw failure;
   }
   function fail(error: unknown): void {
+    const listener = onError;
     const failure = error instanceof Error ? error : new Error(String(error));
     try { cancel('stopped'); } catch { /* Preserve the original scheduling failure. */ }
-    onError?.(failure);
+    listener?.(failure);
   }
   const observe = (event: OPMEvent): void => {
     if (state === 'disposed') return;
@@ -311,7 +330,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
           if (change.applied) continue;
           const at = Math.round(audioTime(change.beat) * sampleRate) / sampleRate;
           if (at > until || at >= limit) continue;
-          change.from = change.forcedFrom ?? gainAt(change.layer, at, change).value;
+          change.from = change.forcedFrom ?? gainAt(change.layer, at, sampleRate, change).value;
           if (at < now - 0.5 / sampleRate) throw new Error('Arrangement lookahead missed a layer gain event');
           change.at = at;
           change.applied = true;
@@ -350,7 +369,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
           if (token !== generation || state !== 'running') { opm.stop(id); return; }
           gate.id = id;
           owned.set(id, gate);
-          const gain = gainAt(gate.pattern.name, at);
+          const gain = gainAt(gate.pattern.name, at, sampleRate);
           if (gain.value !== 1 || gain.remaining > 0) {
             const count = gain.remaining > 0 ? 2 : 1;
             if (dispatched + count > MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds lookahead command density');
@@ -369,8 +388,15 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       admitGains(limit);
       const played = nowBeat();
       changes = changes.filter((change, index) => index === changes.length - 1 || changes[index + 1]!.beat > played + EPSILON);
-      gains = gains.filter((change, index) => !gains.slice(index + 1).some(next =>
-        next.layer === change.layer && next.beat <= played + EPSILON));
+      gains = gains.filter((change, index) => {
+        for (let next = index + 1; next < gains.length; next++) {
+          const later = gains[next]!;
+          // Every writer keeps beat order, so the remaining suffix is future too.
+          if (later.beat > played + EPSILON) break;
+          if (later.layer === change.layer && later.beat <= played + EPSILON) return false;
+        }
+        return true;
+      });
       if (state === 'running') timer = setTimeout(pump, interval * 1000);
     } catch (error) { fail(error); }
   }
@@ -424,7 +450,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     const { beat, preserve, fade } = boundary(options);
     if (state !== 'running') {
       changes = [{ beat: 0, section, layers }];
-      gains = [...patterns.values()].map(pattern => ({ beat: position, layer: pattern.name, from: 0,
+      gains = [...patterns.values()].map(pattern => gainChange({ beat: position, layer: pattern.name, from: 0,
         target: layers.has(pattern.name) ? pattern.gain : 0, fade: 0, applied: true }));
       return beat;
     }
@@ -546,8 +572,8 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
         addGain(layerName, effective(beat).layers.has(layerName) ? gain : 0, beat, fade);
       } else {
         gains = gains.filter(change => change.layer !== layerName);
-        gains.push({ beat: position, layer: layerName, from: gain,
-          target: effective(position).layers.has(layerName) ? gain : 0, fade: 0, applied: true });
+        gains.push(gainChange({ beat: position, layer: layerName, from: gain,
+          target: effective(position).layers.has(layerName) ? gain : 0, fade: 0, applied: true }));
         gains.sort((a, b) => a.beat - b.beat);
       }
       pattern.gain = gain;
@@ -562,7 +588,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     pump,
     dispose() {
       if (state === 'disposed') return;
-      try { cancel('disposed'); } finally { unsubscribe(); }
+      try { cancel('disposed'); } finally { onError = undefined; unsubscribe(); }
     },
   };
   return Object.freeze(api);

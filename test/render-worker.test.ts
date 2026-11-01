@@ -7,6 +7,7 @@ import type { RenderWorkerRequest, RenderWorkerResponse, WorkerRenderOptions, Wo
 import { renderSequence } from '../src/core/sequence.js';
 import type { SequenceEvent } from '../src/core/sequence.js';
 import { encodeWav } from '../src/core/wav.js';
+import { withNamedAccessorAsync } from './named-accessors-harness.js';
 
 class ThreadWorker extends EventTarget {
   static instances: ThreadWorker[] = [];
@@ -201,6 +202,15 @@ test('static render pipeline, real worker backpressure and cancellation boundari
       assert.equal(plain.diagnostics.phases, undefined);
       assert.equal(result.bytesWritten, plain.bytesWritten);
     });
+    await t.test('phase diagnostics survive an inherited phases setter', async () => {
+      const options = { ...config, phaseDiagnostics: true, sink: { write() {} } };
+      const clean = await renderSequenceInWorker(score, options);
+      const polluted = await withNamedAccessorAsync('phases', () => renderSequenceInWorker(score, options));
+      assert.equal(polluted.setterHits, 0);
+      assert.equal(polluted.value.diagnostics.phases!.status, 'completed');
+      assert.equal(Object.hasOwn(polluted.value.diagnostics, 'phases'), true);
+      assert.equal(polluted.value.bytesWritten, clean.bytesWritten);
+    });
     await t.test('startup deadline rejects a worker that never becomes ready, but not slow legitimate writes', async () => {
       const slow = await renderSequenceInWorker(score, { ...config, startupTimeoutMs: 1000, sink: { async write() { await delay(30); } } });
       assert.ok(slow.bytesWritten > 0, 'the startup watchdog ends at ready and never times the sink');
@@ -241,6 +251,30 @@ test('static render pipeline, real worker backpressure and cancellation boundari
       await assert.rejects(renderSequenceInWorker(score, { ...config, onPhase(status) { if (status.phase === 'writing') throw new Error('observer failed'); }, sink: { write() {}, abort() { aborts++; } } }), /observer failed/);
       assert.equal(aborts, 1);
       assert.ok(ThreadWorker.instances.at(-1)!.terminated);
+    });
+    await t.test('phase cancellation preserves terminal notification without handing off to the sink', async () => {
+      for (const boundary of ['initializing', 'writing'] as const) {
+        const controller = new AbortController();
+        let writes = 0, closes = 0, aborts = 0, progress = 0, terminals = 0;
+        let lastPhase = '';
+        const completion = renderSequenceInWorker(score, {
+          ...config, signal: controller.signal,
+          sink: { write() { writes++; }, close() { closes++; }, abort() { aborts++; } },
+          onProgress() { progress++; },
+          onPhase(status) {
+            lastPhase = status.phase;
+            if (status.phase === 'completed' || status.phase === 'cancelled' || status.phase === 'failed') terminals++;
+            if (status.phase === boundary) controller.abort();
+          },
+        });
+        await assert.rejects(completion, { name: 'AbortError' });
+        assert.equal(writes, 0);
+        assert.equal(closes, 0);
+        assert.equal(aborts, 1);
+        assert.equal(progress, 0);
+        assert.equal(lastPhase, 'cancelled');
+        assert.equal(terminals, 1);
+      }
     });
   } finally {
     for (const worker of ThreadWorker.instances) if (!worker.terminated) worker.terminate();

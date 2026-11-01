@@ -5,6 +5,7 @@ import type { Performance } from '../src/api/performance.js';
 import type { OPM } from '../src/api/index.js';
 import type { NoteControls } from '../src/api/index.js';
 import { installWorkletHarness, startedEngine, renderFrames } from './worklet-harness.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 
 const restore = await installWorkletHarness();
 after(restore);
@@ -96,4 +97,62 @@ test('mono legato retargets controls to the selected key and keeps inactive key 
     assert.ok(retarget, 'releasing the selected key hands the shared gate to the remaining key controls');
     assert.ok(Math.abs(retarget.controls.pitch!) < 1e-9, 'the shared gate was anchored on the low key, so no offset remains');
   } finally { performance.dispose(); await opm.dispose(); }
+});
+
+test('mono legato retarget keeps pitch and glide despite inherited setters', async () => {
+  async function retarget(key?: string): Promise<{ controls: NoteControls; setterHits: number }> {
+    const { opm, performance, updates } = await setup();
+    try {
+      performance.configurePart(0, { voice: 'brass', mode: 'mono', legato: true, glide: 0.25 });
+      const low = performance.noteOn(0, 60);
+      const high = performance.noteOn(0, 67);
+      const gate = performance.getPart(0).keys.find(item => item.key === high)!.gateId!;
+      performance.updateKey(0, low, { feedback: 3 });
+      updates.length = 0;
+      const release = (): boolean => performance.noteOff(0, high);
+      const setterHits = key === undefined ? 0 : withNamedAccessor(key, release).setterHits;
+      if (key === undefined) release();
+      const update = updates.find(item => item.id === gate && item.controls.feedback === 3);
+      assert.ok(update, 'the shared gate must be retargeted');
+      return { controls: update.controls, setterHits };
+    } finally { performance.dispose(); await opm.dispose(); }
+  }
+  const clean = await retarget();
+  assert.equal(clean.controls.glide, 0.25);
+  for (const key of ['pitch', 'glide']) {
+    const polluted = await retarget(key);
+    assert.equal(polluted.setterHits, 0, key);
+    assert.deepStrictEqual(polluted.controls, clean.controls, key);
+  }
+});
+
+test('part and key controls never read omitted fields through Object.prototype', async () => {
+  // Getters answer with plausible but wrong values: a clean run is the only valid answer.
+  async function run(key?: string, inherited?: unknown): Promise<unknown> {
+    const { opm, performance, updates } = await setup();
+    const plays: unknown[] = [];
+    const playNote = opm.playNote.bind(opm);
+    opm.playNote = ((options: Parameters<OPM['playNote']>[0]) => {
+      plays.push(JSON.parse(JSON.stringify(options)));
+      return playNote(options);
+    }) as OPM['playNote'];
+    try {
+      performance.configurePart(0, { voice: 'brass', mode: 'mono', legato: true, glide: 0.25 });
+      const play = (): void => {
+        const low = performance.noteOn(0, 60);
+        const high = performance.noteOn(0, 67);
+        performance.updateKey(0, low, { feedback: 3 });
+        performance.updatePart(0, { expression: 0.5 });
+        performance.noteOff(0, high);
+        performance.noteOff(0, low);
+      };
+      if (key === undefined) play(); else withNamedAccessor(key, play, inherited);
+      return JSON.parse(JSON.stringify({ plays, updates }));
+    } finally { performance.dispose(); await opm.dispose(); }
+  }
+  const clean = await run();
+  for (const [key, inherited] of [['pitch', 36], ['glide', 5], ['expression', 0.1], ['pan', 1], ['gain', 0.1],
+    ['modulation', 2], ['ramp', 5], ['frequency', 40], ['feedback', 7]] as const) {
+    assert.deepStrictEqual(await run(key, inherited), clean, key);
+  }
 });

@@ -275,6 +275,41 @@ test('scoped stops and dispose release helper gates without touching unrelated n
   } finally { await s.close(); }
 });
 
+test('disposal during rejected-control cleanup preserves the executing failure notification', async () => {
+  const failures: Error[] = [];
+  const s = await setup(tone(), [], { onError: error => failures.push(error) });
+  let unsubscribe = () => {};
+  let disposed = false;
+  try {
+    const key = s.performance.noteOn(0, 60);
+    const id = gate(s.performance, key)!;
+    const pending = (await s.opm.getDiagnostics()).pendingEvents;
+    for (let i = pending; i < 256; i++) s.opm.updateNote(id, { pan: 0.5 }, { at: 1 });
+    unsubscribe = s.opm.subscribe(event => {
+      if (event.type === 'command' && event.command === 'stop' && !disposed) {
+        disposed = true;
+        s.performance.dispose();
+      }
+    });
+    assert.equal(s.performance.updateKey(0, key, { pan: -0.5 }), true);
+    assert.equal(disposed, true);
+    assert.equal(failures.length, 1);
+    assert.match(failures[0]!.message, /Performance control rejected: capacity/);
+    assert.throws(() => s.performance.getPart(0), /disposed/);
+    assert.throws(() => s.performance.noteOn(0, 69), /disposed/);
+    s.performance.dispose();
+    audio(s.opm, 256);
+    const diagnostics = await s.opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+    const external = s.opm.playNote({ voice: tone(), note: 69 });
+    assert.ok(Math.abs(frequency(audio(s.opm, 2048)) - 440) < 0.5);
+    s.opm.stop(external);
+    audio(s.opm, 256);
+    assert.ok(audio(s.opm, 128).every(value => value === 0));
+  } finally { unsubscribe(); await s.close(); }
+});
+
 test('stealing and reset prune keys; preservation-mode interruption still releases helper gates', async () => {
   const s = await setup();
   try {

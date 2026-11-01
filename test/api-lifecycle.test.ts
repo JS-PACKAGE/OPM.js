@@ -506,6 +506,46 @@ test('subscriptions isolate callbacks, defer additions, and distinguish close fr
   } finally { await opm.dispose(); audio.restore(); }
 });
 
+test('nested subscription dispatch sees fresh additions without reviving removed callbacks', async () => {
+  const audio = mockAudio();
+  const calls: string[] = [];
+  const opm = new OPM({ onEvent: event => {
+    if (event.type === 'command') calls.push(`legacy:${event.frame}`);
+  } });
+  try {
+    await opm.start();
+    const dispatch = (frame: number) => nodeOf(opm).port.onmessage!({ data: {
+      type: 'command', command: 'setMixGain', state: 'accepted', frame, time: frame / 44100,
+    } });
+    let removeFirst = () => {};
+    let removeSecond = () => {};
+    let removeAdded = () => {};
+    removeFirst = opm.subscribe(event => {
+      if (event.type !== 'command') return;
+      calls.push(`first:${event.frame}`);
+      if (event.frame === 0) {
+        removeSecond();
+        removeAdded = opm.subscribe(next => {
+          if (next.type === 'command') calls.push(`added:${next.frame}`);
+        });
+        dispatch(1);
+        calls.push('continued:0');
+      } else removeFirst();
+    });
+    removeSecond = opm.subscribe(event => {
+      if (event.type === 'command') calls.push(`removed:${event.frame}`);
+    });
+    dispatch(0);
+    dispatch(2);
+    const expected = ['first:0', 'first:1', 'added:1', 'legacy:1', 'continued:0', 'legacy:0', 'added:2', 'legacy:2'];
+    assert.deepEqual(calls, expected);
+    removeFirst();
+    removeAdded();
+    dispatch(3);
+    assert.deepEqual(calls, [...expected, 'legacy:3']);
+  } finally { await opm.dispose(); audio.restore(); }
+});
+
 test('command waits correlate multicast replies, retain immediate outcomes, and reject admission failures', async () => {
   const audio = mockAudio();
   const opm = new OPM();
@@ -531,6 +571,35 @@ test('command waits correlate multicast replies, retain immediate outcomes, and 
       error instanceof CommandRejectedError && error.event.reason === 'inactive' && error.event.id === 42);
     await assert.rejects(opm.waitForCommand(999), /Unknown or expired/);
     await assert.rejects(opm.waitForCommand(commandId, { timeout: 0 }), /timeout/);
+  } finally { await opm.dispose(); audio.restore(); }
+});
+
+test('command waits preserve null abort reasons both before registration and while pending', async () => {
+  const audio = mockAudio();
+  const opm = new OPM();
+  try {
+    await opm.start();
+    const commandId = opm.setMixGain(0.5);
+    const alreadyAborted = new AbortController();
+    const pending = new AbortController();
+    alreadyAborted.abort(null);
+    const outcomes = Promise.allSettled([
+      opm.waitForCommand(commandId, { signal: alreadyAborted.signal }),
+      opm.waitForCommand(commandId, { signal: pending.signal }),
+      opm.waitForCommand(commandId),
+    ]);
+    pending.abort(null);
+    nodeOf(opm).port.onmessage!({ data: {
+      type: 'command', command: 'setMixGain', commandId,
+      state: 'accepted', frame: 0, time: 0,
+    } });
+    const results = await outcomes;
+    assert.deepEqual(results.slice(0, 2), [
+      { status: 'rejected', reason: null },
+      { status: 'rejected', reason: null },
+    ]);
+    const surviving = results[2]!;
+    assert.ok(surviving.status === 'fulfilled' && surviving.value.state === 'accepted');
   } finally { await opm.dispose(); audio.restore(); }
 });
 

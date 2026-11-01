@@ -4,6 +4,7 @@ import { OPM, createLookaheadScheduler } from '../src/api/index.js';
 import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, StopOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
 import { Synth } from '../src/core/synth.js';
+import { withIndexedAccessors } from './indexed-accessors-harness.js';
 import { MAX_BANK_BYTES, parseVoiceBank } from '../src/voices/schema.js';
 import type { CompleteVoiceInput } from '../src/voices/schema.js';
 
@@ -313,6 +314,98 @@ test('bounded lookahead uses disjoint windows, cancels pending gates and surface
   } finally {
     scheduler.dispose();
     Object.assign(globalThis, { setTimeout: savedSetTimeout, clearTimeout: savedClearTimeout });
+    await opm.close();
+  }
+});
+
+test('lookahead batches keep their own validated notes despite inherited index accessors', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  const callbacks = new Map<number, () => void>();
+  const savedSetTimeout = globalThis.setTimeout;
+  const savedClearTimeout = globalThis.clearTimeout;
+  let nextTimer = 1;
+  Object.assign(globalThis, {
+    setTimeout: (callback: () => void) => { const id = nextTimer++; callbacks.set(id, callback); return id; },
+    clearTimeout: (id: number) => { callbacks.delete(id); },
+  });
+  // A scalar, never an array: failures inside the accessor window must stay observable.
+  let failure: Error | undefined;
+  const scheduler = createLookaheadScheduler(opm, ({ from }) => [
+    { note: 60, at: from + 0.01, duration: 0.1 },
+    { note: 64, at: from + 0.02, duration: 0.1 },
+  ] satisfies LookaheadNote[], { onError: error => { failure = error; } });
+  try {
+    await scheduler.start();
+    assert.equal((await opm.getDiagnostics()).pendingEvents, 4);
+    contextOf(opm).currentTime = 0.05;
+    const first = callbacks.entries().next().value!;
+    callbacks.delete(first[0]);
+    const polluted = withIndexedAccessors(() => first[1]());
+    assert.equal(failure, undefined);
+    assert.equal(polluted.setterHits + polluted.getterReads, 0);
+    assert.equal(scheduler.running, true);
+    assert.equal((await opm.getDiagnostics()).pendingEvents, 8);
+  } finally {
+    scheduler.dispose();
+    Object.assign(globalThis, { setTimeout: savedSetTimeout, clearTimeout: savedClearTimeout });
+    await opm.close();
+  }
+});
+
+test('lookahead capacity checks and the copy loop share one length read', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  const savedSetTimeout = globalThis.setTimeout;
+  const savedClearTimeout = globalThis.clearTimeout;
+  Object.assign(globalThis, { setTimeout: () => 1, clearTimeout: () => undefined });
+  let failure: Error | undefined;
+  let lengthReads = 0;
+  const scheduler = createLookaheadScheduler(opm, ({ from }) => {
+    const note = { note: 60, at: from + 0.01, duration: 0.1 };
+    // A hostile array reports one admissible entry first, then claims a much larger batch.
+    return new Proxy([note], {
+      get(target, key, receiver) { return key === 'length' ? (lengthReads++ === 0 ? 1 : 1000) : Reflect.get(target, key, receiver); },
+      getOwnPropertyDescriptor(target, key) {
+        if (typeof key === 'string' && /^\d+$/.test(key) && Number(key) > 0) {
+          return { value: note, writable: true, enumerable: true, configurable: true };
+        }
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+  }, { onError: error => { failure = error; } });
+  try {
+    await scheduler.start();
+    assert.equal(failure, undefined);
+    assert.equal(lengthReads, 1);
+    assert.equal((await opm.getDiagnostics()).pendingEvents, 2, 'only the length-checked entry may be admitted');
+  } finally {
+    scheduler.dispose();
+    Object.assign(globalThis, { setTimeout: savedSetTimeout, clearTimeout: savedClearTimeout });
+    await opm.close();
+  }
+});
+
+test('disposing inside a lookahead callback preserves its executing failure notification', async () => {
+  Object.assign(globalThis, { currentFrame: 0 });
+  const opm = new OPM();
+  const reason = new Error('Schedule failed after disposing itself');
+  const errors: Error[] = [];
+  const scheduler = createLookaheadScheduler(opm, () => {
+    scheduler.dispose();
+    throw reason;
+  }, { onError: error => errors.push(error) });
+  try {
+    await scheduler.start();
+    assert.equal(scheduler.running, false);
+    assert.equal(errors.length, 1);
+    assert.equal(errors[0], reason);
+    const diagnostics = await opm.getDiagnostics();
+    assert.equal(diagnostics.activeVoices, 0);
+    assert.equal(diagnostics.pendingEvents, 0);
+    await assert.rejects(scheduler.start(), /disposed/);
+  } finally {
+    scheduler.dispose();
     await opm.close();
   }
 });
