@@ -131,6 +131,8 @@ The same note-control APIs accept these optional fields independently:
 
 `ramp` gives feedback, LFO and frequency/ratio updates independent linear timelines. It must accompany a rampable scalar or tuple control; `operatorADSR` alone with `ramp` rejects. Interrupted updates start at the current value; omitted controls keep their existing timelines. Live `lfoRate` integrates phase without resetting the current phase, including interrupted rate ramps. Tuples and nested ADSRs are strict own-data snapshots detached and frozen before scheduling.
 
+When no rate ramp is active, reapplying the current `lfoRate` preserves the existing phase evolution, including with `ramp` or other controls. During an active rate ramp, requesting its current rate cancels that ramp without resetting phase; omitted rate controls leave it running.
+
 Updating a held operator's ADSR restarts attack from its current dB level, then decays to the new sustain. With both attack and decay zero, a one-frame bridge preserves continuity. An update during release starts from the current dB level and completes the new key-scaled release, bounded to ten seconds; zero release silences immediately. Envelope durations provide continuity rather than interpolating ADSR parameters with the control ramp.
 
 ## DX7 import: retained data versus approximations

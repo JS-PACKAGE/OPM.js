@@ -48,6 +48,8 @@ Rules that make switches musical:
 
 `snapshot` reports state, position, bar/beat, the current and pending sections and layers, the tempo map and `priorityDrops`. `setTempo(bpm)` and `setTempoMap(map)` replace the tempo from the current beat on; notes that were already admitted keep the audio times they were admitted with (at most one lookahead window).
 
+Pause/stop retains `onError` for restart; permanent `dispose()` clears the private callback binding, leaves `snapshot` readable and never closes the shared engine. Executing failures retain their final listener across reentrant cleanup. Disposal invalidates pending startup so its eventual result cannot admit notes or notify a stale callback; the startup promise itself still settles normally. This releases library references, not independently held host data or a promise of immediate GC.
+
 ## Save and reload an interactive arrangement
 
 Keep a definition separate from the live scheduler. `parseArrangementProject` / `serializeArrangementProject`, available since v1.10, store a version 1 `ArrangementProject` containing named complete voices, normalized synthesis settings, tempo/meter, `layers` (length, events, gain and priority), named `sections`, and `initialSection`. This is distinct from the unchanged `ScoreProject` v1. See the [self-contained creation and live replay recipe](./score-projects.md#portable-arrangement-projects).

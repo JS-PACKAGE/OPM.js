@@ -10,7 +10,7 @@ Voice-format versions are independent of package versions: v1.13.1 uses canonica
 
 **Contents:** [Acquire and install](#acquire-and-install) · [Browser quick start](#browser-quick-start) · [Browser API](#browser-api-and-lifecycle) · [Node PCM](#offline-pcm-with-nodejs) · [Voice format and banks](#voice-format-and-banks) · [Compression](#compressed-deployment) · [Troubleshooting](#troubleshooting)
 
-## New in v1.11 (current checkout, unreleased)
+## New in v1.11
 
 - **Voice v7 waveforms and noise.** Each operator accepts `waveform` (`sine`, `half`, `abs`, `quarter`, `alternating`, `camel`, `square`, `saw`, `noise`) and `noiseRate` (20–20000 Hz). Existing sine voices render identically; square/saw (polyBLEP) and half (polyBLAMP) are edge-corrected but, like noise, not alias-free. Original `noise-snare`, `noise-hihat` and `explosion` recipes join the bundled bank. See [expressive voices](./expressive-voices.md).
 - **Optional stereo effects.** `createStereoEffects`/`applyEffects` (offline) and `createEffects` (a dedicated AudioWorklet insert) provide chorus and reverb; nothing is connected automatically. See [audio buses](./audio-buses.md).
@@ -94,7 +94,7 @@ Save this complete page as **`opm-app/public/index.html`**:
 <html lang="en">
 <meta charset="utf-8">
 <title>OPM.js example</title>
-<button id="play" type="button">Play brass chord</button>
+<button id="play" type="button" disabled>Play brass chord</button>
 <output id="status" aria-live="polite">Ready</output>
 <script type="module">
   import { OPM } from './opm/api/index.js';
@@ -114,6 +114,7 @@ Save this complete page as **`opm-app/public/index.html`**:
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 </html>
 ```
@@ -197,6 +198,7 @@ For customization and early release, **replace only the module `<script>` in `op
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 ```
 
@@ -239,6 +241,7 @@ Replace the quick-start page's module script with this block, keeping `#play` an
   document.body.append(stop);
   stop.addEventListener('click', () => scheduler.stop());
   window.disposeOPM = async () => { scheduler.dispose(); await opm.close(); };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -294,6 +297,7 @@ For a host-owned context, replace the quick-start page's module script with this
     gain.disconnect();
     // The host decides when to close context.
   };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -328,6 +332,7 @@ Replace the quick-start module script with this shared live/offline score:
     } catch (error) { document.querySelector('#status').textContent = error.message; }
   });
   window.disposeOPM = async () => { playback?.stop(); await opm.close(); };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -384,6 +389,7 @@ Replace the quick-start module script, retaining `#play` and `#status`:
   window.disposeOPM = async () => {
     transport.dispose(); performance.dispose(); await opm.close();
   };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -515,6 +521,7 @@ For a working bank loader, **replace the module `<script>` in `opm-app/public/in
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 ```
 

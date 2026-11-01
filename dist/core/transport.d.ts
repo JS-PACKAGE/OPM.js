@@ -18,7 +18,8 @@ export declare const MAX_TEMPO_POINTS = 1024;
 export declare function transportNumber(value: unknown, min: number, max: number, label: string): number;
 /** Read dense own-data arrays without executing element getters or iteration overrides. */
 export declare function transportArray(input: unknown, max: number, label: string): unknown[];
-/** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space. */
+/** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space.
+ * Returned snapshots are immutable; re-normalization may reuse their identity. */
 export declare function normalizeTempoMap(input?: readonly TempoPoint[], bpm?: number): readonly Readonly<TempoPoint>[];
 export declare function normalizeTimeSignature(input?: TimeSignature): Readonly<TimeSignature>;
 /** BPM at a beat in an already validated map. */

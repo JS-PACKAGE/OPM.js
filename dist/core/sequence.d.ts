@@ -1,5 +1,6 @@
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
 import type { NoteControls, SynthOptions } from './synth.js';
+import { MAX_RENDER_SAMPLES } from './limits.js';
 import type { RenderResult } from './index.js';
 export interface SequenceNoteEvent {
     type: 'note';
@@ -52,13 +53,13 @@ export interface SequenceSnapshot {
 export declare const MAX_SEQUENCE_NOTES = 128;
 export declare const MAX_SEQUENCE_SLOTS = 256;
 export declare const MAX_SEQUENCE_SECONDS = 60;
-export declare const MAX_RENDER_SAMPLES = 4000000;
+export { MAX_RENDER_SAMPLES };
 export declare const MAX_LONG_SEQUENCE_SECONDS: number;
 export declare const MAX_LONG_SEQUENCE_EVENTS = 65536;
 export declare const MAX_SEQUENCE_CHUNK_FRAMES = 65536;
 export declare function sampleRateValue(value: number): number;
 export declare function sequenceOwnData(input: unknown, allowed: readonly string[], required: readonly string[], label: string): Record<string, unknown>;
-/** Validate the entire score without invoking accessors, and detach every patch/control. */
+/** Validate without accessors; detach raw data and reuse our immutable patches/event-array snapshots. */
 export declare function prepareSequence(events: readonly SequenceEvent[], options?: Pick<SequenceOptions, 'voices'>): SequenceSnapshot;
 /** Long scores have a separate input budget; this does not enlarge worklet queues. */
 export declare function prepareLongSequence(events: readonly SequenceEvent[], options?: Pick<SequenceOptions, 'voices'>): SequenceSnapshot;

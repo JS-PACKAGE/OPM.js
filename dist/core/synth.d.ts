@@ -45,7 +45,7 @@ export declare class VoiceAdmissionError extends Error {
 }
 export declare function validateMaxVoices(value: unknown): number;
 export declare function validateVoicePriority(value: unknown): number;
-/** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
+/** Detach strict own-data controls, reusing only our immutable validated snapshots. */
 export declare function validateNoteControls(input: NoteControls): NoteControls;
 export { normalizeVoice, prepareVoice } from '../voices/normalize.js';
 export declare class Synth {

@@ -1,4 +1,4 @@
-import type { CompleteVoiceInput, NormalizedVoice, VoiceInput } from '../voices/schema.js';
+import type { CompleteVoiceInput, FrozenVoice, NormalizedVoice, VoiceInput } from '../voices/schema.js';
 import type { NoteControls, QualityProfile, SynthOptions } from '../core/synth.js';
 import type { TuningOptions } from '../core/tuning.js';
 export type { ADSR, LFO, LFOInput, LegacyLFO, LegacyLFOV5, LFOTargets, LFOTargetsInput, KeyScale, Operator, OperatorWaveform, Voice, VoiceInput, FrozenVoice, FrozenOperator, NormalizedVoice, PreparedVoice, PitchEnvelope, LegacyVoiceV3, LegacyVoiceV4, LegacyVoiceV5, LegacyVoiceV6 } from '../voices/schema.js';
@@ -161,7 +161,7 @@ export declare class OPM {
     constructor(options?: OPMOptions);
     loadVoice(name: string, voice: VoiceInput): void;
     /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
-    replaceVoiceBank(source: string | readonly CompleteVoiceInput[]): void;
+    replaceVoiceBank(source: string | readonly (CompleteVoiceInput | FrozenVoice)[]): void;
     removeVoice(name: string): boolean;
     /** Canonical versioned entries, detached from the immutable registry and UTF-8 bounded. */
     exportVoiceBank(): string;

@@ -16,7 +16,7 @@
 - [壓縮部署](#壓縮部署)
 - [疑難排解](#疑難排解)
 
-## v1.11 新功能（目前 checkout，尚未發佈）
+## v1.11 新功能
 
 - **音色 v7 波形與雜訊。**每個運算子可指定 `waveform`（`sine`、`half`、`abs`、`quarter`、`alternating`、`camel`、`square`、`saw`、`noise`）與 `noiseRate`（20–20000 Hz）。既有正弦音色輸出不變；square／saw（polyBLEP）與 half（polyBLAMP）有邊緣抗混疊修正，但與 noise 一樣不保證無混疊。內建音色庫新增原創的 `noise-snare`、`noise-hihat`、`explosion`。詳見[表情音色參考](./expressive-voices.md)。
 - **選用立體聲效果。**`createStereoEffects`／`applyEffects`（離線）與 `createEffects`（專用 AudioWorklet insert）提供 chorus 與 reverb；不會自動接線。詳見[音訊匯流排](./audio-buses.md)。
@@ -98,7 +98,7 @@ cp node_modules/opm.js/LICENSE public/opm/LICENSE
 <html lang="zh-Hant">
 <meta charset="utf-8">
 <title>OPM.js example</title>
-<button id="play" type="button">Play brass chord</button>
+<button id="play" type="button" disabled>Play brass chord</button>
 <output id="status" aria-live="polite">Ready</output>
 <script type="module">
   import { OPM } from './opm/api/index.js';
@@ -118,6 +118,7 @@ cp node_modules/opm.js/LICENSE public/opm/LICENSE
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 </html>
 ```
@@ -217,6 +218,7 @@ v1.9 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平�
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 ```
 
@@ -263,6 +265,7 @@ v1.9 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平�
     scheduler.dispose();
     await opm.close();
   };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -318,6 +321,7 @@ v1.9 新增 gain（0–1、預設 1），獨立乘上 expression，依 ramp 平�
     id = undefined;
     gain.disconnect();
   };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -352,6 +356,7 @@ mixGain 是有限 0–1（預設 1），在**輸出級前**縮放；下游 GainN
     } catch (error) { document.querySelector('#status').textContent = error.message; }
   });
   window.disposeOPM = async () => { playback?.stop(); await opm.close(); };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -434,6 +439,7 @@ v1.8 的 `updateKey(part,key,controls)` 對單一實體按鍵套用 NoteControls
     performance.dispose();
     await opm.close();
   };
+  document.querySelector('#play').disabled = false;
 </script>
 ```
 
@@ -558,6 +564,7 @@ renderNote 也接受嚴格 mixGain／tuning／stealing／quality／saturation／
       play.disabled = false;
     }
   });
+  play.disabled = false;
 </script>
 ```
 

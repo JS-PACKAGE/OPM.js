@@ -58,5 +58,5 @@ export interface WorkerRenderResult {
         phases?: WorkerRenderPhaseDiagnostics;
     }>;
 }
-/** Browser-only, backpressured offline rendering; importing this module allocates nothing. */
+/** Browser-only, backpressured offline rendering; imports create no Worker. */
 export declare function renderSequenceInWorker(events: readonly SequenceEvent[], options: WorkerRenderOptions): Promise<WorkerRenderResult>;

@@ -1,0 +1,1 @@
+{"version":3,"file":"limits.js","names":["MAX_RENDER_SAMPLES"],"sources":["../../src/core/limits.ts"],"sourcesContent":["/** Leaf module: the effects AudioWorklet must not load the sequence/synth graph just for this bound. */\nexport const MAX_RENDER_SAMPLES = 4_000_000;\n"],"mappings":"AACO,MAAMA,EAAqB,W","ignoreList":[]}

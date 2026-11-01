@@ -10,7 +10,7 @@ performance.updateKey(0, key, { feedback: 5, pitch: 0.3 });  // that key only
 performance.updatePartNotes(0, { operatorRatios: [2, 1, 1, 1], ramp: 0.05 }); // every sounding note + future notes
 ```
 
-Both calls take the full `NoteControls` object (pitch, glide, expression, pan, modulation, ramp, operator levels/ratios/fixed-Hz/ADSR, feedback and LFO controls). Input is copied as own data and validated before any note is touched.
+Both calls take the full `NoteControls` object (pitch, glide, expression, pan, modulation, ramp, operator levels/ratios/fixed-Hz/ADSR, feedback and LFO controls). Raw input is detached and validated as own data before any note is touched; exact deeply frozen snapshots previously produced by the same validator may be reused, without caching per-note application.
 
 - `updateKey` returns `false` for an unknown or already-removed key and otherwise applies to that key's gate. A key that is **not** sounding in a mono part (a held key behind the selected one) only stores its controls; the shared gate is never modified by it. When the mono selection later moves to that key, its stored controls are applied together with the pitch offset.
 - `updatePartNotes` merges into the part's control state, updates every sounding gate of the part (release tails included) and is applied to notes started later. Pitch accumulates as `part + key + legato offset` and is validated against the engine's ±48 semitone control range.
@@ -18,6 +18,8 @@ Both calls take the full `NoteControls` object (pitch, glide, expression, pan, m
 - `getPartControls(part)` returns a detached, frozen effective part-control snapshot: configured defaults resolved against the current named/custom voice, then merged with part controls. It excludes per-key overrides. Operator levels are **multipliers**, with neutral defaults `[1, 1, 1, 1]`, not the patch's raw operator levels.
 - Mono legato retains its anchor rule: beyond ±48 semitones of the original gate the part restarts the note at the exact target pitch, which re-evaluates velocity, key scaling and rate scaling.
 - `noteOff(part, key, options?: PerformanceNoteOffOptions)` accepts only own-data `force?: boolean`. Ordinary note-off remains pedal-aware and returns `false` for an already-unheld key. `{ force: true }` also releases an unheld pedal-latched key, bypassing sustain for that key alone; mono selection retargets normally. It leaves the pedal and unrelated keys unchanged.
+
+Performance `allNotesOff()` and sustain changes are reusable operations and retain `onError`. Permanent `dispose()` releases that private callback before teardown and rejects later part operations; dispose helpers before their shared OPM. A failure observation that has already entered keeps its original listener through reentrant cleanup, while disposal by an earlier host subscriber prevents subsequent delivery to the unsubscribed Performance observer. Synchronous operation failures still throw instead of being forwarded to `onError`. Reference release does not guarantee immediate GC.
 
 ## Voice budgets and priority
 
@@ -64,6 +66,10 @@ Everything else is counted in `snapshot.ignoredMessages`. Malformed packets (wro
 RPN 0 requires CC101=0/CC100=0. CC6 semitones clamp to 48, optional CC38 cents clamp to 99, and the total clamps to 48 semitones. Each channel starts with the explicit range (default 2); state is shared across adapter inputs for that channel, like other part controllers. RPN null (CC101=127/CC100=127), other RPN numbers, or NRPN selectors CC98/99 deselect sensitivity data entry. CC121 restores the explicit range and null selection; dispose clears internal RPN state and removes listeners, without resetting host part controls. No SysEx is accepted.
 
 Lifecycle: the adapter attaches to current and later inputs (optionally restricted with `inputIds`) and calls `open()` where needed. `releaseAll()` force-releases only adapter-owned keys, including earlier pedal-latched note-offs, without changing the pedal. Disconnect and `dispose()` force-release the affected input's owned keys and remove listeners, then remove its contribution to the shared pedal union. If the last adapter pedal contribution disappears, the part pedal turns off and may release host-played pedal-latched keys too: pedal/controller state is shared per part, not key-owned. Another input's pedal contribution remains effective.
+
+Dispose adapters before their Performance helper. Successful disposal drops the adapter's cached `onError`; an already-entered port `open()` keeps its original error observer until that operation settles, including failure after disposal. Entered pedal cleanup also retains its listener across reentrant disposal. If forced note release fails, ownership records and their observer remain available for `releaseAll()` retry; a disposed adapter clears that binding once retry cleanup removes its last record. This does not close inputs, cancel a pending `open()`, invalidate readable adapter snapshots or release independently host-owned access/port/Performance references.
+
+If an opening-error callback disposes the adapter during input discovery, refresh stops immediately; later inputs are not opened or given listeners. Disposal-wide listener snapshots preserve already-entered cleanup across all affected inputs.
 
 Limits are 32 inputs, 128 physically held keys and 256 ownership records. Physically released records stay available for pedal cleanup; stale records are pruned from Performance snapshots only at the ownership threshold or explicit forced cleanup. Excess admission is reported to `onError` and dropped, never silently overwriting ownership.
 

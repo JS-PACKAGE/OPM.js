@@ -24,6 +24,24 @@ default4096), `maxFrames`, voice registry, mix/tuning/stealing and `quality`.
 WAV; oversized RIFF files reject before Worker allocation. Score, options and
 patches are validated and detached first; there is no audio device/context.
 
+Host preflight may reuse validation metadata for exact immutable event arrays
+returned by this library instance's sequence preparation helpers. Options and
+all applicable score/frame/engine limits still validate; queues remain fresh.
+Raw, copied, Proxy and foreign arrays take the normal validation path. This
+private array membership does not cross the Worker clone boundary.
+
+Structured clone preserves shared references, not private prepared/control membership.
+The Worker fully validates each distinct cloned patch or control identity once per
+job, then reuses its new immutable snapshot for repeated references. These local
+tables do not escape preparation; the controls table is allocated only after the
+first successful control validation. There is no content-based deduplication or
+trust in a serialized marker, and distinct equal-valued roots remain separate.
+Use the same library's `prepareVoice` and `validateNoteControls` outputs when
+sharing patches/controls. Raw inputs still validate and detach per occurrence on
+the host; frozen lookalikes and foreign control snapshots acquire no public trust.
+Every event retains its context/resource checks and fresh DSP application,
+including current-clock ramps and ADSR reanchoring.
+
 The default module is `new URL('../worker/render.js', import.meta.url)`.
 Deploy `dist/worker/render.js` **and all its relative imports**, maps and
 declarations from the matching distribution. An explicit `workerUrl` resolves
@@ -54,6 +72,10 @@ cancellation hostage. Their later rejections are consumed. A sink must
 invalidate in-flight writes and discard/roll back incomplete output; cancellation
 cannot retract bytes already persisted. `abort` must not finalize an incomplete
 file. Use host-side cleanup when abort itself fails.
+
+The host releases its captured score/settings bindings after the start message is cloned and on terminal cleanup. Each private chunk record drops its byte reference immediately after invoking `write`, even if it throws; only validated metadata remains across the await. This removes redundant library references while write/close/abort promises are stalled. It does not clear caller inputs or sink-owned buffers, cancel underlying storage operations, or guarantee when garbage collection occurs.
+
+The host captures the validated fields it uses, not the complete options copy, so raw voice-registry/tuning inputs need not stay reachable through that copy. On terminal settlement it clears cached sink owner/method and observer bindings after any rollback invocation and terminal phase notification. This preserves the original method receiver and last notification; independently retained caller/sink references and a method's own pending async work remain outside that cleanup.
 
 For an actual file export, request File System Access from a trusted gesture
 where it is supported. Feature-detect it; if unavailable, report that long-file
@@ -121,7 +143,11 @@ WAV uses format3 with a `fact` sample-count chunk.
 
 `engine.subscribe(listener)` returns an idempotent unsubscribe function. Each subscription is independent, even for the same listener; it coexists with `onEvent` and scheduler subscriptions. Exceptions and attempts to mutate frozen event records cannot disrupt other listeners or cleanup. Removing a listener during dispatch skips its remaining delivery; newly added listeners begin with the next event. Ordinary `close()` preserves subscriptions for a later `start()`.
 
+Unsubscribe clears its callback reference; terminal disposal clears all remaining subscription records, even if the host retains unsubscribe handles. An executing callback or independent host reference may still keep a callback alive, and garbage collection is not immediate. Restartable `close()` intentionally preserves live subscriptions.
+
 Commands still synchronously return numeric IDs. `waitForCommand(commandId, { timeout?, signal? })` waits only for the correlated **admission acknowledgement**, including a reply received before the method is called. The timeout is milliseconds: default **5000**, integer range **1..60000**. At most **64 pending waits** and **128 command receipts** are retained. Receipts without live waiters are evicted oldest-first; an unknown/expired ID rejects rather than waiting forever. Multiple waits for one ID are independent. Abort/timeout removes only that wait, not the admitted command or another waiter. A late acknowledgement can still be retrieved while its receipt is retained. Signals must be genuine AbortSignals: intrinsic state/reason and listener operations bypass shadow accessors and reject duck-typed objects.
+
+An aborted wait rejects with the exact [`signal.reason`](https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/reason), including `null`, whether cancellation precedes registration or occurs while pending. The reason can be any JavaScript value; do not assume every rejection is an `Error`. Platforms without a reason getter retain an `AbortError` fallback. Native listener and timeout cleanup still apply to every terminal path.
 
 A rejected acknowledgement throws `CommandRejectedError` with its frozen `event` (`reason`, note ID and command ID). Pending waits reject on reset, close, interruption/suspension or processor failure. A command-triggered reset carries its initiating `commandId`; an ordered panic reset rejects earlier outstanding commands, but preserves that panic's own acknowledgement and commands posted after it, even after receipt eviction. Uncommanded interruption resets invalidate every outstanding receipt. A settled acknowledgement is historical admission evidence and is not revoked by a later reset. **Accepted does not prove scheduled execution, gate release, release-tail completion or audible output.** Use note lifecycle events and diagnostics for those distinct observations.
 
@@ -246,6 +272,10 @@ function unmount(): Promise<void> {
 
 For a shared context owned elsewhere, omit its final `context.close()`; disconnect only the routing nodes this component owns. `streamSequence` and `createLookaheadScheduler` have their own `dispose()` methods: dispose each scheduler before its OPM instance so admission timers and live-note ownership are released.
 
+A lookahead `stop()` remains restartable and retains its callbacks. Its permanent `dispose()` releases cached scheduler/error callbacks and the observer binding after scoped cleanup, including when cleanup/error reporting throws. An already-executing operation may deliver its final failure notification; disposal does not cancel underlying OPM startup or clear references independently retained by the host.
+
+Dispose Transport and Arrangement helpers before their shared engine too. Their restartable stop preserves `onError`; permanent disposal clears it without discarding readable public snapshots. Executing failure notifications survive reentrant disposal, while invalidated pending starts settle without admitting notes or notifying stale helper callbacks. Their underlying OPM startup and any host-owned references remain independent.
+
 ## Other bundlers and SSR hosts
 
 Webpack, Rollup, Parcel and static hosts use the same explicit static-asset contract without relying on unverified worklet-plugin APIs: deploy the installed package's **entire `dist/` tree plus the package-root `LICENSE`** at a same-origin URL, preserving relative paths. This is a packaging recipe, not a claim that those other bundlers were exercised. Only the existing Vite production smoke provides bundler-specific runtime verification.
@@ -257,9 +287,11 @@ npx --no-install opm-assets copy public/audio/opm-1.10.0     # atomic copy into 
 npx --no-install opm-assets check https://example.test/audio/opm-1.10.0/   # byte-for-byte check of what is served
 ```
 
-`copy` (also `import { copyAssets } from 'opm.js/tools/assets.js'`, Node only) inspects the installed release first: only `.js`, `.js.map` and `.d.ts` files under `dist/`, no symlinks, every `.js` with its map and declaration, the entry modules `api/index.js`, `core/index.js`, `worklet/processor.js` and `worker/render.js`, and a bounded size (4,096 files, 16 MiB). It stages a temporary directory beside the destination, copies and re-hashes every file, writes `opm-assets.json` (SHA-256 and size per file, plus `LICENSE`) and renames the staging directory into place. It **never overwrites**: a destination that already holds exactly this release is reported as `reused: true`; anything else is an error and left untouched. Use a fresh release-specific directory (or an atomic deployment switch) so removed old assets cannot mix with a new tree.
+`copy` (also `import { copyAssets } from 'opm.js/tools/assets.js'`, Node only) inspects the installed release first: only `.js`, `.js.map` and `.d.ts` files under `dist/`, no symlinks, every `.js` with its map and declaration, the entry modules `api/index.js`, `core/index.js`, `worklet/processor.js` and `worker/render.js`, and a bounded size (4,096 files, 16 MiB). It stages a temporary directory beside the destination, copies and re-hashes every file, writes `opm-assets.json` (SHA-256 and size per file, plus `LICENSE`) and renames the staging directory into place. It **never overwrites** an existing destination: one that already holds exactly this release is reported as `reused: true`; anything else is an error and left untouched. A destination that is first populated by another process during the final publication step also keeps its contents and removes the staging directory, but Node exposes no exclusive directory rename. A different process that creates an **empty** directory at that exact instant can therefore be replaced on POSIX filesystems. Publish into a deployment parent controlled by the same operator, and do not run unrelated writers against that destination. Use a fresh release-specific directory (or an atomic deployment switch) so removed old assets cannot mix with a new tree.
 
 `check` (or `checkDeployment(url)`) downloads each listed file from an HTTPS or loopback-HTTP base URL and compares status, a JavaScript MIME type, `X-Content-Type-Options: nosniff` (disable with `requireNosniff: false`) and the SHA-256 against the installed release. Redirects are errors, so an SPA fallback that returns HTML with status 200 fails on MIME or bytes. It cannot see your page's Content-Security-Policy and does not start an AudioWorklet or Worker: run the browser smoke or the [Vite example (checkout-only)](https://github.com/JS-PACKAGE/OPM.js/blob/v1.10/examples/vite/README.md) for that.
+
+If any file validation or request fails, `check` cancels the other in-flight downloads from that run and reports the original failure.
 
 Configure `new OPM({ workletUrl: '/audio/opm-1.10.0/worklet/processor.js' })` and, for Worker export, `workerUrl: '/audio/opm-1.10.0/worker/render.js'`. The worklet's own imports must remain deployed beside it and use valid JavaScript MIME types; no blob URL or relaxed CSP is needed. The host can bundle the browser-facing API normally or import `/audio/opm-1.10.0/api/index.js` externally.
 
