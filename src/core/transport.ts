@@ -7,6 +7,26 @@ export interface BarBeat { bar: number; beat: number }
 export const MAX_TRANSPORT_BEATS = 86400;
 export const MAX_TEMPO_POINTS = 1024;
 
+// Only privately registered immutable snapshots may retain cached integrals.
+// Caller-owned maps keep the uncached path, so later mutations cannot go stale.
+const tempoOffsets = new WeakMap<readonly Readonly<TempoPoint>[], Float64Array>();
+
+// Frozen own fields do not freeze inherited optional fields or the terminal index.
+function stableTempoContext(length: number): boolean {
+  // Native Object.prototype has an immutable null parent; `in` never runs getters.
+  return !('curve' in Object.prototype)
+    && !('endBpm' in Object.prototype)
+    && Object.getPrototypeOf(Array.prototype) === Object.prototype
+    && !(length in Array.prototype);
+}
+
+// This private complete default is never returned or exposed to caller data.
+const DEFAULT_TIME_SIGNATURE = Object.freeze({ numerator: 4, denominator: 4 });
+
+// Share field names only, never caller data or validation results.
+const TIME_SIGNATURE_FIELDS = ['numerator', 'denominator'] as const;
+const BAR_BEAT_FIELDS = ['bar', 'beat'] as const;
+
 export function transportNumber(value: unknown, min: number, max: number, label: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
     throw new RangeError(`${label} must be finite in ${min}..${max}`);
@@ -18,25 +38,31 @@ export function transportNumber(value: unknown, min: number, max: number, label:
 export function transportArray(input: unknown, max: number, label: string): unknown[] {
   if (!Array.isArray(input)) throw new TypeError(`${label} must be an array`);
   const length = Object.getOwnPropertyDescriptor(input, 'length')!.value as number;
-  if (length > max) throw new RangeError(`${label} exceeds its entry budget`);
+  if (!Number.isSafeInteger(length) || length < 0 || length > max) throw new RangeError(`${label} exceeds its entry budget`);
   for (const key of Reflect.ownKeys(input)) {
     if (key !== 'length' && (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length)) {
       throw new TypeError(`${label} has an unknown field`);
     }
   }
+  // A null prototype keeps inherited indexed accessors out of these own-data writes.
   const result: unknown[] = [];
+  Object.setPrototypeOf(result, null);
   for (let index = 0; index < length; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(input, String(index));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError(`${label} must contain own data`);
-    result.push(descriptor.value);
+    result[index] = descriptor.value;
   }
-  return result;
+  return Object.setPrototypeOf(result, Array.prototype);
 }
 
-/** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space. */
+/** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space.
+ * Returned snapshots are immutable; re-normalization may reuse their identity. */
 export function normalizeTempoMap(input?: readonly TempoPoint[], bpm = 120): readonly Readonly<TempoPoint>[] {
   transportNumber(bpm, 1, 1000, 'bpm');
-  const points = input === undefined ? [{ beat: 0, bpm }] : transportArray(input, MAX_TEMPO_POINTS, 'tempoMap');
+  // The omitted point contains only fixed beat zero and the BPM validated above.
+  if (input === undefined) return Object.freeze([Object.freeze({ beat: 0, bpm })]);
+  if (tempoOffsets.has(input)) return input;
+  const points = transportArray(input, MAX_TEMPO_POINTS, 'tempoMap');
   if (points.length === 0) throw new RangeError('tempoMap must begin at beat zero');
   let previous = -1;
   const result = points.map((point, index) => {
@@ -58,11 +84,25 @@ export function normalizeTempoMap(input?: readonly TempoPoint[], bpm = 120): rea
       throw new RangeError('linear tempo slope must be finite');
     }
   }
+  if (result.length > 1) {
+    const cacheable = stableTempoContext(result.length);
+    // First N cells are prefixes; the remaining N - 1 retain exact full spans.
+    const offsets = new Float64Array(2 * result.length - 1);
+    for (let index = 1; index < result.length; index++) {
+      const span = integral(result[index - 1], result[index], result[index].beat - result[index - 1].beat);
+      offsets[index] = offsets[index - 1] + span;
+      offsets[result.length + index - 1] = span;
+    }
+    // Keep identity reuse, but never reuse integrals built under inherited data.
+    if (!cacheable) offsets[0] = NaN;
+    tempoOffsets.set(result, offsets);
+  }
   return Object.freeze(result);
 }
 
-export function normalizeTimeSignature(input: TimeSignature = { numerator: 4, denominator: 4 }): Readonly<TimeSignature> {
-  const data = sequenceOwnData(input, ['numerator', 'denominator'], ['numerator', 'denominator'], 'time signature');
+export function normalizeTimeSignature(input: TimeSignature = DEFAULT_TIME_SIGNATURE): Readonly<TimeSignature> {
+  if (input === DEFAULT_TIME_SIGNATURE) return Object.freeze({ numerator: input.numerator, denominator: input.denominator });
+  const data = sequenceOwnData(input, TIME_SIGNATURE_FIELDS, TIME_SIGNATURE_FIELDS, 'time signature');
   const numerator = transportNumber(data.numerator, 1, 32, 'numerator');
   const denominator = transportNumber(data.denominator, 1, 32, 'denominator');
   if (!Number.isInteger(numerator) || ![1, 2, 4, 8, 16, 32].includes(denominator)) throw new RangeError('time signature requires integer numerator and power-of-two denominator');
@@ -78,6 +118,11 @@ function integral(point: Readonly<TempoPoint>, next: Readonly<TempoPoint> | unde
   return rate === 0 ? beats * 60 / point.bpm : 60 * Math.log1p(rate * beats / point.bpm) / rate;
 }
 
+function inverseTempoAt(point: Readonly<TempoPoint>, next: Readonly<TempoPoint> | undefined, remaining: number, beats: number): number {
+  const rate = slope(point, next);
+  return point.beat + Math.min(beats, rate === 0 ? remaining * point.bpm / 60 : point.bpm * Math.expm1(remaining * rate / 60) / rate);
+}
+
 /** BPM at a beat in an already validated map. */
 export function tempoBPM(beat: number, map: readonly Readonly<TempoPoint>[]): number {
   let index = 0;
@@ -90,11 +135,12 @@ export function tempoBPM(beat: number, map: readonly Readonly<TempoPoint>[]): nu
 export function replaceTempoFrom(beat: number, bpm: number, map: readonly Readonly<TempoPoint>[]): readonly Readonly<TempoPoint>[] {
   transportNumber(beat, 0, MAX_TRANSPORT_BEATS, 'beat');
   transportNumber(bpm, 1, 1000, 'bpm');
-  const points: TempoPoint[] = map.filter(point => point.beat < beat).map(point => ({ ...point }));
-  const previous = points[points.length - 1];
-  if (previous?.curve === 'linear') previous.endBpm = tempoBPM(beat, map);
-  points.push({ beat, bpm });
-  return normalizeTempoMap(points);
+  const kept = map.filter(point => point.beat < beat);
+  // Spreads define own data: assigning endBpm could reach an inherited setter and drop the ramp end.
+  const points: TempoPoint[] = kept.map((point, index) => index === kept.length - 1 && point.curve === 'linear'
+    ? { ...point, endBpm: tempoBPM(beat, map) } : { ...point });
+  // A spread literal defines own elements; push could reach inherited indexed accessors.
+  return normalizeTempoMap([...points, { beat, bpm }]);
 }
 /** Integral of 60/BPM across tempo boundaries. */
 export function beatsToSeconds(beat: number, tempoMap?: readonly TempoPoint[]): number {
@@ -104,6 +150,21 @@ export function beatsToSeconds(beat: number, tempoMap?: readonly TempoPoint[]): 
 
 /** Internal validated-map form avoids recopying a map on each scheduler tick. */
 export function tempoSeconds(beat: number, map: readonly Readonly<TempoPoint>[]): number {
+  const offsets = tempoOffsets.get(map);
+  // A non-positive numeric beat ends in the first owned, zero-start segment.
+  if (offsets !== undefined && typeof beat === 'number' && beat <= 0) return 0;
+  if (offsets !== undefined && offsets[0] === 0 && stableTempoContext(map.length)) {
+    if (!(beat > 0)) return 0;
+    let low = 0, high = map.length - 1;
+    while (low < high) {
+      const middle = (low + high + 1) >>> 1;
+      if (map[middle].beat <= beat) low = middle;
+      else high = middle - 1;
+    }
+    // Prefix sums keep the original left-to-right addition order, including
+    // exact tempo boundaries; only the final partial segment is integrated.
+    return offsets[low] + integral(map[low], map[low + 1], beat - map[low].beat);
+  }
   let seconds = 0;
   for (let index = 0; index < map.length; index++) {
     const point = map[index];
@@ -122,15 +183,27 @@ export function secondsToBeats(seconds: number, tempoMap?: readonly TempoPoint[]
 
 export function tempoBeat(seconds: number, map: readonly Readonly<TempoPoint>[]): number {
   let remaining = seconds;
+  const offsets = tempoOffsets.get(map);
+  if (typeof seconds === 'number' && offsets !== undefined && offsets[0] === 0 && stableTempoContext(map.length)) {
+    const length = map.length;
+    let index = 0;
+    // Preserve successive subtraction; subtracting a prefix changes rounding.
+    for (; index + 1 < length; index++) {
+      const span = offsets[length + index];
+      if (remaining <= span) break;
+      remaining -= span;
+    }
+    const point = map[index];
+    const next = map[index + 1];
+    const beats = (next?.beat ?? MAX_TRANSPORT_BEATS) - point.beat;
+    return inverseTempoAt(point, next, remaining, beats);
+  }
   for (let index = 0; index < map.length; index++) {
     const point = map[index];
     const next = map[index + 1];
     const beats = (next?.beat ?? MAX_TRANSPORT_BEATS) - point.beat;
     const span = integral(point, next, beats);
-    if (remaining <= span || index === map.length - 1) {
-      const rate = slope(point, next);
-      return point.beat + Math.min(beats, rate === 0 ? remaining * point.bpm / 60 : point.bpm * Math.expm1(remaining * rate / 60) / rate);
-    }
+    if (remaining <= span || index === map.length - 1) return inverseTempoAt(point, next, remaining, beats);
     remaining -= span;
   }
   return MAX_TRANSPORT_BEATS;
@@ -138,15 +211,15 @@ export function tempoBeat(seconds: number, map: readonly Readonly<TempoPoint>[])
 
 export function beatToBarBeat(beat: number, signature?: TimeSignature): Readonly<BarBeat> {
   transportNumber(beat, 0, MAX_TRANSPORT_BEATS, 'beat');
-  const meter = normalizeTimeSignature(signature);
+  const meter = signature === undefined ? DEFAULT_TIME_SIGNATURE : normalizeTimeSignature(signature);
   const units = beat * meter.denominator / 4;
   const bar = Math.floor(units / meter.numerator);
   return Object.freeze({ bar: bar + 1, beat: units - bar * meter.numerator + 1 });
 }
 
 export function barBeatToBeat(position: BarBeat, signature?: TimeSignature): number {
-  const meter = normalizeTimeSignature(signature);
-  const data = sequenceOwnData(position, ['bar', 'beat'], ['bar', 'beat'], 'bar/beat');
+  const meter = signature === undefined ? DEFAULT_TIME_SIGNATURE : normalizeTimeSignature(signature);
+  const data = sequenceOwnData(position, BAR_BEAT_FIELDS, BAR_BEAT_FIELDS, 'bar/beat');
   const bar = transportNumber(data.bar, 1, MAX_TRANSPORT_BEATS * 8 + 1, 'bar');
   const beat = transportNumber(data.beat, 1, meter.numerator + 1, 'bar beat');
   if (!Number.isInteger(bar) || beat >= meter.numerator + 1) throw new RangeError('bar must be an integer and beat within its bar');

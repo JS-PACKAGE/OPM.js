@@ -108,6 +108,7 @@ async function browserConsumer(context: AudioContext, destination: AudioNode) {
     stealing: 'quietest', interruption: 'cancel', workletUrl: new URL('/opm/worklet/processor.js', location.href) });
   opm.loadVoice('custom', complete);
   opm.replaceVoiceBank([{ ...brass, name: 'custom' }]);
+  opm.replaceVoiceBank(Object.freeze([...bank.values()]));
   const bankJSON: string = opm.exportVoiceBank();
   const removed: boolean = opm.removeVoice('unused');
   void [bankJSON, removed];

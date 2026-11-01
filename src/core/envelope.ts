@@ -22,15 +22,15 @@ export function prepareEnvelope(a: number, d: number, s: number, r: number, gate
   const sustainDB = s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(s));
   const decayEnd = a + d;
   const releaseDB = heldDB(gate, a, d, sustainDB, decayEnd, sr);
+  // The conditional spread defines own data; assigning `sr` afterwards could reach an inherited setter.
   const envelope: PreparedEnvelope = { a, d, s, r, sustainDB, sustainGain: s === 0 ? 0 : amplitude(sustainDB), decayEnd, releaseEnd: gate + r,
-    releaseDB, releaseSpanDB: FLOOR_DB - releaseDB };
-  if (sr > 0) envelope.sr = sr;
+    releaseDB, releaseSpanDB: FLOOR_DB - releaseDB, ...(sr > 0 ? { sr } : {}) };
   return envelope;
 }
 
 export function preparedEnvelopeAt(time: number, gate: number, envelope: PreparedEnvelope): number {
   const { a, d, s, r, sustainDB, decayEnd, releaseEnd, releaseDB, releaseSpanDB } = envelope;
-  const sr = envelope.sr ?? 0;
+  const sr = Object.hasOwn(envelope, 'sr') ? envelope.sr! : 0;
   if (time >= gate) {
     if (r === 0 || time >= releaseEnd || gate === 0 || s === 0 && gate >= decayEnd || sr > 0 && releaseDB <= FLOOR_DB) return 0;
     return amplitude(releaseDB + releaseSpanDB * ((time - gate) / r));
@@ -46,7 +46,7 @@ export function preparedEnvelopeAt(time: number, gate: number, envelope: Prepare
 export function envelopeAt(time: number, gate: number, adsr: ADSR): number {
   if (!Number.isFinite(time) || !Number.isFinite(gate) || time < 0 || gate < 0) return 0;
   const { a, d, s, r } = adsr;
-  const sr = adsr.sr ?? 0;
+  const sr = Object.hasOwn(adsr, 'sr') ? adsr.sr! : 0;
   if (!Number.isFinite(a) || !Number.isFinite(d) || !Number.isFinite(s) || !Number.isFinite(r) || !Number.isFinite(sr) ||
       a < 0 || d < 0 || r < 0 || s < 0 || s > 1 || sr < 0) return 0;
   return preparedEnvelopeAt(time, gate, prepareEnvelope(a, d, s, r, gate, sr));

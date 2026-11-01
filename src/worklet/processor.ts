@@ -105,16 +105,18 @@ function processorSettings(options: AudioWorkletNodeOptions): [number, SynthOpti
 }
 
 class OPMProcessor extends AudioWorkletProcessor {
-  declare synth: Synth | null;
-  declare events: ScheduledEvent[];
-  declare notes: Map<number, TrackedNote>;
-  declare patches: Map<number, PreparedVoice>;
-  declare errorCount: number;
-  declare rejectedNotes: number;
-  declare closed: boolean;
-  declare dispatchFrame: number;
-  declare renderFrameBase: number;
-  declare rendering: boolean;
+  // Real fields, not `declare`: they define own slots at construction, so an inherited
+  // accessor on Object.prototype can neither swallow a constructor write nor answer a later read.
+  synth: Synth | null;
+  events: ScheduledEvent[];
+  notes: Map<number, TrackedNote>;
+  patches: Map<number, PreparedVoice>;
+  errorCount: number;
+  rejectedNotes: number;
+  closed: boolean;
+  dispatchFrame: number;
+  renderFrameBase: number;
+  rendering: boolean;
 
   constructor(options: AudioWorkletNodeOptions = {}) {
     super();
@@ -138,8 +140,9 @@ class OPMProcessor extends AudioWorkletProcessor {
   }
 
   noteEvent(id: number, state: NoteState, reason?: string, frame = this.dispatchFrame): void {
-    const message: NoteEvent = { type: 'note', id, state, frame, time: frame / sampleRate };
-    if (reason !== undefined) message.reason = reason;
+    // Optional fields join through a spread: assignment could reach an inherited setter.
+    const message: NoteEvent = { type: 'note', id, state, frame, time: frame / sampleRate,
+      ...(reason === undefined ? {} : { reason }) };
     this.send(message);
   }
 
@@ -152,10 +155,10 @@ class OPMProcessor extends AudioWorkletProcessor {
     const message: CommandEvent = {
       type: 'command', command: COMMAND_TYPES[data.type] as CommandName, state,
       frame: this.dispatchFrame, time: this.dispatchFrame / sampleRate,
+      ...(validId(data.commandId) ? { commandId: data.commandId } : {}),
+      ...('id' in data && validId(data.id) ? { id: data.id } : {}),
+      ...(reason === undefined ? {} : { reason }),
     };
-    if (validId(data.commandId)) message.commandId = data.commandId;
-    if ('id' in data && validId(data.id)) message.id = data.id;
-    if (reason !== undefined) message.reason = reason;
     this.send(message);
   }
 
@@ -164,8 +167,8 @@ class OPMProcessor extends AudioWorkletProcessor {
     for (const id of this.notes.keys()) this.noteEvent(id, 'cancelled', reason);
     this.notes.clear();
     this.synth!.panic();
-    const reset: ResetEvent = { type: 'reset', reason, frame: this.dispatchFrame, time: this.dispatchFrame / sampleRate };
-    if (validId(commandId)) reset.commandId = commandId;
+    const reset: ResetEvent = { type: 'reset', reason, frame: this.dispatchFrame, time: this.dispatchFrame / sampleRate,
+      ...(validId(commandId) ? { commandId } : {}) };
     this.send(reset);
   }
 

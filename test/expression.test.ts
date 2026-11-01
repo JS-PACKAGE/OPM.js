@@ -267,6 +267,37 @@ test('controls reject malformed boundaries without evaluating accessors or chang
   assert.equal(single.updateNote(2, { expression: 0 }), true);
 });
 
+test('reapplying immutable controls reanchors current ramps and envelopes for each note and sample rate', () => {
+  const adsr = { a: 0.003, d: 0.005, s: 0.7, r: 0.03, sr: 0.3 };
+  const controls = validateNoteControls({ expression: 0, pan: 0.5, pitch: 3, glide: 0.02, ramp: 0.04,
+    operatorLevels: [0.6, 1, 1, 1],
+    operatorADSR: [adsr, adsr, adsr, adsr] });
+  const patch = prepareVoice(tone());
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    for (const rate of [16000, 48000]) for (const note of [48.25, 72.25]) {
+      const synth = new Synth(rate, 1, { quality }), reference = new Synth(rate, 1, { quality });
+      const id = synth.noteOn(patch, note), referenceId = reference.noteOn(patch, note);
+      const apply = (input: NoteControls) => {
+        assert.equal(synth.updateNote(id, input), true);
+        assert.equal(reference.updateNote(referenceId, structuredClone(input)), true);
+      };
+      const compare = (frames: number) => {
+        const result = audio(synth, frames);
+        assert.deepEqual(result, audio(reference, frames));
+        return result;
+      };
+      apply(controls);
+      compare(Math.ceil(rate * 0.05) + DECIMATOR_SETTLE_FRAMES);
+      apply({ expression: 1, ramp: 0.02 });
+      compare(Math.ceil(rate * 0.007));
+      apply(controls);
+      const restarted = compare(Math.ceil(rate * 0.006));
+      assert.ok(rms(restarted.left) + rms(restarted.right) > 0.002, 'reapplied fade starts from the current audible expression');
+      compare(Math.ceil(rate * 0.05) + DECIMATOR_SETTLE_FRAMES);
+    }
+  }
+});
+
 test('terminal callback replacements first render on the next frame and cannot replenish one-frame work', () => {
   for (const corrupt of [false, true]) {
     const patch = tone();

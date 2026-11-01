@@ -29,7 +29,7 @@ test('WAV authenticates native channels and ignores shadowed length accessors', 
 });
 
 test('WAV optional and required fields never use inherited values or getters', () => {
-  const keys = ['left', 'right', 'sampleRate'];
+  const keys = ['left', 'right', 'sampleRate', 'format', 'dither'];
   const originals = new Map(keys.map(key => [key, Object.getOwnPropertyDescriptor(Object.prototype, key)]));
   let reads = 0;
   let wav: Uint8Array | undefined;

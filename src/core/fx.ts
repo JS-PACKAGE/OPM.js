@@ -1,4 +1,4 @@
-import { MAX_RENDER_SAMPLES } from './sequence.js';
+import { MAX_RENDER_SAMPLES } from './limits.js';
 
 export interface ChorusOptions { rate: number; depth: number; mix: number; feedback?: number; voices?: number }
 export interface ReverbOptions { size: number; damping: number; mix: number; preDelay?: number; width?: number }
@@ -31,28 +31,32 @@ function bounded(value: unknown, min: number, max: number, label: string): numbe
 }
 export function normalizeEffectsOptions(input: StereoEffectsOptions = {}): Readonly<StereoEffectsOptions> {
   const data = effectsData(input, ['chorus', 'reverb', 'order'], 'effects');
-  const result: StereoEffectsOptions = {};
+  // Locals plus one literal define own data; assigning onto `{}` could reach an inherited setter.
+  let chorus: StereoEffectsOptions['chorus'];
+  let reverb: StereoEffectsOptions['reverb'];
   if (Object.hasOwn(data, 'chorus')) {
     const c = effectsData(data.chorus, ['rate', 'depth', 'mix', 'feedback', 'voices'], 'chorus');
     const voices = Object.hasOwn(c, 'voices') ? bounded(c.voices, 1, 4, 'voices') : 2;
     if (!Number.isInteger(voices)) throw new RangeError('voices must be an integer in 1..4');
-    result.chorus = Object.freeze({ rate: bounded(c.rate, .05, 10, 'rate'), depth: bounded(c.depth, 0, 1, 'depth'), mix: bounded(c.mix, 0, 1, 'mix'), feedback: Object.hasOwn(c, 'feedback') ? bounded(c.feedback, 0, .7, 'feedback') : 0, voices });
+    chorus = Object.freeze({ rate: bounded(c.rate, .05, 10, 'rate'), depth: bounded(c.depth, 0, 1, 'depth'), mix: bounded(c.mix, 0, 1, 'mix'), feedback: Object.hasOwn(c, 'feedback') ? bounded(c.feedback, 0, .7, 'feedback') : 0, voices });
   }
   if (Object.hasOwn(data, 'reverb')) {
     const r = effectsData(data.reverb, ['size', 'damping', 'mix', 'preDelay', 'width'], 'reverb');
-    result.reverb = Object.freeze({ size: bounded(r.size, 0, 1, 'size'), damping: bounded(r.damping, 0, 1, 'damping'), mix: bounded(r.mix, 0, 1, 'mix'), preDelay: Object.hasOwn(r, 'preDelay') ? bounded(r.preDelay, 0, .1, 'preDelay') : 0, width: Object.hasOwn(r, 'width') ? bounded(r.width, 0, 1, 'width') : 1 });
+    reverb = Object.freeze({ size: bounded(r.size, 0, 1, 'size'), damping: bounded(r.damping, 0, 1, 'damping'), mix: bounded(r.mix, 0, 1, 'mix'), preDelay: Object.hasOwn(r, 'preDelay') ? bounded(r.preDelay, 0, .1, 'preDelay') : 0, width: Object.hasOwn(r, 'width') ? bounded(r.width, 0, 1, 'width') : 1 });
   }
-  result.order = Object.hasOwn(data, 'order') ? data.order as StereoEffectsOptions['order'] : 'chorus-reverb';
-  if (result.order !== 'chorus-reverb' && result.order !== 'reverb-chorus') throw new TypeError('Invalid effects order');
-  return Object.freeze(result);
+  const order = Object.hasOwn(data, 'order') ? data.order as StereoEffectsOptions['order'] : 'chorus-reverb';
+  if (order !== 'chorus-reverb' && order !== 'reverb-chorus') throw new TypeError('Invalid effects order');
+  return Object.freeze({ ...(chorus === undefined ? {} : { chorus }), ...(reverb === undefined ? {} : { reverb }), order });
 }
 const typed = Object.getPrototypeOf(Float32Array.prototype) as object;
 const kind = Object.getOwnPropertyDescriptor(typed, Symbol.toStringTag)!.get!;
 const size = Object.getOwnPropertyDescriptor(typed, 'length')!.get!;
 function frames(left: Float32Array, right: Float32Array, offset: number, length?: number): number {
   if (kind.call(left) !== 'Float32Array' || kind.call(right) !== 'Float32Array') throw new RangeError('effects require native Float32Arrays');
+  // Reject before deriving the default count: subtraction would coerce objects.
+  if (!Number.isSafeInteger(offset) || offset < 0) throw new RangeError('Invalid effects buffer range');
   const count = length === undefined ? size.call(left) - offset : length;
-  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(count) || count < 0 || offset + count > size.call(left) || offset + count > size.call(right)) throw new RangeError('Invalid effects buffer range');
+  if (!Number.isSafeInteger(count) || count < 0 || offset + count > size.call(left) || offset + count > size.call(right)) throw new RangeError('Invalid effects buffer range');
   return count;
 }
 function clean(value: number): number { return !Number.isFinite(value) || Math.abs(value) < 1e-20 ? 0 : Math.max(-1e6, Math.min(1e6, value)); }
@@ -62,9 +66,15 @@ class Delay {
   constructor(length: number) { this.data = new Float64Array(length); }
   read(delay: number): number {
     let index = this.position - delay;
-    if (index < 0) index += this.data.length;
-    const base = Math.floor(index), fraction = index - base;
-    return this.data[base]! * (1 - fraction) + this.data[(base + 1) % this.data.length]! * fraction;
+    if (index < 0) {
+      index += this.data.length;
+      // A sub-ulp negative offset can round up to the exclusive endpoint.
+      if (index === this.data.length) index = 0;
+    }
+    // Admitted rings have at most 19,202 cells; wrapped nonnegative indices fit Int32.
+    const base = index | 0, fraction = index - base;
+    // Admitted delays stay inside the ring; only the following tap can wrap.
+    return this.data[base]! * (1 - fraction) + this.data[base + 1 === this.data.length ? 0 : base + 1]! * fraction;
   }
   push(value: number): void { this.data[this.position] = clean(value); if (++this.position === this.data.length) this.position = 0; }
   reset(): void { this.data.fill(0); this.position = 0; }
@@ -74,8 +84,8 @@ const COMBS = [.0297, .0371, .0411, .0437];
 const DIFFUSERS = [.0053, .0017];
 class Engine implements StereoEffects {
   private snapshot: Readonly<StereoEffectsOptions>;
-  private readonly current = new Float64Array(22);
-  private readonly target = new Float64Array(22);
+  private readonly current = new Float64Array(21);
+  private readonly target = new Float64Array(21);
   private readonly chorus: Delay[];
   private readonly pre: Delay[];
   private readonly combs: Delay[];
@@ -89,8 +99,8 @@ class Engine implements StereoEffects {
   private orderGain = 1;
   private tailBound = 0;
   private readonly ramp: number;
-  constructor(private readonly rate: number, options: StereoEffectsOptions) {
-    this.snapshot = normalizeEffectsOptions(options);
+  constructor(private readonly rate: number, options: Readonly<StereoEffectsOptions>) {
+    this.snapshot = options;
     this.order = this.snapshot.order;
     this.ramp = Math.ceil(rate * .02);
     this.chorus = [new Delay(Math.ceil(rate * .02) + 2), new Delay(Math.ceil(rate * .02) + 2)];
@@ -105,11 +115,14 @@ class Engine implements StereoEffects {
   get params(): Readonly<StereoEffectsOptions> { return this.snapshot; }
   get tailSeconds(): number { return this.tailBound; }
   private setTargets(): void {
-    const c = this.snapshot.chorus, r = this.snapshot.reverb, t = this.target;
+    // Own reads: an omitted chorus/reverb must not fall through to Object.prototype.
+    const c = Object.hasOwn(this.snapshot, 'chorus') ? this.snapshot.chorus : undefined;
+    const r = Object.hasOwn(this.snapshot, 'reverb') ? this.snapshot.reverb : undefined;
+    const t = this.target;
     t[0] = c?.rate ?? 1; t[1] = c?.depth ?? 0; t[2] = c?.mix ?? 0; t[3] = c?.feedback ?? 0;
     for (let i = 0; i < 4; i++) t[4 + i] = i < (c?.voices ?? 2) ? 1 : 0;
     t[8] = r?.size ?? 0; t[9] = r?.damping ?? 0; t[10] = r?.preDelay ?? 0; t[11] = r?.mix ?? 0; t[12] = r?.width ?? 1;
-    for (let i = 0; i < 8; i++) t[14 + i] = Math.exp(-Math.log(1000) * this.combs[i]!.data.length / this.rate / (.2 + 3 * t[8]!));
+    for (let i = 0; i < 8; i++) t[13 + i] = Math.exp(-Math.log(1000) * this.combs[i]!.data.length / this.rate / (.2 + 3 * t[8]!));
     const tail = (c && c.mix > 0 ? .02 * (1 + Math.log(1e-6) / Math.log(Math.max(.001, c.feedback ?? 0))) : 0) + (r && r.mix > 0 ? .3 + 3 * (.2 + 3 * r.size) : 0);
     this.tailBound = Math.max(this.tailBound, tail);
   }
@@ -121,29 +134,35 @@ class Engine implements StereoEffects {
   }
   private chorusFrame(): void {
     const p = this.current, a = this.left, b = this.right;
-    // Voices sit pi/2 apart and the right tap leads by pi/2, so with s = sin(phase),
-    // c = cos(phase) the eight sines are left [s, c, -s, -c] and right [c, -s, -c, s].
-    // Voices whose weight is exactly 0 contribute exactly 0 and skip their reads.
-    const s = Math.sin(this.phase), c = Math.cos(this.phase);
-    const centre = this.rate * .01, swing = this.rate * .008 * p[1]!, left = this.chorus[0]!, right = this.chorus[1]!;
-    let l = 0, r = 0, weights = 0;
-    for (let voice = 0; voice < 4; voice++) {
-      const weight = p[4 + voice]!;
-      if (weight === 0) continue;
-      weights += weight;
-      const sine = voice === 0 ? s : voice === 1 ? c : voice === 2 ? -s : -c;
-      const cosine = voice === 0 ? c : voice === 1 ? -s : voice === 2 ? -c : s;
-      l += weight * left.read(centre + swing * sine);
-      r += weight * right.read(centre + swing * cosine);
+    const mix = p[2]!, feedback = p[3]!;
+    let l = 0, r = 0;
+    // Reads have no state; ring writes and phase still warm future wet/feedback updates.
+    if (mix !== 0 || feedback !== 0) {
+      // Voices sit pi/2 apart and the right tap leads by pi/2, so with s = sin(phase),
+      // c = cos(phase) the eight sines are left [s, c, -s, -c] and right [c, -s, -c, s].
+      // Voices whose weight is exactly 0 contribute exactly 0 and skip their reads.
+      const centre = this.rate * .01, swing = this.rate * .008 * p[1]!, left = this.chorus[0]!, right = this.chorus[1]!;
+      // Zero swing still warms delay/feedback history and advances phase; only trig is unnecessary.
+      const s = swing === 0 ? 0 : Math.sin(this.phase), c = swing === 0 ? 0 : Math.cos(this.phase);
+      let weights = 0;
+      for (let voice = 0; voice < 4; voice++) {
+        const weight = p[4 + voice]!;
+        if (weight === 0) continue;
+        weights += weight;
+        const sine = voice === 0 ? s : voice === 1 ? c : voice === 2 ? -s : -c;
+        const cosine = voice === 0 ? c : voice === 1 ? -s : voice === 2 ? -c : s;
+        l += weight * left.read(centre + swing * sine);
+        r += weight * right.read(centre + swing * cosine);
+      }
+      l /= Math.max(1, weights); r /= Math.max(1, weights);
     }
-    l /= Math.max(1, weights); r /= Math.max(1, weights);
-    this.chorus[0]!.push(a + p[3]! * l); this.chorus[1]!.push(b + p[3]! * r);
+    this.chorus[0]!.push(a + feedback * l); this.chorus[1]!.push(b + feedback * r);
     this.phase += 2 * Math.PI * p[0]! / this.rate; if (this.phase >= 2 * Math.PI) this.phase -= 2 * Math.PI;
-    const mix = p[2]!;
-    if (mix !== 0) { this.left = a * (1 - mix) + .7 * (1 - p[3]!) * l * mix; this.right = b * (1 - mix) + .7 * (1 - p[3]!) * r * mix; }
+    if (mix !== 0) { this.left = a * (1 - mix) + .7 * (1 - feedback) * l * mix; this.right = b * (1 - mix) + .7 * (1 - feedback) * r * mix; }
   }
   private reverbFrame(): void {
     const p = this.current, a = this.left, b = this.right;
+    const damping = p[9]! * .9;
     let wetL = 0, wetR = 0;
     for (let channel = 0; channel < 2; channel++) {
       const source = channel === 0 ? a : b, pre = this.pre[channel]!;
@@ -152,9 +171,8 @@ class Engine implements StereoEffects {
       for (let i = 0; i < 4; i++) {
         const index = channel * 4 + i, comb = this.combs[index]!;
         const out = comb.data[comb.position]!;
-        const damping = p[9]! * .9;
         this.low[index] = clean(out * (1 - damping) + this.low[index]! * damping);
-        const gain = p[14 + index]!;
+        const gain = p[13 + index]!;
         comb.push((1 - gain) * delayed + gain * this.low[index]!); sum += out * .25;
       }
       for (let i = 0; i < 2; i++) {
@@ -169,7 +187,12 @@ class Engine implements StereoEffects {
   process(left: Float32Array, right: Float32Array, offset = 0, length?: number): void {
     const count = frames(left, right, offset, length);
     for (let frame = offset; frame < offset + count; frame++) {
-      if (this.remaining > 0) { for (let i = 0; i < 22; i++) this.current[i] = this.remaining === 1 ? this.target[i]! : this.current[i]! + (this.target[i]! - this.current[i]!) / this.remaining; this.remaining--; }
+      if (this.remaining > 0) {
+        // Keep exact target bits at the endpoint, rather than one last arithmetic step.
+        if (this.remaining === 1) this.current.set(this.target);
+        else for (let i = 0; i < 21; i++) this.current[i] = this.current[i]! + (this.target[i]! - this.current[i]!) / this.remaining;
+        this.remaining--;
+      }
       if (this.order !== this.snapshot.order) { this.orderGain = Math.max(0, this.orderGain - 1 / this.ramp); if (this.orderGain === 0) this.order = this.snapshot.order; }
       else this.orderGain = Math.min(1, this.orderGain + 1 / this.ramp);
       const a = left[frame]!, b = right[frame]!;
@@ -183,15 +206,29 @@ class Engine implements StereoEffects {
     }
   }
 }
-export function createStereoEffects(sampleRate: number, options: StereoEffectsOptions = {}): StereoEffects {
+function admittedEffects(sampleRate: number, options: StereoEffectsOptions): Readonly<StereoEffectsOptions> {
   if (!Number.isInteger(sampleRate) || sampleRate < 8000 || sampleRate > 192000) throw new RangeError('sampleRate must be an integer in 8000..192000');
-  return new Engine(sampleRate, options);
+  return normalizeEffectsOptions(options);
+}
+export function createStereoEffects(sampleRate: number, options: StereoEffectsOptions = {}): StereoEffects {
+  return new Engine(sampleRate, admittedEffects(sampleRate, options));
 }
 export function applyEffects(left: Float32Array, right: Float32Array, sampleRate: number, params: StereoEffectsOptions): { left: Float32Array; right: Float32Array } {
   const count = frames(left, right, 0);
   if (size.call(right) !== count) throw new RangeError('Effects stereo lengths must match');
-  const effects = createStereoEffects(sampleRate, params), length = count + Math.ceil(effects.tailSeconds * sampleRate);
+  const snapshot = admittedEffects(sampleRate, params);
+  const chorus = Object.hasOwn(snapshot, 'chorus') ? snapshot.chorus : undefined;
+  const reverb = Object.hasOwn(snapshot, 'reverb') ? snapshot.reverb : undefined;
+  const effects = ((chorus?.mix ?? 0) > 0 || (reverb?.mix ?? 0) > 0) ? new Engine(sampleRate, snapshot) : undefined;
+  const length = count + (effects === undefined ? 0 : Math.ceil(effects.tailSeconds * sampleRate));
   if (!Number.isSafeInteger(length) || length > MAX_RENDER_SAMPLES) throw new RangeError('Effects render exceeds 4,000,000-frame budget');
-  const l = new Float32Array(length), r = new Float32Array(length); l.set(left); r.set(right); effects.process(l, r);
+  const l = new Float32Array(length), r = new Float32Array(length); l.set(left); r.set(right);
+  if (effects === undefined) {
+    // This one-shot dry result cannot use warmed delay history in a later update.
+    for (let i = 0; i < length; i++) {
+      if (!Number.isFinite(l[i])) l[i] = 0;
+      if (!Number.isFinite(r[i])) r[i] = 0;
+    }
+  } else effects.process(l, r);
   return { left: l, right: r };
 }

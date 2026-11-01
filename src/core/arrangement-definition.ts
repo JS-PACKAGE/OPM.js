@@ -1,6 +1,6 @@
 import { MAX_LONG_SEQUENCE_EVENTS, MAX_LONG_SEQUENCE_SECONDS, prepareLongSequence, sequenceOwnData } from './sequence.js';
 import type { BeatSequenceEvent, SequenceEvent, SequenceSnapshot, SequenceVoices } from './sequence.js';
-import { validateVoicePriority } from './synth.js';
+import { ownControl, validateVoicePriority } from './synth.js';
 import {
   MAX_TRANSPORT_BEATS, normalizeTempoMap, normalizeTimeSignature, tempoSeconds, transportArray, transportNumber,
 } from './transport.js';
@@ -36,6 +36,13 @@ export const MAX_ARRANGEMENT_LAYERS = 16;
 export const MAX_ARRANGEMENT_SECTIONS = 32;
 export const MAX_ARRANGEMENT_LAYER_LENGTH = 256;
 
+// Share only field names, never beat data or validation results.
+const BEAT_NOTE_FIELDS = ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority'] as const;
+const BEAT_NOTE_REQUIRED_FIELDS = ['type', 'id', 'beat', 'duration', 'note'] as const;
+const BEAT_CONTROL_FIELDS = ['type', 'id', 'beat', 'controls'] as const;
+const BEAT_STOP_FIELDS = ['type', 'id', 'beat'] as const;
+const NO_BEAT_FIELDS = [] as const;
+
 export function arrangementName(value: unknown, label: string): string {
   if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(value)) {
     throw new TypeError(`${label} must match [A-Za-z0-9_-]{1,64}`);
@@ -49,21 +56,23 @@ export function prepareBeatSequence(events: readonly BeatSequenceEvent[], voices
 } {
   const input = transportArray(events, MAX_LONG_SEQUENCE_EVENTS, 'beat events').map(event => {
     const type = event !== null && typeof event === 'object' ? Object.getOwnPropertyDescriptor(event, 'type')?.value : undefined;
-    const keys = type === 'note' ? ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
-      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : type === 'stop' ? ['type', 'id', 'beat'] : [];
-    const data = sequenceOwnData(event, keys, type === 'note' ? ['type', 'id', 'beat', 'duration', 'note']
-      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : ['type', 'id', 'beat'], 'beat event');
+    const keys = type === 'note' ? BEAT_NOTE_FIELDS
+      : type === 'control' ? BEAT_CONTROL_FIELDS : type === 'stop' ? BEAT_STOP_FIELDS : NO_BEAT_FIELDS;
+    const data = sequenceOwnData(event, keys, type === 'note' ? BEAT_NOTE_REQUIRED_FIELDS
+      : type === 'control' ? BEAT_CONTROL_FIELDS : BEAT_STOP_FIELDS, 'beat event');
     const beat = transportNumber(data.beat, 0, MAX_TRANSPORT_BEATS, 'event beat');
     if (type === 'note') transportNumber(data.duration, 0, MAX_TRANSPORT_BEATS - beat, 'note duration');
     const { beat: _beat, ...rest } = data;
     return { ...rest, time: beat } as unknown as SequenceEvent;
   });
-  const score = prepareLongSequence(input, voices === undefined ? {} : { voices });
+  const score = prepareLongSequence(input, voices === undefined ? undefined : { voices });
   const snapshot = score.events.map((event, index): BeatSequenceEvent => {
     const { time, ...rest } = event;
     if (event.type === 'note') {
       const original = input[index];
-      const voice = original.type === 'note' ? original.voice ?? 'brass' : event.voice;
+      // Own read: a voice inherited from Object.prototype must not replace the validated default.
+      const named = original.type === 'note' && Object.hasOwn(original, 'voice') ? original.voice : undefined;
+      const voice = original.type === 'note' ? named ?? 'brass' : event.voice;
       // Keep registry names stable; inline patches come only from the detached validator snapshot.
       return Object.freeze({ ...rest, beat: time, voice: typeof voice === 'string' ? voice : event.voice }) as BeatSequenceEvent;
     }
@@ -94,9 +103,8 @@ export function prepareArrangementDefinition(input: unknown, voices?: SequenceVo
   const tempoMap = normalizeTempoMap(data.tempoMap as readonly TempoPoint[] | undefined, data.bpm === undefined ? 120 : data.bpm as number);
   const timeSignature = normalizeTimeSignature(data.timeSignature as TimeSignature | undefined);
   const names = new Set<string>();
-  const scores: SequenceSnapshot[] = [];
   let totalEvents = 0;
-  const layers = transportArray(data.layers, MAX_ARRANGEMENT_LAYERS, 'layers').map(raw => {
+  const entries = transportArray(data.layers, MAX_ARRANGEMENT_LAYERS, 'layers').map(raw => {
     const layer = sequenceOwnData(raw, ['name', 'length', 'events', 'voicePriority', 'gain'], ['name', 'length', 'events'], 'arrangement layer');
     const name = arrangementName(layer.name, 'layer name');
     if (names.has(name)) throw new TypeError('Duplicate arrangement layer');
@@ -109,14 +117,15 @@ export function prepareArrangementDefinition(input: unknown, voices?: SequenceVo
     if (totalEvents > MAX_LONG_SEQUENCE_EVENTS) throw new RangeError('Arrangement exceeds its event budget');
     for (const event of prepared.events) {
       if (event.type === 'note' && event.beat >= length) throw new RangeError('Layer notes must start inside the loop length');
-      if (event.type === 'control' && event.controls.gain !== undefined) {
+      if (event.type === 'control' && ownControl(event.controls, 'gain') !== undefined) {
         throw new TypeError('Arrangement reserves note gain for the layer; use expression in layer events');
       }
     }
     validateBeatHorizon(prepared.events, tempoMap);
-    scores.push(prepared.score);
-    return Object.freeze({ name, length, events: prepared.events, voicePriority, gain });
+    return { score: prepared.score, layer: Object.freeze({ name, length, events: prepared.events, voicePriority, gain }) };
   });
+  // Native map defines own elements; push could reach inherited indexed accessors.
+  const layers = entries.map(entry => entry.layer);
   if (layers.length === 0) throw new RangeError('An arrangement requires at least one layer');
   const sectionNames = new Set<string>();
   const sections = transportArray(data.sections, MAX_ARRANGEMENT_SECTIONS, 'sections').map(raw => {
@@ -135,5 +144,5 @@ export function prepareArrangementDefinition(input: unknown, voices?: SequenceVo
   const initialSection = arrangementName(data.initialSection, 'initialSection');
   if (!sectionNames.has(initialSection)) throw new RangeError('Unknown initial section');
   return { definition: Object.freeze({ layers: Object.freeze(layers), sections: Object.freeze(sections), initialSection, tempoMap, timeSignature }),
-    scores: Object.freeze(scores) };
+    scores: Object.freeze(entries.map(entry => entry.score)) };
 }

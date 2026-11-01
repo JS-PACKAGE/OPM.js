@@ -261,17 +261,20 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (!ended) throw new RangeError('MIDI track is missing end-of-track');
   }
   if (reader.offset !== reader.end) throw new RangeError('MIDI file has trailing bytes or undeclared tracks');
-  wire.sort((a, b) => a.tick - b.tick || a.track - b.track || a.order - b.order);
+  // A single track already has nondecreasing ticks and increasing wire order.
+  if (trackCount > 1) wire.sort((a, b) => a.tick - b.tick || a.track - b.track || a.order - b.order);
   const events: BeatSequenceEvent[] = [];
   const queues = new Map<number, NoteQueue>();
   const live = new Set<HeldNote>();
   const sustained = Array.from({ length: 16 }, () => new Set<HeldNote>());
   const pedals = new Array<boolean>(16).fill(false);
-  const owned = Array.from({ length: 16 }, () => new Set<HeldNote>());
+  // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
+  const owned = preserve ? Array.from({ length: 16 }, () => new Set<HeldNote>()) : [];
   const released = new Array<boolean>(16).fill(false);
-  const states = Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 }));
+  // Initial bend-range validation is unconditional, even when these snapshots are skipped.
+  const states = preserve ? Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 })) : [];
   const currentPrograms = new Uint8Array(16);
-  const rpn = Array.from({ length: 16 }, () => midiRpnState(range));
+  const rpn = preserve ? Array.from({ length: 16 }, () => midiRpnState(range)) : [];
   function append(event: BeatSequenceEvent): void {
     if (events.length >= MAX_LONG_SEQUENCE_EVENTS) throw new RangeError('MIDI generated beat events exceed event budget');
     events.push(event);
@@ -285,7 +288,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (tick <= held.tick) throw new RangeError('MIDI note has a zero-length gate');
     held.event.duration = (tick - held.tick) / ppqn;
     live.delete(held);
-    owned[held.channel].delete(held);
+    if (preserve) owned[held.channel].delete(held);
     released[held.channel] = true;
   }
   for (const item of wire) {
@@ -314,6 +317,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     } else if (item.kind === 'expression') {
       const state = states[item.channel];
       let controls: NoteControls;
+      // Set by the modulation branch itself, so no property read can disagree with it.
+      let isModulation = false;
       if (item.command === 0xa0) {
         // Like live MIDI, poly pressure owns the newest still-pressed key, not every repeated pitch.
         const queue = queues.get(item.channel * 128 + item.a);
@@ -333,6 +338,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       } else if (item.command === 0xd0 || item.a === 1) {
         state.modulation = 1 + (item.command === 0xd0 ? item.a : item.b) / 127;
         controls = { modulation: state.modulation };
+        isModulation = true;
       } else if (item.a === 10) {
         state.pan = Math.max(-1, (item.b - 64) / 63);
         controls = { pan: state.pan };
@@ -341,7 +347,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         controls = { expression: state.volume * state.expression };
       }
       for (const held of owned[item.channel]) append({ type: 'control', id: held.event.id, beat,
-        controls: controls.modulation === undefined ? { ...controls } : { modulation: held.modulation ?? controls.modulation },
+        controls: isModulation ? { modulation: held.modulation ?? controls.modulation } : { ...controls },
       });
     } else if (item.kind === 'sustain') {
       pedals[item.channel] = item.b >= 64;
@@ -361,8 +367,9 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           pitch: state.pitch, expression: state.volume * state.expression, pan: state.pan, modulation: state.modulation,
         } });
       }
-      const held = { event, tick: item.tick, channel: item.channel };
-      owned[item.channel].add(held);
+      // Own `modulation` slot: the later poly-pressure assignment must not reach an inherited setter.
+      const held: HeldNote = { event, tick: item.tick, channel: item.channel, modulation: undefined };
+      if (preserve) owned[item.channel].add(held);
       live.add(held);
       const key = item.channel * 128 + item.a;
       const queue = queues.get(key);
@@ -399,14 +406,19 @@ interface ExportNote { id: number; start: number; end: number; startBeat: number
 type ExpressiveField = 'pitch' | 'expression' | 'pan' | 'modulation';
 type ExpressiveState = Record<ExpressiveField, number>;
 interface ExportControl { id: number; tick: number; beat: number; index: number; values: Partial<ExpressiveState> }
-interface OutputEvent { tick: number; order: number; index: number; bytes: readonly number[] }
+interface OutputEvent { tick: number; order: number; index: number; bytes: readonly number[] | number }
+function threeByteEvent(tick: number, order: number, index: number, status: number, a: number, b: number): OutputEvent {
+  // Keep the common three-byte payload in one integer instead of allocating an array.
+  return { tick, order, index, bytes: (status & 255) | ((a & 255) << 8) | ((b & 255) << 16) };
+}
 function vlqSize(value: number): number {
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_VLQ) throw new RangeError('MIDI delta exceeds four-byte VLQ range');
   return value < 128 ? 1 : value < 16384 ? 2 : value < 2097152 ? 3 : 4;
 }
 function writeVlq(target: Uint8Array, offset: number, value: number): number {
   const size = vlqSize(value);
-  for (let index = size - 1; index >= 0; index--) { target[offset + index] = (value % 128) | (index === size - 1 ? 0 : 128); value = Math.floor(value / 128); }
+  // Validated deltas fit 28 bits; never truncate the cumulative track tick.
+  for (let index = size - 1; index >= 0; index--) { target[offset + index] = (value & 127) | (index === size - 1 ? 0 : 128); value >>>= 7; }
   return offset + size;
 }
 
@@ -417,30 +429,38 @@ function quantizedControls(input: unknown, range: number): Partial<ExpressiveSta
   for (const field of Object.keys(controls)) {
     if (!EXPRESSION_FIELDS.includes(field as ExpressiveField)) throw new RangeError(`MIDI export cannot represent control ${field}`);
   }
-  const result: Partial<ExpressiveState> = {};
-  if (controls.pitch !== undefined) {
-    if (Math.abs(controls.pitch) > range) throw new RangeError('MIDI pitch control exceeds pitchBendRange');
-    result.pitch = range === 0 ? 8192 : 8192 + Math.round(controls.pitch / range * (controls.pitch < 0 ? 8192 : 8191));
+  // Locals plus one literal define own data; assigning onto `{}` could reach an inherited setter.
+  let pitch: number | undefined, expression: number | undefined, pan: number | undefined, modulation: number | undefined;
+  const rawPitch = Object.hasOwn(controls, 'pitch') ? controls.pitch : undefined;
+  const rawExpression = Object.hasOwn(controls, 'expression') ? controls.expression : undefined;
+  const rawPan = Object.hasOwn(controls, 'pan') ? controls.pan : undefined;
+  const rawModulation = Object.hasOwn(controls, 'modulation') ? controls.modulation : undefined;
+  if (rawPitch !== undefined) {
+    if (Math.abs(rawPitch) > range) throw new RangeError('MIDI pitch control exceeds pitchBendRange');
+    pitch = range === 0 ? 8192 : 8192 + Math.round(rawPitch / range * (rawPitch < 0 ? 8192 : 8191));
   }
-  if (controls.expression !== undefined) {
+  if (rawExpression !== undefined) {
     // CC7*CC11 has a product lattice, not one seven-bit expression axis.
-    const target = controls.expression * 16129;
+    const target = rawExpression * 16129;
     let best = 0;
     let error = Infinity;
     for (let volume = 127; volume > 0; volume--) {
       const product = volume * Math.min(127, Math.round(target / volume));
       const difference = Math.abs(target - product);
       if (difference < error) { best = product; error = difference; }
-      if (error === 0) break;
+      // Integer products cannot improve this bound; descending volume preserves ties.
+      if (error <= 0.5) break;
     }
-    result.expression = best;
+    expression = best;
   }
-  if (controls.pan !== undefined) result.pan = Math.max(1, Math.min(127, Math.round(64 + controls.pan * 63)));
-  if (controls.modulation !== undefined) {
-    if (controls.modulation < 1) throw new RangeError('MIDI modulation must be in 1..2');
-    result.modulation = Math.round((controls.modulation - 1) * 127);
+  if (rawPan !== undefined) pan = Math.max(1, Math.min(127, Math.round(64 + rawPan * 63)));
+  if (rawModulation !== undefined) {
+    if (rawModulation < 1) throw new RangeError('MIDI modulation must be in 1..2');
+    modulation = Math.round((rawModulation - 1) * 127);
   }
-  return result;
+  // Null prototype: the export reads omitted fields, which must not fall through to Object.prototype.
+  return Object.setPrototypeOf({ ...(pitch === undefined ? {} : { pitch }), ...(expression === undefined ? {} : { expression }),
+    ...(pan === undefined ? {} : { pan }), ...(modulation === undefined ? {} : { modulation }) }, null);
 }
 
 /** Reconstruct channel state only when every affected score gate agrees. */
@@ -459,22 +479,22 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
   const byId = new Map(notes.map(note => [note.id, note]));
   const pitches = new Map<number, { ids: number[]; head: number }>();
   let count = 0;
-  function emit(channel: number, tick: number, bytes: readonly number[], off = false): void {
+  function emit(channel: number, tick: number, status: number, a: number, b: number, off = false): void {
     if (++count > MAX_MIDI_FILE_EVENTS) throw new RangeError('MIDI export exceeds event budget');
     let track = tracks.get(channel);
     if (!track) { track = []; tracks.set(channel, track); }
-    track.push({ tick, order: off ? 2 : 3, index: count, bytes });
+    track.push(threeByteEvent(tick, off ? 2 : 3, count, status, a, b));
   }
   function setChannel(channel: number, tick: number, field: ExpressiveField, value: number): void {
     const state = states[channel];
     if (state[field] === value) return;
-    if (field === 'pitch') emit(channel, tick, [0xe0 | channel, value & 127, value >> 7]);
+    if (field === 'pitch') emit(channel, tick, 0xe0 | channel, value & 127, value >> 7);
     else if (field === 'expression') {
       let volume = 127;
       while (volume > 1 && (value % volume !== 0 || value / volume > 127)) volume--;
-      emit(channel, tick, [0xb0 | channel, 7, volume]);
-      emit(channel, tick, [0xb0 | channel, 11, value / volume]);
-    } else emit(channel, tick, [0xb0 | channel, field === 'pan' ? 10 : 1, value]);
+      emit(channel, tick, 0xb0 | channel, 7, volume);
+      emit(channel, tick, 0xb0 | channel, 11, value / volume);
+    } else emit(channel, tick, 0xb0 | channel, field === 'pan' ? 10 : 1, value);
     state[field] = value;
     if (field === 'modulation') for (const id of defaults[channel]) active[channel].get(id)!.modulation = value;
   }
@@ -483,7 +503,7 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
     if (owner.modulation === value) return;
     const queue = pitches.get(note.channel * 128 + note.pitch)!;
     if (queue.ids[queue.ids.length - 1] !== note.id) throw new RangeError('MIDI poly pressure cannot address an older repeated-pitch note');
-    emit(note.channel, tick, [0xa0 | note.channel, note.pitch, value]);
+    emit(note.channel, tick, 0xa0 | note.channel, note.pitch, value);
     owner.modulation = value;
     defaults[note.channel].delete(note.id);
   }
@@ -495,7 +515,7 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
       const key = op.off.channel * 128 + op.off.pitch;
       const queue = pitches.get(key)!;
       if (++queue.head === queue.ids.length) pitches.delete(key);
-      emit(op.off.channel, op.tick, [0x80 | op.off.channel, op.off.pitch, 0], true);
+      emit(op.off.channel, op.tick, 0x80 | op.off.channel, op.off.pitch, 0, true);
     } else if (op.note) {
       const note = op.note;
       const desired: ExpressiveState = { pitch: 8192, expression: 16129, pan: note.pan, modulation: 0 };
@@ -512,7 +532,7 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
           throw new RangeError(`MIDI overlapping channel state conflicts for ${field}`);
         }
       }
-      emit(note.channel, op.tick, [0x90 | note.channel, note.pitch, note.velocity]);
+      emit(note.channel, op.tick, 0x90 | note.channel, note.pitch, note.velocity);
       active[note.channel].set(note.id, { note, modulation: states[note.channel].modulation });
       defaults[note.channel].add(note.id);
       const key = note.channel * 128 + note.pitch;
@@ -639,8 +659,8 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
   if (!preserve) for (const note of sorted) {
     let track = musical.get(note.channel);
     if (!track) { track = []; musical.set(note.channel, track); }
-    track.push({ tick: note.start, order: 3, index: note.index, bytes: [0x90 | note.channel, note.pitch, note.velocity] });
-    track.push({ tick: note.end, order: 2, index: note.index, bytes: [0x80 | note.channel, note.pitch, 0] });
+    track.push(threeByteEvent(note.start, 3, note.index, 0x90 | note.channel, note.pitch, note.velocity));
+    track.push(threeByteEvent(note.end, 2, note.index, 0x80 | note.channel, note.pitch, 0));
   }
   let endTick = lastTempoTick;
   for (const note of sorted) endTick = Math.max(endTick, note.end);
@@ -649,13 +669,13 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
   let byteLength = 14;
   const sizes: number[] = [];
   for (const track of tracks) {
-    track.push({ tick: endTick, order: 4, index: 0, bytes: [0xff, 0x2f, 0] });
+    track.push(threeByteEvent(endTick, 4, 0, 0xff, 0x2f, 0));
     track.sort((a, b) => a.tick - b.tick || a.order - b.order || a.index - b.index);
     wireCount += track.length;
     if (wireCount > MAX_MIDI_FILE_EVENTS) throw new RangeError('MIDI export exceeds event budget');
     let tick = 0;
     let size = 0;
-    for (const event of track) { size += vlqSize(event.tick - tick) + event.bytes.length; tick = event.tick; }
+    for (const event of track) { size += vlqSize(event.tick - tick) + (typeof event.bytes === 'number' ? 3 : event.bytes.length); tick = event.tick; }
     sizes.push(size); byteLength += 8 + size;
   }
   if (byteLength > MAX_MIDI_FILE_BYTES) throw new RangeError('MIDI export exceeds byte budget');
@@ -667,7 +687,19 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
   for (let index = 0; index < tracks.length; index++) {
     tag(offset, 'MTrk'); view.setUint32(offset + 4, sizes[index]); offset += 8;
     let tick = 0;
-    for (const event of tracks[index]) { offset = writeVlq(result, offset, event.tick - tick); result.set(event.bytes, offset); offset += event.bytes.length; tick = event.tick; }
+    for (const event of tracks[index]) {
+      offset = writeVlq(result, offset, event.tick - tick);
+      if (typeof event.bytes === 'number') {
+        const message = event.bytes;
+        result[offset++] = message;
+        result[offset++] = message >>> 8;
+        result[offset++] = message >>> 16;
+      } else {
+        result.set(event.bytes, offset);
+        offset += event.bytes.length;
+      }
+      tick = event.tick;
+    }
   }
   return result;
 }

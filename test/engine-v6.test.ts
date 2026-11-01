@@ -96,6 +96,81 @@ test('per-operator LFO targets and interrupted live rate retain integrated phase
   near(result, reference(source));
 });
 
+test('uniform LFO targets preserve depth scaling across live controls and recycled notes', () => {
+  const steps: readonly [number, NoteControls?][] = [
+    [2048],
+    [1024, { lfoRate: 7.25 }],
+    [2048, { amDepth: 0.5, pmDepth: 0, ramp: 0.01 }],
+    [2048, { amDepth: 0, pmDepth: 400, ramp: 0.01 }],
+    [1024, { amDepth: 0.5, pmDepth: 400, modulation: 0, lfoRate: 19.5 }],
+    [1024, { pitch: 3.5, glide: 0.01 }],
+    [2048, { modulation: 1 }],
+    [1024, { amDepth: 0, pmDepth: 0, lfoRate: 0 }],
+    [2048, { amDepth: 0.5, pmDepth: 400 }],
+  ];
+  for (const waveform of ['sine', 'noise'] as const) {
+    const targeted = new Synth(16000, 1, { quality: 'standard' });
+    const scaled = new Synth(16000, 1, { quality: 'standard' });
+    audio(targeted, 57); audio(scaled, 57);
+    for (const [amWeight, pmWeight] of [[0.5, 0.5], [1, 0.5], [0.5, 1], [1, 1], [0, 0]] as const) {
+      const patch = tone();
+      patch.ops.forEach((op, index) => { op.frequency = [400, 600, 900, 1300][index]; op.level = 0.2; });
+      patch.lfo = { rate: 12.5, amDepth: 0, pmDepth: 0, waveform, phase: 0.17, delay: 0.004, sync: 'global',
+        amTargets: tuple(amWeight), pmTargets: tuple(pmWeight) };
+      const globalPatch = structuredClone(patch);
+      delete globalPatch.lfo.amTargets;
+      delete globalPatch.lfo.pmTargets;
+      targeted.noteOn(patch, 69, 1); scaled.noteOn(globalPatch, 69, 1);
+      for (const [frames, controls] of steps) {
+        if (controls) {
+          const globalControls = { ...controls };
+          if (controls.amDepth !== undefined) globalControls.amDepth = controls.amDepth * amWeight;
+          if (controls.pmDepth !== undefined) globalControls.pmDepth = controls.pmDepth * pmWeight;
+          assert.equal(targeted.updateNote(1, controls), true);
+          assert.equal(scaled.updateNote(1, globalControls), true);
+        }
+        // These depths do not clip: uniform weights equal globally scaled depths at each boundary.
+        assert.deepEqual(audio(targeted, frames, 37), audio(scaled, frames, 53), `${waveform}/${amWeight}/${pmWeight}`);
+      }
+      targeted.noteOff(1); scaled.noteOff(1);
+      assert.deepEqual(audio(targeted, 2048, 37), audio(scaled, 2048, 53), `${waveform}/${amWeight}/${pmWeight}/release`);
+      assert.equal(targeted.voices.length, 0);
+      assert.equal(scaled.voices.length, 0);
+    }
+    assert.equal(targeted.errorCount, 0);
+    assert.equal(scaled.errorCount, 0);
+  }
+});
+
+test('reapplying the current LFO rate preserves discontinuous phase and subsequent live edits', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    for (const waveform of ['saw', 'square', 'noise'] as const) for (const sync of ['note', 'global'] as const) {
+      const patch = tone();
+      patch.ops[0].frequency = 1000;
+      patch.lfo = { rate: 5, amDepth: 0.8, pmDepth: 0, phase: 0.25, waveform, sync };
+      const baseline = new Synth(8000, 1, { quality, dcBlock: false });
+      const edited = new Synth(8000, 1, { quality, dcBlock: false });
+      for (const synth of [baseline, edited]) {
+        audio(synth, 57);
+        synth.noteOn(patch, 69, 1);
+        audio(synth, 100);
+      }
+      const label = `${quality}/${waveform}/${sync}`;
+      assert.equal(edited.updateNote(1, { lfoRate: 5 }), true);
+      assert.deepEqual(audio(edited, 700, 37), audio(baseline, 700), `${label}/immediate no-op`);
+      assert.equal(edited.updateNote(1, { lfoRate: 5, expression: 0.6, ramp: 0.01 }), true);
+      assert.equal(baseline.updateNote(1, { expression: 0.6, ramp: 0.01 }), true);
+      assert.deepEqual(audio(edited, 3300, 113), audio(baseline, 3300), `${label}/ramped no-op`);
+      for (const synth of [baseline, edited]) assert.equal(synth.updateNote(1, { lfoRate: 8, ramp: 0.01 }), true);
+      assert.deepEqual(audio(edited, 2000, 19), audio(baseline, 2000), `${label}/subsequent rate change`);
+      for (const synth of [baseline, edited]) {
+        assert.equal(synth.currentFrame, 6157);
+        assert.equal(synth.errorCount, 0);
+      }
+    }
+  }
+});
+
 test('live ratios, interrupted fixed Hz ramps and restoring ratio mode preserve phase against Fourier reference', () => {
   const synth = new Synth(16000);
   const frames = 2000, source = new Float64Array(frames * 4), result = new Float32Array(frames);

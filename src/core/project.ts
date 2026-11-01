@@ -95,7 +95,8 @@ function boundedJSON(project: ScoreProject | ArrangementProject, label = 'Score'
 
 function projectInput(source: string | object, label: string): unknown {
   if (typeof source !== 'string') return source;
-  if (source.length > MAX_SCORE_PROJECT_BYTES || new TextEncoder().encode(source).byteLength > MAX_SCORE_PROJECT_BYTES) {
+  // Three UTF-8 bytes per UTF-16 code unit is an upper bound; small inputs need no buffer.
+  if (source.length > MAX_SCORE_PROJECT_BYTES || (source.length * 3 > MAX_SCORE_PROJECT_BYTES && new TextEncoder().encode(source).byteLength > MAX_SCORE_PROJECT_BYTES)) {
     throw new RangeError(`${label} project exceeds byte budget`);
   }
   return JSON.parse(source) as unknown;

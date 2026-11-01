@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { importMidiFile, exportMidiFile, MAX_MIDI_FILE_BYTES, MAX_MIDI_FILE_TRACKS, MAX_MIDI_FILE_EVENTS } from '../src/core/midi-file.js';
 import { compileBeatSequence } from '../src/core/project.js';
 import type { BeatSequenceEvent } from '../src/core/sequence.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 
 const end = [0, 0xff, 0x2f, 0];
 const mapped = { channelVoices: { 0: 'brass' } };
@@ -235,6 +236,22 @@ test('byte, track, all-wire-event, tempo and beat/VLQ budgets are hard bounds', 
   assert.throws(() => exportMidiFile(many, { format: 0 }), /event budget/);
 });
 
+test('VLQ width boundaries preserve gates and cumulative ticks beyond signed 32-bit range', () => {
+  const ppqn = 32767;
+  for (const format of [0, 1] as const) {
+    for (const ticks of [1, 127, 128, 16383, 16384, 2097151, 2097152, 0x0fffffff]) {
+      const events = importedNotes(exportMidiFile([note(1, 0, ticks / ppqn)], { format, ppqn }));
+      assert.deepEqual(events.map(event => [event.beat, event.duration]), [[0, ticks / ppqn]]);
+    }
+    const input = Array.from({ length: 11 }, (_, index) => note(index + 1, index * 8000, 1, 48 + index));
+    const tempoMap = input.map(event => ({ beat: event.beat, bpm: 120 }));
+    const events = importedNotes(exportMidiFile(input, { format, ppqn, tempoMap }));
+    assert.deepEqual(events.map(event => [event.beat, event.duration, event.note]),
+      input.map(event => [event.beat, event.duration, event.note]));
+    assert.throws(() => exportMidiFile([note(1, 0x10000000 / ppqn, 1 / ppqn)], { format, ppqn }), RangeError);
+  }
+});
+
 const midiPolicy = { controls: 'preserve' as const, pitchBendRange: 2 };
 const expressive = { ...mapped, ...midiPolicy };
 function control(id: number, beat: number, controls: Extract<BeatSequenceEvent, { type: 'control' }>['controls']): BeatSequenceEvent {
@@ -415,12 +432,31 @@ test('explicit expressive export quantizes controls and rejects non-MIDI automat
   assert.throws(() => exportMidiFile([note(), control(2, 0.5, { pitch: 1 })], midiPolicy), /owned note/);
 });
 
+test('expression quantization preserves nearest products and higher-volume ties at half-unit boundaries', () => {
+  const cases: readonly (readonly [number, number])[] = [
+    [(0.5 - Number.EPSILON) / 16129, 0],
+    [0.5 / 16129, 0],
+    [(0.5 + Number.EPSILON) / 16129, 1],
+    [0.75 / 16129, 1],
+    [126.5 / 16129, 127],
+    [128.5 / 16129, 128],
+    [0.5, 8064],
+    [0.317, 5112],
+  ];
+  for (const [expression, product] of cases) {
+    const bytes = exportMidiFile([note(), control(1, 0, { expression })], midiPolicy);
+    const initial = importMidiFile(bytes, expressive).events.find(event => event.type === 'control');
+    assert.ok(initial?.type === 'control' && initial.controls.expression !== undefined);
+    assert.equal(Math.round(initial.controls.expression * 16129), product);
+  }
+});
+
 test('expression policies reject malicious options/accessors and bound generated fanout separately from wire input', () => {
   let reads = 0;
   const bytes = smf([[0, 0x90, 60, 127, 120, 0x80, 60, 0, ...end]]);
-  for (const pitchBendRange of [-1, 49, NaN, Infinity, null, '2']) {
-    assert.throws(() => importMidiFile(bytes, { ...expressive, pitchBendRange: pitchBendRange as number }));
-    assert.throws(() => exportMidiFile([note()], { ...midiPolicy, pitchBendRange: pitchBendRange as number }));
+  for (const controls of ['omit', 'preserve'] as const) for (const pitchBendRange of [-1, 49, NaN, Infinity, null, '2']) {
+    assert.throws(() => importMidiFile(bytes, { ...expressive, controls, pitchBendRange: pitchBendRange as number }));
+    assert.throws(() => exportMidiFile([note()], { ...midiPolicy, controls, pitchBendRange: pitchBendRange as number }));
   }
   assert.throws(() => importMidiFile(bytes, { controls: 'guess' as 'preserve' }));
   assert.throws(() => exportMidiFile([note()], { controls: 'guess' as 'preserve' }));
@@ -448,4 +484,42 @@ test('poly overrides persist through sustain and channel pressure while new keys
     [2, 0.5, { pitch: 0, expression: 1, pan: 0, modulation: 1 + 32 / 127 }],
   ]);
   assert.equal(result.lossSummary.preservedControls.find(entry => entry.kind === 'poly-pressure')?.count, 2);
+});
+
+test('expressive export keeps every quantized control despite inherited setters', () => {
+  const events = [note(), control(1, 0, { pitch: 1, expression: 0.5, pan: 0.25, modulation: 1.5 })];
+  const clean = exportMidiFile(events, midiPolicy);
+  const reloaded = importMidiFile(clean, expressive);
+  assert.deepEqual(controlRows(reloaded.events).length, 1);
+  for (const key of ['pitch', 'expression', 'pan', 'modulation']) {
+    const polluted = withNamedAccessor(key, () => exportMidiFile(events, midiPolicy));
+    assert.equal(polluted.setterHits, 0, key);
+    assert.deepStrictEqual(polluted.value, clean, key);
+  }
+});
+
+test('expressive export never reads omitted controls through Object.prototype', () => {
+  const inherited = { pitch: 1, expression: 0.25, pan: -1, modulation: 2 };
+  for (const controls of [{ expression: 0.5 }, { pitch: 1, pan: 0.25 }, { modulation: 1.5 }] as const) {
+    const events = [note(), control(1, 0, controls)];
+    const clean = exportMidiFile(events, midiPolicy);
+    for (const [key, value] of Object.entries(inherited)) {
+      assert.deepStrictEqual(withNamedAccessor(key, () => exportMidiFile(events, midiPolicy), value).value, clean, `${Object.keys(controls)} ${key}`);
+    }
+  }
+});
+
+test('expressive import never reads omitted controls through Object.prototype', () => {
+  // Note, bend, pan, expression, modulation, then poly pressure and channel pressure on the held key.
+  const bytes = smf([[0, 0x90, 60, 100, 0, 0xe0, 0, 80, 0, 0xb0, 10, 96, 0, 0xb0, 11, 64, 0, 0xb0, 1, 32,
+    0, 0xa0, 60, 40, 0, 0xd0, 20, 10, 0x80, 60, 0, ...end]]);
+  const clean = importMidiFile(bytes, expressive);
+  assert.ok(controlRows(clean.events).length >= 5);
+  for (const key of ['modulation', 'pitch', 'pan', 'expression', 'id', 'beat', 'controls']) {
+    for (const inherited of [1.5, 2]) {
+      const polluted = withNamedAccessor(key, () => importMidiFile(bytes, expressive), inherited);
+      assert.equal(polluted.setterHits, 0, key);
+      assert.deepStrictEqual(polluted.value, clean, key);
+    }
+  }
 });

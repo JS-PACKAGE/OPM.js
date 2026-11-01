@@ -62,16 +62,15 @@ export function renderNote({ voice, note = 60, duration = 0.5, velocity = 1, pan
   velocity = bounded(velocity, 0, 1, 'velocity');
   pan = bounded(pan, -1, 1, 'pan');
   let release = 0;
-  for (const op of voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, note, op.rateKeyScale));
+  for (const op of voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, note, Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined));
   const length = Math.ceil((duration + release + 0.01) * sampleRate);
   if (length > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
-  const engine: SynthOptions = {};
-  if (mixGain !== undefined) engine.mixGain = mixGain;
-  if (tuning !== undefined) engine.tuning = tuning;
-  if (stealing !== undefined) engine.stealing = stealing;
-  if (quality !== undefined) engine.quality = quality;
-  if (saturation !== undefined) engine.saturation = saturation;
-  if (dcBlock !== undefined) engine.dcBlock = dcBlock;
+  // One literal of conditional spreads defines own data; assignment could reach an inherited setter.
+  const engine: SynthOptions = {
+    ...(mixGain === undefined ? {} : { mixGain }), ...(tuning === undefined ? {} : { tuning }),
+    ...(stealing === undefined ? {} : { stealing }), ...(quality === undefined ? {} : { quality }),
+    ...(saturation === undefined ? {} : { saturation }), ...(dcBlock === undefined ? {} : { dcBlock }),
+  };
   const synth = new Synth(sampleRate, 8, engine);
   const left = new Float32Array(length);
   const right = new Float32Array(length);

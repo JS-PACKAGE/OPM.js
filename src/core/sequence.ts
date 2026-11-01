@@ -1,8 +1,9 @@
 import { brass } from '../voices/brass.js';
-import { prepareVoice } from '../voices/normalize.js';
+import { preparedVoiceValue } from '../voices/normalize.js';
 import type { PreparedVoice, VoiceInput } from '../voices/schema.js';
-import { Synth, VoiceAdmissionError, operatorDuration, readSynthOptions, validateMaxVoices, validateNoteControls, validateVoicePriority } from './synth.js';
+import { Synth, VoiceAdmissionError, operatorDuration, ownControl, readSynthOptions, validateMaxVoices, validateNoteControls, validateVoicePriority } from './synth.js';
 import type { NoteControls, SynthOptions } from './synth.js';
+import { MAX_RENDER_SAMPLES } from './limits.js';
 import type { RenderResult } from './index.js';
 import { normalizeTuning } from './tuning.js';
 
@@ -36,10 +37,26 @@ export interface SequenceSnapshot {
 export const MAX_SEQUENCE_NOTES = 128;
 export const MAX_SEQUENCE_SLOTS = 256;
 export const MAX_SEQUENCE_SECONDS = 60;
-export const MAX_RENDER_SAMPLES = 4_000_000;
+export { MAX_RENDER_SAMPLES };
 export const MAX_LONG_SEQUENCE_SECONDS = 24 * 60 * 60;
 export const MAX_LONG_SEQUENCE_EVENTS = 65536;
 export const MAX_SEQUENCE_CHUNK_FRAMES = 65536;
+
+// Share only field names, never event data or validation results.
+const NOTE_FIELDS = ['type', 'id', 'time', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority'] as const;
+const NOTE_REQUIRED_FIELDS = ['type', 'id', 'time', 'duration', 'note'] as const;
+const STOP_FIELDS = ['type', 'id', 'time'] as const;
+const CONTROL_FIELDS = ['type', 'id', 'time', 'controls'] as const;
+const PREPARE_OPTION_FIELDS = ['voices'] as const;
+const RENDER_OPTION_FIELDS = ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'] as const;
+const CHUNKED_RENDER_OPTION_FIELDS = ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal'] as const;
+const NO_REQUIRED_FIELDS = [] as const;
+
+// Only this private complete default may skip inspection, never caller options.
+const DEFAULT_PREPARE_OPTIONS = Object.freeze({ voices: undefined });
+
+// Only our frozen output arrays may reuse validation metadata, never caller inputs.
+const scoreSnapshots = new WeakMap<object, SequenceSnapshot>();
 
 export function sampleRateValue(value: number): number {
   if (!Number.isInteger(value) || value < 8000 || value > 96000) {
@@ -71,18 +88,19 @@ function finite(value: unknown, min: number, max: number, label: string): number
   return value;
 }
 
-/** Validate the entire score without invoking accessors, and detach every patch/control. */
-export function prepareSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = {}): SequenceSnapshot {
+/** Validate without accessors; detach raw data and reuse our immutable patches/event-array snapshots. */
+export function prepareSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = DEFAULT_PREPARE_OPTIONS): SequenceSnapshot {
   return prepareScore(events, options, false);
 }
 
 /** Long scores have a separate input budget; this does not enlarge worklet queues. */
-export function prepareLongSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = {}): SequenceSnapshot {
+export function prepareLongSequence(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'> = DEFAULT_PREPARE_OPTIONS): SequenceSnapshot {
   return prepareScore(events, options, true);
 }
 
-function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'>, long: boolean): SequenceSnapshot {
-  const config = sequenceOwnData(options, ['voices'], [], 'sequence options');
+function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOptions, 'voices'>, long: boolean, cloned = false): SequenceSnapshot {
+  const config = options === DEFAULT_PREPARE_OPTIONS ? DEFAULT_PREPARE_OPTIONS
+    : sequenceOwnData(options, PREPARE_OPTION_FIELDS, NO_REQUIRED_FIELDS, 'sequence options');
   const maxSeconds = long ? MAX_LONG_SEQUENCE_SECONDS : MAX_SEQUENCE_SECONDS;
   const maxEvents = long ? MAX_LONG_SEQUENCE_EVENTS : MAX_SEQUENCE_SLOTS;
   const voices = config.voices;
@@ -92,15 +110,23 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
     catch { throw new TypeError('voices must be a Map'); }
   }
   if (!Array.isArray(events)) throw new TypeError('events must be an array');
+  const cached = scoreSnapshots.get(events);
+  if (cached && cached.events.length <= maxEvents && cached.endTime <= maxSeconds &&
+      (long || cached.noteCount <= MAX_SEQUENCE_NOTES && cached.reservedSlots <= MAX_SEQUENCE_SLOTS)) return cached;
   const length = Object.getOwnPropertyDescriptor(events, 'length')?.value as number;
-  if (!Number.isInteger(length) || length > maxEvents) throw new RangeError('Sequence exceeds event budget');
+  if (!Number.isInteger(length) || length < 0 || length > maxEvents) throw new RangeError('Sequence exceeds event budget');
   for (const key of Reflect.ownKeys(events)) {
     if (key === 'length') continue;
     if (typeof key !== 'string' || !/^(0|[1-9]\d*)$/.test(key) || Number(key) >= length) {
       throw new TypeError('events has an unknown field');
     }
   }
+  // Never cache caller-owned raw patches or controls; Worker clones have no mutable caller aliases.
+  const clonedVoices = cloned ? new WeakMap<object, PreparedVoice>() : undefined;
+  let clonedControls: WeakMap<object, NoteControls> | undefined;
+  // A null prototype keeps inherited indexed accessors out of the trusted event array.
   const snapshot: PreparedSequenceEvent[] = [];
+  Object.setPrototypeOf(snapshot, null);
   const notes = new Set<number>();
   let reservedSlots = 0;
   let endTime = 0;
@@ -109,11 +135,11 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('events must contain own data events');
     const input: unknown = descriptor.value;
     const type = input !== null && typeof input === 'object' ? Object.getOwnPropertyDescriptor(input, 'type')?.value : undefined;
-    const allowed = type === 'note' ? ['type', 'id', 'time', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
-      : type === 'stop' ? ['type', 'id', 'time'] : type === 'control' ? ['type', 'id', 'time', 'controls'] : null;
+    const allowed = type === 'note' ? NOTE_FIELDS
+      : type === 'stop' ? STOP_FIELDS : type === 'control' ? CONTROL_FIELDS : null;
     if (!allowed) throw new TypeError('Unknown sequence event type');
-    const data = sequenceOwnData(input, allowed, type === 'note' ? ['type', 'id', 'time', 'duration', 'note']
-      : type === 'control' ? ['type', 'id', 'time', 'controls'] : ['type', 'id', 'time'], 'sequence event');
+    const data = sequenceOwnData(input, allowed, type === 'note' ? NOTE_REQUIRED_FIELDS
+      : type === 'control' ? CONTROL_FIELDS : STOP_FIELDS, 'sequence event');
     const id = data.id as number;
     if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('Sequence id must be a positive safe integer');
     const time = finite(data.time, 0, maxSeconds, 'time');
@@ -136,19 +162,35 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
         voice = voices === undefined ? (voice === 'brass' ? brass : undefined) : Map.prototype.get.call(voices, voice);
         if (voice === undefined) throw new RangeError('Unknown sequence voice');
       }
-      snapshot.push(Object.freeze({ type: 'note', id, time, duration, note, velocity, pan, voicePriority, voice: prepareVoice(voice as VoiceInput) }));
+      let prepared = clonedVoices?.get(voice as object);
+      if (prepared === undefined) {
+        prepared = preparedVoiceValue(voice as VoiceInput);
+        clonedVoices?.set(voice as object, prepared);
+      }
+      snapshot[index] = Object.freeze({ type: 'note', id, time, duration, note, velocity, pan, voicePriority, voice: prepared });
     } else {
       reservedSlots++;
-      snapshot.push(type === 'stop' ? Object.freeze({ type: 'stop', id, time })
-        : Object.freeze({ type: 'control', id, time, controls: Object.freeze(validateNoteControls(data.controls as NoteControls)) }));
+      if (type === 'stop') snapshot[index] = Object.freeze({ type: 'stop', id, time });
+      else {
+        const value = data.controls;
+        let controls = clonedControls?.get(value as object);
+        if (controls === undefined) {
+          controls = validateNoteControls(value as NoteControls);
+          if (cloned) (clonedControls ??= new WeakMap<object, NoteControls>()).set(value as object, controls);
+        }
+        snapshot[index] = Object.freeze({ type: 'control', id, time, controls });
+      }
     }
     if (!long && reservedSlots > MAX_SEQUENCE_SLOTS) throw new RangeError('Sequence exceeds worklet slot budget');
     if (endTime > maxSeconds) throw new RangeError(`Sequence exceeds ${maxSeconds} second horizon`);
   }
+  Object.setPrototypeOf(snapshot, Array.prototype);
   for (const event of snapshot) {
     if (event.type !== 'note' && !notes.has(event.id)) throw new RangeError('Unknown sequence note id');
   }
-  return Object.freeze({ events: Object.freeze(snapshot), noteCount: notes.size, reservedSlots, endTime });
+  const score = Object.freeze({ events: Object.freeze(snapshot), noteCount: notes.size, reservedSlots, endTime });
+  scoreSnapshots.set(score.events, score);
+  return score;
 }
 
 export type SequenceFrameEvent = { frame: number; order: number; event: PreparedSequenceEvent };
@@ -168,7 +210,7 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     queue.push(onset);
     queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
-    for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, op.rateKeyScale));
+    for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined));
     lastFrame = Math.max(lastFrame, endFrame + Math.ceil(release * sampleRate));
   }
   for (const event of score.events) {
@@ -177,12 +219,15 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
       : Math.round((origin + event.time) * sampleRate);
     queue.push({ frame, order: EVENT_ORDER[event.type], event });
     lastFrame = Math.max(lastFrame, frame);
-    if (event.type === 'control' && event.controls.operatorADSR !== undefined) {
+    // Own read: an operatorADSR inherited from Object.prototype must not change the release bound.
+    const adsr = event.type === 'control' ? ownControl(event.controls, 'operatorADSR') : undefined;
+    if (adsr !== undefined) {
       const onset = onsets.get(event.id)!;
       const note = onset.event;
       let release = 0;
       for (let index = 0; index < 4; index++) {
-        release = Math.max(release, operatorDuration(event.controls.operatorADSR[index].r, note.note, note.voice.ops[index].rateKeyScale));
+        const source = note.voice.ops[index];
+        release = Math.max(release, operatorDuration(adsr[index].r, note.note, Object.hasOwn(source, 'rateKeyScale') ? source.rateKeyScale : undefined));
       }
       // A released envelope can be reanchored by later controls. Keep a conservative
       // tail bound even if an explicit stop or stealing ends this gate sooner.
@@ -262,22 +307,25 @@ interface SequenceRenderPlan {
   signal: AbortSignal | undefined;
 }
 
-function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOptions, long: boolean): SequenceRenderPlan {
-  const config = sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock', 'chunkFrames', 'maxFrames', 'signal'], [], 'render sequence options');
-  const score = prepareScore(events, { voices: config.voices as SequenceVoices | undefined }, long);
+function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOptions, long: boolean, cloned = false): SequenceRenderPlan {
+  const config = sequenceOwnData(options, CHUNKED_RENDER_OPTION_FIELDS, NO_REQUIRED_FIELDS, 'render sequence options');
+  const voices = config.voices as SequenceVoices | undefined;
+  const score = prepareScore(events, voices === undefined ? DEFAULT_PREPARE_OPTIONS : { voices }, long, cloned);
   const sampleRate = sampleRateValue(config.sampleRate === undefined ? 44100 : config.sampleRate as number);
   const maxVoices = Object.hasOwn(config, 'maxVoices') ? validateMaxVoices(config.maxVoices) : 8;
   const chunkFrames = config.chunkFrames === undefined ? 4096 : config.chunkFrames;
   if (typeof chunkFrames !== 'number' || !Number.isInteger(chunkFrames) || chunkFrames < 1 || chunkFrames > MAX_SEQUENCE_CHUNK_FRAMES) {
     throw new RangeError('chunkFrames must be an integer in 1..65536');
   }
-  const engine: SynthOptions = {};
-  if (config.mixGain !== undefined) engine.mixGain = config.mixGain as SynthOptions['mixGain'];
-  if (config.tuning !== undefined) engine.tuning = config.tuning as SynthOptions['tuning'];
-  if (config.stealing !== undefined) engine.stealing = config.stealing as SynthOptions['stealing'];
-  if (config.quality !== undefined) engine.quality = config.quality as SynthOptions['quality'];
-  if (config.saturation !== undefined) engine.saturation = config.saturation as SynthOptions['saturation'];
-  if (config.dcBlock !== undefined) engine.dcBlock = config.dcBlock as SynthOptions['dcBlock'];
+  // One literal of conditional spreads defines own data; assignment could reach an inherited setter.
+  const engine: SynthOptions = {
+    ...(config.mixGain === undefined ? {} : { mixGain: config.mixGain as SynthOptions['mixGain'] }),
+    ...(config.tuning === undefined ? {} : { tuning: config.tuning as SynthOptions['tuning'] }),
+    ...(config.stealing === undefined ? {} : { stealing: config.stealing as SynthOptions['stealing'] }),
+    ...(config.quality === undefined ? {} : { quality: config.quality as SynthOptions['quality'] }),
+    ...(config.saturation === undefined ? {} : { saturation: config.saturation as SynthOptions['saturation'] }),
+    ...(config.dcBlock === undefined ? {} : { dcBlock: config.dcBlock as SynthOptions['dcBlock'] }),
+  };
   const settings = readSynthOptions(engine);
   if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);
   const { queue, length } = sequenceFrameEvents(score, sampleRate);
@@ -315,33 +363,42 @@ export function estimateSequenceCapacity(events: readonly SequenceEvent[], optio
 }
 
 function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; right: Float32Array }): ChunkedSequenceRender {
-  const { score, engine, maxVoices, queue, capacity, signal } = plan;
-  const synth = new Synth(capacity.sampleRate, maxVoices, engine);
+  const { score, engine, maxVoices, queue, capacity } = plan;
+  let { signal } = plan;
+  let synth: Synth | undefined = new Synth(capacity.sampleRate, maxVoices, engine);
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
-  const left = output?.left ?? new Float32Array(capacity.chunkFrames);
-  const right = output?.right ?? new Float32Array(capacity.chunkFrames);
+  let left: Float32Array | undefined = output?.left ?? new Float32Array(capacity.chunkFrames);
+  let right: Float32Array | undefined = output?.right ?? new Float32Array(capacity.chunkFrames);
   const state = new Map<number, 'pending' | 'started' | 'released'>();
   for (const event of score.events) if (event.type === 'note') state.set(event.id, 'pending');
   synth.onVoiceEnded = id => { state.delete(id); };
   let position = 0;
   let cursor = 0;
   let cancelled = false;
-  const diagnostics = () => Object.freeze({ errors: synth.errorCount, processedEvents: cursor, renderedFrames: position });
+  let errorCount = 0;
+  const diagnostics = () => Object.freeze({ errors: synth?.errorCount ?? errorCount, processedEvents: cursor, renderedFrames: position });
+  const cancel = () => {
+    cancelled = true;
+    if (synth) errorCount = synth.errorCount;
+    synth = undefined; left = undefined; right = undefined; signal = undefined;
+    state.clear(); queue.length = 0;
+  };
   const renderer: ChunkedSequenceRender = {
     capacity,
     get diagnostics() { return diagnostics(); },
-    cancel() { cancelled = true; state.clear(); },
+    cancel,
     return() { renderer.cancel(); return { done: true, value: undefined }; },
     [Symbol.iterator]() { return this; },
     next() {
       if (cancelled || position >= capacity.frames) return { done: true, value: undefined };
       if (aborted?.call(signal)) { renderer.cancel(); throw new DOMException('Sequence render aborted', 'AbortError'); }
+      const activeSynth = synth!, leftBuffer = left!, rightBuffer = right!;
       const offset = position;
       const end = output ? capacity.frames : Math.min(offset + capacity.chunkFrames, capacity.frames);
       while (cursor < queue.length && queue[cursor].frame < end) {
         const next = queue[cursor];
         if (next.frame > position) {
-          synth.render(left, right, position - offset, next.frame - position);
+          activeSynth.render(leftBuffer, rightBuffer, position - offset, next.frame - position);
           position = next.frame;
         }
         cursor++;
@@ -349,7 +406,7 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
         const event = next.event;
         if (event.type === 'note') {
           try {
-            synth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan, voicePriority: event.voicePriority });
+            activeSynth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan, voicePriority: event.voicePriority });
             state.set(event.id, 'started');
           } catch (error) {
             if (!(error instanceof VoiceAdmissionError)) throw error;
@@ -357,14 +414,16 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
           }
         } else if (event.type === 'stop') {
           if (state.get(event.id) === 'pending') state.delete(event.id);
-          else if (synth.noteOff(event.id)) state.set(event.id, 'released');
-        } else synth.updateNote(event.id, event.controls);
+          else if (activeSynth.noteOff(event.id)) state.set(event.id, 'released');
+        } else activeSynth.updateNote(event.id, event.controls);
       }
-      if (position < end) synth.render(left, right, position - offset, end - position);
+      if (position < end) activeSynth.render(leftBuffer, rightBuffer, position - offset, end - position);
       position = end;
+      // Drop terminal private state, not PCM still held by the consumer.
+      if (position === capacity.frames) cancel();
       const frames = end - offset;
-      return { done: false, value: Object.freeze({ left: frames === left.length ? left : left.subarray(0, frames),
-        right: frames === right.length ? right : right.subarray(0, frames), offset, frames, sampleRate: capacity.sampleRate, diagnostics: diagnostics() }) };
+      return { done: false, value: Object.freeze({ left: frames === leftBuffer.length ? leftBuffer : leftBuffer.subarray(0, frames),
+        right: frames === rightBuffer.length ? rightBuffer : rightBuffer.subarray(0, frames), offset, frames, sampleRate: capacity.sampleRate, diagnostics: diagnostics() }) };
     },
   };
   return renderer;
@@ -375,9 +434,14 @@ export function renderSequenceChunks(events: readonly SequenceEvent[], options: 
   return chunkRenderer(renderPlan(events, options, true));
 }
 
+/** @internal Module Worker only: events/options are owned structured clones, not caller aliases. */
+export function renderClonedSequenceChunks(events: readonly SequenceEvent[], options: ChunkedSequenceOptions): ChunkedSequenceRender {
+  return chunkRenderer(renderPlan(events, options, true, true));
+}
+
 /** Convenience full-buffer rendering retains the original score and allocation budgets. */
 export function renderSequence(events: readonly SequenceEvent[], options: SequenceOptions = {}): RenderResult {
-  sequenceOwnData(options, ['voices', 'sampleRate', 'maxVoices', 'mixGain', 'tuning', 'stealing', 'quality', 'saturation', 'dcBlock'], [], 'render sequence options');
+  sequenceOwnData(options, RENDER_OPTION_FIELDS, NO_REQUIRED_FIELDS, 'render sequence options');
   const plan = renderPlan(events, options, false);
   if (plan.capacity.frames > MAX_RENDER_SAMPLES) throw new RangeError('Render exceeds sample budget');
   const left = new Float32Array(plan.capacity.frames);

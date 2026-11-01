@@ -1,7 +1,11 @@
 export interface TuningOptions { referenceHz?: number; offsets?: readonly number[] }
 export interface NormalizedTuning { readonly referenceHz: number; readonly offsets: readonly number[] }
 
-const ZERO_OFFSETS: readonly number[] = Object.freeze(new Array<number>(128).fill(0));
+// A null-prototype array-like creates own elements, never reaching inherited indexed accessors.
+const ZERO_OFFSETS: readonly number[] = Object.freeze(Array.from({ __proto__: null, length: 128 } as ArrayLike<number>, () => 0));
+// Only frozen output tables may reuse validation; raw inputs are never registered.
+const validatedOffsets = new WeakSet<readonly number[]>();
+validatedOffsets.add(ZERO_OFFSETS);
 
 /** Validate own data only and detach the cents table from its caller. */
 export function normalizeTuning(input: TuningOptions): NormalizedTuning {
@@ -23,20 +27,30 @@ export function normalizeTuning(input: TuningOptions): NormalizedTuning {
   let offsets = ZERO_OFFSETS;
   if (Object.hasOwn(input, 'offsets')) {
     const source: unknown = Object.getOwnPropertyDescriptor(input, 'offsets')!.value;
-    if (!Array.isArray(source) || source.length !== 128 || Reflect.ownKeys(source).length !== 129) {
+    if (!Array.isArray(source)) {
       throw new TypeError('offsets must contain exactly 128 own data cents values');
     }
-    const copy = new Array<number>(128);
-    for (let i = 0; i < 128; i++) {
-      const descriptor = Object.getOwnPropertyDescriptor(source, String(i));
-      if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('offsets must contain own data');
-      const value: unknown = descriptor.value;
-      if (typeof value !== 'number' || !Number.isFinite(value) || value < -4800 || value > 4800) {
-        throw new RangeError('offsets must be finite cents in -4800..4800');
+    const known = validatedOffsets.has(source);
+    if (!known && (source.length !== 128 || Reflect.ownKeys(source).length !== 129)) {
+      throw new TypeError('offsets must contain exactly 128 own data cents values');
+    }
+    const copy: number[] = known ? source.slice() : [];
+    if (!known) {
+      // A null prototype keeps inherited indexed accessors out of these own-data writes.
+      Object.setPrototypeOf(copy, null);
+      for (let i = 0; i < 128; i++) {
+        const descriptor = Object.getOwnPropertyDescriptor(source, String(i));
+        if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('offsets must contain own data');
+        const value: unknown = descriptor.value;
+        if (typeof value !== 'number' || !Number.isFinite(value) || value < -4800 || value > 4800) {
+          throw new RangeError('offsets must be finite cents in -4800..4800');
+        }
+        copy[i] = value;
       }
-      copy[i] = value;
+      Object.setPrototypeOf(copy, Array.prototype);
     }
     offsets = Object.freeze(copy);
+    validatedOffsets.add(offsets);
   }
   return Object.freeze({ referenceHz, offsets });
 }

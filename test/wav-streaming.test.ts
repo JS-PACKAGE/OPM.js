@@ -71,7 +71,11 @@ for (const format of ['pcm16', 'pcm24'] as const) test(`${format} TPDF dither is
   const encoder = createWavEncoder({ sampleRate: 48000, channels: 1, format, totalFrames: frames, dither: true });
   const parts = [encoder.header()];
   assert.throws(() => encoder.encode({ left: Float32Array.of(0.5, Number.NaN) }), /finite/);
-  for (let start = 0; start < frames; start += 7000) parts.push(encoder.encode({ left: left.subarray(start, Math.min(frames, start + 7000)) }));
+  parts.push(encoder.encode({ left: left.subarray(0, 7000) }));
+  // Rejection after a committed prefix must retain its current noise sequence too.
+  assert.throws(() => encoder.encode({ left: Float32Array.of(0.5, Number.NaN) }), /finite/);
+  assert.equal(encoder.framesEncoded, 7000);
+  for (let start = 7000; start < frames; start += 7000) parts.push(encoder.encode({ left: left.subarray(start, Math.min(frames, start + 7000)) }));
   parts.push(encoder.finalize());
   assert.deepEqual(join(parts), dithered);
   assert.deepEqual(encodeWav({ left, sampleRate: 48000, format, dither: true }), dithered, 'deterministic');
@@ -82,6 +86,43 @@ for (const format of ['pcm16', 'pcm24'] as const) test(`${format} TPDF dither is
   for (let i = 0; i < extremes.length; i++) {
     const value = read(clipped, i);
     assert.ok(i % 2 ? value >= top - 1 && value <= top : value >= -top - 1 && value <= -top, `sample ${i} = ${value}`);
+  }
+});
+
+test('metadata-triggered nested encoding commits before the outer dither transaction', () => {
+  for (const format of ['pcm16', 'pcm24'] as const) for (const channels of [1, 2] as const) {
+    const lsb = 1 / (format === 'pcm16' ? 32767 : 8388607);
+    const prefix = new Float32Array(7).fill(0.125 * lsb);
+    const suffix = new Float32Array(17).fill(0.4 * lsb);
+    const whole = new Float32Array(prefix.length + suffix.length);
+    whole.set(prefix); whole.set(suffix, prefix.length);
+    for (const trigger of ['keys', 'descriptor'] as const) for (const reject of [false, true]) {
+      const encoder = createWavEncoder({ sampleRate: 8000, channels, totalFrames: whole.length, format, dither: true });
+      const parts = [encoder.header()];
+      let entered = false;
+      const nested = () => {
+        if (entered) return;
+        entered = true;
+        parts.push(encoder.encode({ left: prefix, right: channels === 2 ? prefix : undefined }));
+      };
+      const left = suffix.slice();
+      if (reject) left[left.length - 1] = NaN;
+      const input = new Proxy({ left, right: channels === 2 ? suffix : undefined }, {
+        ownKeys(target) { if (trigger === 'keys') nested(); return Reflect.ownKeys(target); },
+        getOwnPropertyDescriptor(target, key) {
+          if (trigger === 'descriptor' && key === 'left') nested();
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      });
+      if (reject) {
+        assert.throws(() => encoder.encode(input), RangeError);
+        assert.equal(encoder.framesEncoded, prefix.length);
+        parts.push(encoder.encode({ left: suffix, right: channels === 2 ? suffix : undefined }));
+      } else parts.push(encoder.encode(input));
+      parts.push(encoder.finalize());
+      assert.equal(encoder.framesEncoded, whole.length);
+      assert.deepEqual(join(parts), encodeWav({ left: whole, right: channels === 2 ? whole : undefined, sampleRate: 8000, format, dither: true }));
+    }
   }
 });
 
@@ -123,6 +164,25 @@ test('stream accounting survives invalid partial input, underrun, overrun and wr
   encoder.finalize();
   assert.throws(() => encoder.finalize(), /unfinished/);
   assert.throws(() => encoder.encode({ left: Float32Array.of(0) }), /unfinished/);
+});
+
+test('every WAV format rejects non-finite and adjacent out-of-range samples without committing partial chunks', () => {
+  for (const format of ['pcm16', 'pcm24', 'float32'] as const) for (const dither of format === 'float32' ? [false] : [false, true]) {
+    const left = Float32Array.of(-1, -0, 2 ** -149, 0.125, 1), right = left.map(value => -value);
+    const encoder = createWavEncoder({ sampleRate: 8000, channels: 2, totalFrames: left.length, format, dither });
+    const parts = [encoder.header()];
+    for (const invalid of [NaN, Infinity, -Infinity, 1 + 2 ** -23, -1 - 2 ** -23]) for (const channel of [0, 1]) {
+      const badLeft = Float32Array.of(0.5, channel === 0 ? invalid : 0.25);
+      const badRight = Float32Array.of(0.25, channel === 1 ? invalid : 0.5);
+      assert.throws(() => encodeWav({ left: badLeft, right: badRight, sampleRate: 8000, format, dither }), RangeError);
+      assert.throws(() => encoder.encode({ left: badLeft, right: badRight }), RangeError);
+      assert.equal(encoder.framesEncoded, 0);
+    }
+    parts.push(encoder.encode({ left, right }), encoder.finalize());
+    assert.deepEqual(join(parts), encodeWav({ left, right, sampleRate: 8000, format, dither }));
+    assert.equal(encoder.framesEncoded, left.length);
+    assert.equal(encoder.finished, true);
+  }
 });
 
 test('streaming authenticates channels and own-data without evaluating accessors', () => {

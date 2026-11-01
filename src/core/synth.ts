@@ -62,6 +62,8 @@ export function validateVoicePriority(value: unknown): number {
 
 /** Snapshot note admission controls without invoking inherited values/accessors. */
 function readNoteOptions(input: NoteOptions): Required<NoteOptions> {
+  // Only this private, frozen complete default can skip the public data-object boundary.
+  if (input === DEFAULT_NOTE_OPTIONS) return DEFAULT_NOTE_OPTIONS;
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
     throw new TypeError('note options must be a plain data object');
@@ -89,8 +91,24 @@ const CONTROL_LIMITS = Object.freeze({
   feedback: [0, 7], lfoRate: [0, 20], amDepth: [0, 1], pmDepth: [0, 1200], gain: [0, 1],
 } as const);
 
-/** Copy strict own-data controls at the API/dispatch boundary without invoking getters. */
+// Only our deeply frozen output identities may skip validation, never caller inputs.
+const controlSnapshots = new WeakSet<object>();
+
+function adsrControl(item: object, field: keyof ADSR): number {
+  const data = Object.getOwnPropertyDescriptor(item, field);
+  if (!data || !Object.hasOwn(data, 'value')) throw new TypeError('operatorADSR must contain data');
+  const number: unknown = data.value;
+  const min = field === 'sr' ? 0.01 : 0;
+  const max = field === 's' ? 1 : field === 'sr' ? 100 : 10;
+  if (typeof number !== 'number' || !Number.isFinite(number) || number < min || number > max) {
+    throw new RangeError('operatorADSR has an out-of-range value');
+  }
+  return number;
+}
+
+/** Detach strict own-data controls, reusing only our immutable validated snapshots. */
 export function validateNoteControls(input: NoteControls): NoteControls {
+  if (controlSnapshots.has(input)) return input;
   if (!input || typeof input !== 'object' || Array.isArray(input) ||
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
     throw new TypeError('controls must be a plain object');
@@ -106,7 +124,8 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     if (key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR') {
       if (!Array.isArray(value) || value.length !== 4 || Reflect.ownKeys(value).length !== 5 ||
           Object.getPrototypeOf(value) !== Array.prototype) throw new TypeError(`${key} must be a dense four-element tuple`);
-      const tuple: unknown[] = [];
+      // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
+      const tuple: unknown[] = [0, 0, 0, 0];
       for (let op = 0; op < 4; op++) {
         const element = Object.getOwnPropertyDescriptor(value, String(op));
         if (!element || !Object.hasOwn(element, 'value')) throw new TypeError(`${key} must contain data`);
@@ -119,30 +138,21 @@ export function validateNoteControls(input: NoteControls): NoteControls {
           if (!item || typeof item !== 'object' || Array.isArray(item) ||
               (Object.getPrototypeOf(item) !== Object.prototype && Object.getPrototypeOf(item) !== null) ||
               keys.length !== (hasSr ? 5 : 4)) throw new TypeError('operatorADSR requires full plain ADSR objects');
-          const adsr: ADSR = { a: 0, d: 0, s: 0, r: 0 };
-          // `sr` is optional: omitted holds the sustain level, as in a voice.
-          for (const field of ['a', 'd', 's', 'r', 'sr'] as const) {
-            if (field === 'sr' && !hasSr) break;
-            const data = Object.getOwnPropertyDescriptor(item, field);
-            if (!data || !Object.hasOwn(data, 'value')) throw new TypeError('operatorADSR must contain data');
-            const number: unknown = data.value;
-            const [min, max] = field === 's' ? [0, 1] : field === 'sr' ? [0.01, 100] : [0, 10];
-            if (typeof number !== 'number' || !Number.isFinite(number) || number < min || number > max) {
-              throw new RangeError('operatorADSR has an out-of-range value');
-            }
-            adsr[field] = number;
-          }
-          tuple.push(Object.freeze(adsr));
+          // `sr` is optional: omitted holds the sustain level, as in a voice. The conditional
+          // spread defines own data, so no inherited setter or descriptor hook is reachable.
+          const adsr: ADSR = { a: adsrControl(item, 'a'), d: adsrControl(item, 'd'), s: adsrControl(item, 's'), r: adsrControl(item, 'r'),
+            ...(hasSr ? { sr: adsrControl(item, 'sr') } : {}) };
+          tuple[op] = Object.freeze(adsr);
         } else {
           const min = key === 'operatorRatios' ? 0.125 : key === 'operatorFrequencies' ? 1 : 0;
           const max = key === 'operatorRatios' ? 32 : key === 'operatorFrequencies' ? 20000 : 2;
           if (key !== 'operatorFrequencies' || item !== null) {
             if (typeof item !== 'number' || !Number.isFinite(item) || item < min || item > max) throw new RangeError(`${key} must be finite and in ${min}..${max}`);
           }
-          tuple.push(item);
+          tuple[op] = item;
         }
       }
-      Object.defineProperty(result, key, { value: Object.freeze(tuple), enumerable: true });
+      Object.defineProperty(result, key, { __proto__: null, value: Object.freeze(tuple), enumerable: true } as PropertyDescriptor);
       continue;
     }
     const control = key as keyof typeof CONTROL_LIMITS;
@@ -150,13 +160,20 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
       throw new RangeError(`controls.${key} must be finite and in ${min}..${max}`);
     }
-    result[control] = value;
+    Object.defineProperty(result, control, { __proto__: null, value, enumerable: true } as PropertyDescriptor);
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
   if (Object.hasOwn(result, 'ramp') && !Reflect.ownKeys(result).some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {
     throw new TypeError('ramp requires a rampable control');
   }
-  return Object.freeze(result);
+  Object.freeze(result);
+  controlSnapshots.add(result);
+  return result;
+}
+
+/** @internal Own-property read: an omitted control must not fall through to Object.prototype. */
+export function ownControl<K extends keyof NoteControls>(controls: NoteControls, key: K): NoteControls[K] {
+  return Object.hasOwn(controls, key) ? controls[key] : undefined;
 }
 
 interface ActiveVoice {
@@ -183,6 +200,8 @@ interface ActiveVoice {
   feedbackScale: number; elapsed: number; releaseTime: number; releaseEnd: number;
   /** Note pan; `voicePan` is the patch's offset, summed and clamped by updatePan. */
   velocity: number; expression: number; pan: number; voicePan: number;
+  /** Last noncenter pan and raw trig; preserve gain multiplication order. */
+  gainPan: number; panCos: number; panSin: number;
   expressionFrom: number; expressionTarget: number; expressionStart: number; expressionFrames: number;
   panFrom: number; panTarget: number; panStart: number; panFrames: number;
   modulation: number; modulationFrom: number; modulationTarget: number; modulationStart: number; modulationFrames: number;
@@ -193,6 +212,8 @@ interface ActiveVoice {
   ratios: Float64Array; ratioFrom: Float64Array; ratioTargets: Float64Array; ratioStart: number; ratioFrames: number;
   frequencies: Float64Array; frequencyFrom: Float64Array; frequencyTargets: Float64Array; frequencyStart: number; frequencyFrames: number;
   envelopeStart: Float64Array; envelopeFromDb: Float64Array; envelopeEdited: Uint8Array; releaseStarts: Float64Array;
+  /** Whether retained timing was computed without inherited optional dependencies. */
+  envelopeTimingCacheable: boolean;
   /** Live-rate LFO: turns in [0, 1) and the completed integer cycles (noise sample index). */
   lfoTurns: number; lfoCycle: number; lfoLive: boolean;
   /** Note-on snapshot of the voice LFO: delay, rate, phase, global sync and waveform code. */
@@ -274,7 +295,7 @@ const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
 const ENVELOPE_ANCHOR_FRAMES = 64;
 // log2 of the amplitude per dB, for fastExp2: gain = 2^(dB * log2(10) / 20).
 const DB_TO_LOG2_GAIN = Math.LN10 * Math.LOG2E / 20;
-const DEFAULT_NOTE_OPTIONS: NoteOptions = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
+const DEFAULT_NOTE_OPTIONS: Required<NoteOptions> = Object.freeze({ velocity: 1, pan: 0, voicePriority: 0 });
 const DEFAULT_TUNING = normalizeTuning({});
 const EXPRESSION_RAMP = 1;
 const PAN_RAMP = 2;
@@ -297,6 +318,12 @@ export function operatorDuration(seconds: number, note: number, rateKeyScale = 0
   return Math.min(cap, seconds * 2 ** (-rateKeyScale * (note - 60) / 12));
 }
 
+// Required ADSR fields are own data; omitted timing fields still inherit.
+function stableEnvelopeContext(): boolean {
+  // Native Object.prototype has an immutable null parent; `in` never runs getters.
+  return !('sr' in Object.prototype) && !('rateKeyScale' in Object.prototype);
+}
+
 /** Held decay (`sr`, seconds per 96 dB; undefined holds) and its per-substep gain ratio at `rate`. */
 function setSustainRate(active: ActiveVoice, op: number, seconds: number | undefined, note: number, rateKeyScale: number | undefined, rate: number): void {
   const sustain = seconds === undefined ? 0 : operatorDuration(seconds, note, rateKeyScale, 100);
@@ -316,7 +343,8 @@ export function readSynthOptions(input: SynthOptions): SynthOptions {
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
     throw new TypeError('options must be a plain object');
   }
-  const result: SynthOptions = {};
+  // Null prototype: a later read of an omitted setting cannot fall through to Object.prototype.
+  const result: SynthOptions = Object.create(null);
   for (const key of Reflect.ownKeys(input)) {
     if (key !== 'mixGain' && key !== 'tuning' && key !== 'stealing' && key !== 'quality' && key !== 'saturation' && key !== 'dcBlock') {
       throw new TypeError('options has an unknown field');
@@ -375,6 +403,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     ratios: new Float64Array(4), ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
     frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
     envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
+    envelopeTimingCacheable: false,
     lfoTurns: 0, lfoCycle: 0, lfoLive: false,
     lfoDelay: 0, lfoRate: 0, lfoPhase: 0, lfoGlobal: false, lfoCode: 0,
     amTargeted: false, pmTargeted: false, amTargets: new Float64Array(4), pmTargets: new Float64Array(4),
@@ -383,6 +412,8 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     frequencyScales: new Float64Array(4),
     amGains: new Float64Array(4), pmFactors: new Float64Array(4),
     waveforms: new Uint8Array(4), noiseStates: new Uint32Array(4), noiseTurns: new Float64Array(4), noiseSteps: new Float64Array(4),
+    // Prime double-valued cache fields before a live pan ramp first uses them.
+    panCos: NaN, panSin: NaN, gainPan: NaN,
   };
 }
 
@@ -396,8 +427,8 @@ function rampAt(from: number, target: number, start: number, frames: number, fra
 }
 
 function rampedFrequency(active: ActiveVoice, op: number, frame: number): number {
-  const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
-  const target = active.frequencyTargets[op] || active.tunedFrequency * ratio;
+  const target = active.frequencyTargets[op] || active.tunedFrequency *
+    rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
   return rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, frame);
 }
 
@@ -467,9 +498,14 @@ function advanceControls(active: ActiveVoice): void {
 function updatePan(active: ActiveVoice): void {
   const gain = active.velocity * active.expression;
   const pan = Math.max(-1, Math.min(1, active.pan + active.voicePan));
-  const angle = (pan + 1) * Math.PI / 4;
-  active.leftGain = pan === 1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * Math.cos(angle);
-  active.rightGain = pan === -1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * Math.sin(angle);
+  if (pan !== 0 && active.gainPan !== pan) {
+    active.gainPan = pan;
+    const angle = (pan + 1) * Math.PI / 4;
+    if (pan !== 1) active.panCos = Math.cos(angle);
+    if (pan !== -1) active.panSin = Math.sin(angle);
+  }
+  active.leftGain = pan === 1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * active.panCos;
+  active.rightGain = pan === -1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * active.panSin;
 }
 function removeAt<T>(items: T[], index: number): T {
   const removed = items[index];
@@ -592,8 +628,14 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
       // only multiply it), so its envelope cannot change the output.
       envelopeSegment[op] = 0;
     } else if (active.envelopeEdited[op]) {
-      steady = false;
-      exact |= 1 << op;
+      if (active.releaseTime < 0 && sustainTimes[op] === 0 && sustainDb[op] > FLOOR_DB &&
+          time - active.envelopeStart[op] >= attackTimes[op] + decayTimes[op]) {
+        // Match edited gainAt's exponential; leave the zero-gain render path unchanged.
+        gain = fastExp2(sustainDb[op] * DB_TO_LOG2_GAIN);
+      } else {
+        steady = false;
+        exact |= 1 << op;
+      }
       envelopeSegment[op] = 0;
     } else {
       const attack = attackTimes[op], decay = decayTimes[op], release = releaseTimes[op];
@@ -675,7 +717,7 @@ function preparePitch(active: ActiveVoice, frame: Float64Array, sampleRate: numb
   const next = active.elapsed + 1;
   const start = pitchAt(active, active.elapsed) / 12 + pitchEnvelopeAt(active, active.elapsed / sampleRate) / 1200;
   const end = pitchAt(active, next) / 12 + pitchEnvelopeAt(active, next / sampleRate) / 1200;
-  frame[5] = fastExp2(start);
+  frame[5] = start === 0 ? 1 : fastExp2(start);
   frame[6] = end !== start ? fastExp2((end - start) / oversample) : 1;
 }
 
@@ -1250,13 +1292,14 @@ function silentFrame(active: ActiveVoice, out: Float64Array, dynamicPitch: boole
 
 // Carrier-envelope energy avoids stealing a loud note merely at a zero crossing.
 function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
-  const time = active.elapsed / sampleRate;
+  // Moving or unrendered frame gains are not valid at the current admission time.
+  const steady = active.gainsSteady, time = steady ? 0 : active.elapsed / sampleRate;
   let gain = 0;
   for (let index = 0; index < active.graph.carriers.length; index++) {
     const op = active.graph.carriers[index];
     const level = active.controlRamps & OPERATOR_RAMP ?
       rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, active.elapsed) : active.operatorLevels[op];
-    gain += active.levels[op] * level * gainAt(active, time, op);
+    gain += active.levels[op] * level * (steady ? active.gains[op] : gainAt(active, time, op));
   }
   const expression = active.controlRamps & EXPRESSION_RAMP ?
     rampAt(active.expressionFrom, active.expressionTarget, active.expressionStart, active.expressionFrames, active.elapsed) :
@@ -1275,74 +1318,88 @@ function settleDecimator(state: Float64Array, clear: boolean): boolean {
   return true;
 }
 
+/** Keep the final silent-range clearing out of the per-frame audible kernel.
+ * Called only for an idle FIR, after callbacks have had a chance to admit notes. */
+function finishIdleRender(synth: Synth, left: Float32Array, right: Float32Array, frame: number, end: number): boolean {
+  const dc = synth.dcState;
+  if (synth.voices.length !== 0 || synth.fades.length !== 0 || synth.spillRemaining !== 0 ||
+      dc[0] !== 0 || dc[1] !== 0 || dc[2] !== 0 || dc[3] !== 0) return false;
+  typedArrayFill.call(left, 0, frame + 1, end);
+  if (right !== left) typedArrayFill.call(right, 0, frame + 1, end);
+  (synth as MutableCounters).currentFrame += end - frame;
+  return true;
+}
+
 export class Synth {
-  declare readonly sampleRate: number;
-  declare readonly maxVoices: number;
-  declare readonly quality: QualityProfile;
+  // Real fields, not `declare`: they define own slots at construction, so an inherited
+  // accessor on Object.prototype can neither swallow a constructor write nor answer a later read.
+  readonly sampleRate: number;
+  readonly maxVoices: number;
+  readonly quality: QualityProfile;
   /** @internal */
-  declare oversample: number;
-  declare readonly currentFrame: number;
-  declare readonly errorCount: number;
-  declare readonly lastStolenId: number | null;
-  declare onVoiceEnded?: ((id: number, reason: VoiceEndReason) => void) | null;
+  oversample: number;
+  readonly currentFrame: number;
+  readonly errorCount: number;
+  readonly lastStolenId: number | null;
+  onVoiceEnded?: ((id: number, reason: VoiceEndReason) => void) | null;
   /** @internal */
-  declare voices: ActiveVoice[];
+  voices: ActiveVoice[];
   /** @internal */
-  declare fades: ActiveVoice[];
+  fades: ActiveVoice[];
   /** @internal */
-  declare fadeFrames: number;
+  fadeFrames: number;
   /** @internal */
-  declare spillLeft: number;
+  spillLeft: number;
   /** @internal */
-  declare spillRight: number;
+  spillRight: number;
   /** @internal */
-  declare spillRemaining: number;
+  spillRemaining: number;
   /** @internal */
-  declare nextId: number;
+  nextId: number;
   /** @internal */
-  declare subTimes: Float64Array;
+  subTimes: Float64Array;
   /** @internal */
-  declare sequence: number;
+  sequence: number;
   /** @internal */
-  declare decimatorCoefficients: Float64Array;
+  decimatorCoefficients: Float64Array;
   /** @internal Oversampled stereo mix for the current output frame. */
-  declare mixLeft: Float64Array;
+  mixLeft: Float64Array;
   /** @internal */
-  declare mixRight: Float64Array;
+  mixRight: Float64Array;
   /** @internal One voice's oversampled samples for the current output frame. */
-  declare subSamples: Float64Array;
+  subSamples: Float64Array;
   /** @internal Shared post-mix decimator state, one per output channel. */
-  declare filterLeft: Float64Array;
+  filterLeft: Float64Array;
   /** @internal */
-  declare filterRight: Float64Array;
+  filterRight: Float64Array;
   /** @internal True once both decimator states have drained below the floor. */
-  declare decimatorIdle: boolean;
+  decimatorIdle: boolean;
   /** @internal filterRight is stale and logically equals filterLeft (dual mono). */
-  declare decimatorMirrored: boolean;
+  decimatorMirrored: boolean;
   /** @internal Bounded spare slots include one admission scratch slot. */
-  declare freeVoices: ActiveVoice[];
+  freeVoices: ActiveVoice[];
   /** @internal Preallocated notifications are drained after each stable frame. */
-  declare terminalIds: Float64Array;
+  terminalIds: Float64Array;
   /** @internal */
-  declare terminalErrors: Uint8Array;
+  terminalErrors: Uint8Array;
   /** @internal */
-  declare rendering: boolean;
+  rendering: boolean;
   /** @internal */
-  declare mixGain: number;
+  mixGain: number;
   /** @internal */
-  declare tuning: NormalizedTuning;
+  tuning: NormalizedTuning;
   /** @internal */
-  declare stealing: NonNullable<SynthOptions['stealing']>;
+  stealing: NonNullable<SynthOptions['stealing']>;
   /** @internal */
-  declare saturation: NonNullable<SynthOptions['saturation']>;
+  saturation: NonNullable<SynthOptions['saturation']>;
   /** @internal */
-  declare dcBlock: boolean;
+  dcBlock: boolean;
   /** @internal DC blocker [previous input, previous output] per channel. */
-  declare dcState: Float64Array;
+  dcState: Float64Array;
   /** @internal */
-  declare dcPole: number;
+  dcPole: number;
   /** @internal */
-  declare dcGain: number;
+  dcGain: number;
 
   constructor(sampleRate: number, maxVoices = DEFAULT_MAX_VOICES, options: SynthOptions = {}) {
     if (typeof sampleRate !== 'number' || !Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 192000) {
@@ -1409,8 +1466,8 @@ export class Synth {
     const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
     for (let op = 0; op < 4; op++) {
       const source = active.voice.ops[op];
-      const ratio = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, active.elapsed);
-      const target = active.frequencyTargets[op] || frequency * ratio;
+      const target = active.frequencyTargets[op] || frequency *
+        rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, active.elapsed);
       const hz = rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, active.elapsed);
       active.baseIncrements[op] = PHASE_CYCLE * hz * 2 ** (source.detune / 1200) / rate;
       active.increments[op] = Math.min(MAX_STEP, active.baseIncrements[op] * factor);
@@ -1426,6 +1483,7 @@ export class Synth {
       const candidate = this.voices[index];
       if (candidate.voicePriority > voicePriority) continue;
       const current = chosen < 0 ? undefined : this.voices[chosen];
+      if (current && candidate.voicePriority > current.voicePriority) continue;
       let preferred = !current || candidate.voicePriority < current.voicePriority;
       let audibility = 0;
       if (this.stealing === 'quietest') audibility = voiceAudibility(candidate, this.sampleRate);
@@ -1463,123 +1521,152 @@ export class Synth {
     // Initialize the spare before changing admission state. No slot can be reused
     // while it is still active or fading, including during terminal callbacks.
     const active = this.freeVoices.pop()!;
-    const { baseIncrements, increments, sustainDb, sustainGain, steps, attackStep, decayStep, levels } = active;
-    const frequency = tuningFrequency(note, this.tuning);
-    const rate = this.sampleRate * this.oversample;
-    for (let i = 0; i < 4; i++) {
-      const op = voice.ops[i];
-      active.ratios[i] = active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
-      active.frequencyTargets[i] = op.frequency ?? 0;
-      active.frequencies[i] = active.frequencyFrom[i] = op.frequency ?? frequency * op.ratio;
-      const scale = op.keyScale;
-      const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
-        (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
-      levels[i] = op.level * 10 ** (-(attenuation + (op.velocitySensitivity ?? 0) * (1 - velocity)) / 20);
-      active.waveforms[i] = waveformCode(op.waveform);
-      active.noiseSteps[i] = (op.noiseRate ?? 8000) / rate;
-      const operatorFrequency = (op.frequency ?? frequency * op.ratio) * 2 ** (op.detune / 1200);
-      active.frequencyScales[i] = PHASE_CYCLE * 2 ** (op.detune / 1200) / rate;
-      baseIncrements[i] = PHASE_CYCLE * operatorFrequency / rate;
-      // Retain the original pre-PM cap, but keep unclipped pitch bases so a
-      // downward bend can bring high-ratio operators back into audible range.
-      increments[i] = PHASE_CYCLE * Math.min(rate * 0.45, operatorFrequency) / rate;
-      sustainDb[i] = op.adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(op.adsr.s));
-      sustainGain[i] = sustainDb[i] <= FLOOR_DB ? 0 : 10 ** (sustainDb[i] / 20);
-      steps[i] = Math.min(MAX_STEP, increments[i]);
-      const attack = active.attackTimes[i] = operatorDuration(op.adsr.a, note, op.rateKeyScale);
-      const decay = active.decayTimes[i] = operatorDuration(op.adsr.d, note, op.rateKeyScale);
-      active.releaseTimes[i] = operatorDuration(op.adsr.r, note, op.rateKeyScale);
-      attackStep[i] = attack === 0 ? 1 : 10 ** (-FLOOR_DB / (20 * attack * rate));
-      decayStep[i] = decay === 0 ? 1 : 10 ** (sustainDb[i] / (20 * decay * rate));
-      setSustainRate(active, i, op.adsr.sr, note, op.rateKeyScale, rate);
+    try {
+      const sameVoice = active.voice === voice;
+      const { baseIncrements, increments, sustainDb, sustainGain, steps, attackStep, decayStep, levels } = active;
+      const frequency = tuningFrequency(note, this.tuning);
+      const rate = this.sampleRate * this.oversample;
+      let envelopeTimingCacheable = true;
+      for (let i = 0; i < 4; i++) {
+        const op = voice.ops[i];
+        active.ratios[i] = active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
+        // Optional fields are read only when own: an omitted one must not fall through to
+        // Object.prototype, where an inherited value would bypass the snapshot's validation.
+        const frequencyOverride = Object.hasOwn(op, 'frequency') ? op.frequency : undefined;
+        const rateKeyScale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
+        const noiseRate = Object.hasOwn(op, 'noiseRate') ? op.noiseRate : undefined;
+        active.frequencyTargets[i] = frequencyOverride ?? 0;
+        active.frequencies[i] = active.frequencyFrom[i] = frequencyOverride ?? frequency * op.ratio;
+        const scale = Object.hasOwn(op, 'keyScale') ? op.keyScale : undefined;
+        const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
+          (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
+        levels[i] = op.level * 10 ** (-(attenuation + (Object.hasOwn(op, 'velocitySensitivity') ? op.velocitySensitivity! : 0) * (1 - velocity)) / 20);
+        active.waveforms[i] = waveformCode(Object.hasOwn(op, 'waveform') ? op.waveform : undefined);
+        active.noiseSteps[i] = (noiseRate ?? 8000) / rate;
+        const operatorFrequency = (frequencyOverride ?? frequency * op.ratio) * 2 ** (op.detune / 1200);
+        active.frequencyScales[i] = PHASE_CYCLE * 2 ** (op.detune / 1200) / rate;
+        baseIncrements[i] = PHASE_CYCLE * operatorFrequency / rate;
+        // Retain the original pre-PM cap, but keep unclipped pitch bases so a
+        // downward bend can bring high-ratio operators back into audible range.
+        increments[i] = PHASE_CYCLE * Math.min(rate * 0.45, operatorFrequency) / rate;
+        // Only pristine sustain constants belong to the immutable patch across pooled notes.
+        if (!sameVoice || active.envelopeEdited[i]) {
+          sustainDb[i] = op.adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(op.adsr.s));
+          sustainGain[i] = sustainDb[i] <= FLOOR_DB ? 0 : 10 ** (sustainDb[i] / 20);
+        }
+        steps[i] = Math.min(MAX_STEP, increments[i]);
+        // Earlier optional getters may change the context during this admission.
+        envelopeTimingCacheable &&= stableEnvelopeContext();
+        // Pristine coefficients without rate key scaling are note-independent.
+        if (!sameVoice || active.envelopeEdited[i] || !active.envelopeTimingCacheable || !envelopeTimingCacheable || (rateKeyScale ?? 0) !== 0) {
+          const attack = active.attackTimes[i] = operatorDuration(op.adsr.a, note, rateKeyScale);
+          const decay = active.decayTimes[i] = operatorDuration(op.adsr.d, note, rateKeyScale);
+          active.releaseTimes[i] = operatorDuration(op.adsr.r, note, rateKeyScale);
+          attackStep[i] = attack === 0 ? 1 : 10 ** (-FLOOR_DB / (20 * attack * rate));
+          decayStep[i] = decay === 0 ? 1 : 10 ** (sustainDb[i] / (20 * decay * rate));
+          setSustainRate(active, i, Object.hasOwn(op.adsr, 'sr') ? op.adsr.sr : undefined, note, rateKeyScale, rate);
+        }
+      }
+      active.envelopeTimingCacheable = envelopeTimingCacheable;
+      active.id = id;
+      active.voicePriority = voicePriority;
+      active.note = note;
+      active.sequence = this.sequence++;
+      active.voice = voice;
+      active.pitchEnvelope = Object.hasOwn(voice, 'pitchEnvelope') ? voice.pitchEnvelope : undefined;
+      active.graph = ALGORITHMS[voice.algorithm];
+      const { waveforms } = active;
+      active.frameKernel = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 ? SINE_FRAMES[voice.algorithm] :
+        waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8 ? WAVE_FRAMES[voice.algorithm] : null;
+      // Cache the fixed topology in pooled typed storage; frozen graph-array
+      // indexing otherwise repeats for every operator at every oversampled frame.
+      for (let op = 0; op < 4; op++) {
+        active.inputIndices[op * 2] = active.graph.inputs[op][0] ?? -1;
+        active.inputIndices[op * 2 + 1] = active.graph.inputs[op][1] ?? -1;
+      }
+      active.carrierIndices.set(active.graph.carriers);
+      active.velocity = velocity;
+      active.expression = 1;
+      active.pan = pan;
+      active.voicePan = Object.hasOwn(voice, 'pan') ? voice.pan! : 0;
+      active.expressionFrom = active.expressionTarget = 1;
+      active.expressionStart = active.expressionFrames = 0;
+      active.panFrom = active.panTarget = pan;
+      active.panStart = active.panFrames = 0;
+      active.modulation = active.modulationFrom = active.modulationTarget = 1;
+      active.modulationStart = active.modulationFrames = active.controlRamps = 0;
+      active.modIndex = voice.modIndex * HALF_TURNS_PER_RADIAN;
+      active.amDepth = voice.lfo.amDepth;
+      active.pmDepth = voice.lfo.pmDepth;
+      // Snapshot the LFO shape into fixed numeric slots: voice LFO objects differ in
+      // optional fields, and per-frame reads through them go polymorphic.
+      const lfo = voice.lfo;
+      active.lfoDelay = Object.hasOwn(lfo, 'delay') ? lfo.delay! : 0;
+      active.lfoRate = lfo.rate;
+      active.lfoPhase = Object.hasOwn(lfo, 'phase') ? lfo.phase! : 0;
+      active.lfoGlobal = Object.hasOwn(lfo, 'sync') && lfo.sync === 'global';
+      active.lfoCode = lfoCode;
+      const amTargets = Object.hasOwn(lfo, 'amTargets') ? lfo.amTargets : undefined;
+      const pmTargets = Object.hasOwn(lfo, 'pmTargets') ? lfo.pmTargets : undefined;
+      // Explicit all-unity masks can use the same shared factors as omitted targets.
+      active.amTargeted = amTargets !== undefined &&
+        (amTargets[0] !== 1 || amTargets[1] !== 1 || amTargets[2] !== 1 || amTargets[3] !== 1);
+      active.pmTargeted = pmTargets !== undefined &&
+        (pmTargets[0] !== 1 || pmTargets[1] !== 1 || pmTargets[2] !== 1 || pmTargets[3] !== 1);
+      for (let i = 0; i < 4; i++) {
+        active.amTargets[i] = amTargets?.[i] ?? 1;
+        active.pmTargets[i] = pmTargets?.[i] ?? 1;
+      }
+      active.pitchFrom = active.pitchTarget = active.pitchStart = active.pitchFrames = 0;
+      active.operatorLevels.fill(1);
+      active.operatorFrom.fill(1);
+      active.operatorTargets.fill(1);
+      active.operatorStart = active.operatorFrames = 0;
+      active.tunedFrequency = frequency;
+      active.ratioStart = active.ratioFrames = active.frequencyStart = active.frequencyFrames = 0;
+      active.scalarValues[0] = voice.feedback;
+      active.scalarValues[1] = voice.lfo.rate;
+      active.scalarValues[2] = voice.lfo.amDepth;
+      active.scalarValues[3] = voice.lfo.pmDepth;
+      active.scalarValues[4] = 1;
+      active.scalarFrom.set(active.scalarValues);
+      active.scalarTargets.set(active.scalarValues);
+      active.scalarStarts.fill(0);
+      active.scalarFrames.fill(0);
+      active.envelopeStart.fill(0);
+      active.envelopeFromDb.fill(FLOOR_DB);
+      active.envelopeEdited.fill(0);
+      active.releaseStarts.fill(0);
+      active.lfoTurns = active.lfoCycle = 0;
+      active.lfoLive = false;
+      active.pitchRelease = 0;
+      active.silentGains = false;
+      updatePan(active);
+      active.lastSample = active.fadeRemaining = 0;
+      active.lastFadeGain = 1;
+      active.carrierGain = HEADROOM / active.graph.carriers.length;
+      active.phases.fill(0);
+      active.noiseStates.fill(NOISE_SEED);
+      active.noiseTurns.fill(0);
+      active.values.fill(0);
+      active.releaseDb.fill(0);
+      active.releaseStep.fill(0);
+      active.envelopeSegment.fill(0);
+      active.envelopeUntil.fill(0);
+      active.envelopeFastUntil = 0;
+      active.gains.fill(0);
+      active.gainsSteady = false;
+      active.pitchSettled = false;
+      active.previous = active.older = active.elapsed = 0;
+      active.feedbackScale = feedbackGain(voice.feedback);
+      active.releaseTime = active.releaseEnd = -1;
+    } catch (error) {
+      // A failed spare must not retain partial coefficients or escape the pool.
+      active.voice = null!;
+      active.envelopeTimingCacheable = false;
+      this.freeVoices.push(active);
+      throw error;
     }
-    active.id = id;
-    active.voicePriority = voicePriority;
-    active.note = note;
-    active.sequence = this.sequence++;
-    active.voice = voice;
-    active.pitchEnvelope = voice.pitchEnvelope;
-    active.graph = ALGORITHMS[voice.algorithm];
-    const { waveforms } = active;
-    active.frameKernel = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 ? SINE_FRAMES[voice.algorithm] :
-      waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8 ? WAVE_FRAMES[voice.algorithm] : null;
-    // Cache the fixed topology in pooled typed storage; frozen graph-array
-    // indexing otherwise repeats for every operator at every oversampled frame.
-    for (let op = 0; op < 4; op++) {
-      active.inputIndices[op * 2] = active.graph.inputs[op][0] ?? -1;
-      active.inputIndices[op * 2 + 1] = active.graph.inputs[op][1] ?? -1;
-    }
-    active.carrierIndices.set(active.graph.carriers);
-    active.velocity = velocity;
-    active.expression = 1;
-    active.pan = pan;
-    active.voicePan = voice.pan ?? 0;
-    active.expressionFrom = active.expressionTarget = 1;
-    active.expressionStart = active.expressionFrames = 0;
-    active.panFrom = active.panTarget = pan;
-    active.panStart = active.panFrames = 0;
-    active.modulation = active.modulationFrom = active.modulationTarget = 1;
-    active.modulationStart = active.modulationFrames = active.controlRamps = 0;
-    active.modIndex = voice.modIndex * HALF_TURNS_PER_RADIAN;
-    active.amDepth = voice.lfo.amDepth;
-    active.pmDepth = voice.lfo.pmDepth;
-    // Snapshot the LFO shape into fixed numeric slots: voice LFO objects differ in
-    // optional fields, and per-frame reads through them go polymorphic.
-    const lfo = voice.lfo;
-    active.lfoDelay = lfo.delay ?? 0;
-    active.lfoRate = lfo.rate;
-    active.lfoPhase = lfo.phase ?? 0;
-    active.lfoGlobal = lfo.sync === 'global';
-    active.lfoCode = lfoCode;
-    active.amTargeted = lfo.amTargets !== undefined;
-    active.pmTargeted = lfo.pmTargets !== undefined;
-    for (let i = 0; i < 4; i++) {
-      active.amTargets[i] = lfo.amTargets?.[i] ?? 1;
-      active.pmTargets[i] = lfo.pmTargets?.[i] ?? 1;
-    }
-    active.pitchFrom = active.pitchTarget = active.pitchStart = active.pitchFrames = 0;
-    active.operatorLevels.fill(1);
-    active.operatorFrom.fill(1);
-    active.operatorTargets.fill(1);
-    active.operatorStart = active.operatorFrames = 0;
-    active.tunedFrequency = frequency;
-    active.ratioStart = active.ratioFrames = active.frequencyStart = active.frequencyFrames = 0;
-    active.scalarValues[0] = voice.feedback;
-    active.scalarValues[1] = voice.lfo.rate;
-    active.scalarValues[2] = voice.lfo.amDepth;
-    active.scalarValues[3] = voice.lfo.pmDepth;
-    active.scalarValues[4] = 1;
-    active.scalarFrom.set(active.scalarValues);
-    active.scalarTargets.set(active.scalarValues);
-    active.scalarStarts.fill(0);
-    active.scalarFrames.fill(0);
-    active.envelopeStart.fill(0);
-    active.envelopeFromDb.fill(FLOOR_DB);
-    active.envelopeEdited.fill(0);
-    active.releaseStarts.fill(0);
-    active.lfoTurns = active.lfoCycle = 0;
-    active.lfoLive = false;
-    active.pitchRelease = 0;
-    active.silentGains = false;
-    updatePan(active);
-    active.lastSample = active.fadeRemaining = 0;
-    active.lastFadeGain = 1;
-    active.carrierGain = HEADROOM / active.graph.carriers.length;
-    active.phases.fill(0);
-    active.noiseStates.fill(NOISE_SEED);
-    active.noiseTurns.fill(0);
-    active.values.fill(0);
-    active.releaseDb.fill(0);
-    active.releaseStep.fill(0);
-    active.envelopeSegment.fill(0);
-    active.envelopeUntil.fill(0);
-    active.envelopeFastUntil = 0;
-    active.gains.fill(0);
-    active.gainsSteady = false;
-    active.pitchSettled = false;
-    active.previous = active.older = active.elapsed = 0;
-    active.feedbackScale = feedbackGain(voice.feedback);
-    active.releaseTime = active.releaseEnd = -1;
     (this as MutableCounters).lastStolenId = null;
     if (this.voices.length >= this.maxVoices) {
       const stolen = removeAt(this.voices, stolenIndex);
@@ -1673,14 +1760,26 @@ export class Synth {
     for (const item of this.voices) if (item.id === id) { active = item; break; }
     if (!active) return false;
     if (active.controlRamps !== 0) advanceControls(active);
-    if (controls.pitch !== undefined) {
+    // Controls are read only when own: an omitted control must not fall through to
+    // Object.prototype, where an inherited value would bypass the snapshot's validation.
+    const pitch = Object.hasOwn(controls, 'pitch') ? controls.pitch : undefined;
+    const lfoRate = Object.hasOwn(controls, 'lfoRate') ? controls.lfoRate : undefined;
+    const operatorRatios = Object.hasOwn(controls, 'operatorRatios') ? controls.operatorRatios : undefined;
+    const operatorFrequencies = Object.hasOwn(controls, 'operatorFrequencies') ? controls.operatorFrequencies : undefined;
+    const operatorADSR = Object.hasOwn(controls, 'operatorADSR') ? controls.operatorADSR : undefined;
+    const expression = Object.hasOwn(controls, 'expression') ? controls.expression : undefined;
+    const pan = Object.hasOwn(controls, 'pan') ? controls.pan : undefined;
+    const modulation = Object.hasOwn(controls, 'modulation') ? controls.modulation : undefined;
+    const operatorLevels = Object.hasOwn(controls, 'operatorLevels') ? controls.operatorLevels : undefined;
+    if (pitch !== undefined) {
       active.pitchFrom = pitchAt(active, active.elapsed);
-      active.pitchTarget = controls.pitch;
+      active.pitchTarget = pitch;
       active.pitchStart = active.elapsed;
-      active.pitchFrames = (controls.glide ?? 0) * this.sampleRate;
+      active.pitchFrames = (Object.hasOwn(controls, 'glide') ? controls.glide! : 0) * this.sampleRate;
     }
-    const frames = (controls.ramp ?? 0) * this.sampleRate;
-    if (controls.lfoRate !== undefined && !active.lfoLive) {
+    const frames = (Object.hasOwn(controls, 'ramp') ? controls.ramp! : 0) * this.sampleRate;
+    // A no-op rate edit must not replace the analytic clock with accumulated phase.
+    if (lfoRate !== undefined && !active.lfoLive && lfoRate !== active.scalarValues[1]) {
       const clock = active.lfoGlobal ? this.currentFrame : active.elapsed;
       const turns = clock / this.sampleRate * active.scalarValues[1] + active.lfoPhase, whole = Math.floor(turns);
       active.lfoTurns = turns - whole;
@@ -1688,7 +1787,8 @@ export class Synth {
       active.lfoLive = true;
     }
     for (let field = 0; field < SCALAR_FIELDS.length; field++) {
-      const value = controls[SCALAR_FIELDS[field]];
+      const key = SCALAR_FIELDS[field];
+      const value = Object.hasOwn(controls, key) ? controls[key] : undefined;
       if (value === undefined) continue;
       active.scalarFrom[field] = active.scalarValues[field];
       active.scalarTargets[field] = value;
@@ -1702,37 +1802,38 @@ export class Synth {
       active.controlRamps |= ENGINE_RAMP;
     }
     if (active.controlRamps & ENGINE_RAMP) advanceControls(active);
-    if (controls.operatorRatios !== undefined || controls.operatorFrequencies !== undefined) {
+    if (operatorRatios !== undefined || operatorFrequencies !== undefined) {
       // Sample ongoing pitch-independent Hz before changing either timeline.
       for (let op = 0; op < 4; op++) active.frequencies[op] = rampedFrequency(active, op, active.elapsed);
     }
-    if (controls.operatorRatios !== undefined) {
+    if (operatorRatios !== undefined) {
       for (let op = 0; op < 4; op++) {
         active.ratioFrom[op] = active.ratios[op];
-        active.ratioTargets[op] = controls.operatorRatios[op];
-        if (frames === 0) active.ratios[op] = controls.operatorRatios[op];
+        active.ratioTargets[op] = operatorRatios[op];
+        if (frames === 0) active.ratios[op] = operatorRatios[op];
       }
       active.ratioStart = active.elapsed;
       active.ratioFrames = frames;
       if (frames !== 0) active.controlRamps |= RATIO_RAMP;
       else active.controlRamps &= ~RATIO_RAMP;
     }
-    if (controls.operatorFrequencies !== undefined) {
+    if (operatorFrequencies !== undefined) {
       for (let op = 0; op < 4; op++) {
         active.frequencyFrom[op] = active.frequencies[op];
-        active.frequencyTargets[op] = controls.operatorFrequencies[op] ?? 0;
+        active.frequencyTargets[op] = operatorFrequencies[op] ?? 0;
       }
       active.frequencyStart = active.elapsed;
       active.frequencyFrames = frames;
       if (frames !== 0) active.controlRamps |= FREQUENCY_RAMP;
       else active.controlRamps &= ~FREQUENCY_RAMP;
     }
-    if (controls.operatorRatios !== undefined || controls.operatorFrequencies !== undefined) this.retuneVoice(active);
-    if (controls.operatorADSR !== undefined) {
+    if (operatorRatios !== undefined || operatorFrequencies !== undefined) this.retuneVoice(active);
+    if (operatorADSR !== undefined) {
       const time = active.elapsed / this.sampleRate;
       for (let op = 0; op < 4; op++) {
-        const db = envelopeDbAt(active, time, op), adsr = controls.operatorADSR[op];
-        const keyScale = active.voice.ops[op].rateKeyScale;
+        const db = envelopeDbAt(active, time, op), adsr = operatorADSR[op];
+        const source = active.voice.ops[op];
+        const keyScale = Object.hasOwn(source, 'rateKeyScale') ? source.rateKeyScale : undefined;
         active.envelopeFromDb[op] = db;
         active.envelopeStart[op] = time;
         active.envelopeEdited[op] = 1;
@@ -1745,7 +1846,7 @@ export class Synth {
         active.sustainDb[op] = adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(adsr.s));
         active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : 10 ** (active.sustainDb[op] / 20);
         active.releaseTimes[op] = operatorDuration(adsr.r, active.note, keyScale);
-        setSustainRate(active, op, adsr.sr, active.note, keyScale, this.sampleRate * this.oversample);
+        setSustainRate(active, op, Object.hasOwn(adsr, 'sr') ? adsr.sr : undefined, active.note, keyScale, this.sampleRate * this.oversample);
         if (active.releaseTime >= 0) {
           active.releaseDb[op] = db;
           active.releaseStarts[op] = time;
@@ -1753,45 +1854,45 @@ export class Synth {
       }
       if (active.releaseTime >= 0) active.releaseEnd = carrierReleaseEnd(active, time);
     }
-    if (controls.expression !== undefined) {
+    if (expression !== undefined) {
       active.expressionFrom = active.expression;
-      active.expressionTarget = controls.expression;
+      active.expressionTarget = expression;
       active.expressionStart = active.elapsed;
-      active.expressionFrames = active.expression === controls.expression ? 0 : frames;
+      active.expressionFrames = active.expression === expression ? 0 : frames;
       if (active.expressionFrames === 0) {
-        active.expression = controls.expression;
+        active.expression = expression;
         active.controlRamps &= ~EXPRESSION_RAMP;
       } else active.controlRamps |= EXPRESSION_RAMP;
     }
-    if (controls.pan !== undefined) {
+    if (pan !== undefined) {
       active.panFrom = active.pan;
-      active.panTarget = controls.pan;
+      active.panTarget = pan;
       active.panStart = active.elapsed;
-      active.panFrames = active.pan === controls.pan ? 0 : frames;
+      active.panFrames = active.pan === pan ? 0 : frames;
       if (active.panFrames === 0) {
-        active.pan = controls.pan;
+        active.pan = pan;
         active.controlRamps &= ~PAN_RAMP;
       } else active.controlRamps |= PAN_RAMP;
     }
-    if (controls.expression !== undefined || controls.pan !== undefined) updatePan(active);
-    if (controls.modulation !== undefined) {
+    if (expression !== undefined || pan !== undefined) updatePan(active);
+    if (modulation !== undefined) {
       active.modulationFrom = active.modulation;
-      active.modulationTarget = controls.modulation;
+      active.modulationTarget = modulation;
       active.modulationStart = active.elapsed;
-      active.modulationFrames = active.modulation === controls.modulation ? 0 : frames;
+      active.modulationFrames = active.modulation === modulation ? 0 : frames;
       if (active.modulationFrames === 0) {
-        active.modulation = controls.modulation;
+        active.modulation = modulation;
         active.controlRamps &= ~MODULATION_RAMP;
       } else active.controlRamps |= MODULATION_RAMP;
       updateModulation(active);
     }
-    if (controls.operatorLevels !== undefined) {
+    if (operatorLevels !== undefined) {
       let changed = false;
       for (let op = 0; op < 4; op++) {
         active.operatorFrom[op] = active.operatorLevels[op];
-        active.operatorTargets[op] = controls.operatorLevels[op];
+        active.operatorTargets[op] = operatorLevels[op];
         if (active.operatorFrom[op] !== active.operatorTargets[op]) changed = true;
-        if (frames === 0) active.operatorLevels[op] = controls.operatorLevels[op];
+        if (frames === 0) active.operatorLevels[op] = operatorLevels[op];
       }
       active.operatorStart = active.elapsed;
       active.operatorFrames = changed ? frames : 0;
@@ -1799,7 +1900,7 @@ export class Synth {
       else active.controlRamps |= OPERATOR_RAMP;
     }
     // Reset a former PM/glide step even when modulation becomes zero.
-    if (controls.pitch !== undefined || controls.modulation !== undefined) {
+    if (pitch !== undefined || modulation !== undefined) {
       active.pitchSettled = false;
       const factor = 2 ** (pitchAt(active, active.elapsed) / 12);
       for (let op = 0; op < 4; op++) {
@@ -1837,22 +1938,24 @@ export class Synth {
     // gate opens without an instantaneous gain or pitch step.
     const fade = lfoDelay > 0 && time < lfoDelay + LFO_DELAY_FADE ? (time - lfoDelay) / LFO_DELAY_FADE : 1;
     const amDepth = active.amDepth * fade, pmDepth = active.pmDepth * fade;
+    const amEnabled = lfoEnabled && active.amDepth !== 0, pmEnabled = lfoEnabled && active.pmDepth !== 0;
     let tremolo = 0;
-    if (lfoEnabled && (active.amDepth !== 0 || active.pmDepth !== 0)) {
+    if (amEnabled || pmEnabled) {
       const clock = active.lfoGlobal ? this.currentFrame : active.elapsed;
       const turns = active.lfoLive ? active.lfoTurns : clock / this.sampleRate * active.lfoRate + active.lfoPhase;
       const whole = Math.floor(turns);
       tremolo = lfoAt(turns - whole, active.lfoCode, whole + active.lfoCycle);
     }
-    const amGain = !lfoEnabled || active.amDepth === 0 ? 1 : 1 - amDepth * (0.5 + 0.5 * tremolo);
-    const pmFactor = !lfoEnabled || active.pmDepth === 0 ? 1 : fastExp2(pmDepth * tremolo / 1200);
+    const amGain = amEnabled ? 1 - amDepth * (0.5 + 0.5 * tremolo) : 1;
+    const pmFactor = pmEnabled ? fastExp2(pmDepth * tremolo / 1200) : 1;
     const targeted = active.amTargeted, pmTargeted = active.pmTargeted;
     if (targeted || pmTargeted) {
       const amTargets = active.amTargets, pmTargets = active.pmTargets;
+      // Refresh unity for inactive/zero-weight targets: pitch ramps read these scratch factors.
       for (let op = 0; op < 4; op++) {
         const am = amTargets[op], pm = pmTargets[op];
-        active.amGains[op] = am === 1 ? amGain : !lfoEnabled ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
-        active.pmFactors[op] = pm === 1 ? pmFactor : !lfoEnabled ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
+        active.amGains[op] = am === 1 ? amGain : !amEnabled || am === 0 ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
+        active.pmFactors[op] = pm === 1 ? pmFactor : !pmEnabled || pm === 0 ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
       }
     }
     const gliding = active.pitchFrames !== 0;
@@ -2136,15 +2239,20 @@ export class Synth {
           // A silent channel goes idle once its FIR history is zero. After the
           // last source retires, history below the -96 dB floor snaps to zero.
           const clear = this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0;
-          const idleLeft = silentLeft && settleDecimator(filterLeft, clear);
-          const idleRight = mirrored ? idleLeft : silentRight && settleDecimator(filterRight, clear);
+          // Zero input cannot refill a drained history. Only check that flag
+          // on silent channels, leaving the audible hot path unchanged.
+          const idleLeft = silentLeft && (this.decimatorIdle || settleDecimator(filterLeft, clear));
+          const idleRight = mirrored ? idleLeft : silentRight && (this.decimatorIdle || settleDecimator(filterRight, clear));
           this.decimatorIdle = idleLeft && idleRight;
-          if (this.decimatorIdle) this.decimatorMirrored = true;
         }
         // Callbacks may admit/release notes, but replacements first render on the
         // next frame. Live traversal would let a zero-release chain run forever.
         for (let index = 0; index < terminalCount; index++) {
           this.ended(this.terminalIds[index], this.terminalErrors[index] ? 'error' : 'ended');
+        }
+        if (this.decimatorIdle) {
+          this.decimatorMirrored = true;
+          if (finishIdleRender(this, left, right, frame, end)) return;
         }
         (this as MutableCounters).currentFrame++;
       }

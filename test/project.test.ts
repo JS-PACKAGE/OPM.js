@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { compileBeatSequence, parseScoreProject, serializeScoreProject, MAX_SCORE_PROJECT_BYTES, MAX_SCORE_PROJECT_VOICES } from '../src/core/project.js';
 import type { BeatSequenceEvent } from '../src/core/sequence.js';
 import { beatsToSeconds } from '../src/core/transport.js';
+import type { TempoPoint } from '../src/core/transport.js';
 import { renderSequence, renderSequenceChunks, MAX_LONG_SEQUENCE_EVENTS } from '../src/core/sequence.js';
 import { createWavEncoder } from '../src/core/wav.js';
 import { brass } from '../src/voices/brass.js';
@@ -86,6 +87,16 @@ test('settings and all input budgets are enforced', () => {
   assert.throws(() => parseScoreProject({ ...source(), events: [{ type: 'note', id: 1, voice: 'lead', note: 60, beat: 2000, duration: 1 }], tempoMap: [{ beat: 0, bpm: 1 }] }), /second horizon/);
 });
 
+test('project text admits the exact byte limit and preserves the worst-case UTF-16 boundary', () => {
+  const json = serializeScoreProject(parseScoreProject(source()));
+  const padded = json + ' '.repeat(MAX_SCORE_PROJECT_BYTES - Buffer.byteLength(json));
+  assert.equal(serializeScoreProject(parseScoreProject(padded)), json);
+  const boundary = Math.floor(MAX_SCORE_PROJECT_BYTES / 3);
+  const surrogate = String.fromCharCode(0xd800);
+  assert.throws(() => parseScoreProject(surrogate.repeat(boundary)), SyntaxError);
+  assert.throws(() => parseScoreProject(surrogate.repeat(boundary + 1)), RangeError);
+});
+
 test('soft-knee saturation and DC blocking round-trip while default projects omit the fields', () => {
   const plain = parseScoreProject(source());
   assert.equal(plain.settings.saturation, undefined);
@@ -123,6 +134,27 @@ test('note gates integrate onset and end across tempo ramps and step boundaries'
   assert.equal(result[1].type === 'control' && result[1].controls.glide, 0.4);
   assert.equal(result[1].type === 'control' && result[1].controls.ramp, 0.7);
   assert.equal(result[2].time, beatsToSeconds(6.5, tempoMap));
+});
+
+test('long tempo maps preserve ramp boundaries and gate durations for nonmonotonic event positions', () => {
+  const tempoMap: TempoPoint[] = Array.from({ length: 1024 }, (_, beat) => ({ beat, bpm: 120 }));
+  tempoMap[600] = { beat: 600, bpm: 120, curve: 'linear', endBpm: 240 };
+  tempoMap[601] = { beat: 601, bpm: 60 };
+  const seconds = (beat: number): number => beat <= 600 ? beat / 2 :
+    beat <= 601 ? 300 + Math.log1p(beat - 600) / 2 :
+    beat <= 602 ? 300 + Math.LN2 / 2 + beat - 601 : 301 + Math.LN2 / 2 + (beat - 602) / 2;
+  const beats = [1023.5, 600.5, 0, 601, 602, 599.75, 601.5];
+  const events: BeatSequenceEvent[] = beats.map((beat, index) => ({
+    type: 'note', id: index + 1, beat, duration: 0.75, voice: 'lead', note: 60,
+  }));
+  const result = compileBeatSequence(events, { tempoMap, voices: new Map([['lead', brass]]) });
+  for (const event of result) {
+    assert.equal(event.type, 'note');
+    if (event.type !== 'note') continue;
+    const beat = beats[event.id - 1];
+    assert.ok(Math.abs(event.time - seconds(beat)) < 2e-12, `onset at ${beat}`);
+    assert.ok(Math.abs(event.duration - (seconds(beat + 0.75) - seconds(beat))) < 2e-12, `gate at ${beat}`);
+  }
 });
 
 test('standalone compiler validates options, supports default brass and detaches inline voices', () => {

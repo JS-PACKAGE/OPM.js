@@ -264,3 +264,35 @@ test('envelope-ended voices retire at once while the shared decimator drains to 
   assert.ok(tail.subarray(64).every(value => value === 0));
   assert.equal(synth.decimatorIdle, true);
 });
+
+test('a block becoming idle preserves stereo tails, output bounds, clock and callback-admitted sound', () => {
+  const patch = voice({ ops: Array.from({ length: 4 }, (_, i) => ({ ratio: i + 1, level: 0.5, detune: 0,
+    adsr: { a: 0, d: 0, s: 1, r: 0 } })) });
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const dcBlock of [false, true]) {
+    const run = (chunk: number, replace: boolean) => {
+      const synth = new Synth(8000, 8, { quality, dcBlock });
+      synth.noteOn(patch, 60, 1, { pan: -0.6 });
+      synth.render(new Float32Array(100), new Float32Array(100));
+      synth.noteOff(1);
+      const ended: number[] = [];
+      synth.onVoiceEnded = () => {
+        ended.push(synth.currentFrame);
+        if (replace) synth.noteOn(patch, 72, 2, { pan: 0.4 });
+      };
+      const left = new Float32Array(8200).fill(1), right = new Float32Array(8200).fill(-1);
+      Object.defineProperty(left, 'fill', { get() { throw Error('shadow fill invoked'); } });
+      for (let at = 3; at < 8195; at += chunk) synth.render(left, right, at, Math.min(chunk, 8195 - at));
+      assert.equal(synth.currentFrame, 8292);
+      assert.deepEqual(ended, [100]);
+      assert.equal(synth.errorCount, 0);
+      assert.ok(left.subarray(0, 3).every(value => value === 1));
+      assert.ok(right.subarray(0, 3).every(value => value === -1));
+      assert.ok(left.subarray(8195).every(value => value === 1));
+      assert.ok(right.subarray(8195).every(value => value === -1));
+      if (replace) assert.ok(rms(left, 4000, 8000) > 0.01, 'callback replacement remains audible');
+      else assert.ok(left.subarray(8000, 8195).every(value => value === 0), 'all tails drain before idle clearing');
+      return { left, right };
+    };
+    for (const replace of [false, true]) assert.deepEqual(run(8192, replace), run(113, replace), `${quality} DC=${dcBlock} replacement=${replace}`);
+  }
+});

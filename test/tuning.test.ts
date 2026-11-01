@@ -74,3 +74,26 @@ test('malformed tuning rejects unknown fields, invalid values, sparse tables and
   assert.throws(() => normalizeTuning({ offsets: extra }), TypeError);
   assert.equal(tuningFrequency(69, normalizeTuning(Object.assign(Object.create(null), { referenceHz: 432 }))), 432);
 });
+
+test('reusing tuning data preserves old snapshots and still validates new inputs', () => {
+  const offsets = new Array<number>(128).fill(0);
+  const input = { referenceHz: 440, offsets };
+  const first = normalizeTuning(input);
+  offsets[69] = 1200;
+  const second = normalizeTuning(input);
+  assert.equal(tuningFrequency(69, first), 440);
+  assert.equal(tuningFrequency(69, second), 880);
+  offsets[69] = NaN;
+  assert.throws(() => normalizeTuning(input), RangeError);
+  assert.equal(tuningFrequency(69, second), 880);
+  const alternate = normalizeTuning({ referenceHz: 432, offsets: second.offsets });
+  assert.equal(tuningFrequency(69, alternate), 864);
+  assert.equal(tuningFrequency(69, second), 880);
+  assert.throws(() => normalizeTuning({ referenceHz: NaN, offsets: second.offsets }), RangeError);
+  assert.throws(() => normalizeTuning({ offsets: second.offsets, extra: true } as TuningOptions), TypeError);
+  let calls = 0;
+  const accessor = { offsets: second.offsets };
+  Object.defineProperty(accessor, 'referenceHz', { get() { calls++; return 440; } });
+  assert.throws(() => normalizeTuning(accessor), TypeError);
+  assert.equal(calls, 0);
+});

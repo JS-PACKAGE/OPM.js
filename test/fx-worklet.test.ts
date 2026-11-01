@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createStereoEffects } from '../src/core/fx.js';
-import { createEffects } from '../src/api/fx.js';
+import { createEffects, type EffectsEvent, type OpmEffects } from '../src/api/fx.js';
 
 interface Processor { receive(message: unknown): void; process(inputs: Float32Array[][], outputs: Float32Array[][]): boolean; port: { postMessage(message: unknown): void; close(): void; onmessage: unknown } }
 test('effects worklet validates its protocol, bounds floods and runs the same stereo DSP', async () => {
@@ -35,4 +35,61 @@ test('effects worklet validates its protocol, bounds floods and runs the same st
     const fx = await createEffects(context, { params }); await fx.ready; assert.ok(loaded!.pathname.endsWith('/worklet/fx-processor.js')); assert.equal(fx.input, fx.output);
     assert.throws(() => fx.update({ chorus: { rate: 0, depth: 0, mix: 0 } })); fx.reset(); fx.dispose(); fx.dispose(); assert.ok(disposed); assert.equal(closeMessages, 1); assert.throws(() => fx.reset(), /disposed/);
   } finally { keys.forEach((key, index) => { const descriptor = originals[index]; if (descriptor) Object.defineProperty(globalThis, key, descriptor); else Reflect.deleteProperty(globalThis, key); }); }
+});
+
+test('effects failures preserve their original notification across terminal cleanup and throwing observers', async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'AudioWorkletNode');
+  try {
+    for (const mode of ['processor', 'messageerror', 'post', 'module'] as const) {
+      const failure = new Error(`original ${mode} failure`);
+      let node!: FakeNode;
+      class FakeNode {
+        onprocessorerror: (() => void) | null = null;
+        port = {
+          onmessage: null,
+          onmessageerror: null as (() => void) | null,
+          postMessage(message: { type: string }) { if (mode === 'post' && message.type === 'reset') throw failure; },
+          close() {},
+        };
+        constructor() { node = this; }
+        disconnect() {}
+      }
+      Object.assign(globalThis, { AudioWorkletNode: FakeNode });
+      let state = 'suspended';
+      const context = {
+        get state() { return state; },
+        audioWorklet: { async addModule() { if (mode === 'module') throw failure; } },
+        async close() { state = 'closed'; }, async resume() { state = 'running'; },
+      } as unknown as BaseAudioContext;
+      let fx: OpmEffects | undefined;
+      const observed: { error: Error; receiver: unknown; frozen: boolean; terminal: boolean | null }[] = [];
+      const options = { onEvent(this: void, event: EffectsEvent) {
+        let terminal: boolean | null = null;
+        if (fx) { try { fx.reset(); terminal = false; } catch { terminal = true; } }
+        observed.push({ error: event.error, receiver: this, frozen: Object.isFrozen(event), terminal });
+        fx?.dispose();
+        throw new Error('host observer must not replace the original failure');
+      } };
+      if (mode === 'module') await assert.rejects(createEffects(context, options), error => error === failure);
+      else {
+        fx = await createEffects(context, options);
+        if (mode === 'processor') node.onprocessorerror!();
+        else if (mode === 'messageerror') node.port.onmessageerror!();
+        else assert.throws(() => fx!.reset(), error => error === failure);
+        assert.throws(() => fx!.reset(), /disposed/);
+        assert.throws(() => fx!.update({}), /disposed/);
+        fx.dispose();
+      }
+      assert.equal(observed.length, 1, mode);
+      assert.ok(observed[0]!.error instanceof Error);
+      if (mode === 'module' || mode === 'post') assert.equal(observed[0]!.error, failure);
+      assert.equal(observed[0]!.receiver, undefined);
+      assert.equal(observed[0]!.frozen, true);
+      assert.equal(observed[0]!.terminal, mode === 'module' ? null : true);
+      assert.equal(context.state, 'suspended');
+    }
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'AudioWorkletNode', original);
+    else Reflect.deleteProperty(globalThis, 'AudioWorkletNode');
+  }
 });

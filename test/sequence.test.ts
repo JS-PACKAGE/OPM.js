@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, encodeWav, prepareSequence, renderNote, renderSequence, MAX_SEQUENCE_NOTES, MAX_SEQUENCE_SLOTS } from '../src/core/index.js';
-import type { SequenceEvent, SequenceNoteEvent } from '../src/core/sequence.js';
+import type { SequenceEvent, SequenceNoteEvent, SequenceControlEvent } from '../src/core/sequence.js';
 import { estimateSequenceCapacity, prepareLongSequence, renderSequenceChunks, MAX_LONG_SEQUENCE_EVENTS } from '../src/core/sequence.js';
 import type { Voice, ADSR } from '../src/voices/schema.js';
 
@@ -118,6 +118,19 @@ test('whole-score preparation rejects malformed or over-budget data without invo
   assert.equal(reads, 0);
 });
 
+test('negative sequence lengths reject before inspecting event keys', () => {
+  let traversals = 0;
+  const events = new Proxy<SequenceEvent[]>([], {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === 'length') return { value: -1, writable: true, enumerable: false, configurable: false };
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+    ownKeys(target) { traversals++; return Reflect.ownKeys(target); },
+  });
+  assert.throws(() => prepareSequence(events), RangeError);
+  assert.equal(traversals, 0);
+});
+
 test('prepared score owns immutable snapshots and native named-voice resolution bypasses registry getters', () => {
   const voice = toneVoice();
   const controls = { expression: 0.5 };
@@ -141,6 +154,143 @@ test('prepared score owns immutable snapshots and native named-voice resolution 
   assert.equal(control.controls.expression, 0.5);
   assert.ok(Object.isFrozen(snapshot) && Object.isFrozen(snapshot.events));
   assert.ok(Object.isFrozen(note.voice.ops[0].adsr) && Object.isFrozen(control.controls));
+});
+
+test('omitted preparation options ignore inherited registries without changing sound', () => {
+  const events: SequenceNoteEvent[] = [{ type: 'note', id: 1, time: 0, duration: 0.01, note: 69 }];
+  const expected = prepareSequence(events);
+  const inherited = Object.getOwnPropertyDescriptor(Object.prototype, 'voices');
+  let reads = 0;
+  let actual: typeof expected;
+  Object.defineProperty(Object.prototype, 'voices', {
+    configurable: true,
+    get() { reads++; throw Error('Inherited registry must not be read'); },
+  });
+  try {
+    actual = prepareSequence(events);
+  } finally {
+    if (inherited) Object.defineProperty(Object.prototype, 'voices', inherited);
+    else Reflect.deleteProperty(Object.prototype, 'voices');
+  }
+  assert.equal(reads, 0);
+  assert.deepEqual(actual.events, expected.events);
+  const before = renderSequence(expected.events, { sampleRate });
+  const after = renderSequence(actual.events, { sampleRate });
+  assert.ok(before.left.some(value => value !== 0));
+  assert.deepEqual(after.left, before.left);
+  assert.deepEqual(after.right, before.right);
+});
+
+test('raw patches detach per occurrence when later event descriptors mutate the caller source', () => {
+  const voice = toneVoice();
+  const first: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 0.01, voice, note: 69 };
+  let changed = false;
+  const later = new Proxy<SequenceNoteEvent>({ ...first, id: 2, time: 0.01 }, {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === 'type' && !changed) {
+        changed = true;
+        voice.ops[0].ratio = 2;
+      }
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  const snapshot = prepareSequence([first, later]);
+  const before = snapshot.events[0], after = snapshot.events[1];
+  if (before.type !== 'note' || after.type !== 'note') throw Error('Expected notes');
+  assert.equal(before.voice.ops[0].ratio, 1);
+  assert.equal(after.voice.ops[0].ratio, 2);
+  voice.ops[0].ratio = 3;
+  assert.equal(before.voice.ops[0].ratio, 1);
+  assert.equal(after.voice.ops[0].ratio, 2);
+});
+
+test('raw controls detach per occurrence before later event descriptors change their sound', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const voice = toneVoice();
+    const levels: [number, number, number, number] = [0.5, 0, 0, 0];
+    const controls = { expression: 0.25, operatorLevels: levels };
+    const note: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 0.04, note: 69, voice };
+    const first: SequenceControlEvent = { type: 'control', id: 1, time: 0, controls };
+    let changed = false;
+    const later = new Proxy<SequenceControlEvent>({ type: 'control', id: 1, time: 0.02, controls }, {
+      getOwnPropertyDescriptor(target, key) {
+        if (key === 'type' && !changed) {
+          changed = true;
+          controls.expression = 0.75;
+          levels[0] = 1;
+        }
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    const snapshot = prepareSequence([note, first, later]);
+    controls.expression = 0;
+    levels[0] = 0;
+    const before = snapshot.events[1], after = snapshot.events[2];
+    if (before.type !== 'control' || after.type !== 'control') throw Error('Expected controls');
+    assert.equal(before.controls.expression, 0.25);
+    assert.equal(before.controls.operatorLevels?.[0], 0.5);
+    assert.equal(after.controls.expression, 0.75);
+    assert.equal(after.controls.operatorLevels?.[0], 1);
+    const result = renderSequence(snapshot.events, { sampleRate, quality });
+    const reference = renderSequence([
+      note,
+      { type: 'control', id: 1, time: 0, controls: { expression: 0.25, operatorLevels: [0.5, 0, 0, 0] } },
+      { type: 'control', id: 1, time: 0.02, controls: { expression: 0.75, operatorLevels: [1, 0, 0, 0] } },
+    ], { sampleRate, quality });
+    assert.deepEqual(result.left, reference.left);
+    assert.deepEqual(result.right, reference.right);
+    assert.equal(result.diagnostics.errors, 0);
+    // Compare settled windows on either side of the 20 ms gain change.
+    const rms = (start: number) => Math.sqrt(result.left.subarray(start, start + 80).reduce((sum, value) => sum + value * value, 0) / 80);
+    const early = rms(DECIMATOR_SETTLE_FRAMES), late = rms(224);
+    assert.ok(early > 0 && late > 3 * early);
+  }
+});
+
+test('frozen raw event containers still observe changing note, voice and control sources on each call', () => {
+  const voice = toneVoice();
+  const note: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 0.01, voice, note: 69 };
+  const levels: [number, number, number, number] = [1, 1, 1, 1];
+  const control: SequenceEvent = { type: 'control', id: 1, time: 0, controls: { operatorLevels: levels } };
+  const events = Object.freeze([note, control]);
+  const first = prepareSequence(events);
+  note.note = 72;
+  voice.ops[0].ratio = 2;
+  levels[0] = 0.25;
+  const second = prepareSequence(events);
+  const before = first.events[0], after = second.events[0];
+  const beforeControl = first.events[1], afterControl = second.events[1];
+  if (before.type !== 'note' || after.type !== 'note' || beforeControl.type !== 'control' || afterControl.type !== 'control') throw Error('Unexpected score');
+  assert.equal(before.note, 69);
+  assert.equal(after.note, 72);
+  assert.equal(before.voice.ops[0].ratio, 1);
+  assert.equal(after.voice.ops[0].ratio, 2);
+  assert.equal(beforeControl.controls.operatorLevels?.[0], 1);
+  assert.equal(afterControl.controls.operatorLevels?.[0], 0.25);
+});
+
+test('prepared long inputs retain short score, PCM and option validation boundaries', () => {
+  const base: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 0.01, voice: toneVoice(), note: 69 };
+  const notes = Array.from({ length: MAX_SEQUENCE_NOTES + 1 }, (_, index) => ({ ...base, id: index + 1 }));
+  const allowed = prepareLongSequence(notes.slice(0, MAX_SEQUENCE_NOTES));
+  const short = prepareSequence(allowed.events);
+  assert.equal(short.noteCount, MAX_SEQUENCE_NOTES);
+  assert.equal(short.reservedSlots, MAX_SEQUENCE_SLOTS);
+  const control: SequenceEvent = { type: 'control', id: 1, time: 0, controls: { expression: 0.5 } };
+  const overflowNotes = prepareLongSequence(notes);
+  const overflowSlots = prepareLongSequence([...notes.slice(0, MAX_SEQUENCE_NOTES), control]);
+  const overflowEvents = prepareLongSequence([base, ...Array.from({ length: MAX_SEQUENCE_SLOTS }, () => control)]);
+  const overflowTime = prepareLongSequence([{ ...base, time: 60 }]);
+  for (const score of [overflowNotes, overflowSlots, overflowEvents, overflowTime]) {
+    assert.throws(() => prepareSequence(score.events), RangeError);
+  }
+  const fullPcm = prepareLongSequence([{ ...base, duration: 60 }]);
+  assert.throws(() => renderSequence(fullPcm.events, { sampleRate: 96000 }), RangeError);
+  assert.throws(() => prepareSequence(allowed.events, { voices: {} as Map<string, Voice> }), TypeError);
+  let reads = 0;
+  const options = Object.defineProperty({}, 'voices', { get() { reads++; return new Map(); } });
+  assert.throws(() => prepareSequence(allowed.events, options), TypeError);
+  assert.equal(reads, 0);
 });
 
 test('render budgets include release/filter tails and reject invalid engine configuration before rendering', () => {
@@ -253,6 +403,33 @@ test('cancellation and work limits reject before advancement and hostile input n
   cancelled.cancel();
   assert.equal(cancelled.next().done, true);
   assert.equal(cancelled.diagnostics.renderedFrames, 16);
+});
+
+test('terminal iterators preserve yielded PCM and diagnostics without further advancement', () => {
+  for (const terminal of ['complete', 'cancel', 'return', 'abort'] as const) {
+    const controller = new AbortController();
+    const score: SequenceEvent[] = [{ type: 'note', id: 1, time: 0, duration: 0.02, note: 60, pan: -0.25, voice: toneVoice() }];
+    const renderer = renderSequenceChunks(score, {
+      sampleRate, chunkFrames: terminal === 'complete' ? 65536 : 64, signal: controller.signal,
+    });
+    const yielded = renderer.next();
+    if (yielded.done) assert.fail('Expected the rendered note');
+    const chunk = yielded.value, left = chunk.left.slice(), right = chunk.right.slice();
+    const before = renderer.diagnostics;
+    if (terminal === 'complete') assert.equal(before.renderedFrames, renderer.capacity.frames);
+    else if (terminal === 'cancel') renderer.cancel();
+    else if (terminal === 'return') renderer.return!();
+    else {
+      controller.abort();
+      assert.throws(() => renderer.next(), { name: 'AbortError' });
+    }
+    assert.deepEqual(renderer.diagnostics, before);
+    assert.equal(renderer.next().done, true);
+    renderer.cancel();
+    assert.deepEqual(renderer.diagnostics, before);
+    assert.deepEqual(chunk.left, left);
+    assert.deepEqual(chunk.right, right);
+  }
 });
 
 test('capacity includes note-scaled release tails and detached operator controls', () => {

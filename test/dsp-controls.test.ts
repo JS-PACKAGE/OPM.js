@@ -279,3 +279,26 @@ test('quietest stealing includes independent gain and rejects invalid gain witho
   assert.ok(peak(output.left) > 0.02);
   assert.equal(synth.errorCount, 0);
 });
+
+test('recycled voice pan refreshes independent stereo expression automation', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(16000, 1, { quality });
+    synth.noteOn({ ...tone(), pan: 0.6 }, 69, 1, { pan: 0.1, velocity: 0.7 });
+    audio(synth, 97);
+    synth.panic();
+    const reference = new Synth(16000, 1, { quality });
+    const patch = { ...tone(), pan: -0.6 };
+    for (const instance of [synth, reference]) {
+      instance.noteOn(patch, 69, 2, { pan: 0.1, velocity: 0.7 });
+      instance.updateNote(2, { expression: 0, ramp: 0.03 });
+    }
+    assert.deepEqual(audio(synth, 512, 37), audio(reference, 512));
+    for (const instance of [synth, reference]) {
+      instance.updateNote(2, { pan: 0.8, ramp: 0.02 });
+      instance.updateNote(2, { expression: 1, ramp: 0.01 });
+    }
+    assert.deepEqual(audio(synth, 128, 37), audio(reference, 128));
+    for (const instance of [synth, reference]) instance.updateNote(2, { expression: 0.4, ramp: 0.02 });
+    assert.deepEqual(audio(synth, 640, 37), audio(reference, 640));
+  }
+});

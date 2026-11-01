@@ -61,6 +61,54 @@ test('stealing policies break ties only inside the lowest eligible priority', ()
   }
 });
 
+test('quietest preserves low-priority comparisons across protected voices and breaks equal gains by age', () => {
+  const synth = new Synth(16000, 4, { stealing: 'quietest' });
+  const terminal: [number, string][] = [];
+  synth.onVoiceEnded = (id, reason) => { terminal.push([id, reason]); };
+  synth.noteOn(voice, 69, 1, { voicePriority: 1, velocity: 0.8 });
+  synth.noteOn(voice, 69, 2, { voicePriority: 9, velocity: 0 });
+  synth.noteOn(voice, 69, 3, { voicePriority: 1, velocity: 0.2 });
+  synth.noteOn(voice, 69, 4, { voicePriority: 1, velocity: 0.2 });
+  audio(synth, 64);
+  synth.noteOn(voice, 69, 5, { voicePriority: 10 });
+  assert.deepEqual(terminal, [[3, 'stolen']]);
+  synth.noteOn(voice, 69, 6, { voicePriority: 10 });
+  assert.deepEqual(terminal, [[3, 'stolen'], [4, 'stolen']]);
+  synth.noteOn(voice, 69, 7, { voicePriority: 10 });
+  assert.deepEqual(terminal, [[3, 'stolen'], [4, 'stolen'], [1, 'stolen']]);
+  assert.throws(() => synth.noteOn(voice, 69, 8, { voicePriority: 8 }), VoiceAdmissionError);
+  assert.deepEqual(terminal, [[3, 'stolen'], [4, 'stolen'], [1, 'stolen']]);
+  assert.equal(synth.errorCount, 0);
+});
+
+test('quietest scores current gates and expression across unrendered notes, release and ADSR edits', () => {
+  const instant: Voice = { ...voice, ops: voice.ops.map(op => ({ ...op, adsr: { ...op.adsr, r: 0 } })) as Voice['ops'] };
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(16000, 2, { quality, stealing: 'quietest' });
+    const terminal: [number, string][] = [];
+    synth.onVoiceEnded = (id, reason) => { terminal.push([id, reason]); };
+    synth.noteOn(instant, 69, 1, { velocity: 0.8 });
+    synth.noteOn(instant, 69, 2, { velocity: 0.1 });
+    synth.noteOn(instant, 69, 3, { velocity: 0.2 });
+    assert.deepEqual(terminal, [[2, 'stolen']]);
+    audio(synth, 64);
+    synth.noteOff(1);
+    synth.noteOn(instant, 69, 4);
+    assert.deepEqual(terminal, [[2, 'stolen'], [1, 'stolen']]);
+    audio(synth, 64);
+    const adsr = { a: 0, d: 0.001, s: 0.1, r: 0 };
+    synth.updateNote(3, { operatorADSR: [adsr, adsr, adsr, adsr] });
+    audio(synth, 64);
+    synth.noteOn(instant, 69, 5, { velocity: 0.5 });
+    assert.deepEqual(terminal, [[2, 'stolen'], [1, 'stolen'], [3, 'stolen']]);
+    audio(synth, 64);
+    synth.updateNote(4, { expression: 0.01 });
+    synth.noteOn(instant, 69, 6);
+    assert.deepEqual(terminal, [[2, 'stolen'], [1, 'stolen'], [3, 'stolen'], [4, 'stolen']]);
+    assert.equal(synth.errorCount, 0);
+  }
+});
+
 test('priority bounds are strict own data and validation happens before sounding state changes', () => {
   const synth = new Synth(16000);
   for (const bad of [-1, 128, 1.5, NaN, Infinity, '1', null, undefined, {}]) {
