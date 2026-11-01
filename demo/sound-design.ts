@@ -13,6 +13,7 @@ const json = document.querySelector<HTMLTextAreaElement>('#patch-json')!;
 let patch = designerPatch(examples.find(voice => voice.name === 'brass') ?? examples[0]!);
 let opm: OPM | null = null, context: AudioContext | null = null, gain: GainNode | null = null;
 let held: number | null = null, starting = false, leaving = false, generation = 0, spaceHeld = false;
+let importGeneration = 0;
 const colors = ['#a21c35', '#156e37', '#245da8', '#734aa8'];
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error);
 function controls(): void {
@@ -201,11 +202,31 @@ field('host-gain').addEventListener('input', () => guard(() => { const value = f
 function importPatch(text: string): void { const next = parseDesignerPatch(text); patch = next; render(); retrigger(); status.textContent = 'Strict patch imported; canonical version 8. Optional waveform/noise/fixed-frequency/key/pitch/sustain-rate/pan settings are preserved in JSON.'; }
 button('import-patch').addEventListener('click', () => guard(() => importPatch(json.value)));
 button('export-patch').addEventListener('click', () => guard(() => { json.value = JSON.stringify(designerPatch(patch), null, 2); const url = URL.createObjectURL(new Blob([json.value], { type: 'application/json' })); const link = document.createElement('a'); link.href = url; link.download = `${patch.name}.json`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); status.textContent = 'Canonical runnable patch exported locally; no upload.'; }));
-field('patch-file').addEventListener('change', async () => { const file = field('patch-file').files?.[0]; if (!file) return; try { if (file.size > MAX_PATCH_BYTES) throw new RangeError('Patch exceeds 16 KiB'); importPatch(await file.text()); } catch (error) { status.textContent = `Rejected: ${errorText(error)}`; } finally { field('patch-file').value = ''; } });
+field('patch-file').addEventListener('change', async () => {
+  const input = field('patch-file'), file = input.files?.[0];
+  if (!file || leaving) return;
+  const token = ++importGeneration;
+  try {
+    if (file.size > MAX_PATCH_BYTES) throw new RangeError('Patch exceeds 16 KiB');
+    const text = await file.text();
+    // Only the latest selection may commit after an asynchronous read.
+    if (token !== importGeneration || leaving) return;
+    importPatch(text);
+  } catch (error) {
+    if (token === importGeneration && !leaving) status.textContent = `Rejected: ${errorText(error)}`;
+  } finally {
+    if (token === importGeneration) input.value = '';
+  }
+});
 window.addEventListener('keydown', event => { if (event.code !== 'Space' || event.repeat || event.target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(event.target.tagName)) return; event.preventDefault(); guard(() => { hold(); spaceHeld = true; }); });
 window.addEventListener('keyup', event => { if (event.code === 'Space' && spaceHeld) { event.preventDefault(); guard(release); } });
 window.addEventListener('blur', () => { if (spaceHeld) guard(release); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && held !== null) guard(release); });
-window.addEventListener('pagehide', () => { leaving = true; void close().catch(error => { status.textContent = `Cleanup failed: ${errorText(error)}`; }); });
+window.addEventListener('pagehide', () => {
+  leaving = true;
+  importGeneration++;
+  field('patch-file').value = '';
+  void close().catch(error => { status.textContent = `Cleanup failed: ${errorText(error)}`; });
+});
 window.addEventListener('pageshow', () => { leaving = false; controls(); });
 recipe(); controls();

@@ -17,6 +17,7 @@ const release = element<HTMLButtonElement>('#release');
 const selector = element<HTMLSelectElement>('#voice');
 const voices = new Map<string, Voice | FrozenVoice>([['brass', brass]]);
 let heldId: number | null = null;
+let importGeneration = 0, leaving = false;
 const opm = new OPM({ onEvent(event) {
   if (event.type === 'reset') {
     heldId = null;
@@ -49,20 +50,28 @@ function action(id: string, run: () => void | Promise<void>) {
     finally { button.disabled = id === 'release' && heldId === null; }
   });
 }
-function addVoice(voice: Voice | FrozenVoice) {
-  opm.loadVoice(voice.name, voice);
-  voices.set(voice.name, voice);
-  if (![...selector.options].some(option => option.value === voice.name)) {
-    const option = document.createElement('option');
-    option.value = voice.name;
-    option.textContent = voice.name;
-    selector.append(option);
+function addVoices(batch: readonly (Voice | FrozenVoice)[]) {
+  const merged = new Map(voices);
+  for (const voice of batch) merged.set(voice.name, voice);
+  // Validate and commit the complete registry before updating either UI lookup.
+  opm.replaceVoiceBank([...merged.values()]);
+  for (const voice of batch) {
+    const existing = voices.has(voice.name);
+    voices.set(voice.name, voice);
+    if (!existing) {
+      const option = document.createElement('option');
+      option.value = voice.name;
+      option.textContent = voice.name;
+      selector.append(option);
+    }
   }
 }
 try {
+  const presets: FrozenVoice[] = [];
   for (const voice of parseVoiceBank(examples).values()) {
-    if (!voices.has(voice.name)) addVoice(voice);
+    if (!voices.has(voice.name)) presets.push(voice);
   }
+  addVoices(presets);
 } catch (error) {
   status.textContent = error instanceof Error ? error.message : String(error);
 }
@@ -104,19 +113,32 @@ action('resume', async () => {
 });
 const dx7 = element<HTMLInputElement>('#dx7');
 dx7.addEventListener('change', async () => {
+  const file = dx7.files?.[0];
+  if (!file || leaving) return;
+  const token = ++importGeneration;
   try {
-    const file = dx7.files?.[0];
-    if (!file) return;
     // A standard DX7 bank is 4104 bytes; bound before buffering user input.
     if (file.size > 4104) throw new RangeError('DX7 SysEx exceeds one standard bank');
-    const bytes = new Uint8Array(await file.arrayBuffer());
+    const data = await file.arrayBuffer();
+    if (token !== importGeneration || leaving) return;
+    const bytes = new Uint8Array(data);
     const imported = importDX7(bytes);
     const descriptions = describeDX7(bytes);
-    for (const voice of imported) addVoice(voice);
+    addVoices(imported);
     selector.value = imported[0].name;
     status.textContent = `Imported ${imported.length} approximate DX7 voice(s). ${descriptions[0].warnings.join(' ')}`;
-  } catch (error) { status.textContent = error instanceof Error ? error.message : String(error); }
+  } catch (error) {
+    if (token === importGeneration && !leaving) status.textContent = error instanceof Error ? error.message : String(error);
+  } finally {
+    if (token === importGeneration) dx7.value = '';
+  }
 });
+window.addEventListener('pagehide', () => {
+  leaving = true;
+  importGeneration++;
+  dx7.value = '';
+});
+window.addEventListener('pageshow', () => { leaving = false; });
 action('wav', async () => {
   const { left, right, sampleRate } = renderNote({
     voice: voices.get(selector.value)!, note: 60, duration: 0.7,

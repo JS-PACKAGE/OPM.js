@@ -25,6 +25,7 @@
   </fieldset>
   <fieldset>
     <legend>Voice and PCM files</legend>
+    <p>Completed imports accumulate atomically within 128 voices. A rejected bank preserves the voice list and current selection; a newer file supersedes only an unfinished import.</p>
     <label>DX7 SysEx (approximate 6-to-4 operator conversion)
       <input id="dx7" type="file" accept=".syx">
     </label>

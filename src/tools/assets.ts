@@ -123,19 +123,24 @@ async function matching(destination: string, manifest: Manifest): Promise<boolea
   if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
   const expected = new Set(manifest.assets.map(asset => asset.path));
   expected.add(MANIFEST);
-  let count = 0;
+  let count = 0, manifestSize = -1;
   async function walk(directory: string, prefix = ''): Promise<boolean> {
     for (const name of await readdir(directory)) {
       const path = prefix + name;
       const stat = await lstat(join(directory, name));
       if (stat.isSymbolicLink()) return false;
       if (stat.isDirectory()) { if (!await walk(join(directory, name), `${path}/`)) return false; }
-      else if (!stat.isFile() || !expected.has(path) || ++count > expected.size) return false;
+      else {
+        if (!stat.isFile() || !expected.has(path) || ++count > expected.size) return false;
+        if (path === MANIFEST) manifestSize = stat.size;
+      }
     }
     return true;
   }
   if (!await walk(destination) || count !== expected.size) return false;
-  if ((await readFile(join(destination, MANIFEST), 'utf8')) !== JSON.stringify(manifest, null, 2) + '\n') return false;
+  const text = JSON.stringify(manifest, null, 2) + '\n';
+  // Avoid loading host metadata whose inspected size already rules out a match.
+  if (manifestSize !== Buffer.byteLength(text) || (await readFile(join(destination, MANIFEST), 'utf8')) !== text) return false;
   for (const asset of manifest.assets) {
     const path = join(destination, ...asset.path.split('/'));
     const stat = await lstat(path);
@@ -163,7 +168,10 @@ export async function copyAssets(options: CopyAssetsOptions): Promise<AssetDeplo
   const root = await packageRoot(input.packageRoot);
   const source = join(root, 'dist');
   const canonical = await canonicalDestination(destination);
-  if (canonical === root || canonical.startsWith(root + sep) || source.startsWith(canonical + sep)) {
+  // Filesystem roots already end in sep; doubling it would hide their descendants.
+  const packagePrefix = root.endsWith(sep) ? root : root + sep;
+  const destinationPrefix = canonical.endsWith(sep) ? canonical : canonical + sep;
+  if (canonical === root || canonical.startsWith(packagePrefix) || source.startsWith(destinationPrefix)) {
     throw new Error('Deployment destination must not overlap the package');
   }
   const manifest = await inventory(root);
@@ -207,7 +215,8 @@ export async function checkDeployment(baseUrl: string | URL, options: CheckDeplo
   }
   if (!url.pathname.endsWith('/')) url.pathname += '/';
   const manifest = await inventory(await packageRoot(input.packageRoot));
-  const signal = AbortSignal.timeout(timeout);
+  const controller = new AbortController();
+  const signal = AbortSignal.any([AbortSignal.timeout(timeout), controller.signal]);
   let bytes = 0;
   let cursor = 0;
   async function check(): Promise<void> {
@@ -239,7 +248,13 @@ export async function checkDeployment(baseUrl: string | URL, options: CheckDeplo
       if (size !== asset.bytes || hash.digest('hex') !== asset.sha256) throw new Error(`Deployment bytes differ from installed release: ${asset.path}`);
     }
   }
-  await Promise.all(Array.from({ length: Math.min(4, manifest.assets.length) }, check));
+  try { await Promise.all(Array.from({ length: Math.min(4, manifest.assets.length) }, check)); }
+  catch (error) {
+    // A failed verification no longer needs its other downloads. Preserve the
+    // original failure instead of replacing it with their cancellation errors.
+    controller.abort();
+    throw error;
+  }
   return Object.freeze({ version: manifest.version, baseUrl: url.href, files: manifest.assets.length, bytes,
     limitations: Object.freeze(['Checks installed-release bytes, HTTP status, MIME and optional nosniff only.', 'Page CSP, native Worker/AudioWorklet startup, device deadlines and listening need separate runtime acceptance.']) });
 }
