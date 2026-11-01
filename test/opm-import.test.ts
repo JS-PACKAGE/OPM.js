@@ -4,6 +4,7 @@ import { importOPM, describeOPM } from '../src/voices/opm.js';
 import { prepareVoice, validateVoice } from '../src/voices/schema.js';
 import { ALGORITHMS } from '../src/core/algorithms.js';
 import { renderNote } from '../src/core/index.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 
 // Original handwritten recipes; no third-party voice banks or converter code.
 const labels = ['M1', 'C1', 'M2', 'C2'];
@@ -123,6 +124,48 @@ test('names sanitize, deduplicate, truncate and decode Latin-1 deterministically
   assert.equal(importOPM(latin)[0].name, 'caf');
 });
 
+test('Latin-1 byte views preserve names, final fields and trailing NUL rejection', () => {
+  for (let padding = 0; padding < 8; padding++) {
+    const source = '//' + 'x'.repeat(padding) + '\n' + patch({ name: 'caf\u00e9_Piano' });
+    const bytes = Uint8Array.from(source, character => character.charCodeAt(0));
+    const backing = new Uint8Array(bytes.length + 6);
+    backing.set(bytes, 3);
+    const view = new Uint8Array(backing.buffer, 3, bytes.length);
+    for (const parse of [importOPM, describeOPM]) {
+      assert.deepEqual(parse(view), parse(source));
+      const nul = new Uint8Array(bytes.length + 1);
+      nul.set(bytes);
+      assert.throws(() => parse(nul), /NUL is forbidden/);
+    }
+  }
+});
+
+test('UTF-8 line and bank byte limits include multibyte text and lone surrogates', () => {
+  const encoder = new TextEncoder();
+  const voice = patch();
+  for (const character of ['\u754c', '\ud800', '\udc00', '\ud83d\udc3e']) {
+    const width = encoder.encode(character).length;
+    const comment = '//' + character.repeat(Math.floor(510 / width));
+    const exact = comment + 'x'.repeat(512 - encoder.encode(comment).length);
+    for (const parse of [importOPM, describeOPM]) {
+      assert.deepEqual(parse(`${voice}\n${exact}`), parse(voice));
+      assert.throws(() => parse(`${voice}\n${exact}x`), /line exceeds 512 bytes/);
+    }
+  }
+  const block = '//' + '\u754c'.repeat(169) + '\n';
+  const prefix = voice + '\n';
+  const remaining = 262144 - encoder.encode(prefix).length;
+  const whole = block.repeat(Math.floor(remaining / encoder.encode(block).length));
+  const rest = remaining - encoder.encode(whole).length;
+  const suffix = rest >= 2 ? '//' + 'x'.repeat(rest - 2) : '\n'.repeat(rest);
+  const exact = prefix + whole + suffix;
+  assert.equal(encoder.encode(exact).length, 262144);
+  for (const parse of [importOPM, describeOPM]) {
+    assert.deepEqual(parse(exact), parse(voice));
+    assert.throws(() => parse(exact + '\n'), /OPM input exceeds 262144 bytes/);
+  }
+});
+
 test('untrusted input bounds and every parser rejection retain line diagnostics', () => {
   for (const value of [null, {}, [], new Uint16Array(1), new Proxy(new Uint8Array(1), {})]) assert.throws(() => importOPM(value as string), TypeError);
   const spoofed = new Uint8Array(262145); Object.defineProperty(spoofed, 'length', { value: 1 });
@@ -143,6 +186,20 @@ test('untrusted input bounds and every parser rejection retain line diagnostics'
     assert.throws(() => describeOPM(input), /OPM line \d+:/);
   }
   const maxima = [31, 31, 31, 15, 15, 127, 3, 15, 7, 3, 1];
-  for (let field = 0; field < maxima.length; field++) assert.throws(() => importOPM(patch({ ops: operators(field, [maxima[field] + 1, 0, 0, 0]) })), /OPM line 4:/);
+  for (const parse of [importOPM, describeOPM]) {
+    for (let field = 0; field < maxima.length; field++) assert.throws(() => parse(patch({ ops: operators(field, [maxima[field] + 1, 0, 0, 0]) })), /OPM line 4:/);
+  }
   assert.equal(importOPM(Array.from({ length: 128 }, () => patch()).join('\n')).length, 128);
+});
+
+test('imported sustain rates and noise operators survive inherited setters', () => {
+  const source = patch({ ne: 1, ops: operators(2, [1, 1, 1, 1]) });
+  const clean = importOPM(source);
+  assert.equal(clean[0].ops[3].waveform, 'noise');
+  assert.ok(clean[0].ops.every(op => op.adsr.sr !== undefined));
+  for (const key of ['sr', 'waveform', 'noiseRate']) {
+    const polluted = withNamedAccessor(key, () => importOPM(source));
+    assert.equal(polluted.setterHits, 0, key);
+    assert.deepStrictEqual(polluted.value, clean, key);
+  }
 });

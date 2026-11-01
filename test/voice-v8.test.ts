@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth } from '../src/core/synth.js';
 import { envelopeAt } from '../src/core/envelope.js';
-import { normalizeVoice } from '../src/voices/normalize.js';
+import { normalizeVoice, prepareVoice } from '../src/voices/normalize.js';
 import { parseVoiceBank, validateVoice } from '../src/voices/schema.js';
-import type { ADSR, LFO, Voice, VoiceInput } from '../src/voices/schema.js';
+import type { ADSR, LFO, PreparedVoice, Voice, VoiceInput } from '../src/voices/schema.js';
 
 const RATE = 16000;
 function tone(adsr: ADSR, lfo: LFO = { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' }): Voice {
@@ -73,6 +73,174 @@ test('release starts from the decayed level and live ADSR edits can add or remov
   assert.ok(drop < -30 && drop > -60, String(drop));
   assert.throws(() => live.updateNote(note, { operatorADSR: [{ ...decaying, sr: 0 }, decaying, decaying, decaying] }), RangeError);
   assert.throws(() => live.updateNote(note, { operatorADSR: [{ ...decaying, extra: 1 } as ADSR, decaying, decaying, decaying] }), TypeError);
+});
+
+test('edited held gains follow later ADSR edits, sustain-rate decay, reactivation and release', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(RATE, 8, { quality, saturation: 'soft-knee' });
+    const ended: [number, string][] = [];
+    synth.onVoiceEnded = (id, reason) => { ended.push([id, reason]); };
+    const note = synth.noteOn(tone({ a: 0, d: 0.005, s: 0.9, r: 0.05 }), 69);
+    const edit = (adsr: ADSR) => assert.equal(synth.updateNote(note, { operatorADSR: [adsr, adsr, adsr, adsr] }), true);
+    const level = (samples: Float32Array) => rmsDb(samples, 200, 600);
+    const initial = stereo(synth, 800, 37).left;
+    edit({ a: 0, d: 0, s: 0.5, r: 0.05 });
+    const half = stereo(synth, 800, 37).left;
+    assert.ok(Math.abs(level(half) - level(initial) - 20 * Math.log10(0.5 / 0.9)) < 0.03);
+    edit({ a: 0, d: 0, s: 0.25, r: 0.05 });
+    const quarter = stereo(synth, 800, 37).left;
+    assert.ok(Math.abs(level(quarter) - level(half) - 20 * Math.log10(0.25 / 0.5)) < 0.03);
+    edit({ a: 0, d: 0, s: 0.25, r: 0.05, sr: 0.1 });
+    const falling = stereo(synth, 1600, 37).left;
+    // Windows are 22 carrier cycles apart and remain above the floor: -96 * .05/.1 dB.
+    const drop = rmsDb(falling, 864, 1264) - rmsDb(falling, 64, 464);
+    assert.ok(Math.abs(drop + 48) < 0.05, `${quality}: ${drop}`);
+    assert.ok(falling.subarray(-128).every(sample => sample === 0));
+    edit({ a: 0, d: 0, s: 0.75, r: 0.05 });
+    const restored = stereo(synth, 800, 37).left;
+    assert.ok(Math.abs(level(restored) - level(quarter) - 20 * Math.log10(0.75 / 0.25)) < 0.03);
+    assert.deepEqual(ended, []);
+    synth.noteOff(note);
+    const released = stereo(synth, 1600, 37).left;
+    assert.ok(released.subarray(-128).every(sample => sample === 0));
+    assert.deepEqual(ended, [[note, 'ended']]);
+    assert.equal(synth.errorCount, 0);
+  }
+});
+
+test('recycled prepared patches restore canonical sustain after live ADSR edits and patch switches', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const options = { quality, saturation: 'soft-knee' as const };
+    const synth = new Synth(RATE, 1, options);
+    const original = prepareVoice(tone({ a: 0, d: 0, s: 0.8, r: 0 }));
+    const changed = prepareVoice(tone({ a: 0, d: 0, s: 0.4, r: 0 }));
+    const release = (id: number) => {
+      assert.equal(synth.noteOff(id), true);
+      assert.ok(stereo(synth, 64).left.subarray(-16).every(sample => sample === 0));
+    };
+    const compare = (patch: PreparedVoice) => {
+      const reference = new Synth(RATE, 1, options);
+      reference.noteOn(patch, 69);
+      const id = synth.noteOn(patch, 69);
+      const actual = stereo(synth, 256, 37);
+      assert.deepEqual(actual, stereo(reference, 256));
+      assert.ok(rmsDb(actual.left, 64, 256) > -45);
+      assert.equal(synth.errorCount, 0);
+      reference.panic();
+      return id;
+    };
+    const first = synth.noteOn(original, 69);
+    stereo(synth, 256);
+    release(first);
+    const reused = compare(original);
+    const edit = { a: 0, d: 0, s: 0.2, r: 0 };
+    assert.equal(synth.updateNote(reused, { operatorADSR: [edit, edit, edit, edit] }), true);
+    stereo(synth, 128);
+    release(reused);
+    release(compare(original));
+    release(compare(changed));
+    release(compare(original));
+  }
+});
+
+test('recycled envelope timing and sustain-rate steps follow rate scaling across note changes', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    for (const rateKeyScale of [undefined, 0, 0.5]) {
+      const definition = tone({ a: 0.005, d: 0.01, s: 0.5, r: 0.02, sr: 0.1 });
+      for (const op of definition.ops) if (rateKeyScale !== undefined) op.rateKeyScale = rateKeyScale;
+      const patch = prepareVoice(definition);
+      const synth = new Synth(RATE, 1, { quality });
+      const first = synth.noteOn(patch, 48.25);
+      stereo(synth, 1024, 37);
+      assert.equal(synth.noteOff(first), true);
+      stereo(synth, RATE);
+      const reference = new Synth(RATE, 1, { quality });
+      const id = synth.noteOn(patch, 72.25);
+      const expectedId = reference.noteOn(patch, 72.25);
+      const held = stereo(synth, 1024, 37);
+      assert.deepEqual(held, stereo(reference, 1024));
+      assert.ok(rmsDb(held.left, 64, 256) > -70);
+      assert.equal(synth.noteOff(id), true);
+      assert.equal(reference.noteOff(expectedId), true);
+      const released = stereo(synth, 4096, 37);
+      assert.deepEqual(released, stereo(reference, 4096));
+      assert.ok(released.left.subarray(-128).every(sample => sample === 0));
+      assert.equal(synth.errorCount, 0);
+      assert.equal(reference.errorCount, 0);
+    }
+  }
+});
+
+test('inherited sustain and rate values change neither fresh nor recycled timing', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(RATE, 1, { quality });
+    const patch = prepareVoice(tone({ a: 0.005, d: 0.01, s: 0.5, r: 0.02 }));
+    synth.noteOn(patch, 48, 1);
+    stereo(synth, 1024, 37);
+    synth.panic();
+    // Omitted optional fields are not read through Object.prototype, so the clean sound is the contract.
+    const baseline = new Synth(RATE, 1, { quality });
+    baseline.noteOn(patch, 72.25, 2);
+    const expected = stereo(baseline, 2048, 37);
+    for (const [key, value] of [['sr', 0.05], ['rateKeyScale', 2]] as const) {
+      const original = Object.getOwnPropertyDescriptor(Object.prototype, key);
+      const restore = () => {
+        if (original) Object.defineProperty(Object.prototype, key, original);
+        else Reflect.deleteProperty(Object.prototype, key);
+      };
+      let recycled, fresh;
+      try {
+        Object.defineProperty(Object.prototype, key, { value, configurable: true, writable: true });
+        const reference = new Synth(RATE, 1, { quality });
+        synth.noteOn(patch, 72.25, 2);
+        reference.noteOn(patch, 72.25, 2);
+        recycled = stereo(synth, 2048, 37);
+        fresh = stereo(reference, 2048, 37);
+      } finally {
+        restore();
+      }
+      assert.deepEqual(recycled, expected, `recycled ${key}`);
+      assert.deepEqual(fresh, expected, `fresh ${key}`);
+      assert.equal(synth.errorCount, 0);
+      synth.panic();
+    }
+  }
+});
+
+test('failed note initialization preserves active audio, pool capacity and pristine coefficients', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(RATE, 1, { quality }), reference = new Synth(RATE, 1, { quality });
+    const patch = prepareVoice(tone({ a: 0, d: 0, s: 0.8, r: 0.02 }));
+    const other = prepareVoice(tone({ a: 0, d: 0, s: 0.2, r: 0.02 }));
+    synth.noteOn(patch, 69, 1);
+    reference.noteOn(patch, 69, 1);
+    const failure = new Error('injected initialization failure');
+    // Admission reads only own data, so nothing in a snapshot can throw. Inject the failure
+    // through the spare slot's typed storage instead: its `writes`-th index write throws.
+    const inject = (field: 'frequencyTargets' | 'noiseSteps', failingWrite: number, attempts: number): void => {
+      const spare = synth.freeVoices[synth.freeVoices.length - 1];
+      const original = spare[field];
+      let writes = 0;
+      spare[field] = new Proxy(original, {
+        set(target, key, value) { if (++writes === failingWrite) throw failure; return Reflect.set(target, key, value); },
+      });
+      try {
+        for (let attempt = 0; attempt < attempts; attempt++) {
+          writes = 0;
+          assert.throws(() => synth.noteOn(other, 72, attempt + 2), error => error === failure);
+        }
+      } finally { spare[field] = original; }
+    };
+    inject('frequencyTargets', 1, 72);
+    assert.deepEqual(stereo(synth, 512, 37), stereo(reference, 512));
+    synth.panic();
+    reference.panic();
+    inject('noiseSteps', 2, 1);
+    synth.noteOn(patch, 69, 101);
+    reference.noteOn(patch, 69, 101);
+    assert.deepEqual(stereo(synth, 1024, 37), stereo(reference, 1024));
+    assert.equal(synth.errorCount, 0);
+  }
 });
 
 test('envelopeAt applies the sustain rate before and after the gate', () => {

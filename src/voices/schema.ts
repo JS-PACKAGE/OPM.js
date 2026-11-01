@@ -159,6 +159,24 @@ export function operatorWaveform(value: unknown): OperatorWaveform {
   }
   return value;
 }
+
+function frozenKeyScale(scale: unknown): NonNullable<Operator['keyScale']> {
+  record(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
+  if (!Number.isInteger(scale.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
+  return Object.freeze({
+    breakpoint: numeric(scale.breakpoint, 'breakpoint'),
+    leftDbPerOctave: numeric(scale.leftDbPerOctave, 'leftDbPerOctave'),
+    rightDbPerOctave: numeric(scale.rightDbPerOctave, 'rightDbPerOctave'),
+  });
+}
+
+function frozenPitchEnvelope(envelope: unknown): NonNullable<Voice['pitchEnvelope']> {
+  record(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], 'pitchEnvelope');
+  return Object.freeze({ a: numeric(envelope.a, 'a'), d: numeric(envelope.d, 'd'), r: numeric(envelope.r, 'r'),
+    initial: numeric(envelope.initial, 'initial'), peak: numeric(envelope.peak, 'peak'),
+    sustain: numeric(envelope.sustain, 'sustain'), final: numeric(envelope.final, 'final') });
+}
+
 export function validateVoice(input: unknown): FrozenVoice {
   record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice', ['pitchEnvelope', 'pan']);
   if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4 && input.version !== 5 && input.version !== 6 && input.version !== 7 && input.version !== 8) throw new RangeError('Unsupported voice version');
@@ -172,17 +190,21 @@ export function validateVoice(input: unknown): FrozenVoice {
   record(input.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo',
     version >= 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
       input.version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : input.version === 4 ? ['waveform'] : []);
-  const lfo: LFO = { rate: numeric(input.lfo.rate, 'rate'),
-    amDepth: numeric(input.lfo.amDepth, 'amDepth'), pmDepth: numeric(input.lfo.pmDepth, 'pmDepth'),
-    waveform: Object.hasOwn(input.lfo, 'waveform') ? lfoWaveform(input.lfo.waveform) : 'sine' };
-  if (version < 8 && lfo.waveform === 'noise') throw new RangeError('noise LFO requires voice version 8');
-  if (Object.hasOwn(input.lfo, 'delay')) lfo.delay = numeric(input.lfo.delay, 'delay');
-  if (Object.hasOwn(input.lfo, 'sync')) lfo.sync = lfoSync(input.lfo.sync);
-  if (Object.hasOwn(input.lfo, 'phase')) lfo.phase = numeric(input.lfo.phase, 'phase');
-  if (Object.hasOwn(input.lfo, 'amTargets')) lfo.amTargets = lfoTargets(input.lfo.amTargets, true);
-  if (Object.hasOwn(input.lfo, 'pmTargets')) lfo.pmTargets = lfoTargets(input.lfo.pmTargets, true);
-  Object.freeze(lfo);
-  const ops: FrozenOperator[] = [];
+  // Conditional object spreads define own data (CreateDataProperty): no inherited setter
+  // or descriptor-field hook can intercept an approved optional field.
+  const rate = numeric(input.lfo.rate, 'rate');
+  const amDepth = numeric(input.lfo.amDepth, 'amDepth');
+  const pmDepth = numeric(input.lfo.pmDepth, 'pmDepth');
+  const waveform = Object.hasOwn(input.lfo, 'waveform') ? lfoWaveform(input.lfo.waveform) : 'sine';
+  if (version < 8 && waveform === 'noise') throw new RangeError('noise LFO requires voice version 8');
+  const lfo: LFO = Object.freeze({ rate, amDepth, pmDepth, waveform,
+    ...(Object.hasOwn(input.lfo, 'delay') ? { delay: numeric(input.lfo.delay, 'delay') } : {}),
+    ...(Object.hasOwn(input.lfo, 'sync') ? { sync: lfoSync(input.lfo.sync) } : {}),
+    ...(Object.hasOwn(input.lfo, 'phase') ? { phase: numeric(input.lfo.phase, 'phase') } : {}),
+    ...(Object.hasOwn(input.lfo, 'amTargets') ? { amTargets: lfoTargets(input.lfo.amTargets, true) } : {}),
+    ...(Object.hasOwn(input.lfo, 'pmTargets') ? { pmTargets: lfoTargets(input.lfo.pmTargets, true) } : {}) });
+  // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
+  const ops = [undefined, undefined, undefined, undefined] as unknown as FrozenOperator[];
   for (let i = 0; i < 4; i++) {
     const op = input.ops[i];
     if (op && typeof op === 'object' && version < 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate require voice version 7');
@@ -194,46 +216,31 @@ export function validateVoice(input: unknown): FrozenVoice {
     // One own-property probe, so a proxy cannot answer the gate and the read differently.
     const hasSr = Object.hasOwn(op.adsr, 'sr');
     if (hasSr && version < 8) throw new TypeError('adsr.sr requires voice version 8');
-    const adsr: ADSR = { a: numeric(op.adsr.a, 'a'), d: numeric(op.adsr.d, 'd'), s: numeric(op.adsr.s, 's'), r: numeric(op.adsr.r, 'r') };
-    if (hasSr) adsr.sr = numeric(op.adsr.sr, 'sr');
-    const normalized: Operator = { ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
-      detune: numeric(op.detune, 'detune'), adsr: Object.freeze(adsr) };
-    if (Object.hasOwn(op, 'velocitySensitivity')) normalized.velocitySensitivity = numeric(op.velocitySensitivity, 'velocitySensitivity');
-    if (Object.hasOwn(op, 'frequency')) normalized.frequency = numeric(op.frequency, 'frequency');
-    if (Object.hasOwn(op, 'rateKeyScale')) normalized.rateKeyScale = numeric(op.rateKeyScale, 'rateKeyScale');
-    if (Object.hasOwn(op, 'waveform')) normalized.waveform = operatorWaveform(op.waveform);
-    if (Object.hasOwn(op, 'noiseRate')) normalized.noiseRate = numeric(op.noiseRate, 'noiseRate');
-    if (Object.hasOwn(op, 'keyScale')) {
-      record(op.keyScale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
-      if (!Number.isInteger(op.keyScale.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
-      normalized.keyScale = Object.freeze({
-        breakpoint: numeric(op.keyScale.breakpoint, 'breakpoint'),
-        leftDbPerOctave: numeric(op.keyScale.leftDbPerOctave, 'leftDbPerOctave'),
-        rightDbPerOctave: numeric(op.keyScale.rightDbPerOctave, 'rightDbPerOctave'),
-      });
-    }
-    ops.push(Object.freeze(normalized));
+    const adsr: ADSR = { a: numeric(op.adsr.a, 'a'), d: numeric(op.adsr.d, 'd'), s: numeric(op.adsr.s, 's'), r: numeric(op.adsr.r, 'r'),
+      ...(hasSr ? { sr: numeric(op.adsr.sr, 'sr') } : {}) };
+    ops[i] = Object.freeze({ ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
+      detune: numeric(op.detune, 'detune'), adsr: Object.freeze(adsr),
+      ...(Object.hasOwn(op, 'velocitySensitivity') ? { velocitySensitivity: numeric(op.velocitySensitivity, 'velocitySensitivity') } : {}),
+      ...(Object.hasOwn(op, 'frequency') ? { frequency: numeric(op.frequency, 'frequency') } : {}),
+      ...(Object.hasOwn(op, 'rateKeyScale') ? { rateKeyScale: numeric(op.rateKeyScale, 'rateKeyScale') } : {}),
+      ...(Object.hasOwn(op, 'waveform') ? { waveform: operatorWaveform(op.waveform) } : {}),
+      ...(Object.hasOwn(op, 'noiseRate') ? { noiseRate: numeric(op.noiseRate, 'noiseRate') } : {}),
+      ...(Object.hasOwn(op, 'keyScale') ? { keyScale: frozenKeyScale(op.keyScale) } : {}) });
   }
   // Canonical key order: an optional voice pan sits between modIndex and lfo.
-  const voice: Voice = { version: 8, name: input.name,
+  return Object.freeze({ version: 8, name: input.name,
     algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
     modIndex: numeric(input.modIndex, 'modIndex'),
     ...(Object.hasOwn(input, 'pan') ? { pan: numeric(input.pan, 'pan') } : {}),
-    lfo, ops: Object.freeze(ops) as unknown as Voice['ops'] };
-  if (Object.hasOwn(input, 'pitchEnvelope')) {
-    const envelope = input.pitchEnvelope;
-    record(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], 'pitchEnvelope');
-    voice.pitchEnvelope = Object.freeze({ a: numeric(envelope.a, 'a'), d: numeric(envelope.d, 'd'), r: numeric(envelope.r, 'r'),
-      initial: numeric(envelope.initial, 'initial'), peak: numeric(envelope.peak, 'peak'),
-      sustain: numeric(envelope.sustain, 'sustain'), final: numeric(envelope.final, 'final') });
-  }
-  return Object.freeze(voice);
+    lfo, ops: Object.freeze(ops) as unknown as Voice['ops'],
+    ...(Object.hasOwn(input, 'pitchEnvelope') ? { pitchEnvelope: frozenPitchEnvelope(input.pitchEnvelope) } : {}) } as Voice);
 }
 
 export function parseVoiceBank(source: string | readonly unknown[]): Map<string, FrozenVoice> {
   let input: unknown = source;
   if (typeof input === 'string') {
-    if (input.length > MAX_BANK_BYTES || new TextEncoder().encode(input).length > MAX_BANK_BYTES) {
+    // Three UTF-8 bytes per UTF-16 code unit is an upper bound; small inputs need no buffer.
+    if (input.length > MAX_BANK_BYTES || (input.length * 3 > MAX_BANK_BYTES && new TextEncoder().encode(input).length > MAX_BANK_BYTES)) {
       throw new RangeError('Voice bank exceeds 256 KiB');
     }
     input = JSON.parse(input);

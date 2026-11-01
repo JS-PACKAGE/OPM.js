@@ -29,6 +29,16 @@ const DX7_EDGES = [
   [21, 63, 64, 65], [32, 64, 65], [63, 64, 65], [64, 65], [32, 54, 64],
   [32, 54, 64], [21, 43, 54], [43, 65], [43, 54], [65], [],
 ];
+// Low 16 bits encode source*4+target edges; the next four encode output carriers.
+// Derive once from our existing graphs rather than duplicating topology tables.
+const OPM_TOPOLOGIES = ALGORITHMS.map(graph => {
+  let bits = 0;
+  for (let target = 0; target < 4; target++) {
+    if (graph.carriers.includes(target)) bits |= 1 << (16 + target);
+    for (const source of graph.inputs[target]) bits |= 1 << (source * 4 + target);
+  }
+  return bits;
+});
 const OP_MAX = [99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 99, 3, 3, 7, 3, 7, 99, 1, 31, 99, 14];
 const GLOBAL_MAX = [99, 99, 99, 99, 99, 99, 99, 99, 31, 7, 1, 99, 99, 99, 99, 1, 5, 7, 48];
 const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
@@ -161,15 +171,25 @@ function selection(data: Uint8Array): { algorithm: Algorithm; selected: number[]
       if (c === a || c === b) continue;
       const d = selected.find(number => number !== a && number !== b && number !== c)!;
       const order = [a, b, c, d];
+      let carrierBits = 0;
+      for (let index = 0; index < 4; index++) if (carriers.includes(order[index])) carrierBits |= 1 << index;
+      let originalBits = -1;
       for (let algorithm = 0; algorithm < ALGORITHMS.length; algorithm++) {
-        const graph = ALGORITHMS[algorithm];
-        if (order.some((number, index) => graph.carriers.includes(index) !== carriers.includes(number))) continue;
-        let score = 0;
-        for (let source = 0; source < 4; source++) for (let target = 0; target < 4; target++) {
-          const original = edges.includes(order[source] * 10 + order[target]);
-          const converted = graph.inputs[target].includes(source);
-          if (original !== converted) score++;
+        const topology = OPM_TOPOLOGIES[algorithm];
+        if ((topology >>> 16) !== carrierBits) continue;
+        // Some orders have no eligible output layout; build their edge mask only on demand.
+        if (originalBits < 0) {
+          originalBits = 0;
+          for (let source = 0; source < 4; source++) for (let target = 0; target < 4; target++) {
+            if (edges.includes(order[source] * 10 + order[target])) originalBits |= 1 << (source * 4 + target);
+          }
         }
+        // Population count of the 16-bit symmetric edge difference preserves the old score.
+        let difference = originalBits ^ (topology & 0xffff);
+        difference -= (difference >>> 1) & 0x5555;
+        difference = (difference & 0x3333) + ((difference >>> 2) & 0x3333);
+        difference = (difference + (difference >>> 4)) & 0x0f0f;
+        const score = (difference + (difference >>> 8)) & 0x1f;
         if (score < bestScore) {
           bestScore = score;
           bestAlgorithm = algorithm as Algorithm;
@@ -189,7 +209,8 @@ function convertOperator(data: Uint8Array, number: number): Operator {
   const ratio = (coarse === 0 ? 0.5 : coarse) * (1 + fine / 100);
   const peak = Math.max(data[at + 4], data[at + 5], data[at + 6]);
   const peakAmplitude = amplitude(peak);
-  const operator: Operator = {
+  // A conditional spread defines own data; assigning onto the literal could reach an inherited setter.
+  return {
     ratio: fixed ? 1 : clampRatio(ratio),
     level: amplitude(data[at + 16]) * peakAmplitude,
     detune: (data[at + 20] - 7) * 3,
@@ -208,9 +229,8 @@ function convertOperator(data: Uint8Array, number: number): Operator {
       leftDbPerOctave: data[at + 11] < 2 ? data[at + 9] / 99 * 24 : 0,
       rightDbPerOctave: data[at + 12] < 2 ? data[at + 10] / 99 * 24 : 0,
     },
+    ...(fixed ? { frequency: 10 ** ((coarse & 3) + fine / 100) } : {}),
   };
-  if (fixed) operator.frequency = 10 ** ((coarse & 3) + fine / 100);
-  return operator;
 }
 
 /** Import exactly one standard DX7 single/bank dump as approximate four-op voices. */
@@ -228,13 +248,11 @@ export function importDX7(input: Uint8Array): Voice[] {
       waveform: DX7_LFO_WAVES[data[142]],
       delay: data[138] / 99 * 10,
       sync: data[141] === 1 ? 'note' : 'global',
-    }, };
-    if (data[130] !== 50 || data[131] !== 50 || data[132] !== 50 || data[133] !== 50) {
-      voice.pitchEnvelope = {
-        a: seconds(data[126]), d: Math.min(10, seconds(data[127]) + seconds(data[128])), r: seconds(data[129]),
-        initial: pitchCents(data[133]), peak: pitchCents(data[130]), sustain: pitchCents(data[132]), final: pitchCents(data[133]),
-      };
-    }
+    },
+    ...(data[130] !== 50 || data[131] !== 50 || data[132] !== 50 || data[133] !== 50 ? { pitchEnvelope: {
+      a: seconds(data[126]), d: Math.min(10, seconds(data[127]) + seconds(data[128])), r: seconds(data[129]),
+      initial: pitchCents(data[133]), peak: pitchCents(data[130]), sustain: pitchCents(data[132]), final: pitchCents(data[133]),
+    } } : {}) };
     return normalizeVoice(voice) as Voice;
   });
 }

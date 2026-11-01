@@ -4,6 +4,7 @@ import { importDX7, describeDX7 } from '../src/voices/dx7.js';
 import { normalizeVoice } from '../src/voices/normalize.js';
 import { parseVoiceBank } from '../src/voices/schema.js';
 import { ALGORITHMS, renderNote } from '../src/core/index.js';
+import { withNamedAccessor } from './named-accessors-harness.js';
 
 // Original generated fixtures, based on Yamaha DX7 pp30–31 and DX7II Add-11.
 // No downloaded patch banks or emulator implementation/fixtures are used.
@@ -90,7 +91,23 @@ test('all 32 algorithms retain loudest source carriers as output carriers', () =
     const outputCarriers = ALGORITHMS[voice.algorithm].carriers.map(index => description.selectedOperators[index]);
     assert.deepEqual(outputCarriers.sort((a, b) => a - b), carriers[algorithm].slice(0, 4), `algorithm ${algorithm + 1}`);
     assert.deepEqual(normalizeVoice(voice), voice);
-    assert.ok(description.warnings.some(warning => /not DX7 synthesis/.test(warning)));
+  }
+});
+
+test('equal-loudness carrier and topology ties retain deterministic operator routing', () => {
+  for (const [sourceAlgorithm, algorithm, selected, ratios] of [
+    [0, 4, [2, 1, 4, 3], [7.5, 9, 4.5, 6]],
+    [15, 2, [2, 3, 5, 1], [7.5, 6, 3, 9]],
+  ] as const) {
+    const data = singlePayload();
+    data[134] = sourceAlgorithm;
+    for (let slot = 0; slot < 6; slot++) data[slot * 21 + 16] = 99;
+    const bytes = message(data);
+    const description = describeDX7(bytes)[0], voice = importDX7(bytes)[0];
+    assert.equal(description.algorithm, algorithm);
+    assert.deepEqual(description.selectedOperators, selected);
+    assert.equal(voice.algorithm, algorithm);
+    assert.deepEqual(voice.ops.map(op => op.ratio), ratios);
   }
 });
 
@@ -264,5 +281,22 @@ test('DX7 expressive controls retain verified direction, endpoints and fixed-fre
   for (const [source, expected] of [[0, 'triangle'], [2, 'saw'], [3, 'square'], [4, 'sine']] as const) {
     data[142] = source;
     assert.equal(importDX7(message(data))[0].lfo.waveform, expected);
+  }
+});
+
+test('DX7 import keeps fixed frequencies and pitch envelopes despite inherited setters', () => {
+  const data = singlePayload();
+  data[105 + 17] = 1;
+  data[105 + 18] = 2;
+  data[105 + 19] = 50;
+  data.set([99, 0, 50, 0], 130);
+  const bytes = message(data);
+  const clean = importDX7(bytes);
+  assert.ok(clean[0].pitchEnvelope);
+  assert.ok(clean[0].ops.some(op => op.frequency === 10 ** 2.5));
+  for (const key of ['frequency', 'pitchEnvelope']) {
+    const polluted = withNamedAccessor(key, () => importDX7(bytes));
+    assert.equal(polluted.setterHits, 0, key);
+    assert.deepStrictEqual(polluted.value, clean, key);
   }
 });

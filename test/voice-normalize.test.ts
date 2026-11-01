@@ -26,6 +26,26 @@ test('normalized operators, envelopes, and LFO do not share mutable caller state
   assert.equal(source.ops[0].adsr.s, brass.ops[0].adsr.s);
 });
 
+test('voice preparation never reads or freezes inherited optional objects', () => {
+  for (const key of ['pitchEnvelope', 'keyScale'] as const) {
+    const source = voice();
+    delete source.pitchEnvelope;
+    for (const op of source.ops) delete op.keyScale;
+    const foreign = { mutable: 1 };
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, key);
+    let reads = 0;
+    try {
+      Object.defineProperty(Object.prototype, key, { configurable: true, get() { reads++; return foreign; } });
+      prepareVoice(source);
+      assert.equal(Reflect.set(foreign, 'mutable', 2), true);
+      assert.equal(reads, 0);
+    } finally {
+      if (original) Object.defineProperty(Object.prototype, key, original);
+      else Reflect.deleteProperty(Object.prototype, key);
+    }
+  }
+});
+
 test('nested accessors and sparse operator slots are rejected without reading getters', () => {
   const nested = voice();
   let getterCalls = 0;

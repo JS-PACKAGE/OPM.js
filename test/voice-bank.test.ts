@@ -19,6 +19,13 @@ test('bank length is measured in UTF-8 bytes, not JavaScript characters', () => 
   assert.throws(() => parseVoiceBank(multibyte), RangeError);
 });
 
+test('bank byte admission handles the three-byte UTF-16 bound and lone-surrogate replacement', () => {
+  const boundary = Math.floor(MAX_BANK_BYTES / 3);
+  const surrogate = String.fromCharCode(0xd800);
+  assert.throws(() => parseVoiceBank(surrogate.repeat(boundary)), SyntaxError);
+  assert.throws(() => parseVoiceBank(surrogate.repeat(boundary + 1)), RangeError);
+});
+
 test('duplicate bank names are rejected and returned voices are independent snapshots', () => {
   const first = copy();
   const second = copy();
