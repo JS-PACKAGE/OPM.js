@@ -4,6 +4,10 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Repository browser scripts observed on this host
+
+- With the pinned Playwright 1.56.1 browsers (chromium-1194, firefox-1495, webkit-2215) installed, `npm run browser-smoke` and `npm run browser-stress` passed for Chromium, Firefox and WebKit with zero errors (macOS arm64, HEAD `9657585`). `npx playwright install` stalled at the archive extraction step after a complete download here, so the cached zips were extracted with the system `unzip` and marked `INSTALLATION_COMPLETE`; the cause of the stall was not investigated. This supersedes earlier notes that the bundled Chromium could not launch on this host. Physical-device, MIDI-hardware and human-listening acceptance remain unverified; no source, API or dependency changed.
+
 ### Sample-frame arrangement fade completion
 
 - Fixed layer gain reconstruction measuring a positive fade in rounded seconds while the engine ramps in sample frames. A note whose onset fell exactly where a fade completes (for example a 0.3 s fade at 16 or 48 kHz) was seen as about 1e-16 s short, so every chord note received a phantom one-sample ramp; an 86-note chord then exceeded the 256-command lookahead budget and stopped the arrangement. Elapsed time is now counted in rounded sample frames and compared with `fade × sampleRate`; sub-sample and subnormal fades keep their ramp, and no budget or tolerance was relaxed.
