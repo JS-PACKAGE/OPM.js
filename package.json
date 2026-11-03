@@ -76,7 +76,7 @@
     "build": "npm run compile && node .dev/scripts/build.js",
     "security": "npm run compile && node .dev/scripts/security-check.js",
     "browser-smoke": "npm run compile && node .dev/scripts/browser-smoke.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit && tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM scripts/types/public-api.ts && tsc --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022 --types node scripts/types/core-only.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json --noEmit && tsc --ignoreConfig --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022,DOM scripts/types/public-api.ts && tsc --ignoreConfig --noEmit --strict --module NodeNext --moduleResolution NodeNext --target ES2022 --lib ES2022 --types node scripts/types/core-only.ts",
     "prepack": "npm run build"
   },
   "engines": {
@@ -88,6 +88,6 @@
     "esbuild": "0.28.2",
     "playwright": "1.64.1",
     "terser": "5.51.2",
-    "typescript": "5.9.3"
+    "typescript": "6.0.3"
   }
 }
