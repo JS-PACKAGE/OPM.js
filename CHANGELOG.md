@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Development dependency upgrades
+
+- Pinned development dependencies moved: `@types/node` 18.19.130 → 22.20.5 (now matching the `>=22` engine floor), `acorn` 8.15.0 → 8.19.0 and `playwright` 1.56.1 → 1.64.1. `typescript` 5.9.3, `esbuild` and `terser` are unchanged; the 7.x TypeScript major was deliberately not adopted. No runtime dependency, source, public API or voice format changed, and the rebuilt `dist/` is byte-identical.
+- Observed on macOS arm64 after the upgrade: `npm run typecheck` clean, `npm test` 566/566, `npm run build`, `npm run security -- --package-smoke` and `npm audit` (0 vulnerabilities) pass; `browser-smoke` and `browser-stress` pass on Chromium 156, Firefox and WebKit with zero errors. Chromium logs one 403 console line during module loading; the local fixture server (`scripts/browser-runner.ts`) answers 403 for any non-`dist/` path, so the request is most likely the browser's own `/favicon.ico` fetch (inferred, the URL was not captured). CI installs browsers with `playwright install`, so it will fetch the matching builds; that CI run has not been observed.
+
 ### Repository browser scripts observed on this host
 
 - With the pinned Playwright 1.56.1 browsers (chromium-1194, firefox-1495, webkit-2215) installed, `npm run browser-smoke` and `npm run browser-stress` passed for Chromium, Firefox and WebKit with zero errors (macOS arm64, HEAD `9657585`). `npx playwright install` stalled at the archive extraction step after a complete download here, so the cached zips were extracted with the system `unzip` and marked `INSTALLATION_COMPLETE`; the cause of the stall was not investigated. This supersedes earlier notes that the bundled Chromium could not launch on this host. Physical-device, MIDI-hardware and human-listening acceptance remain unverified; no source, API or dependency changed.
