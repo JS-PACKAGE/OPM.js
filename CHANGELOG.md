@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Branchless sine sign in the fast operator frames
+
+- The inlined `sineOp` used by the per-algorithm sine frames derived the sign of $\sin(\pi x)$ from an int32 conversion and a data-dependent branch (`(k & 1) === 0 ? p : -p`). It now computes the parity with the same round-to-nearest trick as the range reduction, $d = h - \mathrm{round}(h)$ with $h = k/2$, and the sign $1 - 8d^2 \in \{+1, -1\}$ exactly, folded into the gain so it stays off the polynomial's dependency chain. Rendered output is unchanged: a SHA-256 over eco/standard/high × all eight algorithms × six notes × 400 blocks (throwaway script, not committed) matched between the old and new build, and `npm test` 566/566 still pins the fast and generic paths together.
+- Observed on this macOS arm64 host with an interleaved A/B in one process (32 held brass voices, 128-frame blocks, 25 alternating repetitions per build, both orders; absolute times drift by tens of percent between processes here, so only the paired minimum is quoted): standard 0.372 vs 0.400 ms and 0.307 vs 0.330 ms per block (about 7 % faster), eco 0.309 vs 0.371 ms (about 17 % faster); high measured 0.651 vs 0.609 ms and 0.688 vs 0.666 ms, i.e. no gain within the noise of this host. Other hosts and JavaScript engines have not been measured.
+
 ### Development dependency upgrades
 
 - Pinned development dependencies moved: `@types/node` 18.19.130 → 22.20.5 (now matching the `>=22` engine floor), `acorn` 8.15.0 → 8.19.0, `playwright` 1.56.1 → 1.64.1 and `typescript` 5.9.3 → 6.0.3. `esbuild` and `terser` are unchanged. TypeScript 6 refuses to load `tsconfig.json` when files are named on the command line, so the two standalone public-contract checks in `npm run typecheck` now pass `--ignoreConfig`. The 7.x line was not adopted: it no longer ships the JavaScript compiler API that `scripts/build.ts`, `scripts/docs-build.ts` and `scripts/security-check.ts` use (observed: `security-check` fails to typecheck against 7.0.2). No runtime dependency, source, public API or voice format changed, and the rebuilt `dist/` is byte-identical under 6.0.3.
