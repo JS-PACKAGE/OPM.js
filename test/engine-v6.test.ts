@@ -342,7 +342,8 @@ test('optional DC blocker removes feedback DC, keeps audio-band content and sett
   assert.ok(Math.abs(mean(blocked.held)) < 0.01 * rms(blocked.held), 'the blocker removes it');
   // At 440 Hz the 3 Hz high-pass leaves the waveform apart from its offset.
   const offset = Float32Array.from(plain.held, (value, index) => value - blocked.held[index]);
-  const centered = Float32Array.from(offset, value => value - mean(offset));
+  const offsetMean = mean(offset);
+  const centered = Float32Array.from(offset, value => value - offsetMean);
   assert.ok(rms(centered) < 0.02 * rms(blocked.held));
   blocked.synth.noteOff(1);
   const tail = audio(blocked.synth, 48000);
