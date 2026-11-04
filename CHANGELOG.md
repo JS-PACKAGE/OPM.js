@@ -2,7 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.14.0
+
+Package version 1.14.0, a GitHub release (not on npm). A performance, hardening and maintenance release over v1.13.1. Voice format v8 is unchanged and no feature API is added. Public declarations only widen: `replaceVoiceBank` also accepts frozen voices, and `MAX_RENDER_SAMPLES` moved to a leaf module (`src/core/limits.ts`) while staying re-exported from `sequence`. Sample-frame arrangement fade fixes intentionally change some rendered arrangement gains; the `sineOp` change is SHA-256 identical. Development dependencies were upgraded and the test suite is faster.
 
 ### Branchless sine sign in the fast operator frames
 

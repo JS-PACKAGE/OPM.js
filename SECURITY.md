@@ -468,6 +468,8 @@ v1.13.1 release: covered by the SecVoiceV8 record above (approved, hardening app
 
 The branchless-sine-sign follow-up (`sineOp` parity from a second round-to-nearest instead of an int32 conversion and branch) was reviewed read-only by SineOpReview (security-reviewer agent): no supported-input A/C blocker. It confirmed exact equivalence to the previous sign for every |k| < 2^51 (phase stays below tens of half-turns given the 16 rad `modIndex` limit), ties-to-even giving d = ±0.5 for odd k, signed zero, the unchanged `gain === 0` early return, and that NaN/Infinity phases or gains still propagate to non-finite results caught by the existing finite checks. No allocation, state, work or containment change. The reviewer ran no code; the SHA-256 output identity across qualities and algorithms is recorded in CHANGELOG. This is not release approval.
 
+v1.14.0 release: the `src/core/`, `src/worklet/` and voice-parsing changes since v1.13.1 are covered by the Unreleased review records above in this file (scoped static reviews, hardening applied); the final `sineOp` change is recorded with its SHA-256 identity check. The release adds only version numbers and documentation beyond that reviewed source. CI for this exact commit has not been observed.
+
 ## Non-goals
 
 - Sandboxing the host page (OPM.js runs in the page's trust domain; XSS protection is the embedder's job)

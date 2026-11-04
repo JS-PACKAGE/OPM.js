@@ -4,7 +4,7 @@
 
 OPM.js recreates the classic 16-bit era FM sound — four-operator synthesis with a default eight-voice budget (configurable up to 32), multiple algorithms, feedback, and ADSR envelopes — as a lightweight, zero-runtime-dependency TypeScript engine powered by the Web Audio API, distributed as JavaScript ES modules.
 
-> **Status:** v1.13.1 (package 1.13.1) is the latest [GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.1): voice format v8 adds an optional per-operator sustain rate `adsr.sr` (held-note decay, like OPM D2R), a sample-and-hold `noise` LFO and a voice-level `pan`; `.opm` import now maps D2R and the noise LFO, DX7 import maps the sample-and-hold LFO, and voices without the new fields render bit-identically to v1.13.0; see the [CHANGELOG](./CHANGELOG.md). [v1.13.0](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.0) brought roughly 1.5–2× faster allocation-free rendering, per-algorithm frames for non-sine periodic waveforms and opt-in TPDF `dither` for PCM WAV export. v1.12.0 added post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes and optional `saturation: 'soft-knee'` and `dcBlock` output settings. v1.11 added voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. Voice v1–v7 inputs remain accepted; runtime dependencies remain empty. The [v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6.
+> **Status:** v1.14.0 (package 1.14.0) is the latest [GitHub release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.14.0): v1.14.0 keeps voice format v8 and adds no new feature API; it is a performance, hardening and maintenance release (frame-local DSP, effects, WAV and SMF paths with bounded limits, stricter voice/OPM/DX7 parsing, sample-frame arrangement fade fixes, a branchless sine sign in the fast operator frames, updated development dependencies). Public declarations only widen (`replaceVoiceBank` also accepts frozen voices; `MAX_RENDER_SAMPLES` lives in a leaf module and is still re-exported), and the arrangement fade fixes intentionally change some rendered arrangement gains; see the [CHANGELOG](./CHANGELOG.md). [v1.13.1](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.1) introduced voice format v8, which adds an optional per-operator sustain rate `adsr.sr` (held-note decay, like OPM D2R), a sample-and-hold `noise` LFO and a voice-level `pan`; `.opm` import now maps D2R and the noise LFO, DX7 import maps the sample-and-hold LFO, and voices without the new fields render bit-identically to v1.13.0; see the [CHANGELOG](./CHANGELOG.md). [v1.13.0](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.13.0) brought roughly 1.5–2× faster allocation-free rendering, per-algorithm frames for non-sine periodic waveforms and opt-in TPDF `dither` for PCM WAV export. v1.12.0 added post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes and optional `saturation: 'soft-knee'` and `dcBlock` output settings. v1.11 added voice format v7 with per-operator waveforms and held noise, optional stereo chorus/reverb, MIDI program-to-voice maps with RPN bend sensitivity, and approximate `.opm` patch import. Voice v1–v7 inputs remain accepted; runtime dependencies remain empty. The [v1.10 release](https://github.com/JS-PACKAGE/OPM.js/releases/tag/v1.10) (package 1.10.0) uses voice format v6.
 >
 > GitHub release distribution and npm registry publication are separate. Use the release tarball or a source checkout; no npm publication is implied. See the [compatibility policy](./doc/compatibility.md).
 
@@ -71,7 +71,7 @@ OPM.js is a musically-accurate reimplementation, not a cycle-accurate hardware c
 
 ### Try the checkout
 
-Obtain the [v1.13.1 source archive or checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.13.1) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
+Obtain the [v1.14.0 source archive or checkout](https://github.com/JS-PACKAGE/OPM.js/tree/v1.14.0) to run the thirteen examples. HTML pages, Vite tooling and development programs are checkout-only, not included in the installable `.tgz`. Links to these resources below open their repository files; serve the corresponding local HTML to run them. Repository commands run in the directory containing `package.json`, `src/`, and `scripts/` (called `OPM.js` in the examples).
 
 The committed `dist/` is ready to use; trying the demos needs no npm installation or build. With Python 3 available, run from that repository root:
 
@@ -83,18 +83,18 @@ Open **http://localhost:8000/index.html** for the English example catalog:
 
 | Example | Demonstrates |
 | --- | --- |
-| [Basic notes and voices](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
-| [Melody and chord scheduling](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
-| [Live expression and per-voice LFO](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
-| [Shared AudioContext and routing](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
-| [Offline synthesis and WAV](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
-| [Advanced playground](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
-| [Preset and DX7 audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
-| [Scores, Transport and performance](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
-| [Adaptive game music](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
-| [Playable instrument and Web MIDI](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
-| [Independent buses and stems](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
-| [FM sound designer](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
+| [Basic notes and voices](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/basic.html) | Presets, pitch, velocity, timed and held notes |
+| [Melody and chord scheduling](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/song.html) | *Twinkle, Twinkle, Little Star*, absolute timing, bounded lookahead and cancellation |
+| [Live expression and per-voice LFO](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/modulation.html) | Bend/glide a held note; change expression, pan and modulation; scheduled release |
+| [Shared AudioContext and routing](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/context.html) | Host GainNode, manual routing, diagnostics and borrowed-context ownership |
+| [Offline synthesis and WAV](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/wav.html) | Stereo PCM, frame counts and PCM16 WAV without an AudioContext |
+| [Advanced playground](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/playground.html) | Key scaling, suspend/resume, diagnostics and approximate DX7 import |
+| [Preset and DX7 audition](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/audition.html) | Register/velocity grid, A/B comparison, raw peak/RMS reports and rendered WAV |
+| [Scores, Transport and performance](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/sequence.html) | Pause/seek/loop/tempo, sustain/mono priority, live controls, quality/bank tools, multi-format Worker export and physical-device observations |
+| [Adaptive game music](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/adaptive.html) | Boundary-quantized section/layer switching, tempo ramp, swing, voice priority |
+| [Playable instrument and Web MIDI](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/instrument.html) | Mono lead + limited poly pad, per-part/per-key controls, optional user-granted MIDI |
+| [Independent buses and stems](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/buses.html) | Three OPM instances on one AudioContext, separate gain/filter/echo, offline stems |
+| [FM sound designer](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/sound-design.html) | Operators, algorithm graph, dB envelopes, selective LFO, live edits, patch JSON |
 
 Click a playback button to start audio. Stop the server with Ctrl+C when finished. Do not open the HTML through `file://`. Pages and runtime messages are English; TypeScript helpers live in `demo/`.
 
@@ -102,13 +102,13 @@ If `dist/` is missing or you have changed `src/` or `demo/` TypeScript, regenera
 
 ### Install into an npm project
 
-Download [opm.js-1.13.1.tgz from the v1.13.1 release](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.13.1/opm.js-1.13.1.tgz), then install it from your application's root:
+Download [opm.js-1.14.0.tgz from the v1.14.0 release](https://github.com/JS-PACKAGE/OPM.js/releases/download/v1.14.0/opm.js-1.14.0.tgz), then install it from your application's root:
 
 ```sh
-npm install /actual/path/to/opm.js-1.13.1.tgz
+npm install /actual/path/to/opm.js-1.14.0.tgz
 ```
 
-No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The v1.13.1 asset includes these synchronized guides; the original v1.8 tag and archive remain unchanged.
+No checkout or consumer build is required. The registry package name does **not** guarantee npm publication; do not substitute `npm install opm.js` or an assumed CDN URL. The v1.14.0 asset includes these synchronized guides; the original v1.8 tag and archive remain unchanged.
 
 To build a local tarball instead, run from the `OPM.js` source checkout with Node.js 22+ and npm:
 
@@ -117,19 +117,19 @@ npm ci
 npm pack
 ```
 
-`npm pack` builds automatically and produces `opm.js-1.13.1.tgz`. To create a new application beside the checkout:
+`npm pack` builds automatically and produces `opm.js-1.14.0.tgz`. To create a new application beside the checkout:
 
 ```sh
 cd ..
 mkdir opm-app
 cd opm-app
 npm init -y
-npm install ../OPM.js/opm.js-1.13.1.tgz
+npm install ../OPM.js/opm.js-1.14.0.tgz
 ```
 
 For an existing application, run only the install command from its root, adjusting the tarball path. Consumers do not install the engine's development dependencies or need a build step. The installed package contains minified JS, `.js.map` source maps with embedded TypeScript, generated `.d.ts` declarations, demo scripts, usage documentation, and legal files—not HTML demo pages, separate source files, or build scripts.
 
-For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/JS-PACKAGE/OPM.js/blob/v1.13.1/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
+For a bundled host, use the checkout-only [installed-package Vite example](https://github.com/JS-PACKAGE/OPM.js/blob/v1.14.0/examples/vite/README.md): it preserves the complete engine/worklet/Worker tree and license, supports a non-root deployment base, and checks production CSP, MIME types and missing assets. Maintainers can follow the [package verification and publication prerequisites](./doc/publishing.md); this checkout has no npm publishing workflow, and authentication/provenance must be established separately.
 
 ### Use in a browser
 
@@ -225,7 +225,7 @@ To run the same script from a checkout instead, change the imports to `./dist/co
 
 ## API reference
 
-The following reference describes v1.13; contracts added since v1.10 are documented in their sections. Historical release archives remain unchanged. The [compiler-generated reference](./doc/api.html) includes every public root/core/voice/tool export and its full declarations; it is refreshed by `npm run build`. See the [cross-feature contract table](./doc/host-integration.md#cross-feature-contracts) for IDs, lifecycle observations, ownership and persistence.
+The following reference describes v1.14; contracts added since v1.10 are documented in their sections. Historical release archives remain unchanged. The [compiler-generated reference](./doc/api.html) includes every public root/core/voice/tool export and its full declarations; it is refreshed by `npm run build`. See the [cross-feature contract table](./doc/host-integration.md#cross-feature-contracts) for IDs, lifecycle observations, ownership and persistence.
 
 All times are in seconds unless stated otherwise. Browser and Node examples intentionally use different import styles:
 
@@ -677,6 +677,7 @@ The guides include complete browser loader examples with HTTP-status checks and 
 - [x] v1.11 — voice v7 waveforms and noise, stereo chorus/reverb, MIDI program maps and RPN, `.opm` import (regression tests, a real-browser audio smoke, passing Node 22/24/26 and Chromium/Firefox/WebKit CI, and demo coverage; physical-device and human-listening acceptance are unverified)
 - [x] v1.12 — post-mix half-band FIR decimation, polyBLEP/polyBLAMP operator shapes, optional soft-knee saturation and DC blocker (regression tests and demo coverage; physical-device and human-listening acceptance are unverified)
 - [x] v1.13 — ≈1.5–2× faster allocation-free rendering, non-sine waveform frames, opt-in TPDF WAV dither (regression tests and demo coverage; physical-device and human-listening acceptance are unverified)
+- [x] v1.14 — performance and hardening release: frame-local DSP/effects/WAV/SMF paths, stricter parsing, sample-frame arrangement fades, branchless sine sign, updated development dependencies; voice format v8 unchanged (regression tests; physical-device and human-listening acceptance are unverified)
 
 ## Limitations
 
