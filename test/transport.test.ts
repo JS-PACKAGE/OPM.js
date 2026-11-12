@@ -348,11 +348,11 @@ test('expanded seek reconstruction rejects density before altering a running sco
   } finally { transport.dispose(); await opm.dispose(); }
 });
 
-test('loop wraps reconstruct crossing gates without carrying previous iteration pan automation', async () => {
+test('loop wraps recycle queue slots and reconstruct gates without carrying previous pan automation', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);
   const transport = createTransport(opm, [note(2), { type: 'control', id: 1, beat: 0.125, controls: { pan: 1 } }],
-    { startupLead: 0, loop: { enabled: true, from: 0, to: 0.25 } });
+    { startupLead: 0, maxSlots: 6, loop: { enabled: true, from: 0, to: 0.25 } });
   try {
     await transport.start();
     const audio = advance(opm, transport, 6400);

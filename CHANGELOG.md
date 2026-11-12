@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused transport pending-command storage
+
+- Prune expired pending commands in place instead of allocating a replacement array on every pump. Retained order and the strict future-time predicate are unchanged; truncate only when entries were removed.
+- Paired Node.js 26 host-shim benchmarks with 0–192 retained controls reduced stationary pump time by 5–17%. Advancing real-processor loops with 192 controls improved about 3.5%; sparse controls stayed within 1.5%. These are host-shim workloads, not native IPC throughput claims.
+- Complete stereo PCM, messages in both directions and transport snapshots matched across 20 stages, including repeated dense loops, seeks and tempo edits. The existing loop regression now exercises recycling under a six-command limit.
+
 ### Reused transport window eligibility
 
 - Reuse the last beat window's eligible tracks from the immutable prepared score. Input order is preserved, and every segment still creates fresh gates and recalculates tempo-dependent times and reconstructed controls.

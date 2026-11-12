@@ -370,7 +370,12 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
       lastPump = now;
       const to = now + horizon;
       const sampleRate = context.sampleRate;
-      queued = queued.filter(entry => entry.at > now);
+      let kept = 0;
+      for (let index = 0; index < queued.length; index++) {
+        const entry = queued[index];
+        if (entry.at > now) queued[kept++] = entry;
+      }
+      if (kept !== queued.length) queued.length = kept;
       let wraps = 0;
       while (state === 'running') {
         while (cursor < queue.length && queue[cursor].at < to && state === 'running') {
