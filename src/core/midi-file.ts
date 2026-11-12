@@ -448,8 +448,9 @@ function quantizedControls(input: unknown, range: number): Partial<ExpressiveSta
       const product = volume * Math.min(127, Math.round(target / volume));
       const difference = Math.abs(target - product);
       if (difference < error) { best = product; error = difference; }
-      // Integer products cannot improve this bound; descending volume preserves ties.
-      if (error <= 0.5) break;
+      // Integer products cannot improve the half-unit bound. Smaller volumes
+      // also cannot improve once their maximum product is already too low.
+      if (error <= 0.5 || target - (volume - 1) * 127 >= error) break;
     }
     expression = best;
   }
@@ -464,7 +465,7 @@ function quantizedControls(input: unknown, range: number): Partial<ExpressiveSta
 }
 
 /** Reconstruct channel state only when every affected score gate agrees. */
-function expressiveTracks(notes: readonly ExportNote[], controls: readonly ExportControl[]): Map<number, OutputEvent[]> {
+function expressiveTracks(notes: readonly ExportNote[], controls: readonly ExportControl[], byId: ReadonlyMap<number, ExportNote>): Map<number, OutputEvent[]> {
   type Operation = { tick: number; index: number; note?: ExportNote; control?: ExportControl; off?: ExportNote };
   const operations: Operation[] = [];
   for (const note of notes) {
@@ -476,7 +477,6 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
   const active = Array.from({ length: 16 }, () => new Map<number, { note: ExportNote; modulation: number }>());
   const defaults = Array.from({ length: 16 }, () => new Set<number>());
   const states: ExpressiveState[] = Array.from({ length: 16 }, () => ({ pitch: 8192, expression: 16129, pan: 64, modulation: 0 }));
-  const byId = new Map(notes.map(note => [note.id, note]));
   const pitches = new Map<number, { ids: number[]; head: number }>();
   let count = 0;
   function emit(channel: number, tick: number, status: number, a: number, b: number, off = false): void {
@@ -655,7 +655,7 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
     if (microseconds > 0xffffff) throw new RangeError('MIDI tempo exceeds its three-byte field');
     conductor.push({ tick, order: 1, index, bytes: [0xff, 0x51, 3, microseconds >>> 16, microseconds >>> 8 & 255, microseconds & 255] });
   }
-  const musical = preserve ? expressiveTracks(sorted, controls) : new Map<number, OutputEvent[]>();
+  const musical = preserve ? expressiveTracks(sorted, controls, notes) : new Map<number, OutputEvent[]>();
   if (!preserve) for (const note of sorted) {
     let track = musical.get(note.channel);
     if (!track) { track = []; musical.set(note.channel, track); }

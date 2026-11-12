@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Bounded expressive MIDI export
+
+- Stop searching the CC7/CC11 product lattice when smaller volume values cannot improve the nearest product; preserve descending-volume tie behavior. Reuse the export's validated note lookup rather than allocating a second map and temporary entry arrays.
+- In paired Node.js 26 measurements of 512-note expressive exports, high expression values (0.9–0.99) took 6–10% less time and mixed values took about 3% less; low and half-scale values were effectively unchanged. These are workload-specific measurements, not general MIDI throughput guarantees.
+- Compared complete MIDI bytes against the previous implementation at all 32,259 half-unit lattice targets and extended the existing quantization test with high-value and tie cases.
+
 ### Demand-driven generic phase modulation
 
 - The generic operator loop now reads/sums incoming phase modulation only for an audible periodic operator. Held noise never consumed those values, and zero-amplitude periodic operators already returned exact zero. Noise clocks, feedback history, phase advancement, finite-state checks and modulation arithmetic for audible periodic operators are unchanged.

@@ -442,6 +442,9 @@ test('expression quantization preserves nearest products and higher-volume ties 
     [128.5 / 16129, 128],
     [0.5, 8064],
     [0.317, 5112],
+    [0.95, 15367],
+    [0.99, 16002],
+    [16065.5 / 16129, 16129],
   ];
   for (const [expression, product] of cases) {
     const bytes = exportMidiFile([note(), control(1, 0, { expression })], midiPolicy);
