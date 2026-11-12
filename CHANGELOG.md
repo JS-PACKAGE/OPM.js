@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled effects output mixing
+
+- Once an effects order transition reaches unity gain, stop updating that gain and write the cleaned wet result directly instead of blending with a zero-weight dry signal. Delay histories, parameter smoothing, transition arithmetic and bit-preserving dry bypass are unchanged.
+- Paired Node.js 26 measurements of 128-frame effects blocks showed about 1–3% less processing time for wet chorus/reverb workloads; bypass and repeated order transitions changed by less than about 1.2%.
+- Compared 640 stereo blocks and internal delay/ramp state against the previous implementation across four sample rates, parameter/order changes, reset, nonfinite inputs, signed zero and extreme samples.
+
 ### Bounded expressive MIDI export
 
 - Stop searching the CC7/CC11 product lattice when smaller volume values cannot improve the nearest product; preserve descending-volume tie behavior. Reuse the export's validated note lookup rather than allocating a second map and temporary entry arrays.

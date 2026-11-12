@@ -194,14 +194,18 @@ class Engine implements StereoEffects {
         this.remaining--;
       }
       if (this.order !== this.snapshot.order) { this.orderGain = Math.max(0, this.orderGain - 1 / this.ramp); if (this.orderGain === 0) this.order = this.snapshot.order; }
-      else this.orderGain = Math.min(1, this.orderGain + 1 / this.ramp);
+      else if (this.orderGain < 1) this.orderGain = Math.min(1, this.orderGain + 1 / this.ramp);
       const a = left[frame]!, b = right[frame]!;
       this.left = clean(a); this.right = clean(b);
       if (this.order === 'chorus-reverb') { this.chorusFrame(); this.reverbFrame(); } else { this.reverbFrame(); this.chorusFrame(); }
       // Dry bypass does not even rewrite finite samples (including signed zero).
       if (this.current[2] !== 0 || this.current[11] !== 0) {
-        left[frame] = clean(a) * (1 - this.orderGain) + clean(this.left) * this.orderGain;
-        right[frame] = clean(b) * (1 - this.orderGain) + clean(this.right) * this.orderGain;
+        if (this.orderGain === 1) {
+          left[frame] = clean(this.left); right[frame] = clean(this.right);
+        } else {
+          left[frame] = clean(a) * (1 - this.orderGain) + clean(this.left) * this.orderGain;
+          right[frame] = clean(b) * (1 - this.orderGain) + clean(this.right) * this.orderGain;
+        }
       } else { if (!Number.isFinite(a)) left[frame] = 0; if (!Number.isFinite(b)) right[frame] = 0; }
     }
   }
