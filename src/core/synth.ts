@@ -747,12 +747,9 @@ function sineOp(phase: number, gain: number): number {
   if (gain === 0) return 0;
   const k = (phase + ROUND_MAGIC) - ROUND_MAGIC;
   const f = phase - k;
-  // Parity of k without an int32 conversion or a data-dependent branch: d is 0 for
-  // even k and +-0.5 for odd k, so 1 - 8 d^2 is exactly +1 or -1 (for |k| < 2^51,
-  // far beyond any phase the engine supplies). Folding the sign into the gain keeps
-  // it off the polynomial's dependency chain.
-  const h = k * 0.5, d = h - ((h + ROUND_MAGIC) - ROUND_MAGIC);
-  const g = gain * (1 - 8 * d * d);
+  // Engine phases keep k well inside Int32. Its low bit supplies the sign
+  // without another floating-point rounding sequence or a parity branch.
+  const g = gain * (1 - 2 * (k & 1));
   const z = f * f, z2 = z * z;
   const p = f * ((3.141592653243751 + z * -5.1677127412212185) + z2 * (2.5501627947124317 + z * -0.5992474048092294) +
     (z2 * z2) * (0.08203122969596048 + z * -0.007000499610629468));

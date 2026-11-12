@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lower-cost private sine parity
+
+- The engine's bounded sine oscillator now obtains the rounded half-turn's parity from its low bit instead of a second floating-point rounding sequence. The polynomial, gain multiplication, silent-operator behavior and general-purpose `sinPi()` implementation are unchanged.
+- Paired Node.js 26 measurements of 128-frame all-sine rendering at 1/8/32 voices showed about 4–6% less time at standard quality and 5–9% less at high quality. Eco and mixed-waveform results varied; no uniform speedup is claimed.
+- Compared 96 scenarios × 128 stereo blocks against the previous implementation across all eight algorithms, all three qualities, sine/saw voices, 8/48 kHz, maximum feedback/modulation settings, control ramps, pitch glide and release; PCM remained identical.
+
 ### Settled effects output mixing
 
 - Once an effects order transition reaches unity gain, stop updating that gain and write the cleaned wet result directly instead of blending with a zero-weight dry signal. Delay histories, parameter smoothing, transition arithmetic and bit-preserving dry bypass are unchanged.
