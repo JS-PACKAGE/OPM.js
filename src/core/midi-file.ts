@@ -265,7 +265,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   if (trackCount > 1) wire.sort((a, b) => a.tick - b.tick || a.track - b.track || a.order - b.order);
   const events: BeatSequenceEvent[] = [];
   const queues = new Map<number, NoteQueue>();
-  const live = new Set<HeldNote>();
+  let liveCount = 0;
   const sustained = Array.from({ length: 16 }, () => new Set<HeldNote>());
   const pedals = new Array<boolean>(16).fill(false);
   // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
@@ -287,7 +287,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   function close(held: HeldNote, tick: number): void {
     if (tick <= held.tick) throw new RangeError('MIDI note has a zero-length gate');
     held.event.duration = (tick - held.tick) / ppqn;
-    live.delete(held);
+    liveCount--;
     if (preserve) owned[held.channel].delete(held);
     released[held.channel] = true;
   }
@@ -370,7 +370,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       // Own `modulation` slot: the later poly-pressure assignment must not reach an inherited setter.
       const held: HeldNote = { event, tick: item.tick, channel: item.channel, modulation: undefined };
       if (preserve) owned[item.channel].add(held);
-      live.add(held);
+      liveCount++;
       const key = item.channel * 128 + item.a;
       const queue = queues.get(key);
       if (queue) queue.notes.push(held);
@@ -385,10 +385,12 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       else close(held, item.tick);
     }
   }
-  if (live.size !== 0) {
+  if (liveCount !== 0) {
     if (unclosed === 'reject') throw new RangeError('MIDI contains unclosed notes or sustain gates');
-    warn('unclosed-notes', 'Unclosed notes and sustain gates were closed at the final end-of-track tick', false, live.size);
-    for (const held of live) close(held, endTick);
+    warn('unclosed-notes', 'Unclosed notes and sustain gates were closed at the final end-of-track tick', false, liveCount);
+    // Pressed queue suffixes and sustained releases are disjoint owners.
+    for (const queue of queues.values()) for (let index = queue.head; index < queue.notes.length; index++) close(queue.notes[index], endTick);
+    for (const channel of sustained) for (const held of channel) close(held, endTick);
   }
   const snapshot = Object.freeze([...warnings.values()].map(warning => Object.freeze(warning)));
   const approximate: Partial<Record<MidiFileWarningCode, true>> = {

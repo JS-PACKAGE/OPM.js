@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Leaner MIDI import ownership tracking
+
+- Replace the redundant live-note set with a count; pressed-note queue suffixes and sustained-release sets already own every open gate. End-of-file closure walks those disjoint owners without revisiting closed queue prefixes.
+- Paired Node.js 26 measurements of 128–20,000-note imports with expression omitted showed about 19–30% less time; a 4,096-note expression-preserving import took 9–10% less. Single-note imports were effectively unchanged.
+- Compared 256 complete import results across format 0/1, repeated-pitch FIFO ownership, sustain, expression and end-of-file closure. Added a regression covering mixed pressed/sustained gates and previously closed queue prefixes under both expression policies.
+
 ### Leaner repeated live-note admission
 
 - Reuse the `playNote()` field-name list, write immutable patch serialization keys only on cache misses, and avoid refreshing a singleton voice registry's already-most-recent entry. Raw voice inputs still receive a fresh validated snapshot on every call.

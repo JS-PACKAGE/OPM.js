@@ -92,6 +92,23 @@ test('unclosed keys and sustain require an explicit bounded end-of-file closure 
   assert.throws(() => importMidiFile(smf([[0, 0x90, 60, 127, 0, 0x80, 60, 0, ...end]]), mapped), /zero-length/);
 });
 
+test('end-of-file closure counts pressed suffixes and sustained duplicates exactly once', () => {
+  const bytes = smf([[
+    0, 0x90, 60, 127, 0, 0x90, 60, 96, 0, 0x90, 64, 64, 0, 0x90, 64, 32,
+    120, 0x80, 60, 0, 0, 0x80, 64, 0, 0, 0xb0, 64, 127,
+    120, 0x80, 60, 0, 0, 0x90, 60, 127, 0, 0x90, 60, 96,
+    120, 0x80, 60, 0, 0, 0x91, 67, 127,
+    120, 0xff, 0x2f, 0,
+  ]]);
+  for (const controls of ['omit', 'preserve'] as const) {
+    assert.throws(() => importMidiFile(bytes, { ...mapped, controls }), /unclosed/);
+    const result = importMidiFile(bytes, { ...mapped, controls, unclosedNotes: 'close-at-end' });
+    assert.deepEqual(result.events.flatMap(event => event.type === 'note' ? [[event.id, event.duration]] : []),
+      [[1, 0.25], [2, 1], [3, 0.25], [4, 1], [5, 0.5], [6, 0.5], [7, 0.25]]);
+    assert.equal(result.warnings.find(warning => warning.code === 'unclosed-notes')?.count, 5);
+  }
+});
+
 test('omitted programs/controllers/metadata/SysEx and release velocity are exposed, not silently dropped', () => {
   const bytes = smf([[0, 0xc0, 10, 0, 0xd0, 32, 0, 0xe0, 0, 64, 0, 0xb0, 7, 100, 0, 0xff, 1, 3, 65, 66, 67, 0, 0xf0, 3, 1, 2, 0xf7, 0, 0x90, 60, 127, 120, 0x80, 60, 64, ...end]]);
   const result = importMidiFile(bytes);
