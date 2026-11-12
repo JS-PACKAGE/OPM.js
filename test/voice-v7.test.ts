@@ -217,6 +217,47 @@ test('17-bit noise recurrence is maximal length and deterministic', () => {
   assert.deepEqual(audio(synth, 4096), first, 'pitch controls remain valid but cannot pitch noise');
 });
 
+test('noise-only frames match an inaudible control-ramp reference', () => {
+  for (const [sampleRate, quality] of [[8000, 'eco'], [48000, 'standard'], [192000, 'high']] as const) {
+    for (const algorithm of [0, 1, 2, 3, 4, 5, 6, 7] as const) {
+      for (const inactivePeriodic of [false, true]) {
+        const voice = tone('noise', 20000), muted = algorithm % 3;
+        voice.algorithm = algorithm; voice.feedback = 7; voice.modIndex = 16; voice.pan = 0.3;
+        voice.lfo = { rate: 7, amDepth: 0.3, pmDepth: 100, waveform: 'noise',
+          amTargets: [1, 0.5, 0, 0.25], pmTargets: [0, 1, 0.25, 0.75] };
+        voice.ops.forEach((op, i) => {
+          op.ratio = i + 1; op.level = inactivePeriodic && i === muted ? 0 : 0.7;
+          op.adsr.s = i === muted ? 0 : 0.6; op.adsr.r = 0.01;
+          if (inactivePeriodic && i === muted) op.waveform = 'saw';
+        });
+        const fast = new Synth(sampleRate, 1, { quality }), reference = new Synth(sampleRate, 1, { quality });
+        fast.noteOn(voice, 69, 1); reference.noteOn(voice, 69, 1);
+        // A ramp on an inaudible operator selects generic rendering without changing the sound.
+        const levels: [number, number, number, number] = [1, 1, 1, 1]; levels[muted] = 0;
+        reference.updateNote(1, { operatorLevels: levels, ramp: 10 });
+        const left = new Float32Array(128), right = new Float32Array(128);
+        const expectedLeft = new Float32Array(128), expectedRight = new Float32Array(128);
+        for (let block = 0; block < 32; block++) {
+          if (block === 16) reference.updateNote(1, { operatorLevels: [1, 1, 1, 1] });
+          for (const synth of [fast, reference]) {
+            if (block === 8) synth.updateNote(1, { pitch: 12, glide: 0.005 });
+            if (block === 16) {
+              // Waking the silent noise operator exposes any lost hold-clock advancement.
+              const adsr = { a: 0, d: 0, s: 0.6, r: 0.01 };
+              synth.updateNote(1, { operatorADSR: [adsr, adsr, adsr, adsr] });
+            }
+            if (block === 24) synth.noteOff(1);
+          }
+          fast.render(left, right); reference.render(expectedLeft, expectedRight);
+          assert.deepEqual(left, expectedLeft); assert.deepEqual(right, expectedRight);
+          if (block === 0) assert.ok(energy(left) > 0);
+        }
+        assert.equal(fast.errorCount, 0); assert.equal(reference.errorCount, 0);
+      }
+    }
+  }
+});
+
 test('noise is broadband and hold rate controls its spectral content across sample clocks', () => {
   const render = (waveform: OperatorWaveform, noiseRate: number, sampleRate = 48000) =>
     renderNote({ voice: tone(waveform, noiseRate), duration: 1, sampleRate }).left.subarray(Math.ceil(sampleRate * 0.05), sampleRate);

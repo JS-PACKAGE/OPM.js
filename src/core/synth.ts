@@ -229,7 +229,7 @@ interface ActiveVoice {
   pitchSettled: boolean;
   /** Per-frame scratch: folded operator amplitudes 0..3, PM factor 4, pitch factor 5 and step 6. */
   sineFrame: Float64Array;
-  /** This note's sine or periodic-waveform frame for its algorithm, or null when any operator is noise. */
+  /** A specialized static-level frame, or null when no specialization applies. */
   frameKernel: FrameKernel | null;
   /** The note's pitch envelope, snapshotted from its voice (whose shape varies). */
   pitchEnvelope: PreparedVoice['pitchEnvelope'];
@@ -1258,6 +1258,46 @@ function waveFrame7(active: ActiveVoice, out: Float64Array, dynamicPitch: boolea
 
 const WAVE_FRAMES: readonly FrameKernel[] = [waveFrame0, waveFrame1, waveFrame2, waveFrame3, waveFrame4, waveFrame5, waveFrame6, waveFrame7];
 
+function noiseOp(active: ActiveVoice, op: number, gain: number): number {
+  if (active.levels[op] === 0) return 0;
+  const oscillator = 2 * (active.noiseStates[op] & 1) - 1;
+  const turns = active.noiseTurns[op] + active.noiseSteps[op];
+  const ticks = Math.floor(turns);
+  for (let tick = 0; tick < ticks; tick++) active.noiseStates[op] = advanceNoise(active.noiseStates[op]);
+  active.noiseTurns[op] = turns - ticks;
+  return gain === 0 ? 0 : oscillator * gain;
+}
+
+// With only audible noise operators, topology affects the carrier sum but not
+// oscillator inputs. Keep the same clocks, phase history and finite-state checks.
+function noiseFrame(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, carrierIndices, sineFrame: frame } = active;
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3];
+  const carrierCount = active.graph.carriers.length, carrierGain = active.carrierGain;
+  let p0 = phases[0], p1 = phases[1], p2 = phases[2], p3 = phases[3];
+  let s0 = steps[0], s1 = steps[1], s2 = steps[2], s3 = steps[3];
+  let previous = active.previous, older = active.older;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) { stepPitch(active, sub, out.length, frame); s0 = steps[0]; s1 = steps[1]; s2 = steps[2]; s3 = steps[3]; }
+    const v0 = noiseOp(active, 0, gains[base] * q0), v1 = noiseOp(active, 1, gains[base + 1] * q1);
+    const v2 = noiseOp(active, 2, gains[base + 2] * q2), v3 = noiseOp(active, 3, gains[base + 3] * q3);
+    values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+    let sample = 0;
+    for (let j = 0; j < carrierCount; j++) sample += values[carrierIndices[j]];
+    sample *= carrierGain;
+    // Noise ignores modulation inputs, so even a non-carrier must be checked.
+    if (!Number.isFinite(v0 + v1 + v2 + v3 + sample)) return false;
+    p0 += s0; if (p0 >= PHASE_CYCLE) p0 -= PHASE_CYCLE; p1 += s1; if (p1 >= PHASE_CYCLE) p1 -= PHASE_CYCLE;
+    p2 += s2; if (p2 >= PHASE_CYCLE) p2 -= PHASE_CYCLE; p3 += s3; if (p3 >= PHASE_CYCLE) p3 -= PHASE_CYCLE;
+    older = previous; previous = v0;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(p0 + p1 + p2 + p3)) return false;
+  phases[0] = p0; phases[1] = p1; phases[2] = p2; phases[3] = p3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
 /** Every operator gain is zero for the whole frame, so every operator value and
  * the output are exactly +0, as either path would compute. This advances the
  * state they keep (phases with the same sums and wraps, live noise clocks and
@@ -1580,7 +1620,9 @@ export class Synth {
       active.graph = ALGORITHMS[voice.algorithm];
       const { waveforms } = active;
       active.frameKernel = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 ? SINE_FRAMES[voice.algorithm] :
-        waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8 ? WAVE_FRAMES[voice.algorithm] : null;
+        waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8 ? WAVE_FRAMES[voice.algorithm] :
+        (waveforms[0] === 8 || levels[0] === 0) && (waveforms[1] === 8 || levels[1] === 0) &&
+        (waveforms[2] === 8 || levels[2] === 0) && (waveforms[3] === 8 || levels[3] === 0) ? noiseFrame : null;
       // Cache the fixed topology in pooled typed storage; frozen graph-array
       // indexing otherwise repeats for every operator at every oversampled frame.
       for (let op = 0; op < 4; op++) {
@@ -2029,7 +2071,7 @@ export class Synth {
       if (active.silentGains) {
         if (!silentFrame(active, subSamples, dynamicPitch, frame)) return false;
       } else if (active.frameKernel !== null && !operatorRamping) {
-        // Noise-free voices with static operator levels take the per-algorithm frames.
+        // Static operator levels allow the selected specialized frame.
         if (!active.frameKernel(active, subSamples, dynamicPitch)) return false;
       } else {
         const modIndex = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Specialized noise-only frames
+
+- Add an allocation-free frame kernel for voices whose nonzero-level operators are all noise. Zero-level periodic operators remain silent, phase and feedback history are retained, and live operator-level ramps still use the generic path.
+- Paired Node.js 26 measurements reduced rendering time by 19–39% across tested 16-voice noise workloads, including single audible operators and inactive periodic operators. Mixed, sine, silent and ramping controls varied by less than 2%; this is not an across-the-board rendering gain.
+- Full stereo PCM and live oscillator/feedback states matched in 216 animated graph/quality/sample-rate scenarios. A regression test uses an inaudible control ramp as a generic reference, then wakes a silent noise operator to expose lost hold-clock advancement.
+
 ### Branch-free held-noise polarity
 
 - Convert the LFSR low bit directly to -1/+1 without a conditional in the audible noise oscillator. Noise clocks, feedback state, amplitude multiplication and silent-frame handling are unchanged.
