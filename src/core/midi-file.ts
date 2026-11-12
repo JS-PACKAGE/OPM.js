@@ -666,7 +666,14 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
   }
   let endTick = lastTempoTick;
   for (const note of sorted) endTick = Math.max(endTick, note.end);
-  const tracks = format === 0 ? [[...conductor, ...[...musical.values()].flat()]] : [conductor, ...[...musical.entries()].sort((a, b) => a[0] - b[0]).map(([, track]) => track)];
+  let tracks: OutputEvent[][];
+  if (format === 0) {
+    // The conductor is private and becomes the sole track; avoid flattening and copying it again.
+    for (const track of musical.values()) for (const event of track) conductor.push(event);
+    tracks = [conductor];
+  } else {
+    tracks = [conductor, ...[...musical.entries()].sort((a, b) => a[0] - b[0]).map(([, track]) => track)];
+  }
   let wireCount = 0;
   let byteLength = 14;
   const sizes: number[] = [];

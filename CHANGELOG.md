@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fewer temporary MIDI export arrays
+
+- Assemble format-0 output directly in its private conductor array instead of flattening channel tracks into a temporary array and copying it again. Format-1 track assembly is unchanged.
+- Paired Node.js 26 measurements showed about 1–3% less time for the tested multi-note format-0 exports; the format-1 control stayed within 0.4%. All 48 complete-file comparisons matched, covering empty scores, multiple channels, expression, early stops and tempo changes.
+
 ### Leaner MIDI import ownership tracking
 
 - Replace the redundant live-note set with a count; pressed-note queue suffixes and sustained-release sets already own every open gate. End-of-file closure walks those disjoint owners without revisiting closed queue prefixes.
