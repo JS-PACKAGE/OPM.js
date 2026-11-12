@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Direct integer reverb pre-delay taps
+
+- Read integer pre-delay positions directly instead of interpolating two taps. Fractional pre-delay and modulated chorus reads retain the original interpolation; the stereo pre-delay distance is calculated once per frame.
+- Paired Node.js 26 measurements reduced the tested integer-pre-delay reverb time by about 1.4–1.9%, and combined fixed-chorus/reverb time by 1.3–1.7%. Other tested cases stayed within 1.1%; no general effects speedup is claimed.
+- Complete stereo PCM matched across 24 sample-rate/configuration cases with parameter ramps, order changes and reset. Existing adjacent-tap, chunking and extreme-input regressions cover integral/fractional wrapping and bounded delay storage.
+
 ### Independent targeted LFO factor loops
 
 - Compute per-operator AM and PM scratch factors only for the corresponding targeted path. Global modulation no longer causes unused opposite-target reads and writes; inactive targeted factors still refresh to unity before pitch/amplitude consumers run.

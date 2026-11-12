@@ -76,6 +76,11 @@ class Delay {
     // Admitted delays stay inside the ring; only the following tap can wrap.
     return this.data[base]! * (1 - fraction) + this.data[base + 1 === this.data.length ? 0 : base + 1]! * fraction;
   }
+  // Integer pre-delay taps need no interpolation; admitted offsets stay inside the ring.
+  readInteger(delay: number): number {
+    const index = this.position - delay;
+    return this.data[index < 0 ? index + this.data.length : index]!;
+  }
   push(value: number): void { this.data[this.position] = clean(value); if (++this.position === this.data.length) this.position = 0; }
   reset(): void { this.data.fill(0); this.position = 0; }
 }
@@ -163,10 +168,13 @@ class Engine implements StereoEffects {
   private reverbFrame(): void {
     const p = this.current, a = this.left, b = this.right;
     const damping = p[9]! * .9;
+    const preDelay = p[10] === 0 ? 0 : Math.max(1, p[10]! * this.rate);
+    const integralPreDelay = Number.isInteger(preDelay);
     let wetL = 0, wetR = 0;
     for (let channel = 0; channel < 2; channel++) {
       const source = channel === 0 ? a : b, pre = this.pre[channel]!;
-      const delayed = p[10] === 0 ? source : pre.read(Math.max(1, p[10]! * this.rate)); pre.push(source);
+      const delayed = preDelay === 0 ? source : integralPreDelay ? pre.readInteger(preDelay) : pre.read(preDelay);
+      pre.push(source);
       let sum = 0;
       for (let i = 0; i < 4; i++) {
         const index = channel * 4 + i, comb = this.combs[index]!;
