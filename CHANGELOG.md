@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Bounded worklet queue insertion
+
+- Scheduled worklet events retain the existing backward scan for queues of at most 16 entries. Larger queues append already ordered events directly, or find a stable upper bound with binary search before insertion. The 256-event limit, same-frame stop/onset/control priority, admission-order ties and callback-driven removal are unchanged.
+- Real processor admission in a Node AudioWorklet host shell was compared in both import orders after 3,000 warmup batches, using 15 alternating pairs of 500 batches (each includes panic and 8/64/128 prepared note admissions with automatic stops). At 64/128 notes, descending schedules took 20–36% less time, permuted schedules 12–25% less and equal-time schedules 8–15% less. Ascending and eight-note controls ranged from 1.8% faster to 4.9% slower; no low-density improvement is claimed. An initial all-binary candidate had a noisier eight-note regression and was not retained. These are host-dependent admission timings, not DSP speed or AudioWorklet deadline guarantees.
+- All 12 batch scenarios preserved admitted queues, stereo PCM over 64 blocks, complete lifecycle message traces and zero-error diagnostics. Existing same-frame stop/steal/control, cancellation and full-capacity tests cover ordering and bounds. No additional queue storage, public API or dependency was added.
+
 ### Dedicated float WAV sample loop
 
 - Float32 WAV encoding now selects its validation/little-endian-write loop once per chunk, outside integer quantization and dither processing. PCM16/24 retain their original scaling, rounding, clamp and xorshift sequence. Native samples are still read once, in frame/channel order, and invalid chunks still commit neither frame accounting nor dither state.

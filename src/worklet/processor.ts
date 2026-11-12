@@ -173,14 +173,32 @@ class OPMProcessor extends AudioWorkletProcessor {
   }
 
   insert(event: ScheduledEvent): void {
-    let index = this.events.length;
-    // Stops precede onset, then controls; admission order breaks remaining ties.
-    while (index > 0) {
-      const previous = this.events[index - 1];
-      if (previous.frame < event.frame || previous.frame === event.frame && EVENT_ORDER[previous.type] <= EVENT_ORDER[event.type]) break;
-      index--;
+    const events = this.events, length = events.length, order = EVENT_ORDER[event.type];
+    // Tiny queues are cheaper to scan; binary search pays off for larger bursts.
+    if (length <= 16) {
+      let index = length;
+      while (index > 0) {
+        const previous = events[index - 1];
+        if (previous.frame < event.frame || previous.frame === event.frame && EVENT_ORDER[previous.type] <= order) break;
+        index--;
+      }
+      events.splice(index, 0, event);
+      return;
     }
-    this.events.splice(index, 0, event);
+    const last = events[length - 1];
+    if (last.frame < event.frame || last.frame === event.frame && EVENT_ORDER[last.type] <= order) {
+      events.push(event);
+      return;
+    }
+    // Upper bound preserves admission order within stop/onset/control ties.
+    // The last event is already known to sort after this one.
+    let low = 0, high = length - 1;
+    while (low < high) {
+      const middle = (low + high) >>> 1, previous = events[middle];
+      if (previous.frame < event.frame || previous.frame === event.frame && EVENT_ORDER[previous.type] <= order) low = middle + 1;
+      else high = middle;
+    }
+    events.splice(low, 0, event);
   }
 
   removeEvents(id: number, mode: 'all' | 'automatic' | 'controls' = 'all'): void {
