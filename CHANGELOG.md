@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Leaner repeated live-note admission
+
+- Reuse the `playNote()` field-name list, write immutable patch serialization keys only on cache misses, and avoid refreshing a singleton voice registry's already-most-recent entry. Raw voice inputs still receive a fresh validated snapshot on every call.
+- Paired Node.js 26 measurements with a structured-clone port shim showed 5–6% less main-thread time for repeated use of one named voice; eight named voices were effectively unchanged. This does not measure native AudioWorklet throughput.
+- Compared 240 live admissions, registration/eviction messages and stereo blocks through the real processor in the existing Node host; results matched the previous implementation.
+
 ### Integer exponential-table indexing
 
 - Use an integer index for `fastExp2()`'s power-of-two table after its existing range guard. The polynomial and out-of-range/nonfinite fallback are unchanged.

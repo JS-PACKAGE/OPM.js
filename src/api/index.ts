@@ -142,6 +142,7 @@ const MAX_COMMAND_RECEIPTS = 128;
 const MAX_COMMAND_WAITERS = 64;
 const NOTE_STATES = ['accepted', 'started', 'released', 'ended', 'stolen', 'cancelled', 'rejected'];
 const MAX_REGISTERED_VOICES = 128;
+const PLAY_NOTE_FIELDS = ['voice', 'note', 'time', 'at', 'late', 'duration', 'velocity', 'pan', 'voicePriority'] as const;
 interface EventObserver {
   /** Retained unsubscribe handles must not own callbacks after release/disposal. */
   listener: ((event: OPMEvent) => void) | undefined;
@@ -721,7 +722,7 @@ export class OPM {
 
   playNote(options: PlayNoteOptions): number {
     const node = this._requireNode();
-    const data = ownData(options, ['voice', 'note', 'time', 'at', 'late', 'duration', 'velocity', 'pan', 'voicePriority'], 'note options');
+    const data = ownData(options, PLAY_NOTE_FIELDS, 'note options');
     const voice = data.voice === undefined ? 'brass' : data.voice;
     const note = data.note;
     const duration = data.duration === undefined ? null : data.duration;
@@ -753,8 +754,11 @@ export class OPM {
       rawKey = JSON.stringify(patch);
     }
     if (!patch) throw new RangeError('Unknown voice');
-    const key = this._patchKeys.get(patch) ?? rawKey ?? JSON.stringify(patch);
-    this._patchKeys.set(patch, key);
+    let key = this._patchKeys.get(patch);
+    if (key === undefined) {
+      key = rawKey ?? JSON.stringify(patch);
+      this._patchKeys.set(patch, key);
+    }
     let voiceId = this._voiceIds.get(key);
     if (voiceId === undefined) {
       if (this._voiceIds.size < MAX_REGISTERED_VOICES) voiceId = this._nextVoiceId++;
@@ -770,7 +774,8 @@ export class OPM {
         node.port.postMessage({ type: 'prepareVoice', voiceId, voice: patch });
         this._voiceIds.set(key, voiceId);
       }
-    } else {
+    } else if (this._voiceIds.size > 1) {
+      // A singleton is already most-recently used.
       this._voiceIds.delete(key);
       this._voiceIds.set(key, voiceId);
     }
