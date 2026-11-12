@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Demand-driven generic phase modulation
+
+- The generic operator loop now reads/sums incoming phase modulation only for an audible periodic operator. Held noise never consumed those values, and zero-amplitude periodic operators already returned exact zero. Noise clocks, feedback history, phase advancement, finite-state checks and modulation arithmetic for audible periodic operators are unchanged.
+- Two reversed-import-order Node 26.7.0 comparisons measured eight voices in 128-frame blocks after 1,000 warmup blocks, using 15 alternating pairs of 250 blocks. On this macOS arm64 host, all-noise workloads took 5–9% less time and mixed noise/sine workloads 2–5% less across eco/standard/high (eco at 8 kHz, others at 48 kHz; noise rates 20/20,000 Hz). Unchanged sine/silent controls varied by about −1% to +2%. These are workload-specific Node measurements, not browser capacity guarantees.
+- Complete noise phase/PRNG state and stereo PCM matched baseline for 128 blocks per measured setting. A further 48 mixed noise/sine-or-saw cases (all eight algorithms and three quality profiles) preserved PCM through envelopes, LFO, operator-level ramps, pitch glide and release. Existing waveform/generic parity, noise-spectrum and finite-output tests cover these paths. A separate integer-truncation clock experiment regressed silent noise and was discarded; the retained change leaves clock arithmetic untouched.
+
 ### Bounded worklet queue insertion
 
 - Scheduled worklet events retain the existing backward scan for queues of at most 16 entries. Larger queues append already ordered events directly, or find a stable upper bound with binary search before insertion. The 256-event limit, same-frame stop/onset/control priority, admission-order ties and callback-driven removal are unchanged.

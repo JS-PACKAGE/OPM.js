@@ -2052,10 +2052,6 @@ export class Synth {
               if (!Number.isFinite(wrapped)) return false;
               continue;
             }
-            let modulation = op === 0 ? (previous + older) * feedbackScale : 0;
-            const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
-            if (first >= 0) modulation += values[first] * modIndex;
-            if (second >= 0) modulation += values[second] * modIndex;
             const factor = !operatorRamping ? frame[op] : levels[op] *
               rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, position) *
               (targeted ? amGains[op] : amGain);
@@ -2074,6 +2070,11 @@ export class Synth {
               active.noiseTurns[op] = turns - ticks;
               if (amplitude !== 0) value = oscillator * amplitude;
             } else if (amplitude !== 0) {
+              // Noise and silent operators do not consume phase modulation.
+              let modulation = op === 0 ? (previous + older) * feedbackScale : 0;
+              const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
+              if (first >= 0) modulation += values[first] * modIndex;
+              if (second >= 0) modulation += values[second] * modIndex;
               const theta = phases[op] + modulation;
               value = code === 0 ? sinPi(theta) * amplitude :
                 periodicWaveform(theta * Math.PI, code, steps[op] * TURNS_PER_HALF_TURN) * amplitude;
