@@ -223,6 +223,8 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
+Scoped A/C review for single-point tempo snapshot reuse: the integration owner checked that the new validation-only registration applies only to newly returned, deeply frozen snapshots. Its undefined value retains validation identity through `has()` without enabling integral reuse through `get()`. Raw arrays, copies and BPM arguments still validate, transient single-point conversion results are not registered, and tempo arithmetic and inherited-field fallback paths are unchanged. Exact conversion/error comparisons and mutable-input coverage exercise these boundaries. This is not independent release approval.
+
 Scoped A review for MIDI export validation field reuse: the integration owner checked that allowed and required field names and ordering are identical, lists remain private, and every event still passes the same own-data snapshot and value checks. Missing fields, symbol/unknown fields, accessor rejection and repeated mutable inputs were compared with the baseline; no caller getter ran. This is not independent release approval.
 
 Scoped A/C review for format-0 MIDI assembly: the integration owner checked that the reused conductor array and channel tracks are private, append order matches the previous flatten/spread order, and event sorting, end markers, byte sizing and wire/byte budgets remain unchanged. Complete-file comparisons cover formats 0/1 and both expression policies. No caller-owned input is mutated. This is not independent release approval.

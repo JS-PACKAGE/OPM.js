@@ -9,7 +9,8 @@ export const MAX_TEMPO_POINTS = 1024;
 
 // Only privately registered immutable snapshots may retain cached integrals.
 // Caller-owned maps keep the uncached path, so later mutations cannot go stale.
-const tempoOffsets = new WeakMap<readonly Readonly<TempoPoint>[], Float64Array>();
+// An undefined entry retains one-point validation identity via has(), without an integral cache.
+const tempoOffsets = new WeakMap<readonly Readonly<TempoPoint>[], Float64Array | undefined>();
 
 // Frozen own fields do not freeze inherited optional fields or the terminal index.
 function stableTempoContext(length: number): boolean {
@@ -58,6 +59,13 @@ export function transportArray(input: unknown, max: number, label: string): unkn
 /** Strictly increasing quarter-note tempo; linear curves interpolate BPM in beat space.
  * Returned snapshots are immutable; re-normalization may reuse their identity. */
 export function normalizeTempoMap(input?: readonly TempoPoint[], bpm = 120): readonly Readonly<TempoPoint>[] {
+  const map = readTempoMap(input, bpm);
+  // Brand returned single-point snapshots, not the transient copies used by conversions.
+  if (map.length === 1 && map !== input) tempoOffsets.set(map, undefined);
+  return map;
+}
+
+function readTempoMap(input?: readonly TempoPoint[], bpm = 120): readonly Readonly<TempoPoint>[] {
   transportNumber(bpm, 1, 1000, 'bpm');
   // The omitted point contains only fixed beat zero and the BPM validated above.
   if (input === undefined) return Object.freeze([Object.freeze({ beat: 0, bpm })]);
@@ -145,7 +153,7 @@ export function replaceTempoFrom(beat: number, bpm: number, map: readonly Readon
 /** Integral of 60/BPM across tempo boundaries. */
 export function beatsToSeconds(beat: number, tempoMap?: readonly TempoPoint[]): number {
   transportNumber(beat, 0, MAX_TRANSPORT_BEATS, 'beat');
-  return tempoSeconds(beat, normalizeTempoMap(tempoMap));
+  return tempoSeconds(beat, readTempoMap(tempoMap));
 }
 
 /** Internal validated-map form avoids recopying a map on each scheduler tick. */
@@ -176,7 +184,7 @@ export function tempoSeconds(beat: number, map: readonly Readonly<TempoPoint>[])
 }
 
 export function secondsToBeats(seconds: number, tempoMap?: readonly TempoPoint[]): number {
-  const map = normalizeTempoMap(tempoMap);
+  const map = readTempoMap(tempoMap);
   transportNumber(seconds, 0, tempoSeconds(MAX_TRANSPORT_BEATS, map), 'seconds');
   return tempoBeat(seconds, map);
 }

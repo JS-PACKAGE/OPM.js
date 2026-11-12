@@ -617,6 +617,20 @@ test('reused tempo snapshots remain detached while mutable copies and BPM argume
   assert.throws(() => normalizeTempoMap(extra), /unknown/);
 });
 
+test('single-point tempo snapshots do not trust later mutations or frozen caller copies', () => {
+  const input = [{ beat: 0, bpm: 90 }];
+  const snapshot = normalizeTempoMap(input);
+  input[0].bpm = 180;
+  assert.equal(beatsToSeconds(3, snapshot), 2);
+  assert.equal(secondsToBeats(2, snapshot), 3);
+  assert.equal(beatsToSeconds(3, input), 1);
+  input[0].bpm = 0;
+  assert.throws(() => beatsToSeconds(3, input), /bpm/);
+  const copy = Object.freeze([Object.freeze({ ...snapshot[0], bpm: 0 })]);
+  assert.throws(() => secondsToBeats(2, copy), /bpm/);
+  assert.throws(() => normalizeTempoMap(snapshot, NaN), /bpm/);
+});
+
 test('tempo snapshots follow inherited optional fields across context changes', () => {
   const cases = [
     { field: 'curve', inherited: 'linear', input: [{ beat: 0, bpm: 60 }, { beat: 4, bpm: 120 }, { beat: 8, bpm: 120 }] },

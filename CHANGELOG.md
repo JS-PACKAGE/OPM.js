@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused single-point tempo snapshots
+
+- Extend validated identity reuse to retained single-point tempo maps, including snapshots created from the default BPM. One-point snapshots need no integral buffer; transient single-point maps used by public conversions are not registered.
+- Paired Node.js 26 measurements of repeated public conversions with retained single-point maps took about 90% less time forward and 83% less time inverse. Retained default snapshots took about 86% less time forward. Raw/default conversion controls stayed within 1.3%; internal and multi-point controls varied by up to 4%, with no speedup claimed for those paths.
+- All 1,056 exact conversion comparisons matched across clean, inherited and restored prototype contexts, including boundary values. Terminal-accessor error behavior was also preserved; a regression covers source mutation, invalid frozen copies and BPM validation.
+
 ### Reused MIDI event validation field lists
 
 - Reuse private note, stop and control field-name lists rather than creating them for each exported event. Caller data and validation results are never cached.
