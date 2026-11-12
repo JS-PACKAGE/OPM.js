@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Branch-free held-noise polarity
+
+- Convert the LFSR low bit directly to -1/+1 without a conditional in the audible noise oscillator. Noise clocks, feedback state, amplitude multiplication and silent-frame handling are unchanged.
+- Paired Node.js 26 measurements showed about 3–4% less time for one 20 kHz noise voice at 8 kHz in eco quality. Other tested polyphonic, mixed-waveform, silent and sine workloads stayed within 1.4%, so no general rendering speedup is claimed.
+- All 54 full stereo PCM and final noise/phase-state comparisons matched across quality profiles, sample/hold rates, mixed graphs, live level/pitch updates and release.
+
 ### Reused single-point tempo snapshots
 
 - Extend validated identity reuse to retained single-point tempo maps, including snapshots created from the default BPM. One-point snapshots need no integral buffer; transient single-point maps used by public conversions are not registered.

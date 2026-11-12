@@ -2059,7 +2059,7 @@ export class Synth {
             let value = 0;
             if (code === 8) {
               // Noise keeps its own clock even while silent.
-              const oscillator = (active.noiseStates[op] & 1) === 0 ? -1 : 1;
+              const oscillator = 2 * (active.noiseStates[op] & 1) - 1;
               const turns = active.noiseTurns[op] + active.noiseSteps[op];
               // At the minimum clock a 20 kHz hold rate needs at most two ticks.
               const ticks = Math.floor(turns);

@@ -223,6 +223,8 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
+Scoped C review for held-noise polarity: the integration owner checked that masking the Uint32 LFSR state yields only 0 or 1, and `2 * bit - 1` produces exactly the previous -1/+1 values. The clock recurrence, bounded tick loop, amplitude/finite checks and silent path are unchanged. Full PCM and state comparisons found no divergence across 54 scenarios. This is not independent release approval.
+
 Scoped A/C review for single-point tempo snapshot reuse: the integration owner checked that the new validation-only registration applies only to newly returned, deeply frozen snapshots. Its undefined value retains validation identity through `has()` without enabling integral reuse through `get()`. Raw arrays, copies and BPM arguments still validate, transient single-point conversion results are not registered, and tempo arithmetic and inherited-field fallback paths are unchanged. Exact conversion/error comparisons and mutable-input coverage exercise these boundaries. This is not independent release approval.
 
 Scoped A review for MIDI export validation field reuse: the integration owner checked that allowed and required field names and ordering are identical, lists remain private, and every event still passes the same own-data snapshot and value checks. Missing fields, symbol/unknown fields, accessor rejection and repeated mutable inputs were compared with the baseline; no caller getter ran. This is not independent release approval.
