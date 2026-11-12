@@ -2,6 +2,14 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
+## Unreleased
+
+### Paired half-band filter inputs
+
+- The standard/high decimator kernels now write the two inputs of each first-stage output together, halving their input-loop iterations and removing the odd-input skip. Ring wrapping, tap arithmetic/order, cascade output timing, state layout and the eco kernel are unchanged. No public API, voice format, dependency or allocation was added.
+- On this macOS arm64 host (Node 26.7.0), two fresh-process A/B comparisons with reversed import order used 15 alternating timed pairs after warmup. The isolated high filter took 6.2–6.7% less time; a 48 kHz, 128-frame, one-voice stereo synth took 1.4–2.0% less time in high and 1.2–1.3% less in standard. Eight-/32-voice results were small or noisy; no general polyphony or real-time guarantee is claimed. The unchanged eco filter also showed timing noise, so isolated nanosecond-scale results are not portable estimates.
+- A throwaway baseline comparison matched every filter-state cell for 10,000 frames per profile, including the silent tail, and stereo Float32 PCM for 400 blocks at each eco/standard/high × 1/8/32-voice setting in both import orders. Existing profile transfer, phase, tail and chunking tests cover the behavior; no implementation-pinning test was added.
+
 ## v1.14.0
 
 Package version 1.14.0, a GitHub release (not on npm). A performance, hardening and maintenance release over v1.13.1. Voice format v8 is unchanged and no feature API is added. Public declarations only widen: `replaceVoiceBank` also accepts frozen voices, and `MAX_RENDER_SAMPLES` moved to a leaf module (`src/core/limits.ts`) while staying re-exported from `sequence`. Sample-frame arrangement fade fixes intentionally change some rendered arrangement gains; the `sineOp` change is SHA-256 identical. Development dependencies were upgraded and the test suite is faster.

@@ -82,11 +82,13 @@ function ecoFrame(x: Float64Array, s: Float64Array): void {
 
 function standardFrame(x: Float64Array, s: Float64Array): void {
   let p = s[0] | 0, q = s[1] | 0;
-  for (let k = 0; k < 4; k++) {
-    const v = x[k];
-    s[RINGS + p] = v; s[RINGS + p + 15] = v;
+  // Each pair completes one first-stage output; keep both ring writes in order.
+  for (let k = 0; k < 4; k += 2) {
+    const first = x[k], second = x[k + 1];
+    s[RINGS + p] = first; s[RINGS + p + 15] = first;
     p = p === 14 ? 0 : p + 1;
-    if ((k & 1) === 0) continue;
+    s[RINGS + p] = second; s[RINGS + p + 15] = second;
+    p = p === 14 ? 0 : p + 1;
     const c = RINGS + p + 7;
     const y = 0.5 * s[c] + P1 * (s[c - 1] + s[c + 1]) + P2 * (s[c - 3] + s[c + 3]) + P3 * (s[c - 5] + s[c + 5])
       + P4 * (s[c - 7] + s[c + 7]);
@@ -103,16 +105,17 @@ function standardFrame(x: Float64Array, s: Float64Array): void {
 
 function highFrame(x: Float64Array, s: Float64Array): void {
   let p = s[0] | 0, q = s[1] | 0, r = s[2] | 0;
-  for (let k = 0; k < 8; k++) {
-    const v = x[k];
-    s[RINGS + p] = v; s[RINGS + p + 11] = v;
+  for (let k = 0; k < 8; k += 2) {
+    const first = x[k], second = x[k + 1];
+    s[RINGS + p] = first; s[RINGS + p + 11] = first;
     p = p === 10 ? 0 : p + 1;
-    if ((k & 1) === 0) continue;
+    s[RINGS + p] = second; s[RINGS + p + 11] = second;
+    p = p === 10 ? 0 : p + 1;
     const c = RINGS + p + 5;
     const y = 0.5 * s[c] + Q1 * (s[c - 1] + s[c + 1]) + Q2 * (s[c - 3] + s[c + 3]) + Q3 * (s[c - 5] + s[c + 5]);
     s[HIGH_PRE2 + q] = y; s[HIGH_PRE2 + q + 15] = y;
     q = q === 14 ? 0 : q + 1;
-    if ((k & 3) !== 3) continue;
+    if ((k & 3) !== 2) continue;
     const d = HIGH_PRE2 + q + 7;
     const z = 0.5 * s[d] + P1 * (s[d - 1] + s[d + 1]) + P2 * (s[d - 3] + s[d + 3]) + P3 * (s[d - 5] + s[d + 5])
       + P4 * (s[d - 7] + s[d + 7]);
