@@ -466,9 +466,8 @@ function quantizedControls(input: unknown, range: number): Partial<ExpressiveSta
     if (rawModulation < 1) throw new RangeError('MIDI modulation must be in 1..2');
     modulation = Math.round((rawModulation - 1) * 127);
   }
-  // Null prototype: the export reads omitted fields, which must not fall through to Object.prototype.
-  return Object.setPrototypeOf({ ...(pitch === undefined ? {} : { pitch }), ...(expression === undefined ? {} : { expression }),
-    ...(pan === undefined ? {} : { pan }), ...(modulation === undefined ? {} : { modulation }) }, null);
+  // Own slots also cover omissions; merging consumers must skip undefined fields.
+  return { pitch, expression, pan, modulation };
 }
 
 /** Reconstruct channel state only when every affected score gate agrees. */
@@ -530,7 +529,10 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
       while (index + 1 < operations.length) {
         const next = operations[index + 1];
         if (next.tick !== op.tick || next.control?.id !== note.id) break;
-        Object.assign(desired, next.control.values);
+        for (const field of EXPRESSION_FIELDS) {
+          const value = next.control.values[field];
+          if (value !== undefined) desired[field] = value;
+        }
         index++;
       }
       for (const field of EXPRESSION_FIELDS) {

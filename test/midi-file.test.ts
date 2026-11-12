@@ -387,6 +387,15 @@ test('expressive export orders initial controllers before onset and release befo
     [1, 0, { pitch: 2, expression: 0, pan: 1, modulation: 2 }],
     [2, 0.25, { pitch: 0, expression: 1, pan: 0, modulation: 1 }],
   ]);
+  assert.deepEqual(exportMidiFile([
+    note(1, 0, 0.25),
+    control(1, 0, { pitch: 1 }),
+    control(1, 0, { expression: 0 }),
+    control(1, 0, { pan: 1 }),
+    control(1, 0, { modulation: 2 }),
+    control(1, 0, { pitch: 2 }),
+    note(2, 0.25, 0.25),
+  ], { controls: 'preserve', format: 0 }), bytes);
 });
 
 test('bend, CC7*CC11, pan and pressure meaning survives expressive file-score-file with overlapping gates', () => {

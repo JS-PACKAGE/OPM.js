@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-shape MIDI control snapshots
+
+- Quantized expressive-export controls now use one fixed own-data literal instead of temporary conditional spreads and a prototype change. Onset merging skips omitted fields and preserves last-write order.
+- Paired Node.js 26 measurements reduced expressive export time by about 4–7% across the tested single-field, full-field and split-onset scores. Note-only controls stayed within 0.7%; these are offline export measurements, not audio rendering gains.
+- All 64 complete-file comparisons matched across format 0/1, every control-field combination and split onset updates. The onset-order regression now covers partial merges and repeated-field overrides; inherited-accessor coverage remains in place.
+
 ### Cached unmodulated operator amplitudes
 
 - Reuse folded static/operator-level amplitudes while AM is disabled. Live level edits invalidate the pooled-slot cache; ramps keep the generic path, and AM activation/deactivation still refreshes the original amplitude expression.
