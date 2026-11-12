@@ -59,7 +59,8 @@ export function fastExp2(x: number): number {
   const q = (0.6931471805598848 + f * 0.24022650695722692) + f2 * (0.05550410866843088 + f * 0.009618129181193839) +
     f4 * ((0.0013333557622879529 + f * 0.00015403440862087186) + f2 * (1.5252991540055915e-5 + f * 1.3258340763777297e-6)) +
     (f4 * f4) * 1.0148052384218113e-7;
-  return (1 + f * q) * EXP2_INTEGERS[n + EXP2_RANGE];
+  // The range guard keeps rounded n in Int32; use an integer typed-array index.
+  return (1 + f * q) * EXP2_INTEGERS[(n | 0) + EXP2_RANGE];
 }
 export function sineOperator(phase: number, modulation: number, gain: number): number {
   return fastSin(phase + modulation) * gain;

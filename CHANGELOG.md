@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Integer exponential-table indexing
+
+- Use an integer index for `fastExp2()`'s power-of-two table after its existing range guard. The polynomial and out-of-range/nonfinite fallback are unchanged.
+- Paired Node.js 26 measurements showed about 4% less time in lookup-heavy loops and 1–2% less in 8/32-voice rendering with per-operator pitch LFO targets; single-voice rendering was effectively unchanged.
+- Compared 262,145 inputs plus nonfinite, signed-zero, subnormal and range-boundary cases exactly against the previous implementation, and compared targeted-LFO stereo PCM at 1/8/32 voices.
+
 ### Lower-cost private sine parity
 
 - The engine's bounded sine oscillator now obtains the rounded half-turn's parity from its low bit instead of a second floating-point rounding sequence. The polynomial, gain multiplication, silent-operator behavior and general-purpose `sinPi()` implementation are unchanged.
