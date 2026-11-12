@@ -367,6 +367,45 @@ test('loop wraps reconstruct crossing gates without carrying previous iteration 
   } finally { transport.dispose(); await opm.dispose(); }
 });
 
+test('loop edits and seeks reselect tracks after empty and rejected windows', async () => {
+  const opm = await engine();
+  const transport = createTransport(opm, [
+    { type: 'note', id: 3, beat: 2, duration: 1, note: 84, voice },
+    { type: 'note', id: 2, beat: 1, duration: 1, note: 72, voice },
+    note(1.5),
+  ], { startupLead: 0, loop: { enabled: true, from: 0, to: 1 } });
+  try {
+    await transport.start();
+    assert.deepEqual([...transport.ids.keys()], [1]);
+    transport.setLoop({ enabled: true, from: 1, to: 2 });
+    transport.seek(1);
+    assert.deepEqual([...transport.ids.keys()], [2, 1], 'reconstructed ties retain input order');
+    transport.seek(1.5);
+    assert.deepEqual([...transport.ids.keys()], [2], 'a gate ending at the new start is excluded');
+    transport.setLoop({ enabled: true, from: 1, to: 3 });
+    advance(opm, transport, 1024);
+    assert.deepEqual([...transport.ids.keys()], [2, 3]);
+    const before = transport.snapshot;
+    assert.throws(() => transport.setLoop({ enabled: true, from: 0, to: 0.00001 }), /wraps/);
+    assert.deepEqual(transport.snapshot, before);
+    transport.seek(1.5);
+    advance(opm, transport, 1024);
+    assert.deepEqual([...transport.ids.keys()], [2, 3], 'rejected edits cannot poison the next range');
+    transport.setLoop({ enabled: true, from: 4, to: 5 });
+    transport.seek(4);
+    const empty = advance(opm, transport, 1024);
+    assert.deepEqual([...transport.ids.keys()], []);
+    assert.ok(empty.left.subarray(-128).every(value => value === 0));
+    assert.ok(empty.right.subarray(-128).every(value => value === 0));
+    transport.seek(4.5);
+    assert.deepEqual([...transport.ids.keys()], []);
+    transport.setLoop({ enabled: true, from: 0, to: 1 });
+    transport.seek(0);
+    assert.deepEqual([...transport.ids.keys()], [1]);
+    assert.ok(advance(opm, transport, 512).left.some(value => value !== 0));
+  } finally { transport.dispose(); await opm.dispose(); }
+});
+
 test('tempo edits preserve position and cancel only owned future notes and automation', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);

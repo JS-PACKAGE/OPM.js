@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused transport window eligibility
+
+- Reuse the last beat window's eligible tracks from the immutable prepared score. Input order is preserved, and every segment still creates fresh gates and recalculates tempo-dependent times and reconstructed controls.
+- Paired Node.js 26 benchmarks of repeated stopped seeks into the same window took about 92%/99% less time with 1,024/16,384 future notes outside it. Changing-position cases on those scores improved 15–27%; a tiny changing-position case cost about 75 ns more per seek (8%), while construction stayed within 2%. These are scheduler/preflight measurements, not DSP or native IPC gains.
+- Complete stereo PCM, outgoing worklet messages and transport snapshots matched across 40 real-processor host-shim stages. Regression coverage includes unsorted inputs, changed endpoints, empty windows and rejected loop edits.
+
 ### Specialized noise-only frames
 
 - Add an allocation-free frame kernel for voices whose nonzero-level operators are all noise. Zero-level periodic operators remain silent, phase and feedback history are retained, and live operator-level ramps still use the generic path.

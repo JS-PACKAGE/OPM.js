@@ -196,6 +196,9 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     else if (event.type === 'control') tracks.get(event.id)!.controls.push(event);
   }
   for (const track of tracks.values()) track.controls.sort((a, b) => Math.max(a.time, track.note.time) - Math.max(b.time, track.note.time));
+  // Prepared tracks never change; repeated loop windows can reuse eligibility.
+  const eligibleTracks: Track[] = [];
+  let eligibleFrom = -1, eligibleTo = -1;
   const endBeat = score.endTime;
   let state: TransportState = 'stopped';
   let position = 0;
@@ -219,8 +222,16 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
   function commands(from: number, to: number, at: number, tempo: readonly Readonly<TempoPoint>[], includeEndpoint = false): Command[] {
     const result: Command[] = [];
     const offset = tempoSeconds(from, tempo);
-    for (const track of tracks.values()) {
-      if (track.end <= from || track.end <= track.note.time || track.note.time >= to) continue;
+    if (from !== eligibleFrom || to !== eligibleTo) {
+      eligibleFrom = -1; // A failed rebuild must not leave a reusable partial window.
+      eligibleTracks.length = 0;
+      for (const track of tracks.values()) {
+        if (track.end <= from || track.end <= track.note.time || track.note.time >= to) continue;
+        eligibleTracks.push(track);
+      }
+      eligibleFrom = from; eligibleTo = to;
+    }
+    for (const track of eligibleTracks) {
       // Own `id` slot: the later assignment must not reach an inherited setter.
       const gate: Gate = { track, id: undefined };
       const begin = Math.max(from, track.note.time);
