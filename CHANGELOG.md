@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Dedicated float WAV sample loop
+
+- Float32 WAV encoding now selects its validation/little-endian-write loop once per chunk, outside integer quantization and dither processing. PCM16/24 retain their original scaling, rounding, clamp and xorshift sequence. Native samples are still read once, in frame/channel order, and invalid chunks still commit neither frame accounting nor dither state.
+- Two reversed-import-order Node 26.7.0 comparisons on this macOS arm64 host primed every format/channel/dither shape before 15 alternating timed pairs of 65,536-frame exports. Float32 mono took 6.0–7.6% less time and stereo 8.2% less. Integer results ranged from 16.8% faster to 3.0% slower; no general integer-format speedup is claimed. Earlier per-case-only warmup produced much larger, order-dependent integer differences, so those are not treated as stable gains.
+- Full-buffer and 177-frame incremental output matched baseline bytes for every mono/stereo PCM16/PCM24/float32 combination, including both integer dither settings, signed zero, subnormal samples and full scale. Existing malformed-sample, atomic rejection, native-channel and streaming tests cover the unchanged contracts. No API, format, dependency or additional allocation was introduced.
+
 ### Paired half-band filter inputs
 
 - The standard/high decimator kernels now write the two inputs of each first-stage output together, halving their input-loop iterations and removing the odd-input skip. Ring wrapping, tap arithmetic/order, cascade output timing, state layout and the eco kernel are unchanged. No public API, voice format, dependency or allocation was added.

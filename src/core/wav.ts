@@ -75,8 +75,20 @@ function channels(left: unknown, right: unknown, expected?: 1 | 2): { left: Floa
 const DITHER_SEED = 0x9e3779b9;
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
-  const float32 = config.format === 'float32', pcm16 = !float32 && config.format === 'pcm16';
-  const view = float32 || pcm16 ? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength) : null;
+  // Float PCM needs validation and endian conversion, but no integer quantization.
+  if (config.format === 'float32') {
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    for (let frame = 0; frame < frames; frame++) {
+      for (let channel = 0; channel < config.channels; channel++, offset += 4) {
+        const value = channel === 0 ? left[frame] : right![frame];
+        if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+        view.setFloat32(offset, value, true);
+      }
+    }
+    return ditherSeed;
+  }
+  const pcm16 = config.format === 'pcm16';
+  const view = pcm16 ? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength) : null;
   // Zero disables noise; active xorshift state stays signed 32-bit between draws.
   let s = ditherSeed | 0;
   const dither = s !== 0;
@@ -85,7 +97,6 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
       const value = channel === 0 ? left[frame] : right![frame];
       // NaN fails the ordered magnitude bound, alongside infinities and out-of-range samples.
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-      if (float32) { view!.setFloat32(offset, value, true); continue; }
       const scaled = value * (value < 0 ? (pcm16 ? 32768 : 8388608) : (pcm16 ? 32767 : 8388607));
       // Without dither the rounded scaled value is always in range; dither may cross full scale.
       let sample: number;
