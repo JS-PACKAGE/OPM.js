@@ -1998,13 +1998,19 @@ export class Synth {
     const amGain = amEnabled ? 1 - amDepth * (0.5 + 0.5 * tremolo) : 1;
     const pmFactor = pmEnabled ? fastExp2(pmDepth * tremolo / 1200) : 1;
     const targeted = active.amTargeted, pmTargeted = active.pmTargeted;
-    if (targeted || pmTargeted) {
-      const amTargets = active.amTargets, pmTargets = active.pmTargets;
-      // Refresh unity for inactive/zero-weight targets: pitch ramps read these scratch factors.
+    // Only targeted consumers read these arrays; keep their inactive factors at unity.
+    if (targeted) {
+      const targets = active.amTargets, factors = active.amGains;
       for (let op = 0; op < 4; op++) {
-        const am = amTargets[op], pm = pmTargets[op];
-        active.amGains[op] = am === 1 ? amGain : !amEnabled || am === 0 ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
-        active.pmFactors[op] = pm === 1 ? pmFactor : !pmEnabled || pm === 0 ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
+        const am = targets[op];
+        factors[op] = am === 1 ? amGain : !amEnabled || am === 0 ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
+      }
+    }
+    if (pmTargeted) {
+      const targets = active.pmTargets, factors = active.pmFactors;
+      for (let op = 0; op < 4; op++) {
+        const pm = targets[op];
+        factors[op] = pm === 1 ? pmFactor : !pmEnabled || pm === 0 ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
       }
     }
     const gliding = active.pitchFrames !== 0;

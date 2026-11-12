@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Independent targeted LFO factor loops
+
+- Compute per-operator AM and PM scratch factors only for the corresponding targeted path. Global modulation no longer causes unused opposite-target reads and writes; inactive targeted factors still refresh to unity before pitch/amplitude consumers run.
+- Paired Node.js 26 measurements of 16 sustained voices reduced AM-only-target render time by about 12–13% in eco, 9–10% in standard and 6–7% in high quality. PM-only-target cases improved 4–7% in eco/standard and 2.5–3.7% in high; both-target cases improved about 1–6%, while global-target controls stayed within 2.2%. These are workload-specific host results.
+- Complete stereo PCM matched in 288 cases across all algorithms, three quality profiles, sine/saw/noise operators, delayed LFO, depth disable/re-enable, interrupted controls, release and slot reuse. Existing independent-reference and uniform-target/recycled-note tests cover the affected consumers.
+
 ### Lazy MIDI batch ownership tracking
 
 - Allocate an expressive-control batch's duplicate-ID set only when another matching event could join it. Single-control events no longer allocate the set or its seed array; ownership and duplicate boundaries remain unchanged.
