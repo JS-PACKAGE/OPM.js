@@ -229,6 +229,8 @@ interface ActiveVoice {
   pitchSettled: boolean;
   /** Per-frame scratch: folded operator amplitudes 0..3, PM factor 4, pitch factor 5 and step 6. */
   sineFrame: Float64Array;
+  /** Folded amplitudes are reusable while AM is disabled and operator levels stay fixed. */
+  foldedLevelsReady: boolean;
   /** A specialized static-level frame, or null when no specialization applies. */
   frameKernel: FrameKernel | null;
   /** The note's pitch envelope, snapshotted from its voice (whose shape varies). */
@@ -408,7 +410,7 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     lfoDelay: 0, lfoRate: 0, lfoPhase: 0, lfoGlobal: false, lfoCode: 0,
     amTargeted: false, pmTargeted: false, amTargets: new Float64Array(4), pmTargets: new Float64Array(4),
     tunedFrequency: 0, gainsSteady: false, silentGains: false, pitchSettled: false, sineFrame: new Float64Array(7),
-    frameKernel: null, pitchEnvelope: undefined,
+    foldedLevelsReady: false, frameKernel: null, pitchEnvelope: undefined,
     frequencyScales: new Float64Array(4),
     amGains: new Float64Array(4), pmFactors: new Float64Array(4),
     waveforms: new Uint8Array(4), noiseStates: new Uint32Array(4), noiseTurns: new Float64Array(4), noiseSteps: new Float64Array(4),
@@ -1701,6 +1703,7 @@ export class Synth {
       active.envelopeFastUntil = 0;
       active.gains.fill(0);
       active.gainsSteady = false;
+      active.foldedLevelsReady = false;
       active.pitchSettled = false;
       active.previous = active.older = active.elapsed = 0;
       active.feedbackScale = feedbackGain(voice.feedback);
@@ -1932,6 +1935,7 @@ export class Synth {
       updateModulation(active);
     }
     if (operatorLevels !== undefined) {
+      active.foldedLevelsReady = false;
       let changed = false;
       for (let op = 0; op < 4; op++) {
         active.operatorFrom[op] = active.operatorLevels[op];
@@ -2056,12 +2060,13 @@ export class Synth {
       }
     }
     frame[4] = pmFactor;
-    // Fold static level, operator level and shared or per-operator AM once per frame.
-    if (!operatorRamping) {
+    // Reuse folded levels between operator edits while AM is disabled.
+    if (!operatorRamping && (amEnabled || !active.foldedLevelsReady)) {
       const a0 = targeted ? amGains[0] : amGain, a1 = targeted ? amGains[1] : amGain;
       const a2 = targeted ? amGains[2] : amGain, a3 = targeted ? amGains[3] : amGain;
       frame[0] = levels[0] * operatorLevels[0] * a0; frame[1] = levels[1] * operatorLevels[1] * a1;
       frame[2] = levels[2] * operatorLevels[2] * a2; frame[3] = levels[3] * operatorLevels[3] * a3;
+      active.foldedLevelsReady = !amEnabled;
     }
     let output = 0;
     if (finished) {

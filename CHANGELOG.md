@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Cached unmodulated operator amplitudes
+
+- Reuse folded static/operator-level amplitudes while AM is disabled. Live level edits invalidate the pooled-slot cache; ramps keep the generic path, and AM activation/deactivation still refreshes the original amplitude expression.
+- Paired Node.js 26 benchmarks of 16 sustained sine voices without AM reduced render time by about 5–6% in eco, 3.5–3.8% in standard and 1.7% in high quality. Standard noise voices improved 2.5–2.7%; active-AM controls stayed within 1.4%. Results are workload-specific, not browser throughput claims.
+- Complete stereo PCM and oscillator/gain state matched across 288 cases spanning all algorithms, three rates/qualities, periodic/noise/mixed shapes, delayed/targeted AM, interrupted controls and pooled reuse. Existing LFO reference coverage now includes immediate and interrupted operator-level changes.
+
 ### Reused transport pending-command storage
 
 - Prune expired pending commands in place instead of allocating a replacement array on every pump. Retained order and the strict future-time predicate are unchanged; truncate only when entries were removed.
