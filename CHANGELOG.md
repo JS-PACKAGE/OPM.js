@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy MIDI batch ownership tracking
+
+- Allocate an expressive-control batch's duplicate-ID set only when another matching event could join it. Single-control events no longer allocate the set or its seed array; ownership and duplicate boundaries remain unchanged.
+- Paired Node.js 26 measurements reduced tested single-control export time by about 1–3%. Multi-owner controls varied within 1.6%, without a consistent improvement.
+- All 32 full-file/rejection comparisons matched across format 0/1, 1–16 owners, pressure controls and duplicate IDs. The overlap regression now rejects duplicate updates that cannot stand in for a second owner.
+
 ### Fixed-shape MIDI control snapshots
 
 - Quantized expressive-export controls now use one fixed own-data literal instead of temporary conditional spreads and a prototype change. Onset merging skips omitted fields and preserves last-write order.

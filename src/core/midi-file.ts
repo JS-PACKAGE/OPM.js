@@ -551,14 +551,15 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
     } else if (op.control) {
       const batch = [op.control];
       const first = op.control;
-      const batchIds = new Set([first.id]);
+      let batchIds: Set<number> | undefined;
       const note = byId.get(first.id)!;
       // Import fans one wire message out to contiguous owned-gate events; restore it atomically.
       while (index + 1 < operations.length) {
         const next = operations[index + 1];
         if (next.tick !== op.tick || !next.control || byId.get(next.control.id)!.channel !== note.channel ||
-            !EXPRESSION_FIELDS.every(field => next.control!.values[field] === first.values[field]) ||
-            batchIds.has(next.control.id)) break;
+            !EXPRESSION_FIELDS.every(field => next.control!.values[field] === first.values[field])) break;
+        batchIds ??= new Set([first.id]);
+        if (batchIds.has(next.control.id)) break;
         batch.push(next.control);
         batchIds.add(next.control.id);
         index++;

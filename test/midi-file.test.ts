@@ -429,6 +429,10 @@ test('expressive export rejects incompatible channel overlap and unaddressable r
   for (const field of ['pitch', 'expression', 'pan'] as const) {
     const value = field === 'expression' ? 0.5 : 1;
     assert.throws(() => exportMidiFile([note(1, 0, 2), note(2, 0, 2, 64), control(1, 1, { [field]: value })], midiPolicy), /conflicts/);
+    assert.throws(() => exportMidiFile([
+      note(1, 0, 2), note(2, 0, 2, 64),
+      control(1, 1, { [field]: value }), control(1, 1, { [field]: value }), control(2, 1, { [field]: value }),
+    ], midiPolicy), /conflicts/);
   }
   assert.throws(() => exportMidiFile([note(1, 0, 2), { ...note(2, 0.5, 2, 64), pan: 1 }], midiPolicy), /overlapping/);
   assert.throws(() => exportMidiFile([note(1, 0, 2), note(2, 0.5, 2), control(1, 1, { modulation: 2 })], midiPolicy), /older repeated-pitch/);
