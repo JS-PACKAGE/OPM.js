@@ -223,6 +223,8 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
+Scoped A review for MIDI export validation field reuse: the integration owner checked that allowed and required field names and ordering are identical, lists remain private, and every event still passes the same own-data snapshot and value checks. Missing fields, symbol/unknown fields, accessor rejection and repeated mutable inputs were compared with the baseline; no caller getter ran. This is not independent release approval.
+
 Scoped A/C review for format-0 MIDI assembly: the integration owner checked that the reused conductor array and channel tracks are private, append order matches the previous flatten/spread order, and event sorting, end markers, byte sizing and wire/byte budgets remain unchanged. Complete-file comparisons cover formats 0/1 and both expression policies. No caller-owned input is mutated. This is not independent release approval.
 
 Scoped A/C review for MIDI import ownership tracking: the integration owner checked that each onset increments the bounded live count once, note-off either closes its pressed owner or transfers it to sustain, and pedal release closes only its sustain set before clearing it. At end-of-file, pressed queue suffixes and sustained releases are disjoint; closed prefixes are skipped. Byte/event budgets, orphan/zero-length rejection, expression ownership and warning counts are unchanged. Complete-result comparisons and the mixed closure regression cover both expression policies. This is not independent release approval.

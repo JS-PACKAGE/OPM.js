@@ -425,6 +425,11 @@ function writeVlq(target: Uint8Array, offset: number, value: number): number {
 }
 
 const EXPRESSION_FIELDS: readonly ExpressiveField[] = ['pitch', 'expression', 'pan', 'modulation'];
+// Share field names only; every caller event still receives a fresh own-data snapshot.
+const NOTE_FIELDS = ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority'] as const;
+const NOTE_REQUIRED_FIELDS = ['type', 'id', 'beat', 'duration', 'note'] as const;
+const STOP_FIELDS = ['type', 'id', 'beat'] as const;
+const CONTROL_FIELDS = ['type', 'id', 'beat', 'controls'] as const;
 
 function quantizedControls(input: unknown, range: number): Partial<ExpressiveState> {
   const controls = validateNoteControls(input as NoteControls);
@@ -594,9 +599,8 @@ export function exportMidiFile(events: readonly BeatSequenceEvent[], options: Mi
     const type = event !== null && typeof event === 'object' ? Object.getOwnPropertyDescriptor(event, 'type')?.value : undefined;
     if (type === 'control' && !preserve) throw new RangeError('MIDI export cannot represent OPM note controls without controls: preserve');
     if (type !== 'note' && type !== 'stop' && type !== 'control') throw new TypeError('Invalid MIDI beat event type');
-    const data = sequenceOwnData(event, type === 'note' ? ['type', 'id', 'beat', 'duration', 'voice', 'note', 'velocity', 'pan', 'voicePriority']
-      : type === 'control' ? ['type', 'id', 'beat', 'controls'] : ['type', 'id', 'beat'],
-      type === 'note' ? ['type', 'id', 'beat', 'duration', 'note'] : type === 'control' ? ['type', 'id', 'beat', 'controls'] : ['type', 'id', 'beat'], 'MIDI beat event');
+    const data = sequenceOwnData(event, type === 'note' ? NOTE_FIELDS : type === 'control' ? CONTROL_FIELDS : STOP_FIELDS,
+      type === 'note' ? NOTE_REQUIRED_FIELDS : type === 'control' ? CONTROL_FIELDS : STOP_FIELDS, 'MIDI beat event');
     const id = data.id as number;
     if (!Number.isSafeInteger(id) || id <= 0) throw new RangeError('MIDI note id must be a positive safe integer');
     const beat = transportNumber(data.beat, 0, MAX_TRANSPORT_BEATS, 'MIDI beat');

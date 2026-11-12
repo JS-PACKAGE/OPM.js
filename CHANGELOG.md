@@ -4,6 +4,11 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused MIDI event validation field lists
+
+- Reuse private note, stop and control field-name lists rather than creating them for each exported event. Caller data and validation results are never cached.
+- Paired Node.js 26 measurements showed about 1.2–1.3% less time for the tested 20,000-note export. Smaller and expression-preserving cases showed no consistent material change. All 55 complete-result/rejection comparisons matched, including missing/unknown fields, accessors and mutation between calls; caller getters were never invoked.
+
 ### Fewer temporary MIDI export arrays
 
 - Assemble format-0 output directly in its private conductor array instead of flattening channel tracks into a temporary array and copying it again. Format-1 track assembly is unchanged.
