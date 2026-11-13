@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped already-ordered sequence sorting
+
+- Track frame/order monotonicity while assembling offline event queues and skip sorting only when the complete queue is already ordered. Overlaps, reversed notes, earlier appended controls/stops and collapsed/non-finite frame pairs retain the original stable comparator.
+- Paired Node.js 26 measurements of prepared, non-overlapping note-only scores reduced queue assembly time by about 14–17% and capacity preflight by 12–16% at 128/4,096 notes. Overlapping/reversed controls varied from 1.6% slower to 4.6% faster; this is planning overhead, not synthesis throughput.
+- All 450 complete queue comparisons and 63 complete render comparisons matched across score sizes, controls, ordering, rates, origins and quality profiles. A regression checks a tied explicit stop still cancels the last note after initially ordered queue assembly.
+
 ### Skipped inactive targeted AM factors
 
 - When AM is disabled or still delayed, route its consumers through the shared unity gain and skip per-operator AM scratch updates. Re-enabling AM refreshes every target before use; PM scratch and dynamic-pitch behavior are unchanged.

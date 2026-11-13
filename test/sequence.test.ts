@@ -81,6 +81,21 @@ test('stops before or tied with an onset cancel only their targeted notes regard
   }
 });
 
+test('a tied explicit stop cancels the last note of an otherwise ordered monophonic score', () => {
+  const first: SequenceNoteEvent = { type: 'note', id: 1, time: 0, duration: 32 / sampleRate,
+    voice: toneVoice(0), note: 60, pan: -1 };
+  const result = renderSequence([
+    first,
+    { type: 'note', id: 2, time: 32 / sampleRate, duration: 32 / sampleRate, voice: toneVoice(0), note: 72, pan: 1 },
+    { type: 'stop', id: 2, time: 32 / sampleRate },
+  ], { sampleRate });
+  const expected = renderSequence([first], { sampleRate });
+  assert.ok(expected.left.some(value => Math.abs(value) > 0.01));
+  assert.deepEqual(result.left.subarray(0, expected.left.length), expected.left);
+  assert.ok(result.left.subarray(expected.left.length).every(value => value === 0));
+  assert.ok(result.right.every(value => value === 0));
+});
+
 test('the ninth simultaneous note steals the oldest with a bounded fade instead of leaving its gate alive', () => {
   const events: SequenceNoteEvent[] = Array.from({ length: 9 }, (_, index) => ({
     type: 'note', id: index + 1, time: 0, duration: 0.02, voice: toneVoice(), note: 48 + index * 3,

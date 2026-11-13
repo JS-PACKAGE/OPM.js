@@ -201,10 +201,17 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
   const onsets = new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
   const queue: SequenceFrameEvent[] = [];
   let lastFrame = 0;
+  let ordered = true;
+  let previousEnd = -Infinity;
   for (const event of score.events) {
     if (event.type !== 'note') continue;
     const frame = Math.round((origin + event.time) * sampleRate);
     const endFrame = frame + Math.max(1, Math.ceil(event.duration * sampleRate));
+    if (ordered) {
+      // Collapsed/non-finite pairs still need the original comparator's ordering.
+      ordered = frame >= previousEnd && endFrame > frame;
+      previousEnd = endFrame;
+    }
     const onset = { frame, order: EVENT_ORDER.note, event };
     onsets.set(event.id, onset);
     queue.push(onset);
@@ -217,7 +224,12 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     if (event.type === 'note') continue;
     const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets.get(event.id)!.frame)
       : Math.round((origin + event.time) * sampleRate);
-    queue.push({ frame, order: EVENT_ORDER[event.type], event });
+    const order = EVENT_ORDER[event.type];
+    if (ordered && queue.length !== 0) {
+      const last = queue[queue.length - 1];
+      ordered = frame > last.frame || frame === last.frame && order >= last.order;
+    }
+    queue.push({ frame, order, event });
     lastFrame = Math.max(lastFrame, frame);
     // Own read: an operatorADSR inherited from Object.prototype must not change the release bound.
     const adsr = event.type === 'control' ? ownControl(event.controls, 'operatorADSR') : undefined;
@@ -235,7 +247,7 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
       lastFrame = Math.max(lastFrame, Math.max(gateEnd, frame) + Math.ceil(release * sampleRate));
     }
   }
-  queue.sort((a, b) => a.frame - b.frame || a.order - b.order);
+  if (!ordered) queue.sort((a, b) => a.frame - b.frame || a.order - b.order);
   return { queue, length: lastFrame + Math.ceil(0.01 * sampleRate) };
 }
 
