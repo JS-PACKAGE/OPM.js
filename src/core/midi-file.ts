@@ -103,6 +103,14 @@ class Reader {
     if (value >= 128) throw new RangeError('MIDI data byte contains a status bit');
     return value;
   }
+  dataPair(): number {
+    if (this.end - this.offset >= 2) {
+      const value = this.view.getUint16(this.offset);
+      if ((value & 0x8080) === 0) { this.offset += 2; return value; }
+    }
+    // Preserve bytewise status-bit/truncation precedence on invalid pairs.
+    return this.data() << 8 | this.data();
+  }
   u16(): number { this.need(2); const value = this.view.getUint16(this.offset); this.offset += 2; return value; }
   u32(): number { this.need(4); const value = this.view.getUint32(this.offset); this.offset += 4; return value; }
   tag(expected: 'MThd' | 'MTrk'): void {
@@ -205,8 +213,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       else running = 0;
       if (status < 0xf0) {
         const command = status & 0xf0;
-        const a = first === undefined ? input.data() : first;
-        const b = command === 0xc0 || command === 0xd0 ? 0 : input.data();
+        const single = command === 0xc0 || command === 0xd0;
+        let a: number, b: number;
+        if (first !== undefined) { a = first; b = single ? 0 : input.data(); }
+        else if (single) { a = input.data(); b = 0; }
+        else { const pair = input.dataPair(); a = pair >>> 8; b = pair & 127; }
         if (command === 0x90 && b > 0) wire.push({ tick, track, kind: 'on', channel: status & 15, a, b });
         else if (command === 0x80 || command === 0x90) {
           wire.push({ tick, track, kind: 'off', channel: status & 15, a, b });

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Bounded MIDI channel-data pairs
+
+- Explicit-status two-data-byte channel messages use one bounded big-endian Uint16 read and a combined status-bit check. One-byte program/channel-pressure messages and running status keep their original byte ownership; short or invalid pairs use the original ordered checked reads. Logical track boundaries, error precedence, parser budgets and result/report construction are unchanged. No instance field, collection, buffer or cross-import cache is added.
+- Paired fresh-process Node.js 26 runs with both pair orders raised tested preserved-expression import throughput by 2.5–3.2%, sixteen-note throughput by 0.8–2.5% and 256-note throughput by 0.1–2.5%. One-note imports were 0.4–0.9% slower; remaining profile medians ranged from 2.3% slower to 1.6% higher, including running status, single-data commands, warning-heavy, multi-track and empty-track files. These are workload-/host-dependent paired medians, not general speedup, allocation, GC or deadline guarantees.
+- All 96,705 complete result/freeze-descriptor comparisons and 39,891 rejection name/message comparisons matched, with zero caller getter reads and unchanged input bytes. Each of note-off, note-on, poly pressure, CC and bend accepted all 16,384 data-byte combinations with valid gate ownership. Additional coverage includes malformed/partial pairs, logical ends before another track, single-data commands, running status, policies and nonzero native subviews. Instrumentation for sixteen explicit note pairs changed Uint8 reads from 132 to 68 and Uint16 reads from 3 to 35; single-data loads stayed unchanged. The existing 39 MIDI behavioral tests pass, and scoped A/C review is recorded in SECURITY.md.
+
 ### Bounded MIDI chunk-tag comparison
 
 - Complete matching MThd/MTrk tags use one bounded big-endian uint32 comparison instead of four individually checked byte/character comparisons. Short or nonmatching tags retain the original bytewise path, including mismatch-before-truncation error precedence. Native input authentication, logical view offsets and all parser budgets remain unchanged; no collection, buffer or cache is added.
