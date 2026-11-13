@@ -202,13 +202,21 @@ class OPMProcessor extends AudioWorkletProcessor {
   }
 
   removeEvents(id: number, mode: 'all' | 'automatic' | 'controls' = 'all'): void {
+    const events = this.events, length = events.length;
     let kept = 0;
-    for (let index = 0; index < this.events.length; index++) {
-      const event = this.events[index];
+    // Leave the unchanged prefix alone; only compact after the first removal.
+    for (; kept < length; kept++) {
+      const event = events[kept];
       if (event.id !== id || mode === 'automatic' && !(event.type === 'noteOff' && event.automatic) ||
-          mode === 'controls' && event.type !== 'updateNote') this.events[kept++] = event;
+          mode === 'controls' && event.type !== 'updateNote') continue;
+      break;
     }
-    if (kept !== this.events.length) this.events.length = kept;
+    for (let index = kept + 1; index < length; index++) {
+      const event = events[index];
+      if (event.id !== id || mode === 'automatic' && !(event.type === 'noteOff' && event.automatic) ||
+          mode === 'controls' && event.type !== 'updateNote') events[kept++] = event;
+    }
+    if (kept !== length) events.length = kept;
   }
 
   ended(id: number, reason: VoiceEndReason): void {

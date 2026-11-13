@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Prefix-preserving worklet queue compaction
+
+- Event cleanup skips the unchanged prefix and starts moving entries only after the first removal. All/automatic-stop/control filtering keeps the same array, stable event order, ownership and bounded capacity without new state or allocations.
+- Paired fresh-process Node.js 26 measurements on preallocated 16-/256-entry queues reduced absent-ID scans by about 39–42% and tested removals by 4–43%. Queue preparation is excluded; this measures cleanup cost, not overall synthesis throughput.
+- All 270 full-queue compaction cases and 570 complete PCM/message/ownership/diagnostic lifecycle stages matched, including dense/spread/late dispatch, automatic stops, stolen notes, control cancellation, panic and reuse. Existing worklet cancellation/capacity coverage remains unchanged.
+
 ### Shared frequency-ramp frame clocks
 
 - Prepare all four operators' start/midpoint/end Hz samples with shared ratio/Hz clocks and completion tests. Keep fixed-Hz selection independent per operator, the original multiply-before-divide order, post-interpolation frequency scaling and quadratic coefficient formula. The reference-only, void helper reuses existing arrays.
