@@ -53,16 +53,23 @@ function layout(data: Record<string, unknown>): Layout {
 }
 function writeHeader(bytes: Uint8Array, config: Layout): void {
   const view = new DataView(bytes.buffer);
-  const text = (offset: number, value: string): void => { for (let i = 0; i < value.length; i++) bytes[offset + i] = value.charCodeAt(i); };
-  text(0, 'RIFF'); view.setUint32(4, config.byteLength - 8, true); text(8, 'WAVE'); text(12, 'fmt ');
+  // Chunk IDs are big-endian ASCII words; numeric RIFF fields stay little-endian.
+  view.setUint32(0, 0x52494646); // RIFF
+  view.setUint32(4, config.byteLength - 8, true);
+  view.setUint32(8, 0x57415645); // WAVE
+  view.setUint32(12, 0x666d7420); // fmt
   view.setUint32(16, config.format === 'float32' ? 18 : 16, true);
   view.setUint16(20, config.format === 'float32' ? 3 : 1, true);
   view.setUint16(22, config.channels, true); view.setUint32(24, config.sampleRate, true);
   view.setUint32(28, config.sampleRate * config.blockAlign, true); view.setUint16(32, config.blockAlign, true);
   view.setUint16(34, config.sampleBytes * 8, true);
   const dataOffset = config.format === 'float32' ? 50 : 36;
-  if (config.format === 'float32') { text(38, 'fact'); view.setUint32(42, 4, true); view.setUint32(46, config.frames, true); }
-  text(dataOffset, 'data'); view.setUint32(dataOffset + 4, config.dataBytes, true);
+  if (config.format === 'float32') {
+    view.setUint32(38, 0x66616374); // fact
+    view.setUint32(42, 4, true); view.setUint32(46, config.frames, true);
+  }
+  view.setUint32(dataOffset, 0x64617461); // data
+  view.setUint32(dataOffset + 4, config.dataBytes, true);
 }
 function channels(left: unknown, right: unknown, expected?: 1 | 2): { left: Float32Array; right: Float32Array | undefined; frames: number } {
   if (typedArrayKind.call(left) !== 'Float32Array' || (right !== undefined && typedArrayKind.call(right) !== 'Float32Array')) throw new TypeError('WAV channels must be native Float32Arrays');

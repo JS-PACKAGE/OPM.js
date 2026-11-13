@@ -4,6 +4,20 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-width WAV header chunk IDs
+
+- WAV headers now write the fixed RIFF/WAVE/fmt/fact/data IDs as big-endian ASCII words through their existing DataView, removing the local per-character text helper. Numeric fields remain little-endian; PCM/float headers, fact sample count, zero cbSize, data sizes, padding, sample bytes and transfer/accounting behavior are unchanged. No buffer/view, retained field, dependency or public format/API is added.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz full-file encoding, including metadata validation, allocation, headers and samples. Positive values below mean higher throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| One-frame files, all three formats | +0.5–3.5% | +0.6–5.5% |
+| Stereo 128-frame files, all three formats | +1.1–2.7% | +1.1–2.5% |
+| 65,536-frame PCM16/float32 controls | −0.1% to +0.1% | −0.7% to +0.8% |
+
+- Tiny-file results target fixed header overhead; the large-file controls do not establish a speedup. These are workload-/host-dependent Node medians, not general long-file, DSP, browser/device, heap-byte or GC guarantees. Instrumented headers made zero tag charCodeAt calls instead of 16 for PCM and 20 for float; timing used uninstrumented builtins.
+- Source/distribution comparisons match 360 complete WAV cases, 228 rejection checks and 360 transfers with zero metadata getter calls. An independent 36-case header matrix per implementation checks exact IDs, endian-sensitive fields, zero/one/65,537 frames, both channels, sample-rate endpoints, header transfer and empty-file finalization. All 14 targeted WAV tests pass. Scoped A/C review is recorded in SECURITY.md.
+
 ### Reuse the stereo dither writer for full WAV files
 
 - Full-buffer stereo PCM16/PCM24 exports with TPDF dither now select the existing streaming stereo writer instead of the generic channel loop. The same helper accepts the full file's byte offset and frame count; sample capture/validation order, two PRNG draws per sample, seed, rounding and rail clamping are unchanged. No loop, buffer/view allocation, retained field or dependency is added.
