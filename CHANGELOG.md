@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared fixed-depth chorus taps
+
+- At zero chorus depth, read each channel's common delay tap once instead of once per active voice. Keep the original voice-weight accumulation and division order, and continue warming delay, feedback and LFO state for later depth changes.
+- Paired Node.js 26 measurements reduced tested zero-depth chorus time by about 1–2% with one voice, 6–8% with two and 17% with four. Modulated-depth controls varied within 1.9%; this is a fixed-depth optimization, not a universal effects gain.
+- Complete stereo PCM matched across 32 voice-count/depth/sample-rate cases, including fractional taps, feedback and voice-count/depth ramps. Existing fixed-delay, sub-ulp-wrap and later-depth-activation regressions cover the modified surface.
+
 ### Skipped unnecessary immediate scalar ramp scans
 
 - Mark the engine ramp active only when a scalar control has a nonzero ramp duration. Immediate edits already update their scalar/effective values; previously pending ramps retain their flag and still advance or clear normally.

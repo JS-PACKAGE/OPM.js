@@ -145,19 +145,29 @@ class Engine implements StereoEffects {
     if (mix !== 0 || feedback !== 0) {
       // Voices sit pi/2 apart and the right tap leads by pi/2, so with s = sin(phase),
       // c = cos(phase) the eight sines are left [s, c, -s, -c] and right [c, -s, -c, s].
-      // Voices whose weight is exactly 0 contribute exactly 0 and skip their reads.
+      // Zero-weight voices contribute exactly zero.
       const centre = this.rate * .01, swing = this.rate * .008 * p[1]!, left = this.chorus[0]!, right = this.chorus[1]!;
-      // Zero swing still warms delay/feedback history and advances phase; only trig is unnecessary.
-      const s = swing === 0 ? 0 : Math.sin(this.phase), c = swing === 0 ? 0 : Math.cos(this.phase);
       let weights = 0;
-      for (let voice = 0; voice < 4; voice++) {
-        const weight = p[4 + voice]!;
-        if (weight === 0) continue;
-        weights += weight;
-        const sine = voice === 0 ? s : voice === 1 ? c : voice === 2 ? -s : -c;
-        const cosine = voice === 0 ? c : voice === 1 ? -s : voice === 2 ? -c : s;
-        l += weight * left.read(centre + swing * sine);
-        r += weight * right.read(centre + swing * cosine);
+      if (swing === 0) {
+        // All voices read the same tap; retain each weighted addition's original rounding.
+        const tapL = left.read(centre), tapR = right.read(centre);
+        for (let voice = 0; voice < 4; voice++) {
+          const weight = p[4 + voice]!;
+          if (weight === 0) continue;
+          weights += weight;
+          l += weight * tapL; r += weight * tapR;
+        }
+      } else {
+        const s = Math.sin(this.phase), c = Math.cos(this.phase);
+        for (let voice = 0; voice < 4; voice++) {
+          const weight = p[4 + voice]!;
+          if (weight === 0) continue;
+          weights += weight;
+          const sine = voice === 0 ? s : voice === 1 ? c : voice === 2 ? -s : -c;
+          const cosine = voice === 0 ? c : voice === 1 ? -s : voice === 2 ? -c : s;
+          l += weight * left.read(centre + swing * sine);
+          r += weight * right.read(centre + swing * cosine);
+        }
       }
       l /= Math.max(1, weights); r /= Math.max(1, weights);
     }
