@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Direct integer PCM byte stores
+
+- Write PCM16/PCM24 quantized samples through the same explicit little-endian byte stores, avoiding the PCM16 DataView and its mixed integer-writing path. Float32 still uses its endian-aware DataView; validation, quantization and dither draw order are unchanged.
+- Paired Node.js 26 measurements of 65,536-frame stereo exports reduced PCM16 time by about 53–58% and PCM24 by 12–17%, with/without dither. Float32 controls varied within 3.2%; these are encoding workloads, not synthesis throughput.
+- All 30 full-file comparisons matched across formats, channel counts, lengths and dither policies. Existing sample-endpoint, chunk-independence, dither-clamping and invalid-chunk transaction tests cover the changed stores.
+
 ### Shared fixed-depth chorus taps
 
 - At zero chorus depth, read each channel's common delay tap once instead of once per active voice. Keep the original voice-weight accumulation and division order, and continue warming delay, feedback and LFO state for later depth changes.

@@ -88,7 +88,6 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
     return ditherSeed;
   }
   const pcm16 = config.format === 'pcm16';
-  const view = pcm16 ? new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength) : null;
   // Zero disables noise; active xorshift state stays signed 32-bit between draws.
   let s = ditherSeed | 0;
   const dither = s !== 0;
@@ -108,8 +107,8 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
         const noise = (a - (s >>> 0)) * 2 ** -32;
         sample = Math.min(pcm16 ? 32767 : 8388607, Math.max(pcm16 ? -32768 : -8388608, Math.round(scaled + noise)));
       }
-      if (pcm16) view!.setInt16(offset, sample, true);
-      else { bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255; bytes[offset + 2] = (sample >> 16) & 255; }
+      bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255;
+      if (!pcm16) bytes[offset + 2] = (sample >> 16) & 255;
     }
   }
   return s >>> 0;
