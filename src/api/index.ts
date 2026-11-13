@@ -133,7 +133,7 @@ interface DiagnosticsRequest {
 interface CommandReceipt {
   command: CommandName;
   outcome?: CommandEvent | Error;
-  waiters: Set<(outcome: CommandEvent | Error) => void>;
+  waiters: Set<(outcome: CommandEvent | Error) => void> | undefined;
 }
 
 const MAX_DURATION = 60;
@@ -501,11 +501,12 @@ export class OPM {
     if (!Number.isSafeInteger(this._nextCommandId) || this._nextCommandId <= 0) throw new RangeError('Command ID space exhausted');
     if (this._commands.size >= MAX_COMMAND_RECEIPTS) {
       for (const [id, receipt] of this._commands) {
-        if (receipt.waiters.size === 0) { this._commands.delete(id); break; }
+        if ((receipt.waiters?.size ?? 0) === 0) { this._commands.delete(id); break; }
       }
     }
     const id = this._nextCommandId++;
-    this._commands.set(id, { command, waiters: new Set() });
+    // Keep an own field so lazy receipt reads cannot invoke inherited accessors.
+    this._commands.set(id, { command, waiters: undefined });
     return id;
   }
 
@@ -513,7 +514,7 @@ export class OPM {
   private _settleCommand(receipt: CommandReceipt, outcome: CommandEvent | Error): void {
     if (receipt.outcome !== undefined) return;
     receipt.outcome = outcome;
-    for (const settle of [...receipt.waiters]) settle(outcome);
+    if (receipt.waiters !== undefined) for (const settle of [...receipt.waiters]) settle(outcome);
   }
 
   /** @internal */
@@ -866,6 +867,7 @@ export class OPM {
       if (this._commandWaiterCount >= MAX_COMMAND_WAITERS) throw new Error('Too many pending command waits');
     } catch (error) { return Promise.reject(error); }
     return new Promise<CommandEvent>((resolve, reject) => {
+      const waiters = receipt.waiters ??= new Set<(outcome: CommandEvent | Error) => void>();
       let active = true;
       let timer: Parameters<typeof clearTimeout>[0];
       // An omitted outcome marks cancellation; its reason need not be an Error.
@@ -878,7 +880,7 @@ export class OPM {
         active = false;
         clearTimeout(timer);
         try { if (signal) EventTarget.prototype.removeEventListener.call(signal, 'abort', abort); } catch { /* Cleanup must still settle every waiter. */ }
-        receipt.waiters.delete(settle);
+        waiters.delete(settle);
         this._commandWaiterCount--;
         if (outcome === undefined) reject(reason);
         else if (outcome instanceof Error) reject(outcome);
@@ -887,7 +889,7 @@ export class OPM {
       const settle = (outcome: CommandEvent | Error) => finish(outcome);
       const abort = () => finish();
       this._commandWaiterCount++;
-      receipt.waiters.add(settle);
+      waiters.add(settle);
       timer = setTimeout(() => finish(new DOMException('Command acknowledgement timed out', 'TimeoutError')), timeout);
       try {
         if (signal) EventTarget.prototype.addEventListener.call(signal, 'abort', abort, { once: true });
