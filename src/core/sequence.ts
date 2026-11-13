@@ -386,7 +386,8 @@ export function estimateSequenceCapacity(events: readonly SequenceEvent[], optio
 function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; right: Float32Array }): ChunkedSequenceRender {
   const { score, engine, maxVoices, queue, capacity } = plan;
   let { signal } = plan;
-  let synth: Synth | undefined = score.noteCount === 0 ? undefined : new Synth(capacity.sampleRate, maxVoices, engine);
+  // A frozen score cannot admit more voices than its total note count.
+  let synth: Synth | undefined = score.noteCount === 0 ? undefined : new Synth(capacity.sampleRate, Math.min(maxVoices, score.noteCount), engine);
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   let left: Float32Array | undefined = output?.left ?? new Float32Array(capacity.chunkFrames);
   let right: Float32Array | undefined = output?.right ?? new Float32Array(capacity.chunkFrames);

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Bounded offline pools by total score notes
+
+- Offline renderers cap their private Synth pool at the smaller of validated polyphony and total note count. The frozen score cannot submit additional notes; public capacity results, validation and stealing behavior remain unchanged.
+- Paired Node.js 26 standard-profile measurements at 8 kHz made one-/four-note renderer setup about 35%/19% faster at polyphony 8 and 71%/63% at polyphony 32. Complete short renders improved about 17–21%/5–7% and 52%/34%, respectively; 32-note controls varied within 1.5%.
+- All 432 complete stereo PCM/capacity/diagnostic comparisons matched across rates, qualities, stealing policies, sparse/dense scores, live controls, cancellation, noise and tuning.
+
 ### Skipped unused synth pools for empty renders
 
 - Fully validated empty scores now emit their existing silent tail directly, without constructing an unused Synth/voice pool. Chunk reuse, diagnostics, cancellation and abort behavior remain unchanged; captured native fills still overwrite consumer-mutated buffers and reject detached storage.
