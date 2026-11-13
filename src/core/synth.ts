@@ -666,8 +666,8 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
     } else if (active.envelopeEdited[op]) {
       if (active.releaseTime < 0 && sustainTimes[op] === 0 && sustainDb[op] > FLOOR_DB &&
           time - active.envelopeStart[op] >= attackTimes[op] + decayTimes[op]) {
-        // Match edited gainAt's exponential; leave the zero-gain render path unchanged.
-        gain = fastExp2(sustainDb[op] * DB_TO_LOG2_GAIN);
+        // Edits cache gainAt's exponential; pristine patch gains keep their canonical power.
+        gain = sustainGain[op];
       } else {
         steady = false;
         exact |= 1 << op;
@@ -2026,7 +2026,7 @@ export class Synth {
         active.decayTimes[op] = operatorDuration(adsr.d, active.note, keyScale);
         if (active.attackTimes[op] === 0 && active.decayTimes[op] === 0) active.decayTimes[op] = 1 / this.sampleRate;
         active.sustainDb[op] = adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(adsr.s));
-        active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : 10 ** (active.sustainDb[op] / 20);
+        active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : fastExp2(active.sustainDb[op] * DB_TO_LOG2_GAIN);
         active.releaseTimes[op] = operatorDuration(adsr.r, active.note, keyScale);
         setSustainRate(active, op, Object.hasOwn(adsr, 'sr') ? adsr.sr : undefined, active.note, keyScale, this.sampleRate * this.oversample);
         if (active.releaseTime >= 0) {

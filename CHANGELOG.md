@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused edited sustain gains
+
+- Live ADSR edits cache their existing fast exponential in the voice's existing sustainGain slots. Edited held operators read that value instead of reevaluating it when another operator still requires exact envelope traversal. Pristine patch gains retain their canonical power calculation; existing pooled-note admission restores it before clearing edit flags. No voice field, allocation, branch or approximation is added to rendering.
+- Paired fresh-process Node.js 26 measurements with both pair orders reduced tested sixteen-voice mixed edited-envelope render cost by 3.0–3.9% for algorithm 7 and 2.1–3.1% for algorithm 0 across eco/standard/high quality. Unedited, fully held and fully moving controls ranged from 0.7% faster to 1.6% slower. Fully held envelopes already bypass repeated preparation, so these are workload-/host-dependent mixed-envelope gains, not universal synthesis, GC or deadline guarantees.
+- All 2,160 stereo PCM segments matched exactly across qualities, rates, algorithms, sine/noise operators, sustain floors, edits, ramps, release, quietest stealing, panic and pooled reuse. All 4,320 inspected state snapshots validated the edited cache against the original fastExp2 formula and normalized only those derived slots for comparison; other inspected data and all 144 lifecycle runs matched. Existing ADSR, sustain-rate and recycled-patch regressions remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Lazy expressive MIDI export channels
 
 - Materialize each expressive export channel's active-owner Map, default-modulation Set and neutral expression record together at its first note onset, instead of allocating all three for sixteen channels up front. Dense own undefined slots retain channel bounds and prevent inherited indexed lookups; state remains private per export and survives silent gaps. Ownership, overlapping-state conflicts, FIFO pitch/pressure rules and wire event ordering remain unchanged.
