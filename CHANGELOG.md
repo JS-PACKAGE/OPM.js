@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped automatic-ID duplicate scans
+
+- Search active note IDs only when the caller supplied an ID. Before automatic allocation the request ID is undefined, so it cannot match any admitted positive integer; explicit validation, monotonic allocation and exhaustion checks are unchanged.
+- Paired Node.js 26 measurements of burst admission reduced automatic-ID time by about 3% at eight voices and 10% at 32. Explicit-ID 32-voice controls improved 6–9%; one-voice controls varied within 0.7%. These isolate admission, not render throughput.
+- Returned IDs, complete stereo PCM, terminal callbacks, stolen IDs and active ownership matched across 270 stages covering three quality/stealing profiles, capacities, automatic/mixed explicit IDs and duplicate rejection. Existing stealing/terminal-event regressions cover the affected admission paths.
+
 ### Reused pooled oscillator constants
 
 - Reuse waveform codes, held-noise increments and detune/rate frequency scales when a pooled slot receives the same immutable prepared voice. Admission still resets note-dependent frequencies, noise history and kernel selection; different patches refresh every constant.

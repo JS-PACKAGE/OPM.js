@@ -1563,7 +1563,7 @@ export class Synth {
     }
     if (id === undefined && this.nextId > Number.MAX_SAFE_INTEGER) throw new RangeError('Note ID space exhausted');
     if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0)) throw new RangeError('id must be a positive safe integer');
-    for (const active of this.voices) if (active.id === id) throw new RangeError('id already active');
+    if (id !== undefined) for (const active of this.voices) if (active.id === id) throw new RangeError('id already active');
     const stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
     if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
     if (id === undefined) id = this.nextId++;
