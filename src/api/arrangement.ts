@@ -395,16 +395,33 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       }
       admitGains(limit);
       const played = nowBeat();
-      changes = changes.filter((change, index) => index === changes.length - 1 || changes[index + 1]!.beat > played + EPSILON);
-      gains = gains.filter((change, index) => {
-        for (let next = index + 1; next < gains.length; next++) {
+      const boundary = played + EPSILON, changeCount = changes.length;
+      let kept = 0;
+      for (let index = 0; index < changeCount; index++) {
+        if (index === changeCount - 1 || changes[index + 1]!.beat > boundary) {
+          if (kept !== index) changes[kept] = changes[index];
+          kept++;
+        }
+      }
+      if (kept !== changeCount) changes.length = kept;
+      const gainCount = gains.length;
+      kept = 0;
+      // Rewriting earlier slots leaves the later-history lookahead intact.
+      for (let index = 0; index < gainCount; index++) {
+        const change = gains[index];
+        let keep = true;
+        for (let next = index + 1; next < gainCount; next++) {
           const later = gains[next]!;
           // Every writer keeps beat order, so the remaining suffix is future too.
-          if (later.beat > played + EPSILON) break;
-          if (later.layer === change.layer && later.beat <= played + EPSILON) return false;
+          if (later.beat > boundary) break;
+          if (later.layer === change.layer && later.beat <= boundary) { keep = false; break; }
         }
-        return true;
-      });
+        if (keep) {
+          if (kept !== index) gains[kept] = change;
+          kept++;
+        }
+      }
+      if (kept !== gainCount) gains.length = kept;
       if (state === 'running') timer = setTimeout(pump, interval * 1000);
     } catch (error) { fail(error); }
   }

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### In-place Arrangement history pruning
+
+- Pump housekeeping now compacts private section/gain histories in place, avoiding two filter closures and replacement arrays per poll. Preserve the original retention predicates and later-history lookahead; only earlier slots are rewritten, with no escaping array aliases or new scheduler state.
+- Paired fresh-process Node.js 26 controlled-clock, stub-timer measurements with empty layers reduced idle pump cost by about 21–48% (roughly 36–81 ns/call), future-history cases by 13–18%, and expired-history cases by 34–44% across 1/4/16 layers. Native timer and audio synthesis costs are excluded.
+- All 45 complete stereo PCM/worklet-message/gain-command/snapshot/lifecycle cases matched through the OPM/processor Node harness across qualities, layer counts, section changes, same-boundary retargets, pause/restart and live tempo edits, with no scheduling or DSP errors.
+
 ### In-place Arrangement terminal queue cleanup
 
 - Terminal cleanup now compacts only the removed gate's command entries in the private queue, avoiding a filter closure and replacement array. Preserve the unchanged prefix, stable scheduling order, shared layer continuity and existing priority-rejection behavior; no queue-array aliases escape.
