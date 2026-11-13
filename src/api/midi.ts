@@ -235,11 +235,12 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       return;
     }
     if (controller === 64) {
+      const on = value >= 64;
       const owners = sustained.get(input) ?? new Set<number>();
-      if (value >= 64) owners.add(channel); else owners.delete(channel);
+      if (on) owners.add(channel); else owners.delete(channel);
       sustained.set(input, owners);
-      // One physical pedal state is the union over adapter inputs for the part.
-      performance.sustain(channel, pedalOn(channel));
+      // Recheck after resolving sustain: its getter may reenter cleanup.
+      performance.sustain(channel, (on && sustained.get(input)?.has(channel)) || pedalOn(channel));
     } else if (controller === 1) performance.updatePartNotes(channel, { modulation: 1 + value / 127 });
     else if (controller === 7 || controller === 11) {
       if (controller === 7) state.volume = value / 127; else state.expression = value / 127;

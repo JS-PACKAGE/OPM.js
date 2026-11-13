@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Preferred-input MIDI pedal checks
+
+- Pedal-down checks its input's current ownership before scanning the union across ports. The check remains inside the sustain-call arguments, after method lookup, so a getter that resets, detaches or disposes the adapter cannot reuse stale ownership. Pedal-up, reset and disconnect retain their original union traversal and Set ordering; no retained field, buffer, collection or cross-message cache is added.
+- Paired fresh-process Node.js 26 registered-listener runs with both pair orders raised single-input pedal-down throughput by 2.6–9.1% (CPU 2.4–9.1%). When the down owner was last among 32 populated input states, wall throughput was 4.47–4.58 times higher (CPU 4.45–4.53); 32-input toggling improved 53.2–55.7% (CPU 53.0–55.6%) and single-input toggling 1.1–1.6%. Pedal-up medians were 0.8–3.7% slower and CC121 1.4–2.8% slower; first-owner down among 32 inputs ranged from 4.6% slower to 9.6% higher. These are workload-/host-dependent synthetic-host dispatch medians, not general browser/device, rendering, allocation, GC or deadline guarantees.
+- Matching real Performance/OPM/processor stacks matched 352 lifecycles, 91,168 public checkpoints and 2,464 stereo PCM blocks. Coverage includes every pedal value 0..127 on a live input, 1/2/8/32 inputs, 1/16 parts, mixed/shared ownership, reset, reconnect and finite method-body/getter reentrancy through release, disposal, toggle, reset, detach and errors. Two late-owner down messages reduced native Set membership checks from 64 to 2; two all-up messages retained 64 checks. All 28 live MIDI tests pass, including a regression proving getter-triggered cleanup cannot leave later foreign keys pedal-latched. Scoped A/C review is recorded in SECURITY.md; physical-device acceptance remains unverified.
+
 ### Live MIDI cleanup prefixes
 
 - Channel cleanup and input detachment build their existing NUL-delimited ownership prefix once per request instead of rebuilding it through a predicate for each key. Global cleanup uses the same traversal without a predicate. Force/prune ordering, pedal union, failed-release retries and reentrant cleanup keep their original behavior; no persistent field, buffer, collection or cache is added.

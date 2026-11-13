@@ -123,6 +123,25 @@ test('channel cleanup and disconnect isolate prefix-similar input IDs and channe
   }
 });
 
+test('pedal cleanup from a sustain-method getter cannot latch later foreign keys', async () => {
+  const { opm, performance, input, adapter, errors } = await setup();
+  const sustain = performance.sustain;
+  let armed = true;
+  Object.defineProperty(performance, 'sustain', { get() {
+    if (armed) { armed = false; adapter.dispose(); }
+    return sustain;
+  } });
+  try {
+    input.send(0xb0, 64, 127);
+    assert.equal(adapter.snapshot.disposed, true);
+    assert.equal(performance.getPart(0).sustain, false);
+    const host = performance.noteOn(0, 84);
+    performance.noteOff(0, host);
+    assert.deepEqual(performance.getPart(0).keys, []);
+    assert.deepEqual(errors, []);
+  } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+});
+
 test('stale ownership is pruned at its bound without snapshots on every packet or reused-slot loss', async () => {
   const { opm, performance, input, adapter, errors } = await setup();
   try {
