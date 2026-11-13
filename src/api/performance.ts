@@ -392,12 +392,12 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       }
       if (failure !== undefined) throw failure;
     },
-    noteOn(index, note, input = {}) {
+    noteOn(index, note, input = undefined) {
       const p = part(index);
       if (admitting) throw new Error('Performance admission cannot be reentered');
-      const rawNote = sequenceOwnData(input, ['velocity'], [], 'performance note');
+      const rawNote = input === undefined ? undefined : sequenceOwnData(input, ['velocity'], [], 'performance note');
       const pitch = number(note, 0, 127, 'note');
-      const velocity = number(rawNote.velocity === undefined ? 1 : rawNote.velocity, 0, 1, 'velocity');
+      const velocity = rawNote === undefined ? 1 : number(rawNote.velocity === undefined ? 1 : rawNote.velocity, 0, 1, 'velocity');
       if (totalKeys >= maxKeys || p.keys.size >= perPart) throw new RangeError('Performance key capacity exceeded');
       if (!Number.isSafeInteger(nextKey)) throw new RangeError('Performance key ID space exhausted');
       const key: Key = { key: nextKey, note: pitch, velocity, held: true, gateId: null, controls: {} };
@@ -413,12 +413,15 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       } catch (error) { removeKey(p, key.key); throw error; }
       return key.key;
     },
-    noteOff(index, id, input = {}) {
+    noteOff(index, id, input = undefined) {
       const p = part(index);
       number(id, 1, Number.MAX_SAFE_INTEGER, 'key', true);
-      const options = sequenceOwnData(input, ['force'], [], 'performance note-off options');
-      if (options.force !== undefined && typeof options.force !== 'boolean') throw new TypeError('force must be boolean');
-      const force = options.force === true;
+      let force = false;
+      if (input !== undefined) {
+        const options = sequenceOwnData(input, ['force'], [], 'performance note-off options');
+        if (options.force !== undefined && typeof options.force !== 'boolean') throw new TypeError('force must be boolean');
+        force = options.force === true;
+      }
       const key = p.keys.get(id);
       if (!key || !key.held && !force) return false;
       key.held = false;
