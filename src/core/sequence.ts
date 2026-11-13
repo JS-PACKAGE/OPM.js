@@ -58,6 +58,9 @@ const DEFAULT_PREPARE_OPTIONS = Object.freeze({ voices: undefined });
 // Only our frozen output arrays may reuse validation metadata, never caller inputs.
 const scoreSnapshots = new WeakMap<object, SequenceSnapshot>();
 
+const typedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Float32Array.prototype) as object, 'length')!.get!;
+const typedArrayFill = Float32Array.prototype.fill;
+
 export function sampleRateValue(value: number): number {
   if (!Number.isInteger(value) || value < 8000 || value > 96000) {
     throw new RangeError('sampleRate must be an integer in 8000..96000');
@@ -383,13 +386,13 @@ export function estimateSequenceCapacity(events: readonly SequenceEvent[], optio
 function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; right: Float32Array }): ChunkedSequenceRender {
   const { score, engine, maxVoices, queue, capacity } = plan;
   let { signal } = plan;
-  let synth: Synth | undefined = new Synth(capacity.sampleRate, maxVoices, engine);
+  let synth: Synth | undefined = score.noteCount === 0 ? undefined : new Synth(capacity.sampleRate, maxVoices, engine);
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   let left: Float32Array | undefined = output?.left ?? new Float32Array(capacity.chunkFrames);
   let right: Float32Array | undefined = output?.right ?? new Float32Array(capacity.chunkFrames);
   const state = new Map<number, 'pending' | 'started' | 'released'>();
   for (const event of score.events) if (event.type === 'note') state.set(event.id, 'pending');
-  synth.onVoiceEnded = id => { state.delete(id); };
+  if (synth) synth.onVoiceEnded = id => { state.delete(id); };
   let position = 0;
   let cursor = 0;
   let cancelled = false;
@@ -410,10 +413,10 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
     next() {
       if (cancelled || position >= capacity.frames) return { done: true, value: undefined };
       if (aborted?.call(signal)) { renderer.cancel(); throw new DOMException('Sequence render aborted', 'AbortError'); }
-      const activeSynth = synth!, leftBuffer = left!, rightBuffer = right!;
+      const activeSynth = synth, leftBuffer = left!, rightBuffer = right!;
       const offset = position;
       const end = output ? capacity.frames : Math.min(offset + capacity.chunkFrames, capacity.frames);
-      while (cursor < queue.length && queue[cursor].frame < end) {
+      if (activeSynth) while (cursor < queue.length && queue[cursor].frame < end) {
         const next = queue[cursor];
         if (next.frame > position) {
           activeSynth.render(leftBuffer, rightBuffer, position - offset, next.frame - position);
@@ -435,7 +438,18 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
           else if (activeSynth.noteOff(event.id)) state.set(event.id, 'released');
         } else activeSynth.updateNote(event.id, event.controls);
       }
-      if (position < end) activeSynth.render(leftBuffer, rightBuffer, position - offset, end - position);
+      if (position < end) {
+        if (activeSynth) activeSynth.render(leftBuffer, rightBuffer, position - offset, end - position);
+        else {
+          // Empty scores still overwrite borrowed PCM and retain detached-buffer rejection.
+          const start = position - offset, stop = end - offset;
+          if (stop > typedArrayLength.call(leftBuffer) || stop > typedArrayLength.call(rightBuffer)) {
+            throw new RangeError('render requires an in-bounds offset and length');
+          }
+          typedArrayFill.call(leftBuffer, 0, start, stop);
+          typedArrayFill.call(rightBuffer, 0, start, stop);
+        }
+      }
       position = end;
       // Drop terminal private state, not PCM still held by the consumer.
       if (position === capacity.frames) cancel();

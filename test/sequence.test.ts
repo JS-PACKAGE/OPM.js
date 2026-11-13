@@ -347,6 +347,30 @@ test('borrowed chunks concatenate bit-exactly across stop/onset/control boundari
   }
 });
 
+test('empty sequences overwrite borrowed PCM without consumer methods and reject detached buffers', () => {
+  const renderer = renderSequenceChunks([], { sampleRate, chunkFrames: 7 });
+  const first = renderer.next();
+  if (first.done) throw new Error('Expected an empty-score PCM chunk');
+  for (let index = 0; index < first.value.left.length; index++) {
+    first.value.left[index] = NaN;
+    first.value.right[index] = Infinity;
+  }
+  let calls = 0;
+  Object.defineProperty(first.value.left, 'fill', { get() { calls++; throw new Error('consumer fill getter'); } });
+  const second = renderer.next();
+  if (second.done) throw new Error('Expected a second PCM chunk');
+  assert.ok(second.value.left.every(value => value === 0));
+  assert.ok(second.value.right.every(value => value === 0));
+  assert.equal(calls, 0);
+  assert.equal(second.value.offset, first.value.frames);
+  const buffer = second.value.left.buffer as ArrayBuffer;
+  structuredClone(buffer, { transfer: [buffer] });
+  assert.throws(() => renderer.next(), RangeError);
+  renderer.cancel();
+  assert.equal(renderer.next().done, true);
+  assert.equal(renderer.diagnostics.errors, 0);
+});
+
 test('live ADSR changes retain extended and reanchored release tails in offline output', () => {
   const voice = toneVoice(0.03);
   const first = voice.ops.map(op => ({ ...op.adsr, r: 0.2 })) as [ADSR, ADSR, ADSR, ADSR];

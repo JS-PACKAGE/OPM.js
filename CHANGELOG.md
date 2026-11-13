@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped unused synth pools for empty renders
+
+- Fully validated empty scores now emit their existing silent tail directly, without constructing an unused Synth/voice pool. Chunk reuse, diagnostics, cancellation and abort behavior remain unchanged; captured native fills still overwrite consumer-mutated buffers and reject detached storage.
+- Paired Node.js 26 measurements reduced empty full-render time by about 92% in tested standard/high profiles at 8 kHz. One-/31-note controls varied within 0.8%; nonempty synthesis still uses the normal engine.
+- All 94 empty PCM/chunk/cancellation/rejection comparisons and nine nonempty complete renders matched across rates, qualities, chunk sizes and voice limits. A regression checks borrowed-buffer overwrite, hostile fill getters and detached-buffer rejection.
+
 ### Shared immutable sequence capacity limits
 
 - Reuse one complete frozen limits record across capacity results instead of allocating/freezing the same constant fields on every preflight. Each outer capacity result remains fresh; all exposed bounds and property descriptors are unchanged.
