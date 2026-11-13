@@ -271,10 +271,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
     undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
   ];
-  const pedals = new Array<boolean>(16).fill(false);
+  let pedals = 0;
   // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
   const owned: (Set<HeldNote> | undefined)[] = preserve ? Array.from({ length: 16 }, () => undefined) : [];
-  const released = new Array<boolean>(16).fill(false);
+  let released = 0;
   // Initial bend-range validation is unconditional, even when these snapshots are skipped.
   const states = preserve ? Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 })) : [];
   const currentPrograms = new Uint8Array(16);
@@ -293,7 +293,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     held.event.duration = (tick - held.tick) / ppqn;
     liveCount--;
     if (preserve) owned[held.channel]!.delete(held);
-    released[held.channel] = true;
+    released |= 1 << held.channel;
   }
   for (const item of wire) {
     const beat = item.tick / ppqn;
@@ -332,7 +332,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           append({ type: 'control', id: held.event.id, beat, controls: { modulation: held.modulation } });
         }
         continue;
-      } else if (released[item.channel]) {
+      } else if (released & (1 << item.channel)) {
         warn('release-tail-controls', 'Channel expression after a closed gate is applied only to held/sustained gates and future notes; unknown synthesis release tails are not reconstructed');
       }
       if (item.command === 0xe0) {
@@ -355,8 +355,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         controls: isModulation ? { modulation: held.modulation ?? controls.modulation } : { ...controls },
       });
     } else if (item.kind === 'sustain') {
-      pedals[item.channel] = item.b >= 64;
-      if (!pedals[item.channel]) {
+      const mask = 1 << item.channel;
+      if (item.b >= 64) pedals |= mask;
+      else {
+        pedals &= ~mask;
         const pending = sustained[item.channel];
         if (pending) {
           for (const held of pending) close(held, item.tick);
@@ -393,7 +395,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       if (!queue || queue.head === queue.notes.length) throw new RangeError('MIDI note-off has no owned note-on');
       const held = queue.notes[queue.head++];
       if (queue.head === queue.notes.length) queues.delete(key);
-      if (pedals[item.channel]) {
+      if (pedals & (1 << item.channel)) {
         let pending = sustained[item.channel];
         if (!pending) { pending = new Set(); sustained[item.channel] = pending; }
         pending.add(held);

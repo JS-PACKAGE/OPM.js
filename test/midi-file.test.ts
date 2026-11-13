@@ -68,12 +68,14 @@ test('sustain gates defer releases independently of repeated-pitch key ownership
 });
 
 test('channel sustain does not hold another channel and notes can pair across format 1 tracks', () => {
-  const bytes = smf([
-    [0, 0xb0, 64, 127, 0, 0x90, 60, 127, 0, 0x91, 60, 127, 0x83, 0x60, 0xff, 0x2f, 0],
-    [120, 0x80, 60, 0, 0, 0x81, 60, 0, 120, 0xb0, 64, 0, ...end],
-  ]);
-  const result = importMidiFile(bytes, { channelVoices: { 0: 'brass', 1: 'brass' } });
-  assert.deepEqual(result.events.map(event => event.type === 'note' ? event.duration : -1), [0.5, 0.25]);
+  for (const channel of [0, 14]) {
+    const bytes = smf([
+      [0, 0xb0 | channel, 64, 127, 0, 0x90 | channel, 60, 127, 0, 0x90 | (channel + 1), 60, 127, 0x83, 0x60, 0xff, 0x2f, 0],
+      [120, 0x80 | channel, 60, 0, 0, 0x80 | (channel + 1), 60, 0, 120, 0xb0 | channel, 64, 0, ...end],
+    ]);
+    const result = importMidiFile(bytes, { channelVoices: { [channel]: 'brass', [channel + 1]: 'brass' } });
+    assert.deepEqual(result.events.map(event => event.type === 'note' ? event.duration : -1), [0.5, 0.25]);
+  }
 });
 
 test('unclosed keys and sustain require an explicit bounded end-of-file closure policy', () => {

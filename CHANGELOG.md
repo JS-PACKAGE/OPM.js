@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Compact MIDI import channel flags
+
+- Track sustain pedals and closed-gate history with two bounded channel bitmasks instead of allocating/filling two 16-element boolean arrays per import. Channel independence, repeated pedal updates and release-tail warnings are unchanged.
+- Paired Node.js 26 measurements reduced tested small note-only import time by about 5–6% and small expressive imports by 2–3%. Larger/pedal-heavy controls varied within 2.7%, without a consistent throughput gain.
+- All 192 complete-result/rejection comparisons matched across 1/4/16 channels, pedals, duplicate pitches, expression policies and EOF closure policies. The cross-track channel-isolation regression now also exercises channels 14/15.
+
 ### Lazy MIDI expression ownership sets
 
 - In preserved-expression imports, allocate a channel's fanout set only when its first note arrives. Pre-onset controllers still update channel snapshots, closed gates still leave fanout, and later notes reuse the same set.
