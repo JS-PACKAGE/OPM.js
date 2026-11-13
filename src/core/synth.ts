@@ -2098,10 +2098,15 @@ export class Synth {
       } else {
         const modIndex = active.modIndex, feedbackScale = active.feedbackScale, carrierGain = active.carrierGain;
         const carrierCount = graph.carriers.length;
+        const operatorStart = active.operatorStart, operatorFrames = active.operatorFrames;
+        const operatorEnd = operatorStart + operatorFrames;
+        const operatorFrom = active.operatorFrom, operatorTargets = active.operatorTargets;
         let previous = active.previous, older = active.older;
         for (let sub = 0; sub < oversample; sub++) {
           const position = active.elapsed + sub / oversample;
           if (dynamicPitch) stepPitch(active, sub, oversample, frame);
+          const operatorDone = !operatorRamping || operatorFrames === 0 || position >= operatorEnd;
+          const operatorOffset = operatorDone ? 0 : position - operatorStart;
           for (let op = 0; op < 4; op++) {
             if (levels[op] === 0) {
               // A zero static level never sounds (live levels only multiply it): skip
@@ -2113,8 +2118,10 @@ export class Synth {
               if (!Number.isFinite(wrapped)) return false;
               continue;
             }
+            // Share the ramp clock/bounds, retaining each multiply-before-divide order.
             const factor = !operatorRamping ? frame[op] : levels[op] *
-              rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, position) *
+              (operatorDone ? operatorTargets[op] : operatorFrom[op] +
+                (operatorTargets[op] - operatorFrom[op]) * operatorOffset / operatorFrames) *
               (targeted ? amGains[op] : amGain);
             const amplitude = gains[op + sub * 4] * factor;
             const code = waveforms[op];

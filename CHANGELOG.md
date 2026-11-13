@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared operator-level ramp clocks
+
+- Generic oscillator frames now share operator-level ramp bounds and elapsed time across all four operators. Each operator retains the original multiply-before-divide interpolation order, including fractional-frame endpoints; static-level specialized kernels are unchanged.
+- Paired fresh-process Node.js 26 measurements at 48 kHz reduced 16-voice standard sine/noise ramp rendering time by about 3.5–4.3%. Mixed periodic ramps varied from 0.8% slower to 3.5% faster; static-level controls varied within 2.6%, so gains depend on the workload.
+- All 4,320 complete stereo PCM/phase/feedback/lifecycle comparisons matched across algorithms, qualities, waveform mixtures, fractional/tiny ramp spans, live PM/glide edits, stealing, release and pooled patch reuse.
+
 ### Skipped note-only offline ownership maps
 
 - Privately validated note-only scores no longer allocate/populate a pending-note Map or install its terminal cleanup callback. These scores cannot cancel a pending onset; automatic stops for stolen/rejected notes are harmless because score IDs are unique. Mixed control/stop scores retain their ownership tracking.
