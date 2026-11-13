@@ -122,6 +122,8 @@ interface WireEvent { tick: number; track: number; kind: 'on' | 'off' | 'sustain
 type BeatNote = Extract<BeatSequenceEvent, { type: 'note' }>;
 interface HeldNote { event: BeatNote; tick: number; channel: number; modulation?: number }
 interface NoteQueue { notes: HeldNote[]; head: number }
+interface ImportExpressionState { volume: number; expression: number; pitch: number; pan: number; modulation: number }
+const DEFAULT_IMPORT_EXPRESSION: Readonly<ImportExpressionState> = Object.freeze({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 });
 
 function expressionPolicy(config: Record<string, unknown>): { preserve: boolean; range: number } {
   const controls = config.controls === undefined ? 'omit' : config.controls;
@@ -277,7 +279,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   const owned: (Set<HeldNote> | undefined)[] = preserve ? Array.from({ length: 16 }, () => undefined) : [];
   let released = 0;
   // Initial bend-range validation is unconditional, even when these snapshots are skipped.
-  const states = preserve ? Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 })) : [];
+  const states: (ImportExpressionState | undefined)[] = preserve ? [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ] : [];
   const currentPrograms = new Uint8Array(16);
   // Own placeholders keep lazy channel writes clear of inherited index accessors.
   const rpn: (MidiRpnState | undefined)[] = preserve ? [
@@ -325,7 +330,6 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         preserved.set('pitch-bend-range', (preserved.get('pitch-bend-range') ?? 0) + 1);
       } else warn('ignored-channel', 'Unsupported channel messages (including banks, NRPN and unselected data entry) were omitted');
     } else if (item.kind === 'expression') {
-      const state = states[item.channel];
       let controls: NoteControls;
       // Set by the modulation branch itself, so no property read can disagree with it.
       let isModulation = false;
@@ -341,6 +345,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       } else if (released & (1 << item.channel)) {
         warn('release-tail-controls', 'Channel expression after a closed gate is applied only to held/sustained gates and future notes; unknown synthesis release tails are not reconstructed');
       }
+      // Only channel-wide mutations need state; poly pressure never changes channel defaults.
+      const state = states[item.channel] ?? (states[item.channel] = { volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 });
       if (item.command === 0xe0) {
         const bend = item.b * 128 + item.a - 8192;
         state.pitch = bend / (bend < 0 ? 8192 : 8191) * (rpn[item.channel]?.range ?? range);
@@ -378,7 +384,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       const event: BeatNote = { type: 'note', id: nextId++, beat, duration: 0, note: item.a, velocity: item.b / 127, voice: name === undefined ? fallback : name as string };
       append(event);
       if (preserve) {
-        const state = states[item.channel];
+        const state = states[item.channel] ?? DEFAULT_IMPORT_EXPRESSION;
         append({ type: 'control', id: event.id, beat, controls: {
           pitch: state.pitch, expression: state.volume * state.expression, pan: state.pan, modulation: state.modulation,
         } });

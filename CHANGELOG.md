@@ -4,6 +4,13 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy MIDI expression channel snapshots
+
+- Preserved SMF imports now create expression state only on a channel's first channel-wide update, replacing eager construction of sixteen records and its Array.from callback with dense own undefined placeholders. Onsets without updates read one private frozen neutral record and still emit fresh primitive-valued control objects; poly pressure remains key-owned. Mutable state stays fresh per import and bounded to sixteen channels.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced zero-/one-note preserved import cost by 18–22% and tested 64-note cases by 4–6%. Fully warmed dense controller cases stayed within 1.3%; sixteen-channel notes stayed within 1.5%, and sparse expression was 0.7–1.1% slower.
+- Fully warmed single-channel 1K-note imports were 1.1–2.7% slower. Unchanged legacy controls ranged from 5.3% faster to 3.7% slower; shorter warmup included a 7.1% slowdown in an empty-program-map control and 3.3% in a changed controller case. This is an explicit sparse-file allocation/setup tradeoff, not a universal import or synthesis/deadline gain.
+- All 8,479 complete import results, 1,724 rejection cases and 48 complete export files matched, with zero native/mapping metadata getter reads. Comparisons include pre-/held-/post-release changes across mixed neutral/modified channels, signed-zero ranges, fresh imports after returned-control mutation, multitrack ordering, sustain and malformed inputs. A consumer regression keeps channel expression, poly pressure and future-import defaults isolated. Scoped A/C review is recorded in SECURITY.md.
+
 ### Smaller SMF wire records
 
 - Remove the private import ordinal and redundant per-track loop counter. Stable tick/track sorting retains source order for ties, while the separate all-message budget counter and export priority/ordinal ordering remain unchanged.

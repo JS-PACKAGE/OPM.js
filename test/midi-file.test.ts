@@ -319,6 +319,28 @@ test('expressive import snapshots pre-onset state, including silent expression, 
   assert.ok(Object.isFrozen(result.lossSummary.preservedControls[0]));
 });
 
+test('channel expression and poly pressure remain isolated across channels and imports', () => {
+  const config = { ...expressive, channelVoices: { 0: 'brass', 15: 'brass' } };
+  const bytes = smf([[
+    0, 0xbf, 7, 64, 0, 0xbf, 11, 32, 0, 0xbf, 10, 127,
+    0, 0xdf, 127, 0, 0xef, 127, 127,
+    0, 0x9f, 60, 127, 0, 0x90, 62, 127,
+    60, 0xa0, 62, 127, 0, 0x90, 64, 127,
+    60, 0x8f, 60, 0, 0, 0x80, 62, 0, 0, 0x80, 64, 0, ...end,
+  ]]);
+  const neutral = { pitch: 0, expression: 1, pan: 0, modulation: 1 };
+  const expected = [
+    [1, 0, { pitch: 2, expression: 64 / 127 * (32 / 127), pan: 1, modulation: 2 }],
+    [2, 0, neutral], [2, 0.125, { modulation: 2 }], [3, 0.125, neutral],
+  ];
+  const first = importMidiFile(bytes, config);
+  assert.deepEqual(controlRows(first.events), expected);
+  for (const event of first.events) if (event.type === 'control') Object.assign(event.controls, { pitch: 48, expression: 0, pan: -1, modulation: 0 });
+  assert.deepEqual(controlRows(importMidiFile(bytes, config).events), expected);
+  const clean = smf([[0, 0x9f, 60, 127, 0, 0x90, 62, 127, 120, 0x8f, 60, 0, 0, 0x80, 62, 0, ...end]]);
+  assert.deepEqual(controlRows(importMidiFile(clean, config).events), [[1, 0, neutral], [2, 0, neutral]]);
+});
+
 test('preserved bends retain initial range until their channel selects and changes RPN', () => {
   const bytes = smf([[
     0, 0xef, 127, 127, 0, 0x9f, 60, 127,
