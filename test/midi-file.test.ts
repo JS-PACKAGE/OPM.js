@@ -149,6 +149,27 @@ test('all truncated prefixes, malformed framing and illegal running status rejec
   assert.throws(() => importMidiFile(trailing, mapped), /trailing/);
 });
 
+test('chunk tag mismatches take precedence over truncation in partial native views', () => {
+  const good = smf([end]), expected = importMidiFile(good, mapped);
+  const padded = new Uint8Array(good.length + 12);
+  padded.set(good, 5);
+  for (const source of [good, padded.subarray(5, 5 + good.length)]) {
+    assert.deepEqual(importMidiFile(source, mapped), expected);
+    for (const [offset, other] of [[0, 'MTrk'], [14, 'MThd']] as const) {
+      for (let length = 1; length <= 4; length++) {
+        const partial = source.subarray(0, offset + length);
+        assert.throws(() => importMidiFile(partial, mapped), RangeError);
+        const mismatch = partial.slice();
+        mismatch[offset + length - 1] ^= 1;
+        assert.throws(() => importMidiFile(mismatch, mapped), TypeError);
+      }
+      const swapped = source.slice();
+      swapped.set(Array.from(other, character => character.charCodeAt(0)), offset);
+      assert.throws(() => importMidiFile(swapped, mapped), TypeError);
+    }
+  }
+});
+
 test('SMF unsupported formats, timing, headers, tempo and meter errors reject explicitly', () => {
   assert.throws(() => importMidiFile(smf([end], 2)), /format/);
   assert.throws(() => importMidiFile(smf([end], 0, 0)), /PPQN/);

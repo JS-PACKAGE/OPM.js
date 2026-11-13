@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Bounded MIDI chunk-tag comparison
+
+- Complete matching MThd/MTrk tags use one bounded big-endian uint32 comparison instead of four individually checked byte/character comparisons. Short or nonmatching tags retain the original bytewise path, including mismatch-before-truncation error precedence. Native input authentication, logical view offsets and all parser budgets remain unchanged; no collection, buffer or cache is added.
+- Paired fresh-process Node.js 26 runs with both pair orders raised throughput for a tested format-1 file with 128 otherwise-empty tracks by 25.1–25.3%. Other import-profile medians ranged from 0.5% slower to 1.6% faster, including one/sixteen-note, eight-track, dense, warning-heavy and expressive imports. These are workload-/host-dependent framing gains, not general MIDI-import, GC or deadline guarantees.
+- All 1,352 complete result/freeze-descriptor comparisons and 14,936 rejection comparisons matched, with zero caller getter reads. Coverage includes header extensions, all tag-byte substitutions, incomplete correct/mismatched prefixes, nonzero backing offsets, logical subviews, expression/program policies and input immutability. Native-read instrumentation for 128 empty tracks changed Uint8 reads from 1,028 to 512 and Uint32 reads from 129 to 258, including unchanged event/length reads. A consumer regression checks partial-view error classes and swapped chunk kinds. Scoped A/C review is recorded in SECURITY.md.
+
 ### Cached note-frequency retuning
 
 - Operator ratio/fixed-Hz edits and completed frequency ramps reuse the note's existing tuned frequency instead of repeating note-to-frequency conversion. Admission still initializes that value on every slot reuse; tuning changes explicitly refresh active voices and detached fades, including fixed-Hz playback before a later return to ratio mode. No field, lookup table, buffer or cross-note cache is added.

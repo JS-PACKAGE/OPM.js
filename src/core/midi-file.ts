@@ -105,7 +105,13 @@ class Reader {
   }
   u16(): number { this.need(2); const value = this.view.getUint16(this.offset); this.offset += 2; return value; }
   u32(): number { this.need(4); const value = this.view.getUint32(this.offset); this.offset += 4; return value; }
-  tag(expected: string): void {
+  tag(expected: 'MThd' | 'MTrk'): void {
+    if (this.end - this.offset >= 4 &&
+        this.view.getUint32(this.offset) === (expected === 'MThd' ? 0x4d546864 : 0x4d54726b)) {
+      this.offset += 4;
+      return;
+    }
+    // Preserve bytewise mismatch/truncation precedence for invalid tags.
     for (let index = 0; index < expected.length; index++) if (this.byte() !== expected.charCodeAt(index)) throw new TypeError(`Expected MIDI ${expected} chunk`);
   }
   vlq(): number {
