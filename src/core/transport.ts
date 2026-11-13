@@ -23,6 +23,8 @@ function stableTempoContext(length: number): boolean {
 
 // This private complete default is never returned or exposed to caller data.
 const DEFAULT_TIME_SIGNATURE = Object.freeze({ numerator: 4, denominator: 4 });
+// Numeric conversions alone reuse this private map; public normalization stays fresh.
+const DEFAULT_CONVERSION_TEMPO_MAP = Object.freeze([Object.freeze({ beat: 0, bpm: 120 })]);
 
 // Share field names only, never caller data or validation results.
 const TIME_SIGNATURE_FIELDS = ['numerator', 'denominator'] as const;
@@ -151,10 +153,15 @@ export function replaceTempoFrom(beat: number, bpm: number, map: readonly Readon
   // A spread literal defines own elements; push could reach inherited indexed accessors.
   return normalizeTempoMap([...points, { beat, bpm }]);
 }
+function conversionTempoMap(input?: readonly TempoPoint[]): readonly Readonly<TempoPoint>[] {
+  // Inherited hooks may observe fresh object identity, so keep their original path.
+  return input === undefined && stableTempoContext(1) ? DEFAULT_CONVERSION_TEMPO_MAP : readTempoMap(input);
+}
+
 /** Integral of 60/BPM across tempo boundaries. */
 export function beatsToSeconds(beat: number, tempoMap?: readonly TempoPoint[]): number {
   transportNumber(beat, 0, MAX_TRANSPORT_BEATS, 'beat');
-  return tempoSeconds(beat, readTempoMap(tempoMap));
+  return tempoSeconds(beat, conversionTempoMap(tempoMap));
 }
 
 /** Internal validated-map form avoids recopying a map on each scheduler tick. */
@@ -185,7 +192,7 @@ export function tempoSeconds(beat: number, map: readonly Readonly<TempoPoint>[])
 }
 
 export function secondsToBeats(seconds: number, tempoMap?: readonly TempoPoint[]): number {
-  const map = readTempoMap(tempoMap);
+  const map = conversionTempoMap(tempoMap);
   transportNumber(seconds, 0, tempoSeconds(MAX_TRANSPORT_BEATS, map), 'seconds');
   return tempoBeat(seconds, map);
 }

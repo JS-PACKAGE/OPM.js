@@ -125,6 +125,31 @@ test('piecewise tempo integral and inverse cross exact boundaries; meter uses qu
   assert.throws(() => barBeatToBeat({ bar: 1, beat: 7 }, { numerator: 6, denominator: 8 }), /within/);
 });
 
+test('default tempo conversions preserve inherited terminal-slot behavior across calls', () => {
+  const original = Object.getOwnPropertyDescriptor(Array.prototype, '1');
+  const identities = new WeakMap<object, number>();
+  let nextId = 0;
+  let observed: { first: number; second: number; inverse: number } | undefined;
+  try {
+    Object.defineProperty(Array.prototype, '1', {
+      configurable: true,
+      get(this: readonly { beat: number; bpm: number }[]) {
+        if (!Array.isArray(this) || this.length !== 1 || this[0]?.beat !== 0 || this[0]?.bpm !== 120) return undefined;
+        let id = identities.get(this);
+        if (id === undefined) { id = ++nextId; identities.set(this, id); }
+        return { beat: 2 + id / 4, bpm: 90 };
+      },
+      set(value: unknown) { Object.defineProperty(this, '1', { value, writable: true, configurable: true, enumerable: true }); },
+    });
+    observed = { first: beatsToSeconds(8), second: beatsToSeconds(8), inverse: secondsToBeats(1) };
+  } finally {
+    if (original) Object.defineProperty(Array.prototype, '1', original);
+    else Reflect.deleteProperty(Array.prototype, '1');
+  }
+  assert.deepEqual(observed, { first: 1.125, second: 1.25, inverse: 2 });
+  assert.equal(beatsToSeconds(8), 4);
+});
+
 test('actual worklet audio follows tempo-boundary gate conversion', async () => {
   const events: OPMEvent[] = [];
   const opm = await engine(events);

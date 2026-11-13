@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Private default tempo conversion map
+
+- Default `beatsToSeconds` / `secondsToBeats` calls reuse one private frozen 120-BPM map instead of allocating and freezing a point and array on every conversion. Public default normalization still returns fresh snapshots, and caller maps keep their original validation/identity paths. The existing context guard preserves fresh objects when inherited optional fields, terminal slots or a custom array prototype could observe them; integration/inversion arithmetic is unchanged.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced tested default forward conversion cost by 54–57% and inverse cost by 44–45%. Raw-map controls stayed within 0.8%; all controls ranged from 4.5% faster to 4.9% slower. Shorter warmup included 5.7% slower single-point snapshot inversion and 13.9% slower unchanged default normalization. These are host-/warmup-dependent helper results, not a universal scheduler, synthesis/deadline or GC claim.
+- All 4,746 numeric cases and 1,794 rejection cases matched exactly, including signed zero, subnormals, bounds, raw/normalized/linear maps, caller mutation and invalid/accessor inputs with zero input getter/coercion reads. Four inherited-context probes matched complete results, getter counts and observed object identities; a consumer regression preserves terminal-slot behavior across calls and restoration. Scoped A/C review is recorded in SECURITY.md.
+
 ### Lazy MIDI expression channel snapshots
 
 - Preserved SMF imports now create expression state only on a channel's first channel-wide update, replacing eager construction of sixteen records and its Array.from callback with dense own undefined placeholders. Onsets without updates read one private frozen neutral record and still emit fresh primitive-valued control objects; poly pressure remains key-owned. Mutable state stays fresh per import and bounded to sixteen channels.
