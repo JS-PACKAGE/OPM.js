@@ -198,7 +198,9 @@ const EVENT_ORDER = { stop: 0, note: 1, control: 2 } as const;
 
 /** Shared sample-frame ordering, including automatic releases and pending controls. */
 export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin = 0): { queue: SequenceFrameEvent[]; length: number } {
-  const onsets = new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
+  // Only privately registered immutable metadata can prove the non-note pass unnecessary.
+  const noteOnly = scoreSnapshots.get(score.events) === score && score.noteCount === score.events.length;
+  const onsets = noteOnly ? undefined : new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
   const queue: SequenceFrameEvent[] = [];
   let lastFrame = 0;
   let ordered = true;
@@ -213,16 +215,16 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
       previousEnd = endFrame;
     }
     const onset = { frame, order: EVENT_ORDER.note, event };
-    onsets.set(event.id, onset);
+    onsets?.set(event.id, onset);
     queue.push(onset);
     queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
     for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined));
     lastFrame = Math.max(lastFrame, endFrame + Math.ceil(release * sampleRate));
   }
-  for (const event of score.events) {
+  if (!noteOnly) for (const event of score.events) {
     if (event.type === 'note') continue;
-    const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets.get(event.id)!.frame)
+    const frame = event.type === 'control' ? Math.max(Math.round((origin + event.time) * sampleRate), onsets!.get(event.id)!.frame)
       : Math.round((origin + event.time) * sampleRate);
     const order = EVENT_ORDER[event.type];
     if (ordered && queue.length !== 0) {
@@ -234,7 +236,7 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     // Own read: an operatorADSR inherited from Object.prototype must not change the release bound.
     const adsr = event.type === 'control' ? ownControl(event.controls, 'operatorADSR') : undefined;
     if (adsr !== undefined) {
-      const onset = onsets.get(event.id)!;
+      const onset = onsets!.get(event.id)!;
       const note = onset.event;
       let release = 0;
       for (let index = 0; index < 4; index++) {

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped note-only onset lookup tables
+
+- For privately registered immutable note-only snapshots, omit the unused onset Map and second event traversal. Mixed scores and caller-constructed metadata keep the complete lookup/control path; queue objects, onset clamping and release bounds are unchanged.
+- Paired Node.js 26 measurements at 128/4,096 notes reduced queue assembly time by about 14–33% and capacity preflight by 13–32% across ordered, overlapping and reversed note-only scores. Mixed-event controls varied within 1%; these are planning costs, not synthesis throughput.
+- All 540 complete queue comparisons and 63 complete render comparisons matched, including forged/frozen metadata copies and an unread hostile noteCount getter. Existing queued-control and tied-stop regressions cover the mixed-event path.
+
 ### Skipped already-ordered sequence sorting
 
 - Track frame/order monotonicity while assembling offline event queues and skip sorting only when the complete queue is already ordered. Overlaps, reversed notes, earlier appended controls/stops and collapsed/non-finite frame pairs retain the original stable comparator.
