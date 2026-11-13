@@ -2414,12 +2414,16 @@ export class Synth {
           this.spillLeft *= next / (next + 1);
           this.spillRight *= next / (next + 1);
         }
-        let silentLeft = true, silentRight = true, differ = false;
-        for (let sub = 0; sub < oversample; sub++) {
-          const inputLeft = mixLeft[sub], inputRight = mixRight[sub];
-          if (inputLeft !== 0) silentLeft = false;
-          if (inputRight !== 0) silentRight = false;
-          if (inputLeft !== inputRight) differ = true;
+        const firstLeft = mixLeft[0], firstRight = mixRight[0];
+        let silentLeft = firstLeft === 0, silentRight = firstRight === 0, differ = firstLeft !== firstRight;
+        // Once both channels sound and differ, later inputs cannot change these flags.
+        if (silentLeft || silentRight || !differ) {
+          for (let sub = 1; sub < oversample; sub++) {
+            const inputLeft = mixLeft[sub], inputRight = mixRight[sub];
+            if (inputLeft !== 0) silentLeft = false;
+            if (inputRight !== 0) silentRight = false;
+            if (inputLeft !== inputRight) differ = true;
+          }
         }
         // Identical channel histories give identical outputs: centered mixes
         // filter once until the inputs first differ.

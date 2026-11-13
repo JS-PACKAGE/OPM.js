@@ -4,6 +4,23 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled stereo input classification
+
+- The first oversampled stereo input pair now initializes the silent-left, silent-right and differing-input flags. When both inputs are nonzero and unequal, all three flags are final and the remaining classification reads are skipped. Otherwise the remaining inputs are scanned as before. Every input still reaches the unchanged FIR; this does not skip synthesis, filtering, finite-output guards, history updates or mirror transitions. No retained field, buffer, helper or dependency is added.
+- Six fresh-process Node.js 26 pairs per order measured actual 48 kHz, 128-frame DSP rendering, including single panned notes and two-note stereo mixes. Positive values below mean higher throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Panned note / two-note stereo, eco | +2.1–4.3% | +2.1–4.3% |
+| Panned note / two-note stereo, standard | +1.7–3.3% | +1.7–3.3% |
+| Panned note / two-note stereo, high | +2.5–5.7% | +2.5–5.7% |
+| Centered / hard-pan controls, eco | +1.0–4.6% | +1.0–4.7% |
+| Centered / hard-pan controls, standard | +0.7–0.9% | +0.7–1.0% |
+| Centered / hard-pan controls, high | −10.7% to +13.9% | −7.1% to +7.9% |
+
+- High-profile controls were strongly order-sensitive and do not establish a speedup. These are workload-/host-dependent Node medians, not universal browser/device, heap-byte, GC or render-deadline guarantees. Instrumented warmed standard-profile panned and two-note stereo blocks each performed 768 fewer numeric mix-buffer reads per 128 frames; centered, hard-pan and muted read counts were unchanged. Timing used ordinary native buffers, not the read-count instrumentation.
+- Real-core comparisons matched bit-for-bit stereo PCM, complete FIR/DC arrays, spill state and event/frame metadata across 192 lifecycles and 2,304 checkpoints, including 72 nonfinite-FIR and 72 nonfinite-mix fault cases. The matrix covers all eight algorithms, three quality profiles, two sample rates, both saturation modes, DC blocking, gain/pan transitions, release, panic and callback-admitted replacement. All 41 existing core/engine/spectral tests pass. Scoped A/C review is recorded in SECURITY.md; physical-device and human-listening acceptance remain unverified.
+
 ### Short-circuit exact-zero FIR history queries
 
 - Live sources with silent input now ask whether the entire FIR history is exactly zero, returning false at the first nonzero sample instead of computing a maximum magnitude. The internal predicate ignores the same ring-position/derived-output header as the existing peak query; signed zeros are silent, while subnormal, infinite and NaN history is not. After the last source retires, the existing numeric peak/floor clearing path remains in use. FIR execution, state writes, finite-output guards and cached channel ownership are unchanged; no retained field, collection or buffer is added.
