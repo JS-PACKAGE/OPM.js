@@ -4,6 +4,13 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed MIDI owner placeholders
+
+- Initialize preserved-import channel-owner slots with a dense sixteen-element literal instead of a private Array.from array-like and its ignored-value callback. Keep fresh own undefined slots, lazy channel Sets, FIFO ownership, fanout, sustain and release handling unchanged.
+- Initialization intentionally no longer performs incidental inherited numeric-property reads on that private array-like. A valid channel-15 import now survives a throwing inherited index-15 getter at this initialization boundary; this does not promise to ignore every prototype hook elsewhere in arbitrary imports.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced zero-/one-note preserved import cost by 22–24% and tested 64-note cost by about 6%. Fully warmed single-channel 1K-note imports stayed within 0.2%, sixteen-channel notes improved 1–2%, and preserved controller cases ranged from nearly flat to 2.1% faster. Unchanged legacy 64-note and controller-heavy controls were up to 4.2% and 2.5% slower; shorter warmup included 9.2% slower legacy 64-note and 4.3% slower preserved 1K-note cases. These are explicit host-/warmup-dependent setup tradeoffs, not universal import or synthesis/deadline gains.
+- All 2,792 complete import results and 831 rejection cases matched, with zero native/options getter reads. Comparisons cover formats 0/1, repeated pitches, poly pressure, sixteen channels, sustain, EOF policies and truncation; four benign inherited-index probes retain outputs while removing the obsolete initialization read. A consumer regression checks the throwing-getter case and restores the prototype before assertions. Scoped A/C review is recorded in SECURITY.md.
+
 ### Private default tempo conversion map
 
 - Default `beatsToSeconds` / `secondsToBeats` calls reuse one private frozen 120-BPM map instead of allocating and freezing a point and array on every conversion. Public default normalization still returns fresh snapshots, and caller maps keep their original validation/identity paths. The existing context guard preserves fresh objects when inherited optional fields, terminal slots or a custom array prototype could observe them; integration/inversion arithmetic is unchanged.

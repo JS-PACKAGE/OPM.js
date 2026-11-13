@@ -341,6 +341,24 @@ test('channel expression and poly pressure remain isolated across channels and i
   assert.deepEqual(controlRows(importMidiFile(clean, config).events), [[1, 0, neutral], [2, 0, neutral]]);
 });
 
+test('private channel placeholders cannot invoke an inherited numeric getter during expressive import', () => {
+  const bytes = smf([[0, 0x9f, 60, 127, 120, 0x8f, 60, 0, ...end]]);
+  const config = { ...expressive, channelVoices: { 15: 'brass' } };
+  const saved = Object.getOwnPropertyDescriptor(Object.prototype, '15');
+  let events: BeatSequenceEvent[] | undefined;
+  try {
+    Object.defineProperty(Object.prototype, '15', { configurable: true, get() { throw new Error('Inherited numeric getter must not run'); } });
+    events = importMidiFile(bytes, config).events;
+  } finally {
+    if (saved) Object.defineProperty(Object.prototype, '15', saved);
+    else Reflect.deleteProperty(Object.prototype, '15');
+  }
+  assert.deepEqual(events, [
+    { ...note(), duration: 0.25 },
+    control(1, 0, { pitch: 0, expression: 1, pan: 0, modulation: 1 }),
+  ]);
+});
+
 test('preserved bends retain initial range until their channel selects and changes RPN', () => {
   const bytes = smf([[
     0, 0xef, 127, 127, 0, 0x9f, 60, 127,

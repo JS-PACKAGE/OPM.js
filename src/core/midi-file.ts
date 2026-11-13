@@ -276,7 +276,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   ];
   let pedals = 0;
   // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
-  const owned: (Set<HeldNote> | undefined)[] = preserve ? Array.from({ length: 16 }, () => undefined) : [];
+  const owned: (Set<HeldNote> | undefined)[] = preserve ? [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ] : [];
   let released = 0;
   // Initial bend-range validation is unconditional, even when these snapshots are skipped.
   const states: (ImportExpressionState | undefined)[] = preserve ? [
