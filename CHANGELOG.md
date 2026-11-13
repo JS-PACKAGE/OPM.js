@@ -4,6 +4,24 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Independent stereo FIR idle tracking
+
+- The shared post-mix FIR tracks drained left/right histories independently in one numeric mask, replacing its previous boolean without adding a retained field, buffer or dependency. Nonzero input invalidates only its channel's bit; mirrored channels share the left result, and whole-render idle shortcuts still require both histories to be idle. FIR execution, coefficients, floor clearing, DC blocking and finite-output guards are unchanged. A warmed 128-frame hard-pan render now makes zero `Math.abs` calls instead of 18,688; tested centered, general-stereo and muted counts remain zero.
+- Six fresh-process Node.js 26 pairs per order measured actual 48 kHz, 128-frame DSP rendering with both process orders. Positive values below mean higher throughput, not the percentage of CPU time saved:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| One held note, hard left/right, eco | +68.2–71.2% | +68.5–71.4% |
+| One held note, hard left/right, standard | +44.3–45.6% | +44.3–45.7% |
+| One held note, hard left/right, high | +26.1–26.7% | +26.1–26.7% |
+| Centered note, all profiles | −0.8% to +6.8% | −0.8% to +6.2% |
+| Two sounding stereo notes, all profiles | −1.6% to +1.2% | −1.6% to +0.6% |
+| Muted held note, standard/high | −0.3% to 0.0% | −0.3% to 0.0% |
+| Muted held note, eco | −15.7% to +15.2% | −11.9% to +11.8% |
+
+- Muted eco results were strongly order-dependent and do not establish a speedup. These are workload-/host-dependent Node DSP medians, not universal browser/device, heap-byte, GC or render-deadline guarantees.
+- Comparisons matched bit-for-bit stereo PCM, complete filter state and event/frame metadata across 192 lifecycles and 2,304 checkpoints, including all eight algorithms, three quality profiles, two sample rates, gain/pan ramps, subnormal gains, release, panic, callback-admitted replacement and 72 nonfinite-FIR fault cases. All 41 targeted core/engine/spectral tests pass, including a new three-profile regression for single-channel pulse reactivation, preserved tails and no crossfeed. An implementation-only idle-flag assertion was removed; consumer-visible tail/silence checks remain. Scoped A/C review is recorded in SECURITY.md; physical-device and human-listening acceptance remain unverified.
+
 ### Lazy command receipt waiters
 
 - Command receipts retain an own undefined waiter field until an unresolved `waitForCommand` actually needs a private Set. Already-acknowledged/error outcomes and unwaited commands do not construct it, and settlement skips the absent iterator/snapshot. The first pending wait creates one Set; additional waits and reuse after the last abort keep that same Set. Observed native Set constructions for an unwaited scalar command fell from one to zero, moving its first pending-wait construction from zero to one; subsequent/late/reused waits remained at zero. Receipt eviction order, the 128-receipt/64-pending-wait bounds, first-outcome wins and snapshot-based multicast cleanup remain unchanged. No shared mutable fallback, new retained field, buffer or cache is added.

@@ -299,6 +299,7 @@ const DEFAULT_MAX_VOICES = 8;
 const MAX_FADES = 8;
 const TURNS_PER_HALF_TURN = 1 / PHASE_CYCLE;
 const AMPLITUDE_FLOOR = 10 ** (FLOOR_DB / 20);
+const DECIMATOR_IDLE_LEFT = 1, DECIMATOR_IDLE_RIGHT = 2, DECIMATOR_IDLE_BOTH = 3;
 // Envelope segments restart their running geometric gain from the exact dB rule
 // every this many output frames (a power of two).
 const ENVELOPE_ANCHOR_FRAMES = 64;
@@ -1548,8 +1549,8 @@ export class Synth {
   filterLeft: Float64Array;
   /** @internal */
   filterRight: Float64Array;
-  /** @internal True once both decimator states have drained below the floor. */
-  decimatorIdle: boolean;
+  /** @internal Bit 0/1 mark exactly idle left/right FIR histories independently. */
+  decimatorIdleMask: number;
   /** @internal filterRight is stale and logically equals filterLeft (dual mono). */
   decimatorMirrored: boolean;
   /** @internal Bounded spare slots include one admission scratch slot. */
@@ -1618,7 +1619,7 @@ export class Synth {
     this.subSamples = new Float64Array(this.oversample);
     this.filterLeft = new Float64Array(DECIMATOR_STATE_SIZE);
     this.filterRight = new Float64Array(DECIMATOR_STATE_SIZE);
-    this.decimatorIdle = true;
+    this.decimatorIdleMask = DECIMATOR_IDLE_BOTH;
     this.decimatorMirrored = true;
   }
   setMixGain(gain: number): void {
@@ -1953,7 +1954,7 @@ export class Synth {
   resetDecimator(): void {
     this.filterLeft.fill(0);
     this.filterRight.fill(0);
-    this.decimatorIdle = true;
+    this.decimatorIdleMask = DECIMATOR_IDLE_BOTH;
     this.decimatorMirrored = true;
   }
 
@@ -2358,7 +2359,7 @@ export class Synth {
       throw new RangeError('render requires an in-bounds offset and length');
     }
     const dcState = this.dcState;
-    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdle &&
+    if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdleMask === DECIMATOR_IDLE_BOTH &&
         dcState[0] === 0 && dcState[1] === 0 && dcState[2] === 0 && dcState[3] === 0) {
       typedArrayFill.call(left, 0, offset, offset + length);
       if (right !== left) typedArrayFill.call(right, 0, offset, offset + length);
@@ -2456,18 +2457,19 @@ export class Synth {
           // A silent channel goes idle once its FIR history is zero. After the
           // last source retires, history below the -96 dB floor snaps to zero.
           const clear = this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0;
-          // Zero input cannot refill a drained history. Only check that flag
-          // on silent channels, leaving the audible hot path unchanged.
-          const idleLeft = silentLeft && (this.decimatorIdle || settleDecimator(filterLeft, clear));
-          const idleRight = mirrored ? idleLeft : silentRight && (this.decimatorIdle || settleDecimator(filterRight, clear));
-          this.decimatorIdle = idleLeft && idleRight;
+          // A drained silent channel stays idle even while the other channel sounds.
+          // Only revisit its history after nonzero input has cleared its own bit.
+          const idleLeft = silentLeft && ((this.decimatorIdleMask & DECIMATOR_IDLE_LEFT) !== 0 || settleDecimator(filterLeft, clear));
+          const idleRight = mirrored ? idleLeft : silentRight &&
+            ((this.decimatorIdleMask & DECIMATOR_IDLE_RIGHT) !== 0 || settleDecimator(filterRight, clear));
+          this.decimatorIdleMask = (idleLeft ? DECIMATOR_IDLE_LEFT : 0) | (idleRight ? DECIMATOR_IDLE_RIGHT : 0);
         }
         // Callbacks may admit/release notes, but replacements first render on the
         // next frame. Live traversal would let a zero-release chain run forever.
         for (let index = 0; index < terminalCount; index++) {
           this.ended(this.terminalIds[index], this.terminalErrors[index] & 1 ? 'error' : 'ended');
         }
-        if (this.decimatorIdle) {
+        if (this.decimatorIdleMask === DECIMATOR_IDLE_BOTH) {
           this.decimatorMirrored = true;
           if (finishIdleRender(this, left, right, frame, end)) return;
         }

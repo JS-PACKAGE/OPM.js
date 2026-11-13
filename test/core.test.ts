@@ -262,7 +262,6 @@ test('envelope-ended voices retire at once while the shared decimator drains to 
   assert.equal(synth.voices.length, 0);
   assert.ok(tail.subarray(1, 8).some(value => value !== 0), 'decimator history continues after retirement');
   assert.ok(tail.subarray(64).every(value => value === 0));
-  assert.equal(synth.decimatorIdle, true);
 });
 
 test('a block becoming idle preserves stereo tails, output bounds, clock and callback-admitted sound', () => {
@@ -294,5 +293,31 @@ test('a block becoming idle preserves stereo tails, output bounds, clock and cal
       return { left, right };
     };
     for (const replace of [false, true]) assert.deepEqual(run(8192, replace), run(113, replace), `${quality} DC=${dcBlock} replacement=${replace}`);
+  }
+});
+
+test('one idle stereo channel can sound again without losing its FIR tail or leaking into the other channel', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(16000, 8, { quality });
+    synth.noteOn(voice({ algorithm: 7 }), 69, 1);
+    synth.updateNote(1, { gain: 0, ramp: 0 });
+    const stereo = (length: number) => {
+      const left = new Float32Array(length), right = new Float32Array(length);
+      synth.render(left, right);
+      return { left, right };
+    };
+    stereo(256);
+    for (const pan of [-1, 1, -1]) {
+      synth.updateNote(1, { gain: 1, pan, ramp: 0 });
+      const pulse = stereo(3);
+      synth.updateNote(1, { gain: 0, ramp: 0 });
+      const tail = stereo(128);
+      const sounding = pan === -1 ? 'left' : 'right', silent = pan === -1 ? 'right' : 'left';
+      assert.ok(tail[sounding].some(value => Math.abs(value) > 1e-8), `${quality}: the pulse keeps its filter tail`);
+      assert.ok(pulse[silent].every(value => value === 0) && tail[silent].every(value => value === 0),
+        `${quality}: the opposite channel stays silent after reactivation`);
+      assert.ok(tail[sounding].subarray(64).every(value => value === 0), `${quality}: the finite tail drains exactly`);
+    }
+    assert.equal(synth.errorCount, 0);
   }
 });
