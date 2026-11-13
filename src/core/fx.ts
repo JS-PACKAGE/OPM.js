@@ -193,14 +193,15 @@ class Engine implements StereoEffects {
           const out = comb.data[comb.position]!;
           this.low[index] = out;
           const gain = p[13 + index]!;
-          comb.push((1 - gain) * delayed + gain * this.low[index]!); sum += out * .25;
+          comb.push((1 - gain) * delayed + gain * out); sum += out * .25;
         }
       } else for (let i = 0; i < 4; i++) {
         const index = channel * 4 + i, comb = this.combs[index]!;
         const out = comb.data[comb.position]!;
-        this.low[index] = clean(out * (1 - damping) + this.low[index]! * damping);
+        const filtered = clean(out * (1 - damping) + this.low[index]! * damping);
+        this.low[index] = filtered;
         const gain = p[13 + index]!;
-        comb.push((1 - gain) * delayed + gain * this.low[index]!); sum += out * .25;
+        comb.push((1 - gain) * delayed + gain * filtered); sum += out * .25;
       }
       for (let i = 0; i < 2; i++) {
         const diffuser = this.diffusers[channel * 2 + i]!, old = diffuser.data[diffuser.position]!;

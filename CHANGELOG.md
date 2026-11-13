@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused comb filter locals
+
+- Reuse the exact local comb/filter value for feedback after writing its owned Float64 history slot, rather than loading that slot again. Preserve the history write and all arithmetic order in both damped and undamped loops; no new cache, field or allocation.
+- Paired fresh-process Node.js 26 128-frame effects measurements, including input restoration, reduced live-ramp cases by about 2.3–2.6% and isolated reverb cases by 1.0–1.4%. Other controls ranged from 0.2% slower to 1.4% faster; these small effects-path results are not universal synth throughput gains.
+- All 3,510 complete PCM/delay-ring/owned-state comparisons matched over 8–192 kHz, zero/tiny/full damping, extreme/nonfinite samples, stereo/aliased/overlapping buffers, interrupted updates, bypass and reset. Scoped DSP safety review is recorded in SECURITY.md.
+
 ### Sanitized undamped reverb history
 
 - A running effects engine now specializes each channel's zero-damping comb loop. Comb taps are already sanitized on write, so their exact value can replace the repeated filter arithmetic and cleanup; retain low-pass history, feedback writes, wet sums and all delay warming. Every nonzero damping value keeps the original recurrence.
