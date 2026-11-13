@@ -209,15 +209,15 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     } catch (error) { report(error); return; }
     for (const key of ownedKeys.keys()) if (!live.has(key)) ownedKeys.delete(key);
   }
-  function releaseWhere(predicate: (key: string) => boolean, force = true): void {
+  function releasePrefix(prefix: string | undefined, force = true): void {
     if (force) pruneOwnership();
     for (const [key, owners] of held) {
-      if (!predicate(key)) continue;
+      if (prefix !== undefined && !key.startsWith(prefix)) continue;
       held.delete(key);
       for (const owned of owners) { heldKeys--; if (!force) release(owned); }
     }
     if (force) for (const owned of ownedKeys.values()) {
-      if (predicate(owned.slot)) release(owned, true);
+      if (prefix === undefined || owned.slot.startsWith(prefix)) release(owned, true);
     }
   }
   function pedalOn(channel: number): boolean {
@@ -245,7 +245,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       if (controller === 7) state.volume = value / 127; else state.expression = value / 127;
       performance.updatePart(channel, { expression: state.volume * state.expression });
     } else if (controller === 10) performance.updatePart(channel, { pan: Math.max(-1, (value - 64) / 63) });
-    else if (controller === 120 || controller === 123) releaseWhere(key => key.startsWith(`${input}\u0000${channel}\u0000`), controller === 120);
+    else if (controller === 120 || controller === 123) releasePrefix(`${input}\u0000${channel}\u0000`, controller === 120);
     else if (controller === 121) {
       state.volume = 1; state.expression = 1;
       Object.assign(rpn[channel]!, midiRpnState(range));
@@ -326,7 +326,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     if (!entry) return;
     listeners.delete(id);
     entry.input.removeEventListener('midimessage', entry.listener);
-    releaseWhere(key => key.startsWith(`${id}\u0000`));
+    releasePrefix(`${id}\u0000`);
     const channels = sustained.get(id);
     sustained.delete(id);
     if (channels) for (const channel of channels) {
@@ -354,7 +354,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       return Object.freeze({ inputs: Object.freeze([...listeners.keys()]), heldKeys, ignoredMessages: ignored, disposed });
     },
     releaseAll() {
-      try { releaseWhere(() => true); }
+      try { releasePrefix(undefined); }
       finally { if (disposed && ownedKeys.size === 0) onError = undefined; }
     },
     dispose() {

@@ -91,6 +91,38 @@ test('CC123 retains pedal ownership; CC120 forces it and disconnect preserves an
   } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
 });
 
+test('channel cleanup and disconnect isolate prefix-similar input IDs and channel numbers', async () => {
+  for (const controller of [120, 123]) {
+    const { opm, performance, access, input, adapter, errors } = await setup();
+    const second = new FakeInput('keys-extra');
+    access.inputs.set(second.id, second); access.change();
+    try {
+      input.send(0xb1, 64, 127); second.send(0xb1, 64, 127);
+      const host = performance.noteOn(1, 84);
+      input.send(0x91, 60, 100); input.send(0x9a, 70, 100);
+      second.send(0x91, 64, 100); second.send(0x9a, 74, 100);
+      input.send(0x81, 60, 0); input.send(0x91, 62, 100);
+      input.send(0xb1, controller, 0);
+      assert.deepEqual(held(performance, 1), [84, 64]);
+      assert.deepEqual(performance.getPart(1).keys.map(key => key.note), controller === 120 ? [84, 64] : [84, 60, 64, 62]);
+      assert.deepEqual(held(performance, 10), [70, 74]);
+      assert.equal(adapter.snapshot.heldKeys, 3);
+      input.state = 'disconnected'; access.change();
+      assert.deepEqual(performance.getPart(1).keys.map(key => key.note), [84, 64]);
+      assert.deepEqual(held(performance, 10), [74]);
+      assert.equal(performance.getPart(1).sustain, true);
+      assert.equal(adapter.snapshot.heldKeys, 2);
+      second.send(0x81, 64, 0); second.send(0xb1, 64, 0);
+      second.send(0x8a, 74, 0);
+      adapter.releaseAll();
+      assert.equal(adapter.snapshot.heldKeys, 0);
+      assert.deepEqual(performance.getPart(1).keys.map(key => key.key), [host]);
+      assert.deepEqual(performance.getPart(10).keys, []);
+      assert.deepEqual(errors, []);
+    } finally { adapter.dispose(); performance.dispose(); await opm.dispose(); }
+  }
+});
+
 test('stale ownership is pruned at its bound without snapshots on every packet or reused-slot loss', async () => {
   const { opm, performance, input, adapter, errors } = await setup();
   try {

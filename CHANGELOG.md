@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Live MIDI cleanup prefixes
+
+- Channel cleanup and input detachment build their existing NUL-delimited ownership prefix once per request instead of rebuilding it through a predicate for each key. Global cleanup uses the same traversal without a predicate. Force/prune ordering, pedal union, failed-release retries and reentrant cleanup keep their original behavior; no persistent field, buffer, collection or cache is added.
+- Paired fresh-process Node.js 26 runs with both pair orders raised tested cleanup-call wall throughput by 5.8–11.7% for CC120 with sixteen held keys, 8.5–8.7% with 128 keys, 3.8–6.5% for CC123 with 128 keys and 15.5–16.3% for detachment with 64 keys. Global release improved 2.4–2.7%, disposal 1.3–1.4% and ordinary sixteen-note dispatch 0.1–0.9%. Empty CC120 was 2.8–3.3% slower (roughly 5–8 ns here). CPU samples were highly variable; disposal CPU medians were 2.1–7.4% slower. Isolated real-stack lifecycles respect the 128-gate release-tail bound, with setup/render/teardown outside the timed call. These are workload-/host-dependent wall-clock medians, not general CPU, allocation, GC or deadline guarantees.
+- Paired real Performance/OPM/processor harness comparisons matched 220 lifecycles, 1,540 public checkpoints and 880 stereo PCM blocks, including repeated pitches, Unicode/string port IDs, channel/input isolation, foreign keys, pedals and cleanup/disposal reentrancy. All 27 live MIDI tests pass, including a consumer regression for prefix-similar input IDs and channel numbers under CC120, CC123 and disconnect. Scoped A/C review is recorded in SECURITY.md; physical-device MIDI acceptance remains unverified.
+
 ### Bounded MIDI channel-data pairs
 
 - Explicit-status two-data-byte channel messages use one bounded big-endian Uint16 read and a combined status-bit check. One-byte program/channel-pressure messages and running status keep their original byte ownership; short or invalid pairs use the original ordered checked reads. Logical track boundaries, error precedence, parser budgets and result/report construction are unchanged. No instance field, collection, buffer or cross-import cache is added.
