@@ -168,7 +168,7 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
   return s >>> 0;
 }
 
-// Only mono encoder chunks are aligned; full float WAV data starts at byte 58.
+// Streaming float chunks are aligned; full float WAV data starts at byte 58.
 function encodeMonoFloat32(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   if (typedArrayLength.call(left) !== frames) return encodeInto(bytes, offset, left, right, frames, config, ditherSeed);
   const samples = new NativeFloat32Array(bytes.buffer, bytes.byteOffset + offset, frames);
@@ -184,6 +184,19 @@ function encodeMonoFloat32(bytes: Uint8Array, offset: number, left: Float32Array
     if (!(Math.abs(samples[frame]) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
   }
   return ditherSeed;
+}
+
+function encodeStereoFloat32(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
+  const samples = new NativeFloat32Array(bytes.buffer, bytes.byteOffset + offset, frames * 2);
+  for (let frame = 0, index = 0; frame < frames; frame++, index += 2) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    samples[index] = first;
+    const second = right![frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    samples[index + 1] = second;
+  }
+  return 0;
 }
 
 // Channel admission fixes stereo shape; validate/draw/store left before reading right.
@@ -227,7 +240,8 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const config = layout(data);
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
     : !config.dither && config.format === 'pcm24' ? encodePcm24
-      : config.format === 'float32' && config.channels === 1 && LITTLE_ENDIAN ? encodeMonoFloat32
+      : config.format === 'float32' && LITTLE_ENDIAN
+        ? config.channels === 1 ? encodeMonoFloat32 : encodeStereoFloat32
         : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   let emittedHeader = false;
   let framesEncoded = 0;

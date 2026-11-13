@@ -4,6 +4,23 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Aligned stereo float32 WAV stores
+
+- Little-endian stereo float32 streaming encoders now select a fixed interleaving loop once and write through one native Float32 view over the fresh output chunk, instead of per-sample DataView stores. Each source sample is still captured once, checked for finite -1..1 range and then stored before the next sample is read. Mono bulk copying, big-endian/full-file conversion, headers, dither, frame accounting and output transfer ownership are unchanged; no retained buffer, field or dependency is added.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding, including chunk allocation and sample validation. Positive values below mean higher throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Stereo float32, 128-frame chunks | +16.3–16.8% | +14.4–14.5% |
+| Stereo float32, 1,024-frame chunks | +23.7–24.2% | +23.3–24.0% |
+| Stereo float32, 8,192-frame chunks | +27.2–27.5% | +22.8–23.0% |
+| Stereo float32, 65,536-frame chunks | +16.7–17.1% | +8.7–11.7% |
+| Unchanged mono bulk-copy control | −0.3% to +2.1% | −0.5% to +7.5% |
+| Unchanged full-file/PCM controls | −0.1% to +0.8% | −0.1% to +0.7% |
+
+- Mono control results were order-sensitive and do not establish a speedup. These are workload-/host-dependent Node medians, not universal browser/device, heap-byte or GC guarantees. Instrumented 128-frame stereo chunks made zero DataView float stores instead of 256; full-file stereo stayed at 256 and mono chunks stayed at zero. Timing used uninstrumented native views.
+- Source/distribution comparisons matched 360 complete WAV cases, 228 rejection checks and 360 transfers across all formats, channel counts, dither settings and native buffer/view kinds, with zero metadata getter calls. Separate stereo cases resize either input at output allocation: shared growth preserves the admitted prefix, while resizable-buffer shrink rejects without consuming frames and permits a valid retry/transfer. All 27 targeted WAV/real-Worker tests pass, including actual sink transfer, backpressure and cancellation. Scoped A/C review is recorded in SECURITY.md.
+
 ### Native mono float32 WAV chunks
 
 - Little-endian hosts now select a native Float32 bulk writer once for mono float32 streaming encoders. It copies into the fresh owned chunk and validates that private copy, so concurrently mutable shared input cannot replace already-validated samples. The usual path replaces its DataView with one Float32 view over the same output buffer; no input/output buffer or view is retained. Full WAV data starts at unaligned byte 58 and keeps the existing DataView path, as do stereo float32 chunks and big-endian hosts.
