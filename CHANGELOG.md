@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### In-place Arrangement terminal queue cleanup
+
+- Terminal cleanup now compacts only the removed gate's command entries in the private queue, avoiding a filter closure and replacement array. Preserve the unchanged prefix, stable scheduling order, shared layer continuity and existing priority-rejection behavior; no queue-array aliases escape.
+- Paired fresh-process Node.js 26 controlled-host measurements reduced queued terminal dispatch by about 36–52% for 16-note arrangements and 72–82% for 128-note arrangements. Already-drained queue controls also improved; mixed foreign-note observer controls varied within 0.5%. Preparation and audio synthesis are excluded.
+- All 540 complete scheduling/priority/stealing/snapshot/error/restart cases matched, including synchronous steals, priority refusals, partial gate completion, subsequent automation/stops, pause/resume and disposal. Existing worklet-backed Arrangement PCM/lifecycle coverage remains unchanged.
+
 ### Allocation-free terminal-state classification
 
 - Transport, Arrangement and Performance observers now use the existing direct-comparison convention for ended/stolen/cancelled/rejected notes instead of constructing a four-state array per note event. Accepted/started/released events remain nonterminal; admission and ownership handling are unchanged.

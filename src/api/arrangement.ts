@@ -301,7 +301,14 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       const gate = owned.get(event.id);
       if (gate) {
         owned.delete(event.id);
-        queue = queue.filter(command => command.gate !== gate);
+        const length = queue.length;
+        let kept = 0;
+        while (kept < length && queue[kept].gate !== gate) kept++;
+        for (let index = kept + 1; index < length; index++) {
+          const command = queue[index];
+          if (command.gate !== gate) queue[kept++] = command;
+        }
+        if (kept !== length) queue.length = kept;
         if (event.state === 'rejected') {
           // Priority protection is an expected musical outcome, not an unsafe scheduler state.
           if (event.reason === 'priority') priorityDrops++;
