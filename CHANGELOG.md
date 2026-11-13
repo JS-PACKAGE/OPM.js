@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Noise-carrier modulation pruning
+
+- Mixed-waveform voices whose carriers are all noise or permanently zero-level now use a dedicated frame kernel: noise does not read modulation, so periodic non-carriers cannot affect the mix. Keep their phases and gain checks, every live noise clock and carrier-sum order; intentionally zero only inaudible periodic value/feedback scratch. Live operator-level ramps retain generic rendering, and existing all-noise/periodic kernels remain unchanged. No pool fields, render buffers or per-voice closures are added.
+- Paired fresh-process Node.js 26 measurements of 16 voices at 48 kHz found about 37–58% lower render cost for the selected one/two-noise-carrier patches. Longer-warmup single-carrier results were about 44% (eco), 50–51% (standard) and 57% (high); unchanged all-noise controls stayed within 0.4%, while a mixed-carrier control varied by up to 2.3%. Shorter controls fluctuated by up to 9%, so these are targeted host-dependent results, not universal patch/deadline guarantees.
+- All 8,640 complete stereo PCM/retained-numeric-state/lifecycle stages matched across all algorithms/qualities, 16/48 kHz, targeted sine/noise LFO, live edits, quietest stealing, release and reuse; intentionally skipped periodic scratch is excluded, not audio or active noise state. All 96 noncarrier phase/gain fault cases matched PCM/errors/lifecycle. Added consumer regressions for modulation invariance, retained periodic-carrier modulation and fault containment; scoped A/C review is recorded in SECURITY.md.
+
 ### Reused comb filter locals
 
 - Reuse the exact local comb/filter value for feedback after writing its owned Float64 history slot, rather than loading that slot again. Preserve the history write and all arithmetic order in both damped and undamped loops; no new cache, field or allocation.

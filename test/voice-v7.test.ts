@@ -186,6 +186,63 @@ test('sine and waveform frames render identically to the generic path', () => {
   }
 });
 
+test('noise carriers ignore periodic modulators through live controls', () => {
+  const carriers = [[3], [3], [3], [3], [1, 3], [1, 2, 3], [1, 2, 3]];
+  for (const quality of ['eco', 'standard', 'high'] as const) for (let algorithm = 0; algorithm < carriers.length; algorithm++) {
+    const fixture = (muted: boolean): Voice => ({ ...tone('noise'), algorithm: algorithm as Voice['algorithm'], feedback: 3, modIndex: 4,
+      ops: Array.from({ length: 4 }, (_, i) => {
+        const carrier = carriers[algorithm].includes(i);
+        return { ratio: i + 1, level: carrier || !muted ? .5 : 0, detune: i,
+          waveform: carrier ? 'noise' : i % 2 ? 'saw' : 'sine', noiseRate: 1137 + i * 71,
+          adsr: { a: 0, d: 0, s: .7, r: .015 } };
+      }) as unknown as Voice['ops'] });
+    const engines = [false, true].map(muted => {
+      const synth = new Synth(16000, 2, { quality }); synth.noteOn(fixture(muted), 57, 1); return synth;
+    });
+    const compare = (length: number): void => {
+      const output = engines.map(synth => {
+        const left = new Float32Array(length), right = new Float32Array(length); synth.render(left, right);
+        assert.equal(synth.errorCount, 0); return { left, right };
+      });
+      assert.deepEqual(output[0], output[1], `${quality}, algorithm ${algorithm}`);
+    };
+    compare(96);
+    for (const synth of engines) synth.updateNote(1, { operatorLevels: [.2, .9, .4, .7], operatorRatios: [.75, 2.25, 5, 7.5], ramp: .003 });
+    compare(39);
+    for (const synth of engines) synth.updateNote(1, { pitch: 4, glide: .004, pan: -.3, expression: .6, ramp: .002 });
+    compare(128);
+    for (const synth of engines) synth.noteOff(1);
+    compare(1024);
+  }
+});
+
+test('periodic carriers retain modulation beside a noise carrier', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const output = [0, .5].map(modulator => {
+      const input: Voice = { ...tone(), algorithm: 4, feedback: 3, modIndex: 4,
+        ops: Array.from({ length: 4 }, (_, i) => ({ ratio: i + 1, level: i === 0 ? modulator : i === 2 ? 0 : .5,
+          detune: 0, waveform: i === 3 ? 'noise' : 'sine', noiseRate: 1137, adsr: { a: 0, d: 0, s: 1, r: .03 } })) as unknown as Voice['ops'] };
+      const synth = new Synth(16000, 2, { quality }); synth.noteOn(input, 57);
+      return audio(synth, 1024);
+    });
+    const difference = Float32Array.from(output[0], (value, index) => value - output[1][index]);
+    assert.ok(energy(difference) > 1e-6, quality);
+  }
+});
+
+test('inaudible periodic modulators still expose nonfinite phase and gain state', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const fault of ['phase', 'gain']) {
+    const input: Voice = { ...tone(), algorithm: 0, modIndex: 4,
+      ops: tone().ops.map((op, i) => ({ ...op, level: i === 0 || i === 3 ? .5 : 0, waveform: i === 3 ? 'noise' : 'sine' })) as unknown as Voice['ops'] };
+    const synth = new Synth(16000, 2, { quality }), ended: unknown[] = [];
+    synth.onVoiceEnded = (...event) => ended.push(event); synth.noteOn(input, 57, 1); audio(synth, 128);
+    if (fault === 'phase') synth.voices[0].phases[0] = NaN;
+    else synth.voices[0].sineFrame[0] = NaN;
+    assert.ok(audio(synth, 256).every(Number.isFinite));
+    assert.equal(synth.errorCount, 1); assert.deepEqual(ended, [[1, 'error']]);
+  }
+});
+
 test('legacy versions retain restrictions and canonicalize to v8 with identical sine samples', () => {
   const current = tone();
   current.ops.forEach(op => { delete op.waveform; delete op.noiseRate; });
