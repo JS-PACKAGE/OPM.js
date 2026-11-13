@@ -2008,13 +2008,13 @@ export class Synth {
     }
     const amGain = amEnabled ? 1 - amDepth * (0.5 + 0.5 * tremolo) : 1;
     const pmFactor = pmEnabled ? fastExp2(pmDepth * tremolo / 1200) : 1;
-    const targeted = active.amTargeted, pmTargeted = active.pmTargeted;
-    // Only targeted consumers read these arrays; keep their inactive factors at unity.
+    const targeted = amEnabled && active.amTargeted, pmTargeted = active.pmTargeted;
+    // Disabled AM consumers use shared unity gain, so its targeted scratch can stay untouched.
     if (targeted) {
       const targets = active.amTargets, factors = active.amGains;
       for (let op = 0; op < 4; op++) {
         const am = targets[op];
-        factors[op] = am === 1 ? amGain : !amEnabled || am === 0 ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
+        factors[op] = am === 1 ? amGain : am === 0 ? 1 : 1 - amDepth * am * (0.5 + 0.5 * tremolo);
       }
     }
     if (pmTargeted) {

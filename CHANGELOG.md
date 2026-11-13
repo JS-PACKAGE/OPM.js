@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped inactive targeted AM factors
+
+- When AM is disabled or still delayed, route its consumers through the shared unity gain and skip per-operator AM scratch updates. Re-enabling AM refreshes every target before use; PM scratch and dynamic-pitch behavior are unchanged.
+- Paired Node.js 26 measurements of 16 sustained voices reduced zero-depth targeted-AM render time by about 3–6% in eco and 5% in standard; high improved 0.3–1.2%. Enabled-AM controls were up to 1.9% slower, so this is not a universal modulation gain.
+- Complete stereo PCM matched across 864 stages covering all algorithms, three qualities, sine/mixed/saw kernels, LFO delays, depth disable/re-enable, operator ramps, glides and pool reuse. Existing uniform-target reference regressions exercise delayed and live depth transitions.
+
 ### Hoisted voice-stealing policy flags
 
 - Resolve quietest/release-first policy flags once before scanning candidates instead of repeating string comparisons inside the loop. Priority filtering, release preference, audibility evaluation and sequence tie-breaking retain their original order.
