@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled effects block housekeeping
+
+- Stereo effects now check once per synchronous buffer whether parameter/order smoothing is active. Settled blocks skip redundant per-sample ramp checks; moving blocks retain the original updates throughout, including transitions that finish inside a block. All chorus/reverb processing and bypass history warming remain unchanged.
+- Paired fresh-process Node.js 26 measurements of 128-frame effects processing, including input-buffer restoration, reduced seven settled profiles by about 0.6–2.1%; the live-ramp control stayed within 0.1%. These small host-dependent effects-path gains are not whole-synth throughput or deadline guarantees.
+- All 2,106 complete PCM/delay-ring/owned-state comparisons matched over 8–192 kHz, stereo/aliased/overlapping buffers, boundary and nonfinite inputs, interrupted parameter/order changes, bypass and reset. Scoped DSP safety review is recorded in SECURITY.md.
+
 ### In-place Arrangement history pruning
 
 - Pump housekeeping now compacts private section/gain histories in place, avoiding two filter closures and replacement arrays per poll. Preserve the original retention predicates and later-history lookahead; only earlier slots are rewritten, with no escaping array aliases or new scheduler state.
