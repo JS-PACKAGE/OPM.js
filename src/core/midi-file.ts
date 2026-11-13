@@ -266,7 +266,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   const events: BeatSequenceEvent[] = [];
   const queues = new Map<number, NoteQueue>();
   let liveCount = 0;
-  const sustained = Array.from({ length: 16 }, () => new Set<HeldNote>());
+  // Own placeholders keep lazy writes/reads clear of inherited index accessors.
+  const sustained: (Set<HeldNote> | undefined)[] = [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ];
   const pedals = new Array<boolean>(16).fill(false);
   // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
   const owned = preserve ? Array.from({ length: 16 }, () => new Set<HeldNote>()) : [];
@@ -352,8 +356,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     } else if (item.kind === 'sustain') {
       pedals[item.channel] = item.b >= 64;
       if (!pedals[item.channel]) {
-        for (const held of sustained[item.channel]) close(held, item.tick);
-        sustained[item.channel].clear();
+        const pending = sustained[item.channel];
+        if (pending) {
+          for (const held of pending) close(held, item.tick);
+          pending.clear();
+        }
       }
     } else if (item.kind === 'on') {
       const name = (item.channel === 9 ? drums.get(item.a) : undefined) ??
@@ -381,8 +388,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       if (!queue || queue.head === queue.notes.length) throw new RangeError('MIDI note-off has no owned note-on');
       const held = queue.notes[queue.head++];
       if (queue.head === queue.notes.length) queues.delete(key);
-      if (pedals[item.channel]) sustained[item.channel].add(held);
-      else close(held, item.tick);
+      if (pedals[item.channel]) {
+        let pending = sustained[item.channel];
+        if (!pending) { pending = new Set(); sustained[item.channel] = pending; }
+        pending.add(held);
+      } else close(held, item.tick);
     }
   }
   if (liveCount !== 0) {
@@ -390,7 +400,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     warn('unclosed-notes', 'Unclosed notes and sustain gates were closed at the final end-of-track tick', false, liveCount);
     // Pressed queue suffixes and sustained releases are disjoint owners.
     for (const queue of queues.values()) for (let index = queue.head; index < queue.notes.length; index++) close(queue.notes[index], endTick);
-    for (const channel of sustained) for (const held of channel) close(held, endTick);
+    for (const channel of sustained) if (channel) for (const held of channel) close(held, endTick);
   }
   const snapshot = Object.freeze([...warnings.values()].map(warning => Object.freeze(warning)));
   const approximate: Partial<Record<MidiFileWarningCode, true>> = {

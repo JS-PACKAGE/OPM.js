@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy MIDI import sustain sets
+
+- Allocate a channel's sustained-release set only when a pedal-held note-off needs it, rather than creating 16 empty sets for every import. A dense own-slot table preserves channel order and avoids inherited indexed accessors; sets are reused after pedal release.
+- Paired Node.js 26 measurements reduced tested single-note import time by about 26–28% and 128-note cases by 3–9%. The 4,096-note controls varied from 0.6% slower to 5.2% faster, without a consistent large-file gain.
+- All 96 complete-result comparisons matched across note counts, 1/4/16 channels, pedal presence, unclosed sustain gates and expression preservation. Existing mixed pressed/sustained ownership and close-at-end regressions cover the modified path.
+
 ### Direct integer PCM byte stores
 
 - Write PCM16/PCM24 quantized samples through the same explicit little-endian byte stores, avoiding the PCM16 DataView and its mixed integer-writing path. Float32 still uses its endian-aware DataView; validation, quantization and dither draw order are unchanged.
