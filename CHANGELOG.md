@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-channel undithered PCM24 writing
+
+- Extend the once-per-export/encoder private writer selection to undithered PCM24. Fixed mono/stereo loops remove per-sample format/channel dispatch while retaining one read and finite/unit-range check per sample, asymmetric scaling, rounding and explicit little-endian stores. With both undithered integer formats now specialized, remove the unreachable disabled-noise branch from the generic integer writer; active TPDF draw order and transactional state remain unchanged.
+- Paired fresh-process Node.js 26 measurements with longer measurement/warmup windows and both pair orders reduced tested 64K-frame mono full/chunk cost by 35–36% and stereo cost by 45–46%; 128-frame mono/stereo improved 9–10% and about 19%. One-frame files stayed within 0.8%. Other-format/dither controls ranged from 3.7% faster to 2.3% slower. Shorter windows included up to 10.1% slower unchanged PCM16 controls and 5.1% slower dithered PCM24. These are explicit host-/measurement-/warmup-dependent encoding results, not universal export, GC or synthesis/deadline gains.
+- All 888 complete files and 3,492 partitioned streams matched byte for byte, including mono RIFF padding, offset/shared/aliased views, signed zero and subnormals. All 270 invalid-sample/atomic-retry cases matched errors, accounting and final retry bytes with zero input metadata/accessor getter reads. Existing independent interleaving, padding, dither and nested-metadata transaction tests remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Fixed-channel undithered PCM16 writing
 
 - Select a private fixed-format writer once from the validated WAV layout for undithered PCM16. Separate mono/stereo loops remove per-sample format/channel dispatch while preserving each native sample read, finite/unit-range validation, asymmetric scaling, rounding and little-endian stores. Dither and other formats keep the original generic writer; streaming still commits accounting/state only after complete success.

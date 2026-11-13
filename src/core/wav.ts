@@ -95,6 +95,29 @@ function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, righ
   return 0;
 }
 
+function encodePcm24(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
+  if (right === undefined) {
+    for (let frame = 0; frame < frames; frame++, offset += 3) {
+      const value = left[frame];
+      if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+      const sample = Math.round(value * (value < 0 ? 8388608 : 8388607));
+      bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255; bytes[offset + 2] = (sample >> 16) & 255;
+    }
+    return 0;
+  }
+  for (let frame = 0; frame < frames; frame++, offset += 6) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const firstSample = Math.round(first * (first < 0 ? 8388608 : 8388607));
+    bytes[offset] = firstSample & 255; bytes[offset + 1] = (firstSample >> 8) & 255; bytes[offset + 2] = (firstSample >> 16) & 255;
+    const second = right[frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const secondSample = Math.round(second * (second < 0 ? 8388608 : 8388607));
+    bytes[offset + 3] = secondSample & 255; bytes[offset + 4] = (secondSample >> 8) & 255; bytes[offset + 5] = (secondSample >> 16) & 255;
+  }
+  return 0;
+}
+
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   // Float PCM needs validation and endian conversion, but no integer quantization.
@@ -119,25 +142,19 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
     return ditherSeed;
   }
   const pcm16 = config.format === 'pcm16';
-  // Zero disables noise; active xorshift state stays signed 32-bit between draws.
+  // Undithered integers use fixed writers; this path always advances active TPDF.
   let s = ditherSeed | 0;
-  const dither = s !== 0;
   for (let frame = 0; frame < frames; frame++) {
     for (let channel = 0; channel < config.channels; channel++, offset += config.sampleBytes) {
       const value = channel === 0 ? left[frame] : right![frame];
       // NaN fails the ordered magnitude bound, alongside infinities and out-of-range samples.
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
       const scaled = value * (value < 0 ? (pcm16 ? 32768 : 8388608) : (pcm16 ? 32767 : 8388607));
-      // Without dither the rounded scaled value is always in range; dither may cross full scale.
-      let sample: number;
-      if (!dither) sample = Math.round(scaled);
-      else {
-        s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
-        const a = s >>> 0;
-        s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
-        const noise = (a - (s >>> 0)) * 2 ** -32;
-        sample = Math.min(pcm16 ? 32767 : 8388607, Math.max(pcm16 ? -32768 : -8388608, Math.round(scaled + noise)));
-      }
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      const a = s >>> 0;
+      s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+      const noise = (a - (s >>> 0)) * 2 ** -32;
+      const sample = Math.min(pcm16 ? 32767 : 8388607, Math.max(pcm16 ? -32768 : -8388608, Math.round(scaled + noise)));
       bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255;
       if (!pcm16) bytes[offset + 2] = (sample >> 16) & 255;
     }
@@ -149,7 +166,8 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
 export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const data = sequenceOwnData(options, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const config = layout(data);
-  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16 : encodeInto;
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
+    : !config.dither && config.format === 'pcm24' ? encodePcm24 : encodeInto;
   let emittedHeader = false;
   let framesEncoded = 0;
   let finished = false;
@@ -187,7 +205,8 @@ export function encodeWav(input: WavOptions): Uint8Array {
   const chunk = channels(data.left, data.right);
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
-  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16 : encodeInto;
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
+    : !config.dither && config.format === 'pcm24' ? encodePcm24 : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);
   encodeSamples(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);
