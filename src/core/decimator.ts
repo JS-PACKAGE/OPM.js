@@ -150,3 +150,11 @@ export function decimatorPeak(state: Float64Array): number {
   for (let index = HEADER; index < state.length; index++) peak = Math.max(peak, Math.abs(state[index]));
   return peak;
 }
+
+/** @internal A live silent source needs exact history drain, not its maximum. */
+export function decimatorIsZero(state: Float64Array): boolean {
+  for (let index = HEADER; index < state.length; index++) {
+    if (state[index] !== 0) return false;
+  }
+  return true;
+}

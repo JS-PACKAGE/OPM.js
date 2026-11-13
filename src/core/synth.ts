@@ -3,7 +3,7 @@ import type { AlgorithmGraph } from './algorithms.js';
 import { normalizeTuning, tuningFrequency } from './tuning.js';
 import type { NormalizedTuning, TuningOptions } from './tuning.js';
 import { lfoAt, lfoWaveformCode } from './lfo.js';
-import { DECIMATOR_OUTPUT, DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateFrame, decimatorPeak, qualityOversample } from './decimator.js';
+import { DECIMATOR_OUTPUT, DECIMATOR_STATE_SIZE, createDecimatorCoefficients, decimateFrame, decimatorPeak, decimatorIsZero, qualityOversample } from './decimator.js';
 import type { QualityProfile } from './decimator.js';
 export type { QualityProfile } from './decimator.js';
 
@@ -1489,8 +1489,9 @@ function voiceAudibility(active: ActiveVoice, sampleRate: number): number {
  *  sounding, sub-floor residue is cleared; a live silent voice instead flushes
  *  the finite FIR to exact zeros so its envelope tail stays intact. */
 function settleDecimator(state: Float64Array, clear: boolean): boolean {
+  if (!clear) return decimatorIsZero(state);
   const peak = decimatorPeak(state);
-  if (peak !== 0 && (!clear || peak >= AMPLITUDE_FLOOR)) return false;
+  if (peak >= AMPLITUDE_FLOOR) return false;
   if (peak !== 0) state.fill(0);
   return true;
 }

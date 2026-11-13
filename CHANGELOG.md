@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Short-circuit exact-zero FIR history queries
+
+- Live sources with silent input now ask whether the entire FIR history is exactly zero, returning false at the first nonzero sample instead of computing a maximum magnitude. The internal predicate ignores the same ring-position/derived-output header as the existing peak query; signed zeros are silent, while subnormal, infinite and NaN history is not. After the last source retires, the existing numeric peak/floor clearing path remains in use. FIR execution, state writes, finite-output guards and cached channel ownership are unchanged; no retained field, collection or buffer is added.
+- Six fresh-process Node.js 26 pairs per order timed real 48 kHz DSP rendering. Pulse cases reuse one held gate and validated gain controls for 16 sounding/112 silent frames per block; zero-release cycles reuse a prepared patch and include admission/release/rendering in timing. Positive values below mean higher throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Centered/hard-left gain pulses, eco | +8.3–10.9% | +8.3–10.9% |
+| Centered/hard-left gain pulses, standard | +4.2–5.6% | +4.2–5.5% |
+| Centered/hard-left gain pulses, high | +1.9–2.8% | +1.9–2.8% |
+| Continuously sounding centered note, all profiles | −0.5% to +0.5% | −0.5% to +0.3% |
+| Zero-release cycles, all profiles | −1.8% to −0.3% | −1.6% to −0.3% |
+
+- In a warmed standard-profile pulse block, observed `Math.abs` calls fell from 3,942 to zero; zero-release blocks remained at 3,796 and steady centered/hard-pan/stereo/muted cases remained at zero. This targets live silent transitions, not general note-release speed. Results are workload-/host-dependent Node medians, not universal browser/device, heap-byte, GC or render-deadline guarantees.
+- Real-core comparisons matched bit-for-bit stereo PCM, full FIR state and event/frame metadata for 192 lifecycles and 2,304 checkpoints, including 72 nonfinite-FIR faults. Another 5,181 numerical queries matched the previous peak-equals-zero rule without mutation, covering signed zero, subnormals, NaN/Infinity, ignored headers and short/long histories. All 41 existing core/engine/spectral tests pass, including pulse-tail/crossfeed coverage. Scoped A/C review is recorded in SECURITY.md; physical-device and human-listening acceptance remain unverified.
+
 ### Independent stereo FIR idle tracking
 
 - The shared post-mix FIR tracks drained left/right histories independently in one numeric mask, replacing its previous boolean without adding a retained field, buffer or dependency. Nonzero input invalidates only its channel's bit; mirrored channels share the left result, and whole-render idle shortcuts still require both histories to be idle. FIR execution, coefficients, floor clearing, DC blocking and finite-output guards are unchanged. A warmed 128-frame hard-pan render now makes zero `Math.abs` calls instead of 18,688; tested centered, general-stereo and muted counts remain zero.
