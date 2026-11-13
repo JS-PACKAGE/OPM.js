@@ -294,7 +294,8 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
         const failure = clear(p, true);
         if (failure !== undefined) listener?.(failure instanceof Error ? failure : new Error(String(failure)));
       }
-    } else if (event.type === 'note' && ['ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) {
+    } else if (event.type === 'note' && (event.state === 'ended' || event.state === 'stolen' ||
+        event.state === 'cancelled' || event.state === 'rejected')) {
       if (admitting) {
         if (admissionTerminals.size < 256) admissionTerminals.add(event.id);
         else admissionOverflow = true;

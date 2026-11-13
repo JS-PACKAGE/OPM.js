@@ -295,7 +295,8 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       fail(new Error(`Arrangement command rejected: ${event.reason ?? 'unknown'}`));
       return;
     }
-    if (event.type === 'note' && ['ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) {
+    if (event.type === 'note' && (event.state === 'ended' || event.state === 'stolen' ||
+        event.state === 'cancelled' || event.state === 'rejected')) {
       if (admitting) { terminal = event.id; terminalReason = event.reason; }
       const gate = owned.get(event.id);
       if (gate) {

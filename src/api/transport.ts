@@ -329,7 +329,8 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     if (event.type === 'command' && event.state === 'rejected' && event.id !== undefined && owned.has(event.id)) {
       fail(new Error(`Transport command rejected: ${event.reason ?? 'unknown'}`));
     }
-    if (event.type === 'note' && ['ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) {
+    if (event.type === 'note' && (event.state === 'ended' || event.state === 'stolen' ||
+        event.state === 'cancelled' || event.state === 'rejected')) {
       if (admitting) terminal = event.id;
       if (owned.delete(event.id)) {
         const length = queued.length;

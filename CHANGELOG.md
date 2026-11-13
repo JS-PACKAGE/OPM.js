@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Allocation-free terminal-state classification
+
+- Transport, Arrangement and Performance observers now use the existing direct-comparison convention for ended/stolen/cancelled/rejected notes instead of constructing a four-state array per note event. Accepted/started/released events remain nonterminal; admission and ownership handling are unchanged.
+- Paired fresh-process Node.js 26 observer microbenchmarks reduced mixed unowned-note dispatch time by about 31–37%, saving roughly 2.4–2.8 ns per event. Events are pre-created and no audio is synthesized; this is a small event-classification saving, not a DSP throughput claim.
+- All 84 complete admission/owned-key/scheduling/error/reset cases matched across every note state, synchronous admission notifications, both completion orders, command rejection and disposal.
+
 ### In-place Transport terminal queue cleanup
 
 - Terminal note events now compact the private admitted-command queue in place instead of allocating a filter callback and replacement array. Skip the unchanged prefix, preserve command order, and leave public snapshots and owned-ID behavior unchanged; the queue has no escaping array aliases.
