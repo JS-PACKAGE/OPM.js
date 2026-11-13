@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Streaming stereo dither loops
+
+- Select a private fixed-channel TPDF writer once for active-dither stereo streaming encoders. Explicit left/right steps remove the inner channel loop and channel-source dispatch while retaining each read/check, sign-dependent scale, two draws per sample, rounding, clipping and little-endian store order. Full export and mono keep the original generic traversal; direct mono specialization was rejected after measured regressions.
+- Paired fresh-process Node.js 26 measurements with longer measurement/warmup windows and both pair orders reduced tested 64K-frame stereo dithered PCM16 chunk cost by 19–21% and PCM24 by about 23%. Tested 128-frame stereo chunks improved 0–2.1%; one-frame stereo PCM24 included a 3.8% slowdown. Large full-export dither controls stayed within 2%, large mono-stream controls within 1.8%, and tiny full-export dither controls within 2.5%. Unchanged undithered/float controls ranged from 9.5% faster to 0.7% slower. These are host-/measurement-/warmup-dependent streaming results, not universal export, GC or synthesis/deadline gains.
+- All 888 complete files, 3,492 partitioned streams and 270 invalid-sample/atomic-retry cases matched exact bytes, errors and accounting with zero input metadata/accessor getter reads. Existing independent stereo interleaving, dither chunk independence, nested-metadata and retry regressions remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Active-dither quantization constants
 
 - Resolve the private integer format's positive/negative scales and lower clipping bound once per write, outside the active-TPDF sample loops. Reuse the positive scale as the upper clipping bound. Sample validation, multiply/add order, both xorshift draws, rounding, clamping and transactional RNG/frame accounting remain unchanged; undithered and float writers keep their existing paths.

@@ -165,12 +165,48 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
   return s >>> 0;
 }
 
+// Channel admission fixes stereo shape; validate/draw/store left before reading right.
+function encodeStereoDither(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
+  const pcm16 = config.format === 'pcm16';
+  const negativeScale = pcm16 ? 32768 : 8388608;
+  const positiveScale = pcm16 ? 32767 : 8388607;
+  const minSample = -negativeScale;
+  let s = ditherSeed | 0;
+  const sampleBytes = config.sampleBytes;
+  const frameBytes = sampleBytes * 2;
+  for (let frame = 0; frame < frames; frame++, offset += frameBytes) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const firstScaled = first * (first < 0 ? negativeScale : positiveScale);
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    const a = s >>> 0;
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    const firstNoise = (a - (s >>> 0)) * 2 ** -32;
+    const firstSample = Math.min(positiveScale, Math.max(minSample, Math.round(firstScaled + firstNoise)));
+    bytes[offset] = firstSample & 255; bytes[offset + 1] = (firstSample >> 8) & 255;
+    if (!pcm16) bytes[offset + 2] = (firstSample >> 16) & 255;
+    const second = right![frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const secondScaled = second * (second < 0 ? negativeScale : positiveScale);
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    const b = s >>> 0;
+    s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+    const secondNoise = (b - (s >>> 0)) * 2 ** -32;
+    const secondSample = Math.min(positiveScale, Math.max(minSample, Math.round(secondScaled + secondNoise)));
+    const secondOffset = offset + sampleBytes;
+    bytes[secondOffset] = secondSample & 255; bytes[secondOffset + 1] = (secondSample >> 8) & 255;
+    if (!pcm16) bytes[secondOffset + 2] = (secondSample >> 16) & 255;
+  }
+  return s >>> 0;
+}
+
 /** Streaming RIFF32 output with known length; retains no PCM or emitted bytes. */
 export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const data = sequenceOwnData(options, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const config = layout(data);
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
-    : !config.dither && config.format === 'pcm24' ? encodePcm24 : encodeInto;
+    : !config.dither && config.format === 'pcm24' ? encodePcm24
+      : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   let emittedHeader = false;
   let framesEncoded = 0;
   let finished = false;
