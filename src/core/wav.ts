@@ -48,8 +48,7 @@ function layout(data: Record<string, unknown>): Layout {
   if (byteLength - 8 > 0xffffffff) throw new RangeError('WAV exceeds RIFF32 size');
   return { sampleRate: sampleRate as number, channels, format, dither, frames: totalFrames as number, sampleBytes, blockAlign, dataBytes, headerBytes, padding, byteLength };
 }
-function headerBytes(config: Layout): Uint8Array {
-  const bytes = new Uint8Array(config.headerBytes);
+function writeHeader(bytes: Uint8Array, config: Layout): void {
   const view = new DataView(bytes.buffer);
   const text = (offset: number, value: string): void => { for (let i = 0; i < value.length; i++) bytes[offset + i] = value.charCodeAt(i); };
   text(0, 'RIFF'); view.setUint32(4, config.byteLength - 8, true); text(8, 'WAVE'); text(12, 'fmt ');
@@ -61,7 +60,6 @@ function headerBytes(config: Layout): Uint8Array {
   const dataOffset = config.format === 'float32' ? 50 : 36;
   if (config.format === 'float32') { text(38, 'fact'); view.setUint32(42, 4, true); view.setUint32(46, config.frames, true); }
   text(dataOffset, 'data'); view.setUint32(dataOffset + 4, config.dataBytes, true);
-  return bytes;
 }
 function channels(left: unknown, right: unknown, expected?: 1 | 2): { left: Float32Array; right: Float32Array | undefined; frames: number } {
   if (typedArrayKind.call(left) !== 'Float32Array' || (right !== undefined && typedArrayKind.call(right) !== 'Float32Array')) throw new TypeError('WAV channels must be native Float32Arrays');
@@ -136,7 +134,7 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
     get framesEncoded() { return framesEncoded; }, get finished() { return finished; },
     header() {
       if (emittedHeader || finished) throw new Error('WAV header already emitted');
-      const bytes = headerBytes(config); emittedHeader = true; return bytes;
+      const bytes = new Uint8Array(config.headerBytes); writeHeader(bytes, config); emittedHeader = true; return bytes;
     },
     encode(input: WavChunk) {
       if (!emittedHeader || finished) throw new Error('WAV encoder requires an emitted header and unfinished state');
@@ -165,7 +163,7 @@ export function encodeWav(input: WavOptions): Uint8Array {
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const bytes = new Uint8Array(config.byteLength);
-  bytes.set(headerBytes(config));
+  writeHeader(bytes, config);
   encodeInto(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);
   return bytes;
 }

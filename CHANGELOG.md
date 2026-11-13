@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Direct full-buffer WAV headers
+
+- Write full-export headers directly into the newly allocated complete WAV, removing the temporary 44-/58-byte header array and its copy. Streaming still allocates and returns an independent header; both callers share the private writer. Keep reserved zeros, fact/data sizes, RIFF padding, endian stores, sample encoding and header/accounting state unchanged.
+- Paired fresh-process Node.js 26 measurements, including longer warmup and reversed ordering, reduced one-/128-frame full export cost by about 4–19% (long-warmup cases: 6–19%). Tested 64K-frame full controls were 2.9–6.5% slower; chunk controls ranged from 9.9% faster to 3.4% slower. This is an explicit allocation/small-file setup tradeoff, not a universal WAV throughput or synthesis gain.
+- All 720 complete files and 2,520 chunk-independent streams matched byte for byte across formats, mono/stereo, rates, offset/shared views, signed zero and subnormals. All 225 invalid-sample/atomic-retry cases, ten hostile-metadata cases (zero getter reads) and six malformed-channel cases matched. Existing independent header/empty-stream/RIFF/dither checks remain unchanged; scoped A/C review is recorded in SECURITY.md.
+
 ### Fixed-channel float WAV writing
 
 - Float32 WAV payloads now choose mono/stereo once and write with fixed channel offsets instead of a nested dynamic channel loop. Keep original left/right sample-read order, finite/unit-range checks, little-endian DataView stores, unaligned 58-byte float headers and atomic chunk accounting. No new buffers, persistent state or public API.
