@@ -35,6 +35,32 @@ function audio(synth: Synth, frames: number): Float32Array {
   return left;
 }
 
+test('rejected topology initialization cannot leave recycled carrier indices stale', () => {
+  const synth = new Synth(8000, 1), reference = new Synth(8000, 1);
+  const first = tone('noise');
+  first.algorithm = 0;
+  const next = prepareVoice(tone('noise'));
+  synth.noteOn(prepareVoice(first), 60, 1);
+  synth.panic();
+  const saved = Object.getOwnPropertyDescriptor(Array.prototype, '1');
+  const blocked = new Error('blocked graph input');
+  let failure: unknown;
+  try {
+    // Frozen input arrays have absent second edges; fail after patch identity changes.
+    Object.defineProperty(Array.prototype, '1', { configurable: true, get() { throw blocked; } });
+    try { synth.noteOn(next, 60, 2); } catch (error) { failure = error; }
+  } finally {
+    if (saved) Object.defineProperty(Array.prototype, '1', saved);
+    else Reflect.deleteProperty(Array.prototype, '1');
+  }
+  assert.equal(failure, blocked);
+  synth.noteOn(next, 60, 3);
+  reference.noteOn(next, 60, 3);
+  const expected = audio(reference, 512);
+  assert.ok(energy(expected) > 0);
+  assert.deepEqual(audio(synth, 512), expected);
+});
+
 test('periodic shapes stay finite and bounded for negative, huge and modulated phases', () => {
   const shapes: OperatorWaveform[] = ['sine', 'half', 'abs', 'quarter', 'alternating', 'camel', 'square', 'saw'];
   let random = 123456789;

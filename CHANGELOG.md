@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused pooled carrier indices
+
+- Keep the pooled carrier-index table when admitting the same immutable prepared voice again, avoiding a redundant typed-array copy. Different voices still refresh it; sparse modulation-input slots keep their existing per-admission reads.
+- Paired Node.js 26 measurements reduced repeated prepared-voice admission time by about 5–9%, depending on carrier count. Raw-input controls varied within 1.1%; this is pooled admission overhead, not sustained render throughput.
+- Complete stereo PCM and carrier-index state matched across 360 stages covering all eight algorithms, three quality profiles, mixed/noise/sine kernels, patch changes, live edits and pool reuse. A regression also checks audible recovery after rejected topology initialization, exercising the existing failed-admission identity invalidation.
+
 ### Skipped unity operator-level attenuation
 
 - At note admission, use the validated operator level directly when combined key/velocity attenuation is zero, avoiding the redundant `10 ** 0` calculation. Nonzero attenuation keeps the original arithmetic and output bits.

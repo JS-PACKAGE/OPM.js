@@ -1637,7 +1637,8 @@ export class Synth {
         active.inputIndices[op * 2] = active.graph.inputs[op][0] ?? -1;
         active.inputIndices[op * 2 + 1] = active.graph.inputs[op][1] ?? -1;
       }
-      active.carrierIndices.set(active.graph.carriers);
+      // Carriers are dense/frozen; input holes above still observe the admission context.
+      if (!sameVoice) active.carrierIndices.set(active.graph.carriers);
       active.velocity = velocity;
       active.expression = 1;
       active.pan = pan;
