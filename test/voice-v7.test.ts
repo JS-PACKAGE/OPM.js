@@ -230,10 +230,41 @@ test('periodic carriers retain modulation beside a noise carrier', () => {
   }
 });
 
+test('periodic carriers after noise ignore only the upstream periodic modulation', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const algorithm of [0, 1] as const) {
+    const fixture = (ignored: number, noiseLevel = .5): Voice => ({ ...tone(), algorithm, feedback: 3, modIndex: 4,
+      lfo: { rate: 5, amDepth: .2, pmDepth: 23, waveform: 'noise', amTargets: [1, .5, .3, .7], pmTargets: [.5, 1, 0, .3] },
+      ops: Array.from({ length: 4 }, (_, i) => ({ ratio: i + 1, level: i === 0 ? ignored : i === 2 ? noiseLevel : .5,
+        detune: i, waveform: i === 2 ? 'noise' : 'sine', noiseRate: 1337,
+        adsr: { a: 0, d: 0, s: .7, r: .015 } })) as unknown as Voice['ops'] });
+    const engines = [.5, 0].map(level => {
+      const synth = new Synth(16000, 2, { quality }); synth.noteOn(fixture(level), 57, 1); return synth;
+    });
+    const compare = (length: number): { left: Float32Array; right: Float32Array } => {
+      const output = engines.map(synth => {
+        const left = new Float32Array(length), right = new Float32Array(length); synth.render(left, right);
+        assert.equal(synth.errorCount, 0); return { left, right };
+      });
+      assert.deepEqual(output[0], output[1], `${quality}, algorithm ${algorithm}`); return output[0];
+    };
+    const first = compare(96), unmodulated = new Synth(16000, 2, { quality });
+    unmodulated.noteOn(fixture(.5, 0), 57, 1);
+    const reference = audio(unmodulated, 96);
+    assert.ok(energy(Float32Array.from(first.left, (value, index) => value - reference[index])) > 1e-6);
+    for (const synth of engines) synth.updateNote(1, { operatorLevels: [.3, .6, .7, .2], operatorRatios: [.75, 2.25, 5, 7.5], ramp: .003 });
+    compare(39);
+    for (const synth of engines) synth.updateNote(1, { pitch: 4, glide: .004, expression: .6, pan: -.2, ramp: .002 });
+    compare(128);
+    for (const synth of engines) synth.noteOff(1);
+    compare(1024);
+  }
+});
+
 test('inaudible periodic modulators still expose nonfinite phase and gain state', () => {
-  for (const quality of ['eco', 'standard', 'high'] as const) for (const fault of ['phase', 'gain']) {
+  const layouts = [{ noise: 3, levels: [.5, 0, 0, .5] }, { noise: 2, levels: [.5, .5, .5, .5] }];
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const fault of ['phase', 'gain']) for (const layout of layouts) {
     const input: Voice = { ...tone(), algorithm: 0, modIndex: 4,
-      ops: tone().ops.map((op, i) => ({ ...op, level: i === 0 || i === 3 ? .5 : 0, waveform: i === 3 ? 'noise' : 'sine' })) as unknown as Voice['ops'] };
+      ops: tone().ops.map((op, i) => ({ ...op, level: layout.levels[i], waveform: i === layout.noise ? 'noise' : 'sine' })) as unknown as Voice['ops'] };
     const synth = new Synth(16000, 2, { quality }), ended: unknown[] = [];
     synth.onVoiceEnded = (...event) => ended.push(event); synth.noteOn(input, 57, 1); audio(synth, 128);
     if (fault === 'phase') synth.voices[0].phases[0] = NaN;

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Late-noise route pruning
+
+- Mixed voices with noise at operator 2 and a sole periodic carrier at operator 3 can skip both disconnected upstream periodic oscillators. Admission derives reachability from the frozen graph; keep every phase, active noise clock, gain check and carrier modulation. Single-oscillator opportunities retain the original path to avoid dispatch overhead. No pool fields, persistent masks, buffers or closures are added.
+- Paired fresh-process Node.js 26 measurements of 16 voices at 48 kHz, with longer warmup and reversed ordering, reduced the selected algorithm-0 patch's render cost by about 13% (eco), 14% (standard) and 17–18% (high). Unchanged mixed controls stayed within 0.4%; sine controls ranged from 3.0% faster to 0.9% slower. Shorter unchanged controls included a 6.8% slowdown, so these targeted host-dependent results are not universal throughput/deadline guarantees.
+- All 18,432 complete stereo PCM/retained-numeric-state/lifecycle stages and 120 noncarrier phase/gain fault cases matched across algorithms, qualities, 8/48 kHz, all noise layouts, static zeros, live edits, stealing and different-route reuse. Only intentionally inaudible periodic scratch is excluded. Consumer regressions cover ignored upstream modulation, retained post-noise modulation and nonfinite state; scoped A/C review is recorded in SECURITY.md.
+
 ### Noise-carrier modulation pruning
 
 - Mixed-waveform voices whose carriers are all noise or permanently zero-level now use a dedicated frame kernel: noise does not read modulation, so periodic non-carriers cannot affect the mix. Keep their phases and gain checks, every live noise clock and carrier-sum order; intentionally zero only inaudible periodic value/feedback scratch. Live operator-level ramps retain generic rendering, and existing all-noise/periodic kernels remain unchanged. No pool fields, render buffers or per-voice closures are added.

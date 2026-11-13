@@ -1368,6 +1368,47 @@ function carrierNoiseFrame(active: ActiveVoice, out: Float64Array, dynamicPitch:
   return true;
 }
 
+// Two leading periodic operators are inaudible before noise 2 / sole carrier 3.
+// Admission selects this route only when both oscillators can be skipped.
+function lateNoiseFrame(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, levels, waveforms, inputIndices, carrierIndices, sineFrame: frame } = active;
+  const modIndex = active.modIndex;
+  const carrierCount = active.graph.carriers.length, carrierGain = active.carrierGain;
+  let previous = active.previous, older = active.older;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    if (dynamicPitch) stepPitch(active, sub, out.length, frame);
+    for (let op = 0; op < 4; op++) {
+      let value = 0;
+      if (levels[op] !== 0) {
+        const amplitude = gains[base + op] * frame[op], code = waveforms[op];
+        if (code === 8) value = +noiseOp(active, op, amplitude);
+        else if (amplitude !== 0 && op >= 2) {
+          let modulation = 0;
+          const first = inputIndices[op * 2], second = inputIndices[op * 2 + 1];
+          if (first >= 0) modulation += values[first] * modIndex;
+          if (second >= 0) modulation += values[second] * modIndex;
+          const theta = phases[op] + modulation;
+          value = code === 0 ? sinPi(theta) * amplitude :
+            periodicWaveform(theta * Math.PI, code, steps[op] * TURNS_PER_HALF_TURN) * amplitude;
+        }
+        if (!Number.isFinite(amplitude)) return false;
+      }
+      values[op] = value;
+      const phase = phases[op] + steps[op], wrapped = phase < PHASE_CYCLE ? phase : phase - PHASE_CYCLE;
+      phases[op] = wrapped;
+      if (!Number.isFinite(value) || !Number.isFinite(wrapped)) return false;
+    }
+    older = previous; previous = values[0];
+    let sample = 0;
+    for (let j = 0; j < carrierCount; j++) sample += values[carrierIndices[j]];
+    sample *= carrierGain;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  active.previous = previous; active.older = older;
+  return true;
+}
+
 /** Every operator gain is zero for the whole frame, so every operator value and
  * the output are exactly +0, as either path would compute. This advances the
  * state they keep (phases with the same sums and wraps, live noise clocks and
@@ -1706,6 +1747,21 @@ export class Synth {
           if (waveforms[op] !== 8 && levels[op] !== 0) { noiseCarriers = false; break; }
         }
         if (noiseCarriers) active.frameKernel = carrierNoiseFrame;
+        else {
+          let needed = 0, unused = 0;
+          for (let index = 0; index < carriers.length; index++) needed |= 1 << carriers[index];
+          // Signal order is topological; noise and permanent zero levels stop traversal.
+          for (let op = 3; op >= 0; op--) {
+            if ((needed & (1 << op)) === 0 || waveforms[op] === 8 || levels[op] === 0) continue;
+            const inputs = active.graph.inputs[op];
+            for (let index = 0; index < inputs.length; index++) needed |= 1 << inputs[index];
+          }
+          for (let op = 0; op < 4; op++) {
+            if ((needed & (1 << op)) === 0 && waveforms[op] !== 8 && levels[op] !== 0) unused |= 1 << op;
+          }
+          // One skipped oscillator does not amortize another frame dispatch.
+          if (unused === 3 && waveforms[2] === 8 && carriers.length === 1 && carriers[0] === 3) active.frameKernel = lateNoiseFrame;
+        }
       }
       // Cache the fixed topology in pooled typed storage; frozen graph-array
       // indexing otherwise repeats for every operator at every oversampled frame.
