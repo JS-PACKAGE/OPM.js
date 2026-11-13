@@ -343,3 +343,40 @@ test('recursive rendering is rejected without corrupting notification state or f
   assert.equal(rms(retired.left), 0);
   assert.ok(rms(audio(synth, 100).left) > 0.01);
 });
+
+test('mixed 32-voice terminals preserve reasons, survivors and callback-admitted note timing', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const patch = tone();
+    patch.ops.forEach(op => { op.adsr.r = 0; });
+    const prepared = prepareVoice(patch);
+    const synth = new Synth(8000, 32, { quality }), reference = new Synth(8000, 32, { quality });
+    const ended: [number, string][] = [], expected: [number, string][] = [];
+    synth.onVoiceEnded = (id, reason) => {
+      ended.push([id, reason]);
+      if (id === 1) synth.noteOn(prepared, 72, 100, { pan: 0.3 });
+    };
+    reference.onVoiceEnded = (id, reason) => { expected.push([id, reason]); };
+    for (const engine of [synth, reference]) {
+      for (let id = 1; id <= 32; id++) engine.noteOn(prepared, 48 + id / 2, id);
+      audio(engine, 57);
+      for (const id of [1, 3, 31]) engine.noteOff(id);
+      for (const id of [6, 18, 32]) engine.voices[id - 1].phases[0] = NaN;
+    }
+    assert.deepEqual(audio(synth, 1), audio(reference, 1));
+    reference.noteOn(prepared, 72, 100, { pan: 0.3 });
+    const terminals: [number, string][] = [
+      [1, 'ended'], [3, 'ended'], [6, 'error'], [18, 'error'], [31, 'ended'], [32, 'error'],
+    ];
+    assert.deepEqual(ended, terminals);
+    assert.deepEqual(expected, terminals);
+    assert.equal(synth.errorCount, 3);
+    assert.deepEqual(audio(synth, 257), audio(reference, 257),
+      'survivors and the callback replacement advance exactly once per later frame');
+    for (const engine of [synth, reference]) {
+      for (let id = 1; id <= 32; id++) assert.equal(engine.noteOff(id), !terminals.some(([retired]) => retired === id));
+      assert.equal(engine.noteOff(100), true);
+    }
+    assert.deepEqual(audio(synth, 128), audio(reference, 128));
+    assert.deepEqual(ended, expected);
+  }
+});

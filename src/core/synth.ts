@@ -550,6 +550,23 @@ function removeAt<T>(items: T[], index: number): T {
   return removed;
 }
 
+function compactTerminals(voices: ActiveVoice[], terminals: Uint8Array, count: number): void {
+  let write = terminals[0] >> 1;
+  // Keep a lone tail retirement on the original cheap pop path.
+  if (count === 1) {
+    removeAt(voices, write);
+    return;
+  }
+  // Stable compaction once instead of shifting all later voices per retirement.
+  let terminal = 1;
+  for (let read = write + 1; read < voices.length; read++) {
+    if (terminal < count && read === (terminals[terminal] >> 1)) terminal++;
+    else voices[write++] = voices[read];
+  }
+  // Setting length to zero discards V8's reusable backing store.
+  while (voices.length > write) voices.pop();
+}
+
 /** Held dB: linear attack from the floor, decay to sustain, then (when `sustain` > 0)
  * a fall of 96 dB per `sustain` seconds, clamped at the floor. */
 function heldDb(time: number, attack: number, decay: number, sustainDb: number, sustain: number): number {
@@ -1534,7 +1551,7 @@ export class Synth {
   freeVoices: ActiveVoice[];
   /** @internal Preallocated notifications are drained after each stable frame. */
   terminalIds: Float64Array;
-  /** @internal */
+  /** @internal Retired index << 1 | error flag; maxVoices <= 32 fits one byte. */
   terminalErrors: Uint8Array;
   /** @internal */
   rendering: boolean;
@@ -2349,18 +2366,19 @@ export class Synth {
           if (!this.renderVoice(active)) {
             (this as MutableCounters).errorCount++;
             this.terminalIds[terminalCount] = active.id;
-            this.terminalErrors[terminalCount++] = 1;
-            this.freeVoices.push(removeAt(this.voices, index--));
+            this.terminalErrors[terminalCount++] = (index << 1) | 1;
+            this.freeVoices.push(active);
             continue;
           }
           // Envelope-based retirement: once every operator release has ended the
           // voice contributes silence; the shared decimator drains its tail.
           if (active.releaseTime >= 0 && (active.elapsed - 1) / this.sampleRate >= active.releaseEnd) {
             this.terminalIds[terminalCount] = active.id;
-            this.terminalErrors[terminalCount++] = 0;
-            this.freeVoices.push(removeAt(this.voices, index--));
+            this.terminalErrors[terminalCount++] = index << 1;
+            this.freeVoices.push(active);
           }
         }
+        if (terminalCount > 0) compactTerminals(this.voices, this.terminalErrors, terminalCount);
         for (let index = 0; index < this.fades.length; index++) {
           const active = this.fades[index];
           const gain = active.fadeRemaining / this.fadeFrames;
@@ -2434,7 +2452,7 @@ export class Synth {
         // Callbacks may admit/release notes, but replacements first render on the
         // next frame. Live traversal would let a zero-release chain run forever.
         for (let index = 0; index < terminalCount; index++) {
-          this.ended(this.terminalIds[index], this.terminalErrors[index] ? 'error' : 'ended');
+          this.ended(this.terminalIds[index], this.terminalErrors[index] & 1 ? 'error' : 'ended');
         }
         if (this.decimatorIdle) {
           this.decimatorMirrored = true;

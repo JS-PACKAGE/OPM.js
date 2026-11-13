@@ -4,6 +4,13 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Stable batch voice retirement
+
+- Frames with multiple completed or faulted voices compact surviving voices once in their original order, instead of repeatedly shifting the remaining array after every retirement. The existing bounded terminal byte stores the original voice index and error bit; notification IDs, free-pool order and deferred callback admission are unchanged. Single-terminal frames retain the original removal path.
+- Tail removal uses pop rather than resetting array length, preserving reusable backing capacity observed on the tested V8. No voice field, typed buffer or per-frame collection is added. A 32-voice mixed-release/fault regression checks exact reasons, callback-admitted note timing, future stereo PCM and surviving note ownership across all quality modes. Scoped A/C review is recorded in SECURITY.md.
+- Isolated-profile, paired fresh-process Node.js 26 runs with both pair orders made tested 32-voice simultaneous-retirement render windows 26–28% faster in standard quality and 22–23% faster in high quality. Ordinary rendering stayed within 0.7%; complete short-note admit/render/release cycles improved 1.9–2.1% and 0.5–0.9%, respectively. Earlier mixed-profile runs had large positive unchanged-control outliers; these figures use isolated profiles rather than those inflated results. They are workload-/host-dependent, not universal synthesis, GC or deadline guarantees.
+- All 2,376 stereo PCM segments, 2,592 inspected state snapshots and 216 lifecycle cases matched across qualities, sample rates, capacities, saturation modes, DC filtering, sparse/dense retirement masks, faults, callback admission, aliased outputs, stealing and panic. Snapshot comparison validates packed indices and normalizes only the changed terminal scratch-byte representation; all other inspected data and callbacks match.
+
 ### Reused edited sustain gains
 
 - Live ADSR edits cache their existing fast exponential in the voice's existing sustainGain slots. Edited held operators read that value instead of reevaluating it when another operator still requires exact envelope traversal. Pristine patch gains retain their canonical power calculation; existing pooled-note admission restores it before clearing edit flags. No voice field, allocation, branch or approximation is added to rendering.
