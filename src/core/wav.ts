@@ -281,7 +281,8 @@ export function encodeWav(input: WavOptions): Uint8Array {
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
-    : !config.dither && config.format === 'pcm24' ? encodePcm24 : encodeInto;
+    : !config.dither && config.format === 'pcm24' ? encodePcm24
+      : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);
   encodeSamples(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);

@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reuse the stereo dither writer for full WAV files
+
+- Full-buffer stereo PCM16/PCM24 exports with TPDF dither now select the existing streaming stereo writer instead of the generic channel loop. The same helper accepts the full file's byte offset and frame count; sample capture/validation order, two PRNG draws per sample, seed, rounding and rail clamping are unchanged. No loop, buffer/view allocation, retained field or dependency is added.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz full-file encoding with 128/8,192/65,536 frames, including output allocation, headers and validation. Positive values below mean higher throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Stereo PCM16 with dither | +1.3–3.3% | +1.3–3.3% |
+| Stereo PCM24 with dither | +0.6–2.1% | +0.6–1.9% |
+| Unchanged mono PCM24 dither control | +1.0–1.4% | +0.7–1.4% |
+| Unchanged undithered stereo PCM16 control | −0.1% to +0.2% | −0.4% to +0.3% |
+| Unchanged stereo float32 control | −0.5% to −0.3% | −0.7% |
+
+- Control measurements do not establish speedups for unchanged paths. These are workload-/host-dependent Node medians, not universal browser/device, heap-byte or GC guarantees.
+- Source/distribution comparisons match the 360-case WAV matrix, 228 rejection checks and 360 transferred chunks with zero metadata getter calls. Four additional 65,537/262,145-frame dither files match bounded incremental encoding byte-for-byte, and both PCM formats preserve either-channel shared-growth prefixes and resizable-shrink rejection/retry/transfer behavior. All 14 targeted WAV tests pass. Scoped A/C review is recorded in SECURITY.md.
+
 ### Aligned stereo float32 WAV stores
 
 - Little-endian stereo float32 streaming encoders now select a fixed interleaving loop once and write through one native Float32 view over the fresh output chunk, instead of per-sample DataView stores. Each source sample is still captured once, checked for finite -1..1 range and then stored before the next sample is read. Mono bulk copying, big-endian/full-file conversion, headers, dither, frame accounting and output transfer ownership are unchanged; no retained buffer, field or dependency is added.
