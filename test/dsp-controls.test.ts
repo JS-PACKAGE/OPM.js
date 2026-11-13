@@ -198,6 +198,30 @@ test('retuning fractional notes preserves attack, decay, release and phase witho
   assert.ok(release.left.subarray(3100).every(sample => sample === 0));
 });
 
+test('retuning fixed-Hz playback refreshes the note frequency used by a later ratio ramp', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const note of [48.25, 72.25]) {
+    const patch = tone();
+    patch.ops.forEach((op, index) => { op.frequency = 220 + index * 110; });
+    const offsets = Array<number>(128).fill(0);
+    offsets[Math.floor(note)] = 20;
+    offsets[Math.ceil(note)] = 40;
+    const tuning = { referenceHz: 432, offsets };
+    const synth = new Synth(48000, 1, { quality });
+    const reference = new Synth(48000, 1, { quality, tuning });
+    for (const instance of [synth, reference]) instance.noteOn(patch, note, 1);
+    assert.deepEqual(audio(synth, 333), audio(reference, 333));
+    synth.setTuning(tuning);
+    for (const instance of [synth, reference]) {
+      instance.updateNote(1, { operatorFrequencies: [null, null, null, null],
+        operatorRatios: [1.5, 2, 3, 4], ramp: 0.01 });
+    }
+    const ramp = audio(synth, 257);
+    assert.ok(ramp.left.some(sample => sample !== 0));
+    assert.deepEqual(ramp, audio(reference, 257));
+    assert.deepEqual(audio(synth, 1024), audio(reference, 1024));
+  }
+});
+
 test('retuning at a steal boundary includes the detached audible tail without restarting it', () => {
   const synth = new Synth(48000, 1), reference = new Synth(48000, 1);
   const controls: NoteControls = { pitch: 7, glide: 0.03 };

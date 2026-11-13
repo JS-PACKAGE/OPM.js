@@ -1629,13 +1629,18 @@ export class Synth {
   setTuning(tuning: TuningOptions): void {
     const normalized = normalizeTuning(tuning);
     this.tuning = normalized;
-    for (let index = 0; index < this.voices.length; index++) this.retuneVoice(this.voices[index]);
-    for (let index = 0; index < this.fades.length; index++) this.retuneVoice(this.fades[index]);
+    for (let index = 0; index < this.voices.length; index++) {
+      const active = this.voices[index];
+      this.retuneVoice(active, tuningFrequency(active.note, normalized));
+    }
+    for (let index = 0; index < this.fades.length; index++) {
+      const active = this.fades[index];
+      this.retuneVoice(active, tuningFrequency(active.note, normalized));
+    }
   }
 
-  /** @internal */
-  retuneVoice(active: ActiveVoice): void {
-    const frequency = tuningFrequency(active.note, this.tuning);
+  /** @internal Tuning changes supply a fresh frequency; operator edits reuse the note's cached value. */
+  retuneVoice(active: ActiveVoice, frequency: number): void {
     active.tunedFrequency = frequency;
     active.pitchSettled = false;
     const rate = this.sampleRate * this.oversample;
@@ -2033,7 +2038,7 @@ export class Synth {
       active.frequencyStart = active.elapsed;
       active.frequencyFrames = frames;
     }
-    if (operatorRatios !== undefined || operatorFrequencies !== undefined) this.retuneVoice(active);
+    if (operatorRatios !== undefined || operatorFrequencies !== undefined) this.retuneVoice(active, active.tunedFrequency);
     if (operatorADSR !== undefined) {
       const time = active.elapsed / this.sampleRate;
       for (let op = 0; op < 4; op++) {
@@ -2332,7 +2337,7 @@ export class Synth {
     if (frequencyRamping) {
       if (active.elapsed >= active.ratioStart + active.ratioFrames) active.ratioFrames = 0;
       if (active.elapsed >= active.frequencyStart + active.frequencyFrames) active.frequencyFrames = 0;
-      if (active.ratioFrames === 0 && active.frequencyFrames === 0) this.retuneVoice(active);
+      if (active.ratioFrames === 0 && active.frequencyFrames === 0) this.retuneVoice(active, active.tunedFrequency);
     }
     active.lastSample = output * active.scalarValues[4];
     return Number.isFinite(active.lastSample);

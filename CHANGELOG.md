@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Cached note-frequency retuning
+
+- Operator ratio/fixed-Hz edits and completed frequency ramps reuse the note's existing tuned frequency instead of repeating note-to-frequency conversion. Admission still initializes that value on every slot reuse; tuning changes explicitly refresh active voices and detached fades, including fixed-Hz playback before a later return to ratio mode. No field, lookup table, buffer or cross-note cache is added.
+- Paired fresh-process Node.js 26 measurements with both pair orders made tested changing prevalidated ratio-control calls 6.9–14.0% faster and fixed-Hz calls 14.5–14.6% faster. Raw ratio-control calls improved 2.6–2.8%; tuning, expression, steady-render and complete-ramp control-profile medians ranged from 1.7% slower to 0.5% faster. These are workload-/host-dependent control-call gains, not general rendering, GC or deadline guarantees.
+- Baseline comparisons covered 1,248 exact stereo PCM segments, 4,896 inspected numerical/array state snapshots, 96 lifecycle cases and 576 rejected tuning updates, including fractional/end-point notes, tuning limits, interrupted ramps, fixed-Hz restoration, release, stolen tails and pooled reuse across all qualities. Private function identities are compared only by function type; no numerical state is normalized. A consumer regression compares fixed-Hz retuning followed by a ratio ramp against tuning selected before admission. Scoped A/C review is recorded in SECURITY.md.
+
 ### Shared operator rate multipliers
 
 - Refreshing one operator's envelope timing now computes its note-dependent rate multiplier once and reuses it for attack, decay, release and optional sustain rate, instead of recomputing the same exponent for each duration. An unclamped unit duration derives that multiplier through the unchanged scalar duration rule; every stored A/D/R value still clamps at ten seconds and sustain rate at one hundred seconds. Pristine timing-cache hits remain untouched; no voice field, collection or cross-note cache is added.
