@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped empty MIDI loss-report work
+
+- Legacy MIDI imports without mapped programs omit the otherwise unused preserved-control Map and iterator. Imports with expression preservation or any mapped program retain the same counters and insertion order, including mapped program changes when expression is omitted. Empty warning snapshots skip the unused classification record and two filter calls; all public report arrays remain fresh and frozen.
+- Isolated-profile paired fresh-process Node.js 26 measurements with both pair orders made tested one-note imports 4.8–5.6% faster and sixteen-note imports 3.3–4.8% faster. Isolated ignored-controller controls improved 1.4–1.6%; dense preserved-controller controls ranged from 0.9% slower to 1.2% faster. Mixed-profile runs showed up to 4.7% slower warning-heavy cases, so these are workload-/host-dependent results, not universal import or GC guarantees.
+- All 1,375 complete result/freeze-descriptor comparisons, 2,427 rejection comparisons and four inherited-warning contexts matched, with zero caller getter reads. Instrumentation observed six to five Map constructions and one to zero Map iterators for the tested legacy/empty-program imports; preserve/mapped imports remained six/one. Empty warning snapshots made zero rather than two private filter calls; nonempty snapshots retained two. Existing loss-summary, mapped-program and RPN regressions remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Stable batch voice retirement
 
 - Frames with multiple completed or faulted voices compact surviving voices once in their original order, instead of repeatedly shifting the remaining array after every retirement. The existing bounded terminal byte stores the original voice index and error bit; notification IDs, free-pool order and deferred callback admission are unchanged. Single-terminal frames retain the original removal path.

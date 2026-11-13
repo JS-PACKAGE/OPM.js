@@ -154,7 +154,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   try { arrayBufferLength.call(buffer); } catch { throw new TypeError('MIDI source must not use shared memory'); }
   const reader = new Reader(new DataView(buffer, typedOffset.call(source), length), length);
   const warnings = new Map<MidiFileWarningCode, MidiFileWarning>();
-  const preserved = new Map<MidiFileControlKind, number>();
+  // Legacy imports without mapped programs cannot preserve any source controls.
+  const preserved = preserve || programs.size > 0 ? new Map<MidiFileControlKind, number>() : undefined;
   function warn(code: MidiFileWarningCode, message: string, loss = true, count = 1): void {
     if (loss && unsupported === 'reject') throw new RangeError(`Unsupported MIDI content: ${message}`);
     const existing = warnings.get(code);
@@ -217,7 +218,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           wire.push({ tick, track, kind: 'expression', channel: status & 15, a, b, command });
           const kind: MidiFileControlKind = command === 0xe0 ? 'pitch-bend' : command === 0xd0 ? 'channel-pressure'
             : command === 0xa0 ? 'poly-pressure' : a === 1 ? 'modulation' : a === 10 ? 'pan' : 'expression';
-          preserved.set(kind, (preserved.get(kind) ?? 0) + 1);
+          preserved!.set(kind, (preserved!.get(kind) ?? 0) + 1);
         } else warn('ignored-channel', 'Unsupported channel messages (including banks and omitted expression/RPN) were omitted');
       } else if (status === 0xff) {
         const type = input.data();
@@ -325,12 +326,12 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       hasMeter = true;
     } else if (item.kind === 'program') {
       currentPrograms[item.channel] = item.a;
-      if (programs.has(item.a)) preserved.set('program-change', (preserved.get('program-change') ?? 0) + 1);
+      if (programs.has(item.a)) preserved!.set('program-change', (preserved!.get('program-change') ?? 0) + 1);
       else warn('ignored-program', 'Unmapped program changes were omitted; channel/default voice fallback remains in effect');
     } else if (item.kind === 'rpn') {
       const state = rpn[item.channel] ?? (rpn[item.channel] = midiRpnState(range));
       if (midiRpnControl(state, item.a, item.b)) {
-        preserved.set('pitch-bend-range', (preserved.get('pitch-bend-range') ?? 0) + 1);
+        preserved!.set('pitch-bend-range', (preserved!.get('pitch-bend-range') ?? 0) + 1);
       } else warn('ignored-channel', 'Unsupported channel messages (including banks, NRPN and unselected data entry) were omitted');
     } else if (item.kind === 'expression') {
       let controls: NoteControls;
@@ -425,13 +426,13 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     for (const channel of sustained) if (channel) for (const held of channel) close(held, endTick);
   }
   const snapshot = Object.freeze([...warnings.values()].map(warning => Object.freeze(warning)));
-  const approximate: Partial<Record<MidiFileWarningCode, true>> = {
+  const approximate: Partial<Record<MidiFileWarningCode, true>> | undefined = snapshot.length === 0 ? undefined : {
     'default-voice': true, 'sustain-applied': true, 'tempo-conflict': true, 'unclosed-notes': true, 'release-tail-controls': true,
   };
   const lossSummary: Readonly<MidiFileLossSummary> = Object.freeze({
-    omissions: Object.freeze(snapshot.filter(warning => !approximate[warning.code])),
-    approximations: Object.freeze(snapshot.filter(warning => approximate[warning.code])),
-    preservedControls: Object.freeze([...preserved].map(([kind, count]) => Object.freeze({ kind, count }))),
+    omissions: Object.freeze(approximate === undefined ? [] : snapshot.filter(warning => !approximate[warning.code])),
+    approximations: Object.freeze(approximate === undefined ? [] : snapshot.filter(warning => approximate[warning.code])),
+    preservedControls: Object.freeze(preserved === undefined ? [] : [...preserved].map(([kind, count]) => Object.freeze({ kind, count }))),
   });
   return { events, tempoMap: normalizeTempoMap(tempos), timeSignature: meter, warnings: snapshot, lossSummary };
 }
