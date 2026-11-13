@@ -391,9 +391,12 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
   const aborted = signal === undefined ? undefined : Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted')!.get!;
   let left: Float32Array | undefined = output?.left ?? new Float32Array(capacity.chunkFrames);
   let right: Float32Array | undefined = output?.right ?? new Float32Array(capacity.chunkFrames);
-  const state = new Map<number, 'pending' | 'started' | 'released'>();
-  for (const event of score.events) if (event.type === 'note') state.set(event.id, 'pending');
-  if (synth) synth.onVoiceEnded = id => { state.delete(id); };
+  // Note-only scores cannot cancel pending onsets; stale automatic offs are harmless.
+  const state = score.noteCount === score.events.length ? undefined : new Map<number, 'pending' | 'started' | 'released'>();
+  if (state) {
+    for (const event of score.events) if (event.type === 'note') state.set(event.id, 'pending');
+    if (synth) synth.onVoiceEnded = id => { state.delete(id); };
+  }
   let position = 0;
   let cursor = 0;
   let cancelled = false;
@@ -403,7 +406,7 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
     cancelled = true;
     if (synth) errorCount = synth.errorCount;
     synth = undefined; left = undefined; right = undefined; signal = undefined;
-    state.clear(); queue.length = 0;
+    state?.clear(); queue.length = 0;
   };
   const renderer: ChunkedSequenceRender = {
     capacity,
@@ -424,19 +427,19 @@ function chunkRenderer(plan: SequenceRenderPlan, output?: { left: Float32Array; 
           position = next.frame;
         }
         cursor++;
-        if (!state.has(next.event.id)) continue;
+        if (state && !state.has(next.event.id)) continue;
         const event = next.event;
         if (event.type === 'note') {
           try {
             activeSynth.noteOn(event.voice, event.note, event.id, { velocity: event.velocity, pan: event.pan, voicePriority: event.voicePriority });
-            state.set(event.id, 'started');
+            state?.set(event.id, 'started');
           } catch (error) {
             if (!(error instanceof VoiceAdmissionError)) throw error;
-            state.delete(event.id);
+            state?.delete(event.id);
           }
         } else if (event.type === 'stop') {
-          if (state.get(event.id) === 'pending') state.delete(event.id);
-          else if (activeSynth.noteOff(event.id)) state.set(event.id, 'released');
+          if (state?.get(event.id) === 'pending') state.delete(event.id);
+          else if (activeSynth.noteOff(event.id)) state?.set(event.id, 'released');
         } else activeSynth.updateNote(event.id, event.controls);
       }
       if (position < end) {

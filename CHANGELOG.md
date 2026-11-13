@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped note-only offline ownership maps
+
+- Privately validated note-only scores no longer allocate/populate a pending-note Map or install its terminal cleanup callback. These scores cannot cancel a pending onset; automatic stops for stolen/rejected notes are harmless because score IDs are unique. Mixed control/stop scores retain their ownership tracking.
+- Paired Node.js 26 measurements reduced renderer setup by about 4–5% for 128 notes and 10–14% for 4,096 notes. Complete render differences were noisy (-1.4% to +3.4%); mixed-score setup was up to 2.4% slower, so this is an allocation/setup optimization rather than a synthesis-speed claim.
+- All 438 complete stereo PCM/capacity/diagnostic comparisons and 72 chunk/cancellation comparisons matched across qualities, rates, stealing policies, priority rejection, noise and pending cancellation.
+
 ### Bounded offline pools by total score notes
 
 - Offline renderers cap their private Synth pool at the smaller of validated polyphony and total note count. The frozen score cannot submit additional notes; public capacity results, validation and stealing behavior remain unchanged.
