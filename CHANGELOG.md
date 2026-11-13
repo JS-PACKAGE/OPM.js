@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-channel undithered PCM16 writing
+
+- Select a private fixed-format writer once from the validated WAV layout for undithered PCM16. Separate mono/stereo loops remove per-sample format/channel dispatch while preserving each native sample read, finite/unit-range validation, asymmetric scaling, rounding and little-endian stores. Dither and other formats keep the original generic writer; streaming still commits accounting/state only after complete success.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced tested 64K–256K-frame stereo full/chunk export cost by 33–50% and 64K-frame mono cost by 29–41%; 128-frame stereo exports improved 29–30%. One-frame files varied within 1.4%. Other-format/dither controls were up to 3.7% slower; shorter warmup included 4.1% slower mono float export. These are format-/host-/warmup-dependent encoding results, not a universal export or synthesis/deadline gain.
+- All 888 complete files and 3,492 partitioned streams matched byte for byte across formats, rates, normal/offset/shared/aliased views, signed zero and subnormals. All 270 invalid-sample/atomic-retry cases matched exact errors, accounting and retry bytes; input metadata/accessor getter reads stayed zero. Existing independent interleaving, dither, nested-metadata and invalid-left/right transaction tests remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Fixed MIDI owner placeholders
 
 - Initialize preserved-import channel-owner slots with a dense sixteen-element literal instead of a private Array.from array-like and its ignored-value callback. Keep fresh own undefined slots, lazy channel Sets, FIFO ownership, fanout, sustain and release handling unchanged.

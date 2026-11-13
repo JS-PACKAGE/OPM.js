@@ -71,6 +71,30 @@ function channels(left: unknown, right: unknown, expected?: 1 | 2): { left: Floa
 // TPDF dither from xorshift32 (Marsaglia): fixed seed per encoder, so chunked and
 // full-buffer encodings of the same audio are byte-identical and reproducible.
 const DITHER_SEED = 0x9e3779b9;
+// Fixed PCM16 loops avoid per-sample channel/format dispatch without enlarging the generic loop.
+function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
+  if (right === undefined) {
+    for (let frame = 0; frame < frames; frame++, offset += 2) {
+      const value = left[frame];
+      if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+      const sample = Math.round(value * (value < 0 ? 32768 : 32767));
+      bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255;
+    }
+    return 0;
+  }
+  for (let frame = 0; frame < frames; frame++, offset += 4) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const firstSample = Math.round(first * (first < 0 ? 32768 : 32767));
+    bytes[offset] = firstSample & 255; bytes[offset + 1] = (firstSample >> 8) & 255;
+    const second = right[frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const secondSample = Math.round(second * (second < 0 ? 32768 : 32767));
+    bytes[offset + 2] = secondSample & 255; bytes[offset + 3] = (secondSample >> 8) & 255;
+  }
+  return 0;
+}
+
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   // Float PCM needs validation and endian conversion, but no integer quantization.
@@ -125,6 +149,7 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
 export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const data = sequenceOwnData(options, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const config = layout(data);
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16 : encodeInto;
   let emittedHeader = false;
   let framesEncoded = 0;
   let finished = false;
@@ -144,7 +169,7 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
       if (framesEncoded + chunk.frames > config.frames) throw new RangeError('WAV frame overrun');
       const bytes = new Uint8Array(chunk.frames * config.blockAlign);
       // Commit only after the complete sample transaction succeeds.
-      committedDitherState = encodeInto(bytes, 0, chunk.left, chunk.right, chunk.frames, config, committedDitherState);
+      committedDitherState = encodeSamples(bytes, 0, chunk.left, chunk.right, chunk.frames, config, committedDitherState);
       framesEncoded += chunk.frames;
       return bytes;
     },
@@ -162,8 +187,9 @@ export function encodeWav(input: WavOptions): Uint8Array {
   const chunk = channels(data.left, data.right);
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16 : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);
-  encodeInto(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);
+  encodeSamples(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);
   return bytes;
 }
