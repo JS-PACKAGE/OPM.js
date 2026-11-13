@@ -1590,7 +1590,8 @@ export class Synth {
         const scale = Object.hasOwn(op, 'keyScale') ? op.keyScale : undefined;
         const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
           (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
-        levels[i] = op.level * 10 ** (-(attenuation + (Object.hasOwn(op, 'velocitySensitivity') ? op.velocitySensitivity! : 0) * (1 - velocity)) / 20);
+        const levelDb = attenuation + (Object.hasOwn(op, 'velocitySensitivity') ? op.velocitySensitivity! : 0) * (1 - velocity);
+        levels[i] = levelDb === 0 ? op.level : op.level * 10 ** (-levelDb / 20);
         active.waveforms[i] = waveformCode(Object.hasOwn(op, 'waveform') ? op.waveform : undefined);
         active.noiseSteps[i] = (noiseRate ?? 8000) / rate;
         const operatorFrequency = (frequencyOverride ?? frequency * op.ratio) * 2 ** (op.detune / 1200);

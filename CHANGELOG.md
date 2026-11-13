@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped unity operator-level attenuation
+
+- At note admission, use the validated operator level directly when combined key/velocity attenuation is zero, avoiding the redundant `10 ** 0` calculation. Nonzero attenuation keeps the original arithmetic and output bits.
+- Paired Node.js 26 measurements reduced prepared, unscaled-voice admission time by about 3–5%. Explicit zero-scaling cases improved about 0.8%; raw-input/scaled controls varied within 1.3%. These are admission costs, not sustained render throughput.
+- Complete stereo PCM and admitted operator levels matched across 243 stages covering three quality profiles, register/velocity endpoints, scaling modes, overlapping notes and pool reuse. Existing breakpoint/default-scaling and velocity-response regressions cover the changed path.
+
 ### Skipped empty-array prototype transitions
 
 - After complete array-shape/key validation, return the fresh empty snapshot without switching its prototype to null and back. Nonempty snapshots retain the existing own-data element checks and protected writes.
