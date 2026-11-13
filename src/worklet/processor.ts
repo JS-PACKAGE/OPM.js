@@ -208,7 +208,7 @@ class OPMProcessor extends AudioWorkletProcessor {
       if (event.id !== id || mode === 'automatic' && !(event.type === 'noteOff' && event.automatic) ||
           mode === 'controls' && event.type !== 'updateNote') this.events[kept++] = event;
     }
-    this.events.length = kept;
+    if (kept !== this.events.length) this.events.length = kept;
   }
 
   ended(id: number, reason: VoiceEndReason): void {

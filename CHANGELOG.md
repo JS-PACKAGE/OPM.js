@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped unchanged worklet queue truncation
+
+- Preserve pending-event array length when reclamation removes nothing. Actual removals still compact in order and truncate before terminal notifications; no queue limit or event predicate changes.
+- Paired Node.js 26 measurements saved about 13 ns per empty-queue reclamation. No-removal scans over 128/256 retained events improved about 10%/6%; these isolate queue maintenance, not end-to-end rendering.
+- All 72 queue mode/size/ID comparisons and 864 complete real-processor PCM/message/queue stages matched across three quality profiles, density, cancellation, tails and repeated reuse.
+
 ### Reused control snapshot descriptors
 
 - Define each validated note-control field through one private null-prototype descriptor per call. `Object.defineProperty` copies each value and flags, so previously defined scalar/tuple values remain independent and immutable.
