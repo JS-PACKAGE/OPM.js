@@ -171,11 +171,11 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     }
     allowed = new Set(ids as string[]);
   }
-  const mappings = config.controllerMap === undefined ? new Map<number, ControllerMapping>() : controllerMappings(config.controllerMap);
+  const mappings = config.controllerMap === undefined ? undefined : controllerMappings(config.controllerMap);
   const programs = config.programVoices === undefined ? undefined : midiVoiceMap(config.programVoices);
   const rpn = Array.from({ length: parts }, () => midiRpnState(range));
   // Capture the defined reset baseline before ports can deliver any messages.
-  const baselines = mappings.size === 0 ? [] : Array.from({ length: parts }, (_, channel) => performance.getPartControls(channel));
+  const baselines = !mappings?.size ? [] : Array.from({ length: parts }, (_, channel) => performance.getPartControls(channel));
   if (!access || typeof access.addEventListener !== 'function' || !(access.inputs instanceof Map || typeof access.inputs?.values === 'function')) {
     throw new TypeError('access must provide inputs and statechange events');
   }
@@ -227,7 +227,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
   function control(channel: number, input: string, controller: number, value: number): void {
     const state = states[channel]!;
     if (midiRpnControl(rpn[channel]!, controller, value)) return;
-    const mapping = mappings.get(controller);
+    const mapping = mappings?.get(controller);
     if (mapping) {
       const target = value === 0 ? mapping.min : value === 127 ? mapping.max : mapping.min + (mapping.max - mapping.min) * value / 127;
       performance.updatePartNotes(channel, mappingControls(mapping, target,
@@ -252,7 +252,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       Object.assign(rpn[channel]!, midiRpnState(range));
       performance.updatePart(channel, { expression: 1, pan: 0 });
       performance.updatePartNotes(channel, { pitch: 0, modulation: 1 });
-      for (const mapped of mappings.values()) {
+      if (mappings) for (const mapped of mappings.values()) {
         const baseline = baselines[channel]!;
         const initial = mapped.operator === undefined ? baseline[mapped.field as MidiScalarControl]!
           : baseline[mapped.field as MidiOperatorControl]![mapped.operator]!;
