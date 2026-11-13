@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped unnecessary immediate scalar ramp scans
+
+- Mark the engine ramp active only when a scalar control has a nonzero ramp duration. Immediate edits already update their scalar/effective values; previously pending ramps retain their flag and still advance or clear normally.
+- Paired Node.js 26 measurements reduced repeated immediate `Synth.updateNote()` time with validated snapshots by about 7–18%. Raw-input cases improved up to 3% or were effectively unchanged; ongoing-ramp controls varied within 1.4%. These are control-dispatch costs, not render throughput.
+- Complete stereo PCM and scalar/ramp state matched across 144 update/render stages in three quality profiles, including interrupted ramps, mixed immediate/ramped fields, depth disable/re-enable and scalar combinations. Existing live-control reference regressions cover the changed path.
+
 ### Reused immutable tuning tables
 
 - Reuse cents tables already produced and frozen by the tuning validator instead of copying 128 immutable values again. Raw inputs and arbitrary frozen copies still receive full validation and detached storage; outer settings and reference frequencies always validate.

@@ -1852,7 +1852,7 @@ export class Synth {
         if (field === 0) active.feedbackScale = feedbackGain(value);
         if (field === 2 || field === 3) updateModulation(active);
       }
-      active.controlRamps |= ENGINE_RAMP;
+      if (active.scalarFrames[field] !== 0) active.controlRamps |= ENGINE_RAMP;
     }
     if (active.controlRamps & ENGINE_RAMP) advanceControls(active);
     if (operatorRatios !== undefined || operatorFrequencies !== undefined) {
