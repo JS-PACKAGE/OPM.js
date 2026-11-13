@@ -273,7 +273,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   ];
   const pedals = new Array<boolean>(16).fill(false);
   // Only preserved expression needs channel fanout; live and sustain tracking remain independent.
-  const owned = preserve ? Array.from({ length: 16 }, () => new Set<HeldNote>()) : [];
+  const owned: (Set<HeldNote> | undefined)[] = preserve ? Array.from({ length: 16 }, () => undefined) : [];
   const released = new Array<boolean>(16).fill(false);
   // Initial bend-range validation is unconditional, even when these snapshots are skipped.
   const states = preserve ? Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 })) : [];
@@ -292,7 +292,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (tick <= held.tick) throw new RangeError('MIDI note has a zero-length gate');
     held.event.duration = (tick - held.tick) / ppqn;
     liveCount--;
-    if (preserve) owned[held.channel].delete(held);
+    if (preserve) owned[held.channel]!.delete(held);
     released[held.channel] = true;
   }
   for (const item of wire) {
@@ -350,7 +350,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         if (item.a === 7) state.volume = item.b / 127; else state.expression = item.b / 127;
         controls = { expression: state.volume * state.expression };
       }
-      for (const held of owned[item.channel]) append({ type: 'control', id: held.event.id, beat,
+      const owners = owned[item.channel];
+      if (owners) for (const held of owners) append({ type: 'control', id: held.event.id, beat,
         controls: isModulation ? { modulation: held.modulation ?? controls.modulation } : { ...controls },
       });
     } else if (item.kind === 'sustain') {
@@ -376,7 +377,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       }
       // Own `modulation` slot: the later poly-pressure assignment must not reach an inherited setter.
       const held: HeldNote = { event, tick: item.tick, channel: item.channel, modulation: undefined };
-      if (preserve) owned[item.channel].add(held);
+      if (preserve) {
+        let owners = owned[item.channel];
+        if (!owners) { owners = new Set(); owned[item.channel] = owners; }
+        owners.add(held);
+      }
       liveCount++;
       const key = item.channel * 128 + item.a;
       const queue = queues.get(key);

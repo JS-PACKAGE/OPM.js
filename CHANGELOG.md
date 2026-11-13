@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy MIDI expression ownership sets
+
+- In preserved-expression imports, allocate a channel's fanout set only when its first note arrives. Pre-onset controllers still update channel snapshots, closed gates still leave fanout, and later notes reuse the same set.
+- Paired Node.js 26 measurements reduced small expressive-import time by about 3–6% and the tested 128-round workload by 1–4%. Larger expressive controls varied from 0.3% slower to 2.1% faster; note-only controls did not show a consistent gain.
+- All 192 complete-result/rejection comparisons matched across channel counts, pedal use, duplicate pitches, pre-onset controls, release-tail controls and both end-of-file policies. Existing expression snapshot, sustain/poly-pressure and generated-fanout regressions cover the changed path.
+
 ### Lazy MIDI import sustain sets
 
 - Allocate a channel's sustained-release set only when a pedal-held note-off needs it, rather than creating 16 empty sets for every import. A dense own-slot table preserves channel order and avoids inherited indexed accessors; sets are reused after pedal release.
