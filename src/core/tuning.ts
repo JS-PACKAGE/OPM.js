@@ -7,7 +7,7 @@ const ZERO_OFFSETS: readonly number[] = Object.freeze(Array.from({ __proto__: nu
 const validatedOffsets = new WeakSet<readonly number[]>();
 validatedOffsets.add(ZERO_OFFSETS);
 
-/** Validate own data only and detach the cents table from its caller. */
+/** Validate own data; detach raw cents tables and reuse only our frozen output tables. */
 export function normalizeTuning(input: TuningOptions): NormalizedTuning {
   if (input === null || typeof input !== 'object' || Array.isArray(input) ||
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) {
@@ -34,7 +34,8 @@ export function normalizeTuning(input: TuningOptions): NormalizedTuning {
     if (!known && (source.length !== 128 || Reflect.ownKeys(source).length !== 129)) {
       throw new TypeError('offsets must contain exactly 128 own data cents values');
     }
-    const copy: number[] = known ? source.slice() : [];
+    // Identity membership guarantees immutable own cells; raw or merely frozen copies still detach.
+    const copy: number[] = known ? source : [];
     if (!known) {
       // A null prototype keeps inherited indexed accessors out of these own-data writes.
       Object.setPrototypeOf(copy, null);
@@ -49,8 +50,8 @@ export function normalizeTuning(input: TuningOptions): NormalizedTuning {
       }
       Object.setPrototypeOf(copy, Array.prototype);
     }
-    offsets = Object.freeze(copy);
-    validatedOffsets.add(offsets);
+    offsets = known ? copy : Object.freeze(copy);
+    if (!known) validatedOffsets.add(offsets);
   }
   return Object.freeze({ referenceHz, offsets });
 }

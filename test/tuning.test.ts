@@ -89,6 +89,10 @@ test('reusing tuning data preserves old snapshots and still validates new inputs
   const alternate = normalizeTuning({ referenceHz: 432, offsets: second.offsets });
   assert.equal(tuningFrequency(69, alternate), 864);
   assert.equal(tuningFrequency(69, second), 880);
+  assert.throws(() => Object.assign(alternate.offsets, { 69: 0 }), TypeError);
+  const forged = [...second.offsets];
+  forged[69] = NaN;
+  assert.throws(() => normalizeTuning({ offsets: Object.freeze(forged) }), RangeError);
   assert.throws(() => normalizeTuning({ referenceHz: NaN, offsets: second.offsets }), RangeError);
   assert.throws(() => normalizeTuning({ offsets: second.offsets, extra: true } as TuningOptions), TypeError);
   let calls = 0;

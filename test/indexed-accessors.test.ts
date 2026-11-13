@@ -82,7 +82,7 @@ test('tuning tables keep their own cents despite inherited index accessors', () 
   const polluted = withIndexedAccessors(() => normalizeTuning({ offsets }));
   assert.deepStrictEqual(polluted.value, clean);
   assert.equal(polluted.setterHits + polluted.getterReads, 0);
-  // A previously validated table is detached by slicing; its copy must stay own data too.
+  // Reusing a frozen validated table must not introduce inherited index reads.
   const reused = withIndexedAccessors(() => normalizeTuning({ offsets: polluted.value.offsets }));
   assert.deepStrictEqual(reused.value, clean);
   assert.equal(reused.setterHits + reused.getterReads, 0);

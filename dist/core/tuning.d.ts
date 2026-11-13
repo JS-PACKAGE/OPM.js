@@ -6,7 +6,7 @@ export interface NormalizedTuning {
     readonly referenceHz: number;
     readonly offsets: readonly number[];
 }
-/** Validate own data only and detach the cents table from its caller. */
+/** Validate own data; detach raw cents tables and reuse only our frozen output tables. */
 export declare function normalizeTuning(input: TuningOptions): NormalizedTuning;
 /** Fractional MIDI notes interpolate cents, not frequencies, between adjacent keys. */
 export declare function tuningFrequency(note: number, tuning: NormalizedTuning): number;

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused immutable tuning tables
+
+- Reuse cents tables already produced and frozen by the tuning validator instead of copying 128 immutable values again. Raw inputs and arbitrary frozen copies still receive full validation and detached storage; outer settings and reference frequencies always validate.
+- Paired Node.js 26 measurements of repeated normalization with retained ordinary/default snapshots took about 94% less time. Raw-table normalization stayed within 0.6%; this is normalization overhead, not render throughput.
+- All 2,044 snapshot/fractional-frequency comparisons matched. The tuning reuse regression now checks frozen-copy validation and immutable reused output; inherited-index coverage exercises the retained-table path.
+
 ### Skipped unchanged worklet queue truncation
 
 - Preserve pending-event array length when reclamation removes nothing. Actual removals still compact in order and truncate before terminal notifications; no queue limit or event predicate changes.
