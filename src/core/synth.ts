@@ -116,6 +116,8 @@ export function validateNoteControls(input: NoteControls): NoteControls {
   const keys = Reflect.ownKeys(input);
   if (keys.length === 0) throw new TypeError('controls must not be empty');
   const result: NoteControls = {};
+  // defineProperty copies descriptors; one private null-prototype record safely serves every field.
+  const property = { __proto__: null, value: undefined, enumerable: true } as PropertyDescriptor;
   for (const key of keys) {
     const operatorTuple = key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR';
     if (typeof key !== 'string' || !operatorTuple && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
@@ -153,7 +155,8 @@ export function validateNoteControls(input: NoteControls): NoteControls {
           tuple[op] = item;
         }
       }
-      Object.defineProperty(result, key, { __proto__: null, value: Object.freeze(tuple), enumerable: true } as PropertyDescriptor);
+      property.value = Object.freeze(tuple);
+      Object.defineProperty(result, key, property);
       continue;
     }
     const control = key as keyof typeof CONTROL_LIMITS;
@@ -161,7 +164,8 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
       throw new RangeError(`controls.${key} must be finite and in ${min}..${max}`);
     }
-    Object.defineProperty(result, control, { __proto__: null, value, enumerable: true } as PropertyDescriptor);
+    property.value = value;
+    Object.defineProperty(result, control, property);
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
   if (Object.hasOwn(result, 'ramp') && !keys.some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {

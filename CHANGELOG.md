@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused control snapshot descriptors
+
+- Define each validated note-control field through one private null-prototype descriptor per call. `Object.defineProperty` copies each value and flags, so previously defined scalar/tuple values remain independent and immutable.
+- Paired Node.js 26 measurements reduced tested multi-field validation time by about 4–15%; single-field validation stayed within 0.6%. These measure validation alone, not full rendering.
+- All 28 mixed-order snapshot/descriptor/rejection comparisons matched, including frozen detached tuples and zero caller-getter reads. Existing inherited-name and descriptor-prototype-hook regressions cover scalar and ADSR snapshots.
+
 ### Direct MIDI pedal-owner scans
 
 - Check sustain ownership directly across input sets without materializing a temporary array. Pedal changes, controller reset and disconnect share the same short-circuit scan; another input's pedal ownership is preserved.
