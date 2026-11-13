@@ -332,7 +332,14 @@ export function createTransport(opm: OPM, beatEvents: readonly BeatSequenceEvent
     if (event.type === 'note' && ['ended', 'stolen', 'cancelled', 'rejected'].includes(event.state)) {
       if (admitting) terminal = event.id;
       if (owned.delete(event.id)) {
-        queued = queued.filter(entry => entry.id !== event.id);
+        const length = queued.length;
+        let kept = 0;
+        while (kept < length && queued[kept].id !== event.id) kept++;
+        for (let index = kept + 1; index < length; index++) {
+          const entry = queued[index];
+          if (entry.id !== event.id) queued[kept++] = entry;
+        }
+        if (kept !== length) queued.length = kept;
         if (event.state === 'rejected') fail(new Error(`Transport note rejected: ${event.reason ?? 'unknown'}`));
       }
     }

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### In-place Transport terminal queue cleanup
+
+- Terminal note events now compact the private admitted-command queue in place instead of allocating a filter callback and replacement array. Skip the unchanged prefix, preserve command order, and leave public snapshots and owned-ID behavior unchanged; the queue has no escaping array aliases.
+- Paired fresh-process Node.js 26 controlled-clock Transport observer measurements reduced tested terminal dispatch by about 29–46% for 16-note queues and 73–82% for 128-note queues while records remained queued. Already-expired queue controls improved 13–16%. Score setup and audio synthesis are excluded.
+- All 192 complete ownership/scheduling/snapshot/error/restart cases matched across terminal reasons, forward/reverse/mixed completion, expired queues, automation and disposal. Existing worklet-backed Transport lifecycle and reentrant-disposal coverage remains applicable.
+
 ### Prefix-preserving worklet queue compaction
 
 - Event cleanup skips the unchanged prefix and starts moving entries only after the first removal. All/automatic-stop/control filtering keeps the same array, stable event order, ownership and bounded capacity without new state or allocations.
