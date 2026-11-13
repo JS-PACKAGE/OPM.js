@@ -197,7 +197,9 @@ interface ActiveVoice {
    * gain from the previous frame (0 when some operator needs reclassification). */
   envelopeFastUntil: number;
   attackTimes: Float64Array; decayTimes: Float64Array; releaseTimes: Float64Array;
-  operatorLevels: Float64Array; operatorFrom: Float64Array; operatorTargets: Float64Array;
+  /** Last ramp anchor or settled target; evaluate active ramps analytically. */
+  operatorLevels: Float64Array;
+  operatorFrom: Float64Array; operatorTargets: Float64Array;
   operatorStart: number; operatorFrames: number;
   levels: Float64Array; leftGain: number; rightGain: number; lastSample: number; fadeRemaining: number;
   lastFadeGain?: number; carrierGain: number; phases: Float64Array; values: Float64Array;
@@ -477,11 +479,9 @@ function advanceControls(active: ActiveVoice): void {
     if (frame >= active.modulationStart + active.modulationFrames) active.controlRamps &= ~MODULATION_RAMP;
     updateModulation(active);
   }
-  if (ramps & OPERATOR_RAMP) {
-    for (let op = 0; op < 4; op++) {
-      active.operatorLevels[op] = rampAt(active.operatorFrom[op], active.operatorTargets[op], active.operatorStart, active.operatorFrames, frame);
-    }
-    if (frame >= active.operatorStart + active.operatorFrames) active.controlRamps &= ~OPERATOR_RAMP;
+  if ((ramps & OPERATOR_RAMP) && frame >= active.operatorStart + active.operatorFrames) {
+    for (let op = 0; op < 4; op++) active.operatorLevels[op] = active.operatorTargets[op];
+    active.controlRamps &= ~OPERATOR_RAMP;
   }
   if (ramps & ENGINE_RAMP) {
     let pending = false, modulationChanged = false;
@@ -1948,11 +1948,14 @@ export class Synth {
     if (operatorLevels !== undefined) {
       active.foldedLevelsReady = false;
       let changed = false;
+      const moving = (active.controlRamps & OPERATOR_RAMP) !== 0;
       for (let op = 0; op < 4; op++) {
-        active.operatorFrom[op] = active.operatorLevels[op];
+        const from = moving ? rampAt(active.operatorFrom[op], active.operatorTargets[op],
+          active.operatorStart, active.operatorFrames, active.elapsed) : active.operatorLevels[op];
+        active.operatorFrom[op] = from;
         active.operatorTargets[op] = operatorLevels[op];
         if (active.operatorFrom[op] !== active.operatorTargets[op]) changed = true;
-        if (frames === 0) active.operatorLevels[op] = operatorLevels[op];
+        active.operatorLevels[op] = frames === 0 ? operatorLevels[op] : from;
       }
       active.operatorStart = active.elapsed;
       active.operatorFrames = changed ? frames : 0;

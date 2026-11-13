@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy operator-level ramp caches
+
+- Moving operator levels are already evaluated analytically by rendering and quietest admission. Skip their redundant whole-frame cache writes until completion or retargeting; holding a ramp at its exact current value also materializes that value before clearing the ramp.
+- Paired fresh-process Node.js 26 measurements at 48 kHz reduced warmed 16-voice eco ramp rendering time by about 2.8–3.9%, standard sine/noise by 2.4–3.3%, and high profiles by 0.5–2.4%. Standard mixed ramps varied from 0.4% slower to 1.9% faster; static-level controls ranged from 1.5% slower to 3.2% faster.
+- All 6,912 complete stereo PCM/phase/ramp/lifecycle comparisons matched across algorithms, qualities, waveform mixtures, live retargets, exact-current holds, fractional/tiny spans, stealing and pooled reuse. A regression checks quietest stealing after holding a moving level at its midpoint in every quality profile.
+
 ### Shared operator-level ramp clocks
 
 - Generic oscillator frames now share operator-level ramp bounds and elapsed time across all four operators. Each operator retains the original multiply-before-divide interpolation order, including fractional-frame endpoints; static-level specialized kernels are unchanged.

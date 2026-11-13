@@ -109,6 +109,23 @@ test('quietest scores current gates and expression across unrendered notes, rele
   }
 });
 
+test('holding a moving operator level preserves its loudness for quietest stealing', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) {
+    const synth = new Synth(16000, 2, { quality, stealing: 'quietest' });
+    const terminal: [number, string][] = [];
+    synth.onVoiceEnded = (id, reason) => { terminal.push([id, reason]); };
+    synth.noteOn(voice, 60, 1);
+    synth.noteOn(voice, 64, 2);
+    synth.updateNote(1, { operatorLevels: [0, 1, 1, 1], ramp: 0.1 });
+    synth.updateNote(2, { operatorLevels: [0.6, 1, 1, 1] });
+    audio(synth, 800);
+    // Holding at the midpoint must remain quieter than the 0.6-level note.
+    synth.updateNote(1, { operatorLevels: [0.5, 1, 1, 1], ramp: 0.1 });
+    synth.noteOn(voice, 67, 3);
+    assert.deepEqual(terminal, [[1, 'stolen']]);
+  }
+});
+
 test('priority bounds are strict own data and validation happens before sounding state changes', () => {
   const synth = new Synth(16000);
   for (const bad of [-1, 128, 1.5, NaN, Infinity, '1', null, undefined, {}]) {
