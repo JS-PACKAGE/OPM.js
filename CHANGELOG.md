@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-channel float WAV writing
+
+- Float32 WAV payloads now choose mono/stereo once and write with fixed channel offsets instead of a nested dynamic channel loop. Keep original left/right sample-read order, finite/unit-range checks, little-endian DataView stores, unaligned 58-byte float headers and atomic chunk accounting. No new buffers, persistent state or public API.
+- Paired fresh-process Node.js 26 measurements, including longer warmup and reversed ordering, reduced 64K/1M-frame full float export cost by about 24–42% and 64K-frame chunk cost by 24–43%; 128-frame full exports improved 6–18%. Unchanged PCM controls ranged from 2.3% faster to 2.4% slower. These are host-dependent encoding results, not synthesis/deadline guarantees.
+- All 720 complete files and 2,520 chunk-independent streams matched byte for byte across formats, channels, 8/44.1/192 kHz, offset/shared views, signed zero and subnormals. All 225 invalid-sample/atomic-retry cases, ten hostile-metadata cases (zero getter reads) and six malformed-channel cases matched. Existing WAV safety/dither regressions remain unchanged; scoped A/C review is recorded in SECURITY.md.
+
 ### Late-noise route pruning
 
 - Mixed voices with noise at operator 2 and a sole periodic carrier at operator 3 can skip both disconnected upstream periodic oscillators. Admission derives reachability from the frozen graph; keep every phase, active noise clock, gain check and carrier modulation. Single-oscillator opportunities retain the original path to avoid dispatch overhead. No pool fields, persistent masks, buffers or closures are added.

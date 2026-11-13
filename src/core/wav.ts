@@ -78,11 +78,20 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
   // Float PCM needs validation and endian conversion, but no integer quantization.
   if (config.format === 'float32') {
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    for (let frame = 0; frame < frames; frame++) {
-      for (let channel = 0; channel < config.channels; channel++, offset += 4) {
-        const value = channel === 0 ? left[frame] : right![frame];
+    if (right === undefined) {
+      for (let frame = 0; frame < frames; frame++, offset += 4) {
+        const value = left[frame];
         if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
         view.setFloat32(offset, value, true);
+      }
+    } else {
+      for (let frame = 0; frame < frames; frame++, offset += 8) {
+        const first = left[frame];
+        if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+        view.setFloat32(offset, first, true);
+        const second = right[frame];
+        if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+        view.setFloat32(offset + 4, second, true);
       }
     }
     return ditherSeed;
