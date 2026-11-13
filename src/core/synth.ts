@@ -1584,7 +1584,6 @@ export class Synth {
         // Object.prototype, where an inherited value would bypass the snapshot's validation.
         const frequencyOverride = Object.hasOwn(op, 'frequency') ? op.frequency : undefined;
         const rateKeyScale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
-        const noiseRate = Object.hasOwn(op, 'noiseRate') ? op.noiseRate : undefined;
         active.frequencyTargets[i] = frequencyOverride ?? 0;
         active.frequencies[i] = active.frequencyFrom[i] = frequencyOverride ?? frequency * op.ratio;
         const scale = Object.hasOwn(op, 'keyScale') ? op.keyScale : undefined;
@@ -1592,10 +1591,14 @@ export class Synth {
           (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
         const levelDb = attenuation + (Object.hasOwn(op, 'velocitySensitivity') ? op.velocitySensitivity! : 0) * (1 - velocity);
         levels[i] = levelDb === 0 ? op.level : op.level * 10 ** (-levelDb / 20);
-        active.waveforms[i] = waveformCode(Object.hasOwn(op, 'waveform') ? op.waveform : undefined);
-        active.noiseSteps[i] = (noiseRate ?? 8000) / rate;
         const operatorFrequency = (frequencyOverride ?? frequency * op.ratio) * 2 ** (op.detune / 1200);
-        active.frequencyScales[i] = PHASE_CYCLE * 2 ** (op.detune / 1200) / rate;
+        // Live controls cannot change these patch/clock-dependent oscillator constants.
+        if (!sameVoice) {
+          active.waveforms[i] = waveformCode(Object.hasOwn(op, 'waveform') ? op.waveform : undefined);
+          const noiseRate = Object.hasOwn(op, 'noiseRate') ? op.noiseRate : undefined;
+          active.noiseSteps[i] = (noiseRate ?? 8000) / rate;
+          active.frequencyScales[i] = PHASE_CYCLE * 2 ** (op.detune / 1200) / rate;
+        }
         baseIncrements[i] = PHASE_CYCLE * operatorFrequency / rate;
         // Retain the original pre-PM cap, but keep unclipped pitch bases so a
         // downward bend can bring high-ratio operators back into audible range.

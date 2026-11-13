@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused pooled oscillator constants
+
+- Reuse waveform codes, held-noise increments and detune/rate frequency scales when a pooled slot receives the same immutable prepared voice. Admission still resets note-dependent frequencies, noise history and kernel selection; different patches refresh every constant.
+- Paired Node.js 26 measurements reduced repeated prepared-voice admission time by about 11–14% across sine, mixed and noise patches. Raw-input controls varied within 2.8%; this is admission overhead, not sustained rendering throughput.
+- Complete stereo PCM and oscillator state matched across 720 stages covering all eight algorithms, all waveform codes, three quality profiles, noise-rate endpoints, patch changes, pool reuse and live frequency/ratio ramps. Existing recycled-note and failed-initialization recovery regressions cover cache invalidation.
+
 ### Reused pooled carrier indices
 
 - Keep the pooled carrier-index table when admitting the same immutable prepared voice again, avoiding a redundant typed-array copy. Different voices still refresh it; sparse modulation-input slots keep their existing per-admission reads.
