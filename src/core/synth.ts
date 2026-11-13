@@ -319,6 +319,11 @@ function feedbackGain(value: number): number {
   return value <= 1 ? value * 2 ** -7 : 2 ** (value - 8);
 }
 
+function operatorRateFactor(note: number, rateKeyScale = 0): number {
+  // An unclamped one-second duration is the shared timing multiplier.
+  return operatorDuration(1, note, rateKeyScale, Infinity);
+}
+
 /** @internal Scale once per admission; low-note a/d/r durations never exceed the voice's
  * ten-second budget (`cap` 100 for the held sustain rate). */
 export function operatorDuration(seconds: number, note: number, rateKeyScale = 0, cap = 10): number {
@@ -332,8 +337,8 @@ function stableEnvelopeContext(): boolean {
 }
 
 /** Held decay (`sr`, seconds per 96 dB; undefined holds) and its per-substep gain ratio at `rate`. */
-function setSustainRate(active: ActiveVoice, op: number, seconds: number | undefined, note: number, rateKeyScale: number | undefined, rate: number): void {
-  const sustain = seconds === undefined ? 0 : operatorDuration(seconds, note, rateKeyScale, 100);
+function setSustainRate(active: ActiveVoice, op: number, seconds: number | undefined, rateFactor: number, rate: number): void {
+  const sustain = seconds === undefined ? 0 : Math.min(100, seconds * rateFactor);
   active.sustainTimes[op] = sustain;
   active.sustainStep[op] = sustain === 0 ? 1 : 10 ** (FLOOR_DB / (20 * sustain * rate));
 }
@@ -1735,12 +1740,14 @@ export class Synth {
         envelopeTimingCacheable &&= stableEnvelopeContext();
         // Pristine coefficients without rate key scaling are note-independent.
         if (!sameVoice || active.envelopeEdited[i] || !active.envelopeTimingCacheable || !envelopeTimingCacheable || (rateKeyScale ?? 0) !== 0) {
-          const attack = active.attackTimes[i] = operatorDuration(op.adsr.a, note, rateKeyScale);
-          const decay = active.decayTimes[i] = operatorDuration(op.adsr.d, note, rateKeyScale);
-          active.releaseTimes[i] = operatorDuration(op.adsr.r, note, rateKeyScale);
+          // All four durations use this operator's same note-dependent multiplier.
+          const rateFactor = operatorRateFactor(note, rateKeyScale);
+          const attack = active.attackTimes[i] = Math.min(10, op.adsr.a * rateFactor);
+          const decay = active.decayTimes[i] = Math.min(10, op.adsr.d * rateFactor);
+          active.releaseTimes[i] = Math.min(10, op.adsr.r * rateFactor);
           attackStep[i] = attack === 0 ? 1 : 10 ** (-FLOOR_DB / (20 * attack * rate));
           decayStep[i] = decay === 0 ? 1 : 10 ** (sustainDb[i] / (20 * decay * rate));
-          setSustainRate(active, i, Object.hasOwn(op.adsr, 'sr') ? op.adsr.sr : undefined, note, rateKeyScale, rate);
+          setSustainRate(active, i, Object.hasOwn(op.adsr, 'sr') ? op.adsr.sr : undefined, rateFactor, rate);
         }
       }
       active.envelopeTimingCacheable = envelopeTimingCacheable;
@@ -2033,19 +2040,20 @@ export class Synth {
         const db = envelopeDbAt(active, time, op), adsr = operatorADSR[op];
         const source = active.voice.ops[op];
         const keyScale = Object.hasOwn(source, 'rateKeyScale') ? source.rateKeyScale : undefined;
+        const rateFactor = operatorRateFactor(active.note, keyScale);
         active.envelopeFromDb[op] = db;
         active.envelopeStart[op] = time;
         active.envelopeEdited[op] = 1;
         active.envelopeUntil[op] = 0;
         active.envelopeFastUntil = 0;
         active.gainsSteady = false;
-        active.attackTimes[op] = operatorDuration(adsr.a, active.note, keyScale);
-        active.decayTimes[op] = operatorDuration(adsr.d, active.note, keyScale);
+        active.attackTimes[op] = Math.min(10, adsr.a * rateFactor);
+        active.decayTimes[op] = Math.min(10, adsr.d * rateFactor);
         if (active.attackTimes[op] === 0 && active.decayTimes[op] === 0) active.decayTimes[op] = 1 / this.sampleRate;
         active.sustainDb[op] = adsr.s === 0 ? FLOOR_DB : Math.max(FLOOR_DB, 20 * Math.log10(adsr.s));
         active.sustainGain[op] = active.sustainDb[op] <= FLOOR_DB ? 0 : fastExp2(active.sustainDb[op] * DB_TO_LOG2_GAIN);
-        active.releaseTimes[op] = operatorDuration(adsr.r, active.note, keyScale);
-        setSustainRate(active, op, Object.hasOwn(adsr, 'sr') ? adsr.sr : undefined, active.note, keyScale, this.sampleRate * this.oversample);
+        active.releaseTimes[op] = Math.min(10, adsr.r * rateFactor);
+        setSustainRate(active, op, Object.hasOwn(adsr, 'sr') ? adsr.sr : undefined, rateFactor, this.sampleRate * this.oversample);
         if (active.releaseTime >= 0) {
           active.releaseDb[op] = db;
           active.releaseStarts[op] = time;

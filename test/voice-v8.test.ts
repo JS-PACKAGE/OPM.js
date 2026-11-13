@@ -309,3 +309,46 @@ test('v8 fields are version gated, canonical and bank-clamped', () => {
   assert.equal(bank.get('v8-test')!.pan, -1);
   assert.equal(bank.get('v8-test')!.ops[0].adsr.sr, 100);
 });
+
+test('mixed operator rate scales match prescaled envelopes through ADSR edits and release', () => {
+  const scales = [0, 0.25, 0.5, 1];
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const note of [48.25, 72.25]) {
+    const definition = tone({ a: 0.004, d: 0.01, s: 0.55, r: 0.02, sr: 0.12 });
+    definition.ops.forEach((op, index) => {
+      op.ratio = index + 1;
+      op.level = 0.15;
+      op.rateKeyScale = scales[index];
+    });
+    const prescale = (adsr: ADSR, index: number): ADSR => {
+      const multiplier = 2 ** (scales[index] * (60 - note) / 12);
+      return { a: Math.min(10, adsr.a * multiplier), d: Math.min(10, adsr.d * multiplier),
+        s: adsr.s, r: Math.min(10, adsr.r * multiplier),
+        ...(adsr.sr === undefined ? {} : { sr: Math.min(100, adsr.sr * multiplier) }) };
+    };
+    const expected = structuredClone(definition);
+    expected.ops.forEach((op, index) => {
+      op.adsr = prescale(op.adsr, index);
+      delete op.rateKeyScale;
+    });
+    const synth = new Synth(RATE, 1, { quality }), reference = new Synth(RATE, 1, { quality });
+    const ended: string[] = [], referenceEnded: string[] = [];
+    synth.onVoiceEnded = (_id, reason) => { ended.push(reason); };
+    reference.onVoiceEnded = (_id, reason) => { referenceEnded.push(reason); };
+    const id = synth.noteOn(definition, note), referenceId = reference.noteOn(expected, note);
+    const initial = stereo(synth, 512, 37);
+    assert.deepEqual(initial, stereo(reference, 512));
+    assert.ok(rmsDb(initial.left, 128, 512) > -40);
+    const adsr = definition.ops.map((op, index) => ({
+      ...op.adsr, a: 0.002 + index * 0.001, d: 0.006, r: 0.03, sr: 0.16 - index * 0.01,
+    })) as [ADSR, ADSR, ADSR, ADSR];
+    synth.updateNote(id, { operatorADSR: adsr });
+    reference.updateNote(referenceId, { operatorADSR: adsr.map(prescale) as [ADSR, ADSR, ADSR, ADSR] });
+    assert.deepEqual(stereo(synth, 257, 37), stereo(reference, 257));
+    assert.equal(synth.noteOff(id), true);
+    assert.equal(reference.noteOff(referenceId), true);
+    assert.deepEqual(stereo(synth, 2048, 37), stereo(reference, 2048));
+    assert.deepEqual(ended, ['ended']);
+    assert.deepEqual(referenceEnded, ended);
+    assert.equal(synth.errorCount, 0);
+  }
+});

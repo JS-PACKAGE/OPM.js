@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared operator rate multipliers
+
+- Refreshing one operator's envelope timing now computes its note-dependent rate multiplier once and reuses it for attack, decay, release and optional sustain rate, instead of recomputing the same exponent for each duration. An unclamped unit duration derives that multiplier through the unchanged scalar duration rule; every stored A/D/R value still clamps at ten seconds and sustain rate at one hundred seconds. Pristine timing-cache hits remain untouched; no voice field, collection or cross-note cache is added.
+- Paired fresh-process Node.js 26 runs with both pair orders made tested changing-patch admissions 4.6% faster without key scaling and 6.9–8.1% faster with scaling. Live ADSR updates improved 1.1–2.1%; unchanged scalar, same-patch, planning and held-render controls varied from 0.3% slower to 3.5% faster. These are workload-/host-dependent admission/control gains, not universal rendering, GC or deadline guarantees.
+- All 1,019,305 scalar comparisons, 480 stereo PCM segments, 636 inspected state snapshots, 180 offline results and 60 lifecycle cases matched without normalization, including eighteen capped admission/edit cases. Coverage includes mixed per-operator scales, missing/explicit zero scaling, fractional notes, sustain limits, noise/sine, quality modes, release edits, stealing and reuse. A consumer regression independently prescales four differently scaled operators and compares audible PCM through live edits and release. Scoped A/C review is recorded in SECURITY.md.
+
 ### Skipped empty MIDI loss-report work
 
 - Legacy MIDI imports without mapped programs omit the otherwise unused preserved-control Map and iterator. Imports with expression preservation or any mapped program retain the same counters and insertion order, including mapped program changes when expression is omitted. Empty warning snapshots skip the unused classification record and two filter calls; all public report arrays remain fresh and frozen.
