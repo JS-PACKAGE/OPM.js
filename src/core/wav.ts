@@ -142,6 +142,9 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
     return ditherSeed;
   }
   const pcm16 = config.format === 'pcm16';
+  const negativeScale = pcm16 ? 32768 : 8388608;
+  const positiveScale = pcm16 ? 32767 : 8388607;
+  const minSample = -negativeScale;
   // Undithered integers use fixed writers; this path always advances active TPDF.
   let s = ditherSeed | 0;
   for (let frame = 0; frame < frames; frame++) {
@@ -149,12 +152,12 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
       const value = channel === 0 ? left[frame] : right![frame];
       // NaN fails the ordered magnitude bound, alongside infinities and out-of-range samples.
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-      const scaled = value * (value < 0 ? (pcm16 ? 32768 : 8388608) : (pcm16 ? 32767 : 8388607));
+      const scaled = value * (value < 0 ? negativeScale : positiveScale);
       s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
       const a = s >>> 0;
       s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
       const noise = (a - (s >>> 0)) * 2 ** -32;
-      const sample = Math.min(pcm16 ? 32767 : 8388607, Math.max(pcm16 ? -32768 : -8388608, Math.round(scaled + noise)));
+      const sample = Math.min(positiveScale, Math.max(minSample, Math.round(scaled + noise)));
       bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255;
       if (!pcm16) bytes[offset + 2] = (sample >> 16) & 255;
     }

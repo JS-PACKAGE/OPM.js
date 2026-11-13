@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Active-dither quantization constants
+
+- Resolve the private integer format's positive/negative scales and lower clipping bound once per write, outside the active-TPDF sample loops. Reuse the positive scale as the upper clipping bound. Sample validation, multiply/add order, both xorshift draws, rounding, clamping and transactional RNG/frame accounting remain unchanged; undithered and float writers keep their existing paths.
+- Paired fresh-process Node.js 26 measurements with longer measurement/warmup windows and both pair orders reduced tested 64K-frame dithered PCM16 mono full export cost by 11–12%, stereo full cost by about 9%, and stereo chunk cost by 11–12%. PCM24 stereo full/chunk exports improved 6–9%/about 9%, while mono full improved 0.6–1.4%. One-frame cases stayed within 1.5%; 128-frame PCM16 stayed within 0.7% and PCM24 improved 1.5–2.2%. Unchanged-format controls ranged from 5.7% faster to 1.8% slower. These are host-/measurement-/warmup-dependent encoding results, not universal export, GC or synthesis/deadline gains.
+- All 888 complete files, 3,492 partitioned streams and 270 invalid-sample/atomic-retry cases matched exact bytes, errors and accounting with zero input metadata/accessor getter reads. Existing independent quantization/interleaving, dither, nested-metadata and retry regressions remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Fixed-channel undithered PCM24 writing
 
 - Extend the once-per-export/encoder private writer selection to undithered PCM24. Fixed mono/stereo loops remove per-sample format/channel dispatch while retaining one read and finite/unit-range check per sample, asymmetric scaling, rounding and explicit little-endian stores. With both undithered integer formats now specialized, remove the unreachable disabled-noise branch from the generic integer writer; active TPDF draw order and transactional state remain unchanged.
