@@ -117,11 +117,12 @@ export function validateNoteControls(input: NoteControls): NoteControls {
   if (keys.length === 0) throw new TypeError('controls must not be empty');
   const result: NoteControls = {};
   for (const key of keys) {
-    if (typeof key !== 'string' || !['operatorLevels', 'operatorRatios', 'operatorFrequencies', 'operatorADSR'].includes(key) && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
+    const operatorTuple = key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR';
+    if (typeof key !== 'string' || !operatorTuple && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
     const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
     if (!Object.hasOwn(descriptor, 'value')) throw new TypeError(`controls.${key} must be data`);
     const value: unknown = descriptor.value;
-    if (key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR') {
+    if (operatorTuple) {
       if (!Array.isArray(value) || value.length !== 4 || Reflect.ownKeys(value).length !== 5 ||
           Object.getPrototypeOf(value) !== Array.prototype) throw new TypeError(`${key} must be a dense four-element tuple`);
       // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
@@ -163,7 +164,7 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     Object.defineProperty(result, control, { __proto__: null, value, enumerable: true } as PropertyDescriptor);
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
-  if (Object.hasOwn(result, 'ramp') && !Reflect.ownKeys(result).some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {
+  if (Object.hasOwn(result, 'ramp') && !keys.some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {
     throw new TypeError('ramp requires a rampable control');
   }
   Object.freeze(result);

@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reused live-control validation keys
+
+- Classify operator tuples once per input field without allocating a temporary name list. Ramp dependency checks reuse the already validated own-key snapshot instead of enumerating the newly constructed result again; raw caller objects still validate on every call.
+- Paired Node.js 26 measurements reduced the tested ramped-control validation time by about 3–12% and complete core `Synth.updateNote()` time by 3–10%. Non-ramped validation controls stayed within 1%; this does not measure native worklet IPC or render throughput.
+- All 28 snapshot/rejection comparisons and 64 updated stereo PCM blocks matched. Invalid fields, symbols, empty/sparse controls, accessors and repeated mutable inputs retained their behavior; caller getter reads remained zero.
+
 ### Direct integer reverb pre-delay taps
 
 - Read integer pre-delay positions directly instead of interpolating two taps. Fractional pre-delay and modulated chorus reads retain the original interpolation; the stereo pre-delay distance is calculated once per frame.
