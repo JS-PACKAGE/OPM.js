@@ -4,6 +4,19 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Smaller SMF wire records
+
+- Remove the private import ordinal and redundant per-track loop counter. Stable tick/track sorting retains source order for ties, while the separate all-message budget counter and export priority/ordinal ordering remain unchanged.
+- Native V8 layout samples of actual captured import records on Node.js 26 (not a whole-file heap or GC measurement):
+
+| Wire record | Before (bytes) | After (bytes) |
+| --- | ---: | ---: |
+| Note on/off | 80 | 72 |
+| Expression | 88 | 80 |
+
+- Paired fresh-process first-call 1K-note imports improved 12–13%. With longer warmup, sixteen-track notes improved 3.5% and mapped controller traffic 2.9%, but one-note legacy imports were 3.3% slower; other cases stayed within 1.6%. Shorter warmup included a 28% slowdown for preserved 1K-note imports and 9% for mapping controls. This is a record-storage/setup tradeoff, not a universal throughput or GC claim.
+- All 7,327 complete import results, 1,652 rejection cases and 48 complete export files matched, with zero native/mapping metadata getter reads. Comparisons include 192 multitrack cases with shared channels, simultaneous controllers/programs/tempos and staggered clocks; existing consumer ordering and hard-budget tests remain unchanged. Scoped A/C review is recorded in SECURITY.md.
+
 ### Numeric MIDI channel-map keys
 
 - Normalize validated import channel keys to numbers once when building their private map, then look up decoded channels directly instead of stringifying each note. Export voice-name keys remain strings, including numeric/prototype-like names. Keep full own-data/value validation, program/drum/channel/default precedence, fresh snapshots and all resource bounds; no new container or shared state.

@@ -118,7 +118,7 @@ class Reader {
     throw new RangeError('MIDI VLQ exceeds four bytes');
   }
 }
-interface WireEvent { tick: number; track: number; order: number; kind: 'on' | 'off' | 'sustain' | 'tempo' | 'meter' | 'expression' | 'program' | 'rpn'; channel: number; a: number; b: number; command?: number }
+interface WireEvent { tick: number; track: number; kind: 'on' | 'off' | 'sustain' | 'tempo' | 'meter' | 'expression' | 'program' | 'rpn'; channel: number; a: number; b: number; command?: number }
 type BeatNote = Extract<BeatSequenceEvent, { type: 'note' }>;
 interface HeldNote { event: BeatNote; tick: number; channel: number; modulation?: number }
 interface NoteQueue { notes: HeldNote[]; head: number }
@@ -183,7 +183,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     let tick = 0;
     let running = 0;
     let ended = false;
-    for (let order = 0; input.offset < input.end; order++) {
+    while (input.offset < input.end) {
       if (++eventCount > MAX_MIDI_FILE_EVENTS) throw new RangeError('MIDI file exceeds event budget');
       tick += input.vlq();
       if (tick > MAX_TRANSPORT_BEATS * ppqn) throw new RangeError('MIDI file exceeds beat horizon');
@@ -198,21 +198,21 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         const command = status & 0xf0;
         const a = first === undefined ? input.data() : first;
         const b = command === 0xc0 || command === 0xd0 ? 0 : input.data();
-        if (command === 0x90 && b > 0) wire.push({ tick, track, order, kind: 'on', channel: status & 15, a, b });
+        if (command === 0x90 && b > 0) wire.push({ tick, track, kind: 'on', channel: status & 15, a, b });
         else if (command === 0x80 || command === 0x90) {
-          wire.push({ tick, track, order, kind: 'off', channel: status & 15, a, b });
+          wire.push({ tick, track, kind: 'off', channel: status & 15, a, b });
           if (command === 0x80 && b !== 0) warn('release-velocity', 'Note-off release velocity was omitted');
         } else if (command === 0xb0 && a === 64) {
           if (sustain === 'reject') throw new RangeError('MIDI sustain is rejected by policy');
-          wire.push({ tick, track, order, kind: 'sustain', channel: status & 15, a, b });
+          wire.push({ tick, track, kind: 'sustain', channel: status & 15, a, b });
           warn('sustain-applied', 'Sustain CC64 was flattened into note gate durations', false);
         } else if (command === 0xc0) {
-          wire.push({ tick, track, order, kind: 'program', channel: status & 15, a, b });
+          wire.push({ tick, track, kind: 'program', channel: status & 15, a, b });
         } else if (preserve && command === 0xb0 && (a === 6 || a === 38 || a >= 98 && a <= 101)) {
-          wire.push({ tick, track, order, kind: 'rpn', channel: status & 15, a, b });
+          wire.push({ tick, track, kind: 'rpn', channel: status & 15, a, b });
         } else if (preserve && (command === 0xe0 || command === 0xd0 || command === 0xa0 ||
             command === 0xb0 && (a === 1 || a === 7 || a === 10 || a === 11))) {
-          wire.push({ tick, track, order, kind: 'expression', channel: status & 15, a, b, command });
+          wire.push({ tick, track, kind: 'expression', channel: status & 15, a, b, command });
           const kind: MidiFileControlKind = command === 0xe0 ? 'pitch-bend' : command === 0xd0 ? 'channel-pressure'
             : command === 0xa0 ? 'poly-pressure' : a === 1 ? 'modulation' : a === 10 ? 'pan' : 'expression';
           preserved.set(kind, (preserved.get(kind) ?? 0) + 1);
@@ -232,13 +232,13 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           const microseconds = input.view.getUint8(payload) * 65536 + input.view.getUint8(payload + 1) * 256 + input.view.getUint8(payload + 2);
           if (microseconds === 0) throw new RangeError('MIDI tempo must be positive');
           transportNumber(60000000 / microseconds, 1, 1000, 'MIDI bpm');
-          wire.push({ tick, track, order, kind: 'tempo', channel: 0, a: microseconds, b: 0 });
+          wire.push({ tick, track, kind: 'tempo', channel: 0, a: microseconds, b: 0 });
         } else if (type === 0x58) {
           const numerator = input.view.getUint8(payload);
           const exponent = input.view.getUint8(payload + 1);
           if (exponent > 5) throw new RangeError('MIDI meter denominator exceeds supported range');
           normalizeTimeSignature({ numerator, denominator: 2 ** exponent });
-          wire.push({ tick, track, order, kind: 'meter', channel: 0, a: numerator, b: 2 ** exponent });
+          wire.push({ tick, track, kind: 'meter', channel: 0, a: numerator, b: 2 ** exponent });
           if (input.view.getUint8(payload + 2) !== 24 || input.view.getUint8(payload + 3) !== 8) warn('meter-detail', 'MIDI metronome click and thirty-second-note fields were omitted');
         } else {
           if (type === 0x20 && input.view.getUint8(payload) > 15) throw new RangeError('Invalid MIDI channel prefix');
@@ -262,8 +262,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (!ended) throw new RangeError('MIDI track is missing end-of-track');
   }
   if (reader.offset !== reader.end) throw new RangeError('MIDI file has trailing bytes or undeclared tracks');
-  // A single track already has nondecreasing ticks and increasing wire order.
-  if (trackCount > 1) wire.sort((a, b) => a.tick - b.tick || a.track - b.track || a.order - b.order);
+  // Stable sorting preserves source order for tick/track ties; a single track is already ordered.
+  if (trackCount > 1) wire.sort((a, b) => a.tick - b.tick || a.track - b.track);
   const events: BeatSequenceEvent[] = [];
   const queues = new Map<number, NoteQueue>();
   let liveCount = 0;
