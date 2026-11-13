@@ -194,6 +194,19 @@ test('explicit stops, FIFO overlaps and channel mappings survive export reload',
   assert.throws(() => exportMidiFile([note(1, 0, 2), note(2, 0.5, 0.5)]), /FIFO/);
 });
 
+test('numeric and prototype-like voice names retain distinct SMF channel mappings', () => {
+  const events: BeatSequenceEvent[] = [
+    { ...note(1, 0, 0.25, 60), voice: '0' },
+    { ...note(2, 0.25, 0.25, 62), voice: '01' },
+    { ...note(3, 0.5, 0.25, 64), voice: 'constructor' },
+  ];
+  for (const format of [0, 1] as const) {
+    const bytes = exportMidiFile(events, { format, voiceChannels: { '0': 1, '01': 15, constructor: 3 } });
+    const result = importMidiFile(bytes, { channelVoices: { 1: '0', 15: '01', 3: 'constructor' } });
+    assert.deepEqual(result.events, events);
+  }
+});
+
 test('PPQN rounding is monotone and unrepresentable gates/tempos/controls reject', () => {
   const bytes = exportMidiFile([note(1, 0.11, 0.51), note(2, 0.62, 0.49)], { ppqn: 10 });
   assert.deepEqual(importedNotes(bytes).map(event => [event.beat, event.duration]), [[0.1, 0.5], [0.6, 0.5]]);

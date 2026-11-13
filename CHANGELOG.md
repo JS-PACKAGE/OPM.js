@@ -4,6 +4,13 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Numeric MIDI channel-map keys
+
+- Normalize validated import channel keys to numbers once when building their private map, then look up decoded channels directly instead of stringifying each note. Export voice-name keys remain strings, including numeric/prototype-like names. Keep full own-data/value validation, program/drum/channel/default precedence, fresh snapshots and all resource bounds; no new container or shared state.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced tested 1K-note channel-voice import cost by about 5–6% and the sixteen-channel empty-program-map case by 6–8%. Controller-heavy channel-voice cases improved 2–5%; complete-program-map controls stayed within 1.6%. First-call 1K-note cases improved 9–15%.
+- One-note legacy imports were about 3% slower. A shorter-warmup preserved 1K-note case was 31% slower (about 31 microseconds/import within that batch). These are host-/warmup-dependent mapping results, not a universal import or synthesis/deadline gain.
+- All 7,231 complete import results, 1,556 rejection cases and 48 complete export files matched, with zero native/mapping metadata getter reads. Export comparisons include formats 0/1, PPQN, input ordering, null prototypes and numeric/prototype-like names; a consumer roundtrip regression keeps `0`, `01` and `constructor` distinct. Scoped A/C review is recorded in SECURITY.md.
+
 ### Lazy MIDI RPN channel snapshots
 
 - Preserved SMF imports now create RPN snapshots only for channels with RPN-related controller traffic. Dense own undefined placeholders replace eager construction of all sixteen records and its Array.from callback. Bends before that traffic use the unchanged, unconditionally validated initial range; partial/null/NRPN selection, clamping, zero ranges, warnings and channel ownership are unchanged.

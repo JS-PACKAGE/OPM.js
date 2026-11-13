@@ -73,8 +73,8 @@ function channel(value: unknown): number {
   if (!Number.isInteger(result)) throw new RangeError('MIDI channel must be an integer');
   return result;
 }
-function dictionary(input: unknown, channels: boolean): Map<string, string | number> {
-  const result = new Map<string, string | number>();
+function dictionary(input: unknown, channels: boolean): Map<string | number, string | number> {
+  const result = new Map<string | number, string | number>();
   if (input === undefined) return result;
   if (input === null || typeof input !== 'object' || Array.isArray(input) ||
       (Object.getPrototypeOf(input) !== Object.prototype && Object.getPrototypeOf(input) !== null)) throw new TypeError('MIDI mapping must be a plain data object');
@@ -85,7 +85,8 @@ function dictionary(input: unknown, channels: boolean): Map<string, string | num
     if (channels ? !/^(?:[0-9]|1[0-5])$/.test(key) : !/^[a-zA-Z0-9_-]{1,64}$/.test(key)) throw new TypeError('Invalid MIDI mapping key');
     const descriptor = Object.getOwnPropertyDescriptor(input, key)!;
     if (!Object.hasOwn(descriptor, 'value')) throw new TypeError('MIDI mapping must contain own data');
-    result.set(key, channels ? voiceName(descriptor.value) : channel(descriptor.value));
+    // Import channels use numbers at onset; export voice names must remain strings.
+    result.set(channels ? Number(key) : key, channels ? voiceName(descriptor.value) : channel(descriptor.value));
   }
   return result;
 }
@@ -372,7 +373,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       }
     } else if (item.kind === 'on') {
       const name = (item.channel === 9 ? drums.get(item.a) : undefined) ??
-        programs.get(currentPrograms[item.channel]) ?? voices.get(String(item.channel));
+        programs.get(currentPrograms[item.channel]) ?? voices.get(item.channel);
       if (name === undefined) warn('default-voice', 'Unmapped MIDI notes use defaultVoice');
       const event: BeatNote = { type: 'note', id: nextId++, beat, duration: 0, note: item.a, velocity: item.b / 127, voice: name === undefined ? fallback : name as string };
       append(event);
