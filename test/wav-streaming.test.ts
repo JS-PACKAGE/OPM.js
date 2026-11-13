@@ -167,13 +167,13 @@ test('stream accounting survives invalid partial input, underrun, overrun and wr
 });
 
 test('every WAV format rejects non-finite and adjacent out-of-range samples without committing partial chunks', () => {
-  for (const format of ['pcm16', 'pcm24', 'float32'] as const) for (const dither of format === 'float32' ? [false] : [false, true]) {
-    const left = Float32Array.of(-1, -0, 2 ** -149, 0.125, 1), right = left.map(value => -value);
-    const encoder = createWavEncoder({ sampleRate: 8000, channels: 2, totalFrames: left.length, format, dither });
+  for (const format of ['pcm16', 'pcm24', 'float32'] as const) for (const dither of format === 'float32' ? [false] : [false, true]) for (const channels of [1, 2] as const) {
+    const left = Float32Array.of(-1, -0, 2 ** -149, 0.125, 1), right = channels === 2 ? left.map(value => -value) : undefined;
+    const encoder = createWavEncoder({ sampleRate: 8000, channels, totalFrames: left.length, format, dither });
     const parts = [encoder.header()];
-    for (const invalid of [NaN, Infinity, -Infinity, 1 + 2 ** -23, -1 - 2 ** -23]) for (const channel of [0, 1]) {
+    for (const invalid of [NaN, Infinity, -Infinity, 1 + 2 ** -23, -1 - 2 ** -23]) for (let channel = 0; channel < channels; channel++) {
       const badLeft = Float32Array.of(0.5, channel === 0 ? invalid : 0.25);
-      const badRight = Float32Array.of(0.25, channel === 1 ? invalid : 0.5);
+      const badRight = channels === 2 ? Float32Array.of(0.25, channel === 1 ? invalid : 0.5) : undefined;
       assert.throws(() => encodeWav({ left: badLeft, right: badRight, sampleRate: 8000, format, dither }), RangeError);
       assert.throws(() => encoder.encode({ left: badLeft, right: badRight }), RangeError);
       assert.equal(encoder.framesEncoded, 0);

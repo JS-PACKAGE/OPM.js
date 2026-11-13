@@ -4,6 +4,23 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Native mono float32 WAV chunks
+
+- Little-endian hosts now select a native Float32 bulk writer once for mono float32 streaming encoders. It copies into the fresh owned chunk and validates that private copy, so concurrently mutable shared input cannot replace already-validated samples. The usual path replaces its DataView with one Float32 view over the same output buffer; no input/output buffer or view is retained. Full WAV data starts at unaligned byte 58 and keeps the existing DataView path, as do stereo float32 chunks and big-endian hosts.
+- Length-tracking shared views that grow after frame admission retain the original bounded-prefix behavior, including growth between the length check and native copy. Invalid values still reject the whole chunk without consuming frames; headers, signed zero, subnormals, dither, chunk limits and transfer ownership are unchanged.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding, including chunk allocation and sample validation. Positive values below mean higher throughput, not CPU time saved:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Mono float32, 128-frame chunks | +44.4–44.5% | +38.0–38.4% |
+| Mono float32, 1,024-frame chunks | +131.0–132.8% | +121.0–122.4% |
+| Mono float32, 8,192-frame chunks | +214.1–214.4% | +206.6–209.4% |
+| Mono float32, 65,536-frame chunks | +87.8–88.7% | +87.7–90.8% |
+| Unchanged stereo/full-file/PCM controls | −0.9% to +1.1% | −1.8% to +1.6% |
+
+- These are workload-/host-dependent Node medians, not universal browser/device, heap-byte or GC guarantees. Instrumented 128-frame mono chunks made zero DataView float stores instead of 128; full-file mono and streaming stereo counts stayed at 128 and 256. Timing did not use that instrumentation.
+- Source/distribution comparisons matched 360 complete WAV cases, 228 rejection checks and 360 transferred chunks across every format, channel count and dither setting, including native subviews, shadowed metadata and fixed/shared/growable/resizable buffers. Additional checks cover shrink/growth at output allocation, growth just before native copying, and source mutation after copying. The existing range/atomic-accounting regression now covers mono as well as stereo. All 14 targeted WAV tests pass. Scoped A/C review is recorded in SECURITY.md.
+
 ### Settled stereo input classification
 
 - The first oversampled stereo input pair now initializes the silent-left, silent-right and differing-input flags. When both inputs are nonzero and unequal, all three flags are final and the remaining classification reads are skipped. Otherwise the remaining inputs are scanned as before. Every input still reaches the unchanged FIR; this does not skip synthesis, filtering, finite-output guards, history updates or mirror transitions. No retained field, buffer, helper or dependency is added.

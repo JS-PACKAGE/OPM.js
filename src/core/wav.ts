@@ -26,6 +26,9 @@ const MAX_CHUNK_FRAMES = 65536;
 const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype);
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
 const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
+const NativeFloat32Array = Float32Array;
+const typedArraySet = Float32Array.prototype.set;
+const LITTLE_ENDIAN = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
 
 interface Layout { sampleRate: number; channels: 1 | 2; format: WavFormat; dither: boolean; frames: number; sampleBytes: number; blockAlign: number; dataBytes: number; headerBytes: number; padding: number; byteLength: number }
 function layout(data: Record<string, unknown>): Layout {
@@ -165,6 +168,24 @@ function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right
   return s >>> 0;
 }
 
+// Only mono encoder chunks are aligned; full float WAV data starts at byte 58.
+function encodeMonoFloat32(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
+  if (typedArrayLength.call(left) !== frames) return encodeInto(bytes, offset, left, right, frames, config, ditherSeed);
+  const samples = new NativeFloat32Array(bytes.buffer, bytes.byteOffset + offset, frames);
+  try {
+    typedArraySet.call(samples, left);
+  } catch (error) {
+    // A length-tracking shared source can grow after admission. Encode only its admitted prefix.
+    if (typedArrayLength.call(left) <= frames) throw error;
+    return encodeInto(bytes, offset, left, right, frames, config, ditherSeed);
+  }
+  // Validate the private copy, never re-read mutable shared input after validating it.
+  for (let frame = 0; frame < frames; frame++) {
+    if (!(Math.abs(samples[frame]) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+  }
+  return ditherSeed;
+}
+
 // Channel admission fixes stereo shape; validate/draw/store left before reading right.
 function encodeStereoDither(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   const pcm16 = config.format === 'pcm16';
@@ -206,7 +227,8 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const config = layout(data);
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
     : !config.dither && config.format === 'pcm24' ? encodePcm24
-      : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
+      : config.format === 'float32' && config.channels === 1 && LITTLE_ENDIAN ? encodeMonoFloat32
+        : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   let emittedHeader = false;
   let framesEncoded = 0;
   let finished = false;
