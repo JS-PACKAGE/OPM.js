@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Direct MIDI pedal-owner scans
+
+- Check sustain ownership directly across input sets without materializing a temporary array. Pedal changes, controller reset and disconnect share the same short-circuit scan; another input's pedal ownership is preserved.
+- Paired Node.js 26 adapter-only measurements with an instrumented downstream host reduced tested pedal-dispatch time by 13–44% with 1–32 inputs, and controller-reset time by 8–16%. These isolate adapter bookkeeping, not physical pedal or audio latency.
+- All 1,067 dispatch/error/snapshot stages matched across multiple channels, pedal changes, resets and input removal. Existing multi-input pedal, forced cleanup and disconnect regressions exercise the shared ownership path.
+
 ### Allocation-free MIDI packet data-byte checks
 
 - Validate the one or two channel-message data bytes directly instead of allocating a typed-array subview and callback scan per packet. Status, packet length, channel limits and dispatch semantics are unchanged.

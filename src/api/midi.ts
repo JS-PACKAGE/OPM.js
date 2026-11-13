@@ -220,6 +220,10 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       if (predicate(owned.slot)) release(owned, true);
     }
   }
+  function pedalOn(channel: number): boolean {
+    for (const owners of sustained.values()) if (owners.has(channel)) return true;
+    return false;
+  }
   function control(channel: number, input: string, controller: number, value: number): void {
     const state = states[channel]!;
     if (midiRpnControl(rpn[channel]!, controller, value)) return;
@@ -235,8 +239,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       if (value >= 64) owners.add(channel); else owners.delete(channel);
       sustained.set(input, owners);
       // One physical pedal state is the union over adapter inputs for the part.
-      const on = [...sustained.values()].some(set => set.has(channel));
-      performance.sustain(channel, on);
+      performance.sustain(channel, pedalOn(channel));
     } else if (controller === 1) performance.updatePartNotes(channel, { modulation: 1 + value / 127 });
     else if (controller === 7 || controller === 11) {
       if (controller === 7) state.volume = value / 127; else state.expression = value / 127;
@@ -256,7 +259,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
           mapped.operator === undefined ? undefined : performance.getPartControls(channel)));
       }
       sustained.get(input)?.delete(channel);
-      performance.sustain(channel, [...sustained.values()].some(set => set.has(channel)));
+      performance.sustain(channel, pedalOn(channel));
     } else ignored++;
   }
   function receive(input: string, data: Uint8Array | null): void {
@@ -327,7 +330,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     const channels = sustained.get(id);
     sustained.delete(id);
     if (channels) for (const channel of channels) {
-      try { performance.sustain(channel, [...sustained.values()].some(set => set.has(channel))); }
+      try { performance.sustain(channel, pedalOn(channel)); }
       catch (error) { detachError?.(error instanceof Error ? error : new Error(String(error))); }
     }
   }
