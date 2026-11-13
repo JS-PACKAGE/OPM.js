@@ -207,10 +207,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           warn('sustain-applied', 'Sustain CC64 was flattened into note gate durations', false);
         } else if (command === 0xc0) {
           wire.push({ tick, track, order, kind: 'program', channel: status & 15, a, b });
-        } else if (preserve && command === 0xb0 && [6, 38, 98, 99, 100, 101].includes(a)) {
+        } else if (preserve && command === 0xb0 && (a === 6 || a === 38 || a >= 98 && a <= 101)) {
           wire.push({ tick, track, order, kind: 'rpn', channel: status & 15, a, b });
         } else if (preserve && (command === 0xe0 || command === 0xd0 || command === 0xa0 ||
-            command === 0xb0 && [1, 7, 10, 11].includes(a))) {
+            command === 0xb0 && (a === 1 || a === 7 || a === 10 || a === 11))) {
           wire.push({ tick, track, order, kind: 'expression', channel: status & 15, a, b, command });
           const kind: MidiFileControlKind = command === 0xe0 ? 'pitch-bend' : command === 0xd0 ? 'channel-pressure'
             : command === 0xa0 ? 'poly-pressure' : a === 1 ? 'modulation' : a === 10 ? 'pan' : 'expression';

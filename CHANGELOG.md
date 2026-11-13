@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Allocation-free MIDI controller classification
+
+- Classify supported expression/RPN controller bytes with direct comparisons instead of constructing temporary lookup arrays for each preserved channel message. The accepted controller sets and legacy omit policy are unchanged.
+- Paired Node.js 26 measurements reduced 4,096-controller expression/RPN imports by about 9–12% and a workload cycling all controller IDs by about 27%. Note-only controls varied within 1.7%; these are file-import workloads, not synthesis throughput.
+- All 4,096 complete-result/rejection comparisons matched across every controller ID, channels 0/15, four data values, expression policies and sustain policies. Existing expression, RPN/loss-summary and unsupported-message regressions cover the changed dispatch.
+
 ### Compact MIDI import channel flags
 
 - Track sustain pedals and closed-gate history with two bounded channel bitmasks instead of allocating/filling two 16-element boolean arrays per import. Channel independence, repeated pedal updates and release-tail warnings are unchanged.
