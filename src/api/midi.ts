@@ -172,7 +172,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     allowed = new Set(ids as string[]);
   }
   const mappings = config.controllerMap === undefined ? new Map<number, ControllerMapping>() : controllerMappings(config.controllerMap);
-  const programs = midiVoiceMap(config.programVoices);
+  const programs = config.programVoices === undefined ? undefined : midiVoiceMap(config.programVoices);
   const rpn = Array.from({ length: parts }, () => midiRpnState(range));
   // Capture the defined reset baseline before ports can deliver any messages.
   const baselines = mappings.size === 0 ? [] : Array.from({ length: parts }, (_, channel) => performance.getPartControls(channel));
@@ -298,7 +298,9 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
         if (owned) performance.updateKey(channel, owned.key, { modulation: 1 + data[2]! / 127 });
       } else if (status === 0xb0) control(channel, input, data[1]!, data[2]!);
       else if (status === 0xc0) {
-        const voice = programs.get(data[1]!);
+        // Preserve packet read/error timing when no map is configured.
+        const program = data[1]!;
+        const voice = programs?.get(program);
         if (voice === undefined) ignored++;
         else performance.configurePart(channel, { voice }, { preserveNotes: true });
       }

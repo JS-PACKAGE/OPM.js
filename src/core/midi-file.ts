@@ -151,8 +151,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   const config = sequenceOwnData(options, ['channelVoices', 'defaultVoice', 'programVoices', 'drumVoices', 'unsupported', 'unclosedNotes', 'sustain', 'controls', 'pitchBendRange'], [], 'MIDI import options');
   const { preserve, range } = expressionPolicy(config);
   const voices = dictionary(config.channelVoices, true);
-  const programs = midiVoiceMap(config.programVoices);
-  const drums = midiVoiceMap(config.drumVoices);
+  const programs = config.programVoices === undefined ? undefined : midiVoiceMap(config.programVoices);
+  const drums = config.drumVoices === undefined ? undefined : midiVoiceMap(config.drumVoices);
   const fallback = voiceName(config.defaultVoice === undefined ? 'brass' : config.defaultVoice);
   const unsupported = config.unsupported === undefined ? 'warn' : config.unsupported;
   const unclosed = config.unclosedNotes === undefined ? 'reject' : config.unclosedNotes;
@@ -169,7 +169,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   const reader = new Reader(new DataView(buffer, typedOffset.call(source), length), length);
   const warnings = new Map<MidiFileWarningCode, MidiFileWarning>();
   // Legacy imports without mapped programs cannot preserve any source controls.
-  const preserved = preserve || programs.size > 0 ? new Map<MidiFileControlKind, number>() : undefined;
+  const preserved = preserve || (programs?.size ?? 0) > 0 ? new Map<MidiFileControlKind, number>() : undefined;
   function warn(code: MidiFileWarningCode, message: string, loss = true, count = 1): void {
     if (loss && unsupported === 'reject') throw new RangeError(`Unsupported MIDI content: ${message}`);
     const existing = warnings.get(code);
@@ -343,7 +343,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       hasMeter = true;
     } else if (item.kind === 'program') {
       currentPrograms[item.channel] = item.a;
-      if (programs.has(item.a)) preserved!.set('program-change', (preserved!.get('program-change') ?? 0) + 1);
+      if (programs?.has(item.a)) preserved!.set('program-change', (preserved!.get('program-change') ?? 0) + 1);
       else warn('ignored-program', 'Unmapped program changes were omitted; channel/default voice fallback remains in effect');
     } else if (item.kind === 'rpn') {
       const state = rpn[item.channel] ?? (rpn[item.channel] = midiRpnState(range));
@@ -399,8 +399,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         }
       }
     } else if (item.kind === 'on') {
-      const name = (item.channel === 9 ? drums.get(item.a) : undefined) ??
-        programs.get(currentPrograms[item.channel]) ?? voices.get(item.channel);
+      const name = (item.channel === 9 ? drums?.get(item.a) : undefined) ??
+        programs?.get(currentPrograms[item.channel]) ?? voices.get(item.channel);
       if (name === undefined) warn('default-voice', 'Unmapped MIDI notes use defaultVoice');
       const event: BeatNote = { type: 'note', id: nextId++, beat, duration: 0, note: item.a, velocity: item.b / 127, voice: name === undefined ? fallback : name as string };
       append(event);
