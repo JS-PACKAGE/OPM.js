@@ -512,9 +512,18 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
   for (const control of controls) operations.push({ tick: control.tick, index: control.index, control });
   operations.sort((a, b) => a.tick - b.tick || Number(!!b.off) - Number(!!a.off) || a.index - b.index);
   const tracks = new Map<number, OutputEvent[]>();
-  const active = Array.from({ length: 16 }, () => new Map<number, { note: ExportNote; modulation: number }>());
-  const defaults = Array.from({ length: 16 }, () => new Set<number>());
-  const states: ExpressiveState[] = Array.from({ length: 16 }, () => ({ pitch: 8192, expression: 16129, pan: 64, modulation: 0 }));
+  const active: (Map<number, { note: ExportNote; modulation: number }> | undefined)[] = [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ];
+  const defaults: (Set<number> | undefined)[] = [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ];
+  const states: (ExpressiveState | undefined)[] = [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ];
   const pitches = new Map<number, { ids: number[]; head: number }>();
   let count = 0;
   function emit(channel: number, tick: number, status: number, a: number, b: number, off = false): void {
@@ -524,7 +533,7 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
     track.push(threeByteEvent(tick, off ? 2 : 3, count, status, a, b));
   }
   function setChannel(channel: number, tick: number, field: ExpressiveField, value: number): void {
-    const state = states[channel];
+    const state = states[channel]!;
     if (state[field] === value) return;
     if (field === 'pitch') emit(channel, tick, 0xe0 | channel, value & 127, value >> 7);
     else if (field === 'expression') {
@@ -534,28 +543,36 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
       emit(channel, tick, 0xb0 | channel, 11, value / volume);
     } else emit(channel, tick, 0xb0 | channel, field === 'pan' ? 10 : 1, value);
     state[field] = value;
-    if (field === 'modulation') for (const id of defaults[channel]) active[channel].get(id)!.modulation = value;
+    if (field === 'modulation') for (const id of defaults[channel]!) active[channel]!.get(id)!.modulation = value;
   }
   function poly(note: ExportNote, tick: number, value: number): void {
-    const owner = active[note.channel].get(note.id)!;
+    const owner = active[note.channel]!.get(note.id)!;
     if (owner.modulation === value) return;
     const queue = pitches.get(note.channel * 128 + note.pitch)!;
     if (queue.ids[queue.ids.length - 1] !== note.id) throw new RangeError('MIDI poly pressure cannot address an older repeated-pitch note');
     emit(note.channel, tick, 0xa0 | note.channel, note.pitch, value);
     owner.modulation = value;
-    defaults[note.channel].delete(note.id);
+    defaults[note.channel]!.delete(note.id);
   }
   for (let index = 0; index < operations.length; index++) {
     const op = operations[index];
     if (op.off) {
-      active[op.off.channel].delete(op.off.id);
-      defaults[op.off.channel].delete(op.off.id);
+      active[op.off.channel]!.delete(op.off.id);
+      defaults[op.off.channel]!.delete(op.off.id);
       const key = op.off.channel * 128 + op.off.pitch;
       const queue = pitches.get(key)!;
       if (++queue.head === queue.ids.length) pitches.delete(key);
       emit(op.off.channel, op.tick, 0x80 | op.off.channel, op.off.pitch, 0, true);
     } else if (op.note) {
       const note = op.note;
+      // Retain channel state across silent gaps; only its first onset materializes it.
+      let owners = active[note.channel];
+      if (!owners) {
+        owners = new Map();
+        active[note.channel] = owners;
+        defaults[note.channel] = new Set();
+        states[note.channel] = { pitch: 8192, expression: 16129, pan: 64, modulation: 0 };
+      }
       const desired: ExpressiveState = { pitch: 8192, expression: 16129, pan: note.pan, modulation: 0 };
       // Onset controls run before the first sample. Keep them before the wire note-on too.
       while (index + 1 < operations.length) {
@@ -568,14 +585,14 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
         index++;
       }
       for (const field of EXPRESSION_FIELDS) {
-        if (active[note.channel].size === 0) setChannel(note.channel, op.tick, field, desired[field]);
-        else if (field !== 'modulation' && states[note.channel][field] !== desired[field]) {
+        if (owners.size === 0) setChannel(note.channel, op.tick, field, desired[field]);
+        else if (field !== 'modulation' && states[note.channel]![field] !== desired[field]) {
           throw new RangeError(`MIDI overlapping channel state conflicts for ${field}`);
         }
       }
       emit(note.channel, op.tick, 0x90 | note.channel, note.pitch, note.velocity);
-      active[note.channel].set(note.id, { note, modulation: states[note.channel].modulation });
-      defaults[note.channel].add(note.id);
+      owners.set(note.id, { note, modulation: states[note.channel]!.modulation });
+      defaults[note.channel]!.add(note.id);
       const key = note.channel * 128 + note.pitch;
       const queue = pitches.get(key);
       if (queue) queue.ids.push(note.id); else pitches.set(key, { ids: [note.id], head: 0 });
@@ -597,17 +614,18 @@ function expressiveTracks(notes: readonly ExportNote[], controls: readonly Expor
         index++;
       }
       const owners = active[note.channel];
+      if (!owners) throw new RangeError('MIDI control has no sounding owned gate');
       for (const control of batch) if (!owners.has(control.id)) throw new RangeError('MIDI control has no sounding owned gate');
       for (const field of EXPRESSION_FIELDS) {
         const value = first.values[field];
         if (value === undefined) continue;
         if (field === 'modulation') {
           let baselineOwners = 0;
-          for (const control of batch) if (defaults[note.channel].has(control.id)) baselineOwners++;
-          if (baselineOwners === defaults[note.channel].size) setChannel(note.channel, op.tick, field, value);
+          for (const control of batch) if (defaults[note.channel]!.has(control.id)) baselineOwners++;
+          if (baselineOwners === defaults[note.channel]!.size) setChannel(note.channel, op.tick, field, value);
           for (const control of batch) poly(byId.get(control.id)!, op.tick, value);
         } else if (batch.length === owners.size) setChannel(note.channel, op.tick, field, value);
-        else if (states[note.channel][field] !== value) throw new RangeError(`MIDI per-note ${field} conflicts with overlapping channel gates`);
+        else if (states[note.channel]![field] !== value) throw new RangeError(`MIDI per-note ${field} conflicts with overlapping channel gates`);
       }
     }
   }

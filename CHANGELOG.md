@@ -4,6 +4,13 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy expressive MIDI export channels
+
+- Materialize each expressive export channel's active-owner Map, default-modulation Set and neutral expression record together at its first note onset, instead of allocating all three for sixteen channels up front. Dense own undefined slots retain channel bounds and prevent inherited indexed lookups; state remains private per export and survives silent gaps. Ownership, overlapping-state conflicts, FIFO pitch/pressure rules and wire event ordering remain unchanged.
+- Initialization intentionally no longer performs the incidental inherited numeric-property reads from the old private Array.from array-likes. Scoped benign probes retain complete output bytes while removing three such reads; a small valid channel-15 export now survives a throwing inherited index-15 getter. This is not a promise to ignore every prototype hook in arbitrary exports.
+- Paired fresh-process Node.js 26 measurements with longer samples/warmup and both pair orders reduced tested zero-note expressive export cost by about 59%, one-note cost by 42%, sixteen-note/single-channel cost by 10–11% and 64-note cost by 3%. Sixteen simultaneous channels improved about 6% for sixteen notes, but denser multi-channel/controller cases were up to 3.6% slower; unchanged non-expressive controls were up to 2.8% slower. These are explicit sparse-score allocation/setup tradeoffs, not universal export, GC or synthesis/deadline gains.
+- All 406 complete export files and 660 rejection cases matched with zero input metadata/accessor getter reads, including both SMF formats, PPQN rounding, overlapping gates, same-tick/pre-onset controls, pressure, early stops and channel mappings. Four scoped prototype contexts matched clean bytes with zero new initialization reads. Consumer regressions cover the throwing getter and pre-onset ownership error. Scoped A/C review is recorded in SECURITY.md.
+
 ### Streaming stereo dither loops
 
 - Select a private fixed-channel TPDF writer once for active-dither stereo streaming encoders. Explicit left/right steps remove the inner channel loop and channel-source dispatch while retaining each read/check, sign-dependent scale, two draws per sample, rounding, clipping and little-endian store order. Full export and mono keep the original generic traversal; direct mono specialization was rejected after measured regressions.

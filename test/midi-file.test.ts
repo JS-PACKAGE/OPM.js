@@ -442,6 +442,28 @@ test('post-release channel updates report unknown-tail approximation and do not 
   assert.throws(() => exportMidiFile([note(1, 0, 0.25), control(1, 0.5, { pitch: 1 })], midiPolicy), /release-tail/);
 });
 
+test('expressive export channel initialization cannot read an inherited numeric getter', () => {
+  const events = [note(), control(1, 0, { pitch: 1, expression: 0.5, pan: 0.25, modulation: 1.5 })];
+  for (const format of [0, 1] as const) {
+    const config = { ...midiPolicy, format, voiceChannels: { brass: 15 } };
+    const clean = exportMidiFile(events, config);
+    const saved = Object.getOwnPropertyDescriptor(Object.prototype, '15');
+    let bytes: Uint8Array | undefined;
+    try {
+      Object.defineProperty(Object.prototype, '15', { configurable: true, get() { throw new Error('Inherited numeric getter must not run'); } });
+      bytes = exportMidiFile(events, config);
+    } finally {
+      if (saved) Object.defineProperty(Object.prototype, '15', saved);
+      else Reflect.deleteProperty(Object.prototype, '15');
+    }
+    assert.deepEqual(bytes, clean);
+  }
+});
+
+test('expressive controls ordered before their same-tick onset reject as ownership errors', () => {
+  assert.throws(() => exportMidiFile([control(1, 0, { pitch: 1 }), note()], midiPolicy), RangeError);
+});
+
 test('expressive export orders initial controllers before onset and release before reset/new onset', () => {
   const events = [note(1, 0, 0.25), control(1, 0, { pitch: 2, expression: 0, pan: 1, modulation: 2 }), note(2, 0.25, 0.25)];
   const bytes = exportMidiFile(events, { controls: 'preserve', format: 0 });
