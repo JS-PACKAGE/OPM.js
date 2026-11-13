@@ -47,6 +47,7 @@ export function transportArray(input: unknown, max: number, label: string): unkn
   }
   // A null prototype keeps inherited indexed accessors out of these own-data writes.
   const result: unknown[] = [];
+  if (length === 0) return result;
   Object.setPrototypeOf(result, null);
   for (let index = 0; index < length; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(input, String(index));

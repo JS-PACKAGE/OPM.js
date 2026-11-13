@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skipped empty-array prototype transitions
+
+- After complete array-shape/key validation, return the fresh empty snapshot without switching its prototype to null and back. Nonempty snapshots retain the existing own-data element checks and protected writes.
+- Paired Node.js 26 measurements reduced isolated empty-array snapshot time by about 64% (roughly 110 ns per call). Nonempty array/file-export controls varied within 1%; this is validation overhead, not a general rendering gain.
+- All 65 snapshot/error comparisons and three complete MIDI export comparisons matched, including empty arrays, malformed keys and symbol fields. Existing strict-array and empty-sequence regressions cover the affected consumers.
+
 ### Allocation-free MIDI controller classification
 
 - Classify supported expression/RPN controller bytes with direct comparisons instead of constructing temporary lookup arrays for each preserved channel message. The accepted controller sets and legacy omit policy are unchanged.
