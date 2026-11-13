@@ -312,6 +312,12 @@ export interface ChunkedSequenceRender extends IterableIterator<SequenceChunk> {
   cancel(): void;
 }
 
+const SEQUENCE_CAPACITY_LIMITS = Object.freeze({
+  fullBufferFrames: MAX_RENDER_SAMPLES, batchNotes: MAX_SEQUENCE_NOTES, batchSlots: MAX_SEQUENCE_SLOTS,
+  longEvents: MAX_LONG_SEQUENCE_EVENTS, longSeconds: MAX_LONG_SEQUENCE_SECONDS, chunkFrames: MAX_SEQUENCE_CHUNK_FRAMES,
+  streamHorizonSeconds: 0.2, streamSlots: MAX_SEQUENCE_SLOTS, streamNotes: MAX_SEQUENCE_NOTES,
+});
+
 interface SequenceRenderPlan {
   score: SequenceSnapshot;
   engine: SynthOptions;
@@ -364,9 +370,7 @@ function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOp
     singleBatchAllowed: score.endTime <= MAX_SEQUENCE_SECONDS && score.noteCount <= MAX_SEQUENCE_NOTES && score.reservedSlots <= MAX_SEQUENCE_SLOTS,
     ...windowCapacity,
     streamAllowed: windowCapacity.peakWindowSlots <= MAX_SEQUENCE_SLOTS && windowCapacity.peakWindowNotes <= MAX_SEQUENCE_NOTES,
-    limits: Object.freeze({ fullBufferFrames: MAX_RENDER_SAMPLES, batchNotes: MAX_SEQUENCE_NOTES, batchSlots: MAX_SEQUENCE_SLOTS,
-      longEvents: MAX_LONG_SEQUENCE_EVENTS, longSeconds: MAX_LONG_SEQUENCE_SECONDS, chunkFrames: MAX_SEQUENCE_CHUNK_FRAMES,
-      streamHorizonSeconds: 0.2, streamSlots: MAX_SEQUENCE_SLOTS, streamNotes: MAX_SEQUENCE_NOTES }),
+    limits: SEQUENCE_CAPACITY_LIMITS,
   });
   return { score, engine: settings, maxVoices, queue, capacity, signal };
 }

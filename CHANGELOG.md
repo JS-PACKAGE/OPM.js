@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared immutable sequence capacity limits
+
+- Reuse one complete frozen limits record across capacity results instead of allocating/freezing the same constant fields on every preflight. Each outer capacity result remains fresh; all exposed bounds and property descriptors are unchanged.
+- Paired Node.js 26 measurements reduced empty/single-note preflight time by about 6–10%, saving roughly 16–21 ns per call. Larger controls varied from 3.2% slower to 1.5% faster, without a consistent large-score gain.
+- All 45 complete capacity/descriptor comparisons and 12 complete render comparisons matched across rates, chunk sizes and quality profiles. Attempted mutation of every tested returned limits record still threw.
+
 ### Skipped note-only onset lookup tables
 
 - For privately registered immutable note-only snapshots, omit the unused onset Map and second event traversal. Mixed scores and caller-constructed metadata keep the complete lookup/control path; queue objects, onset clamping and release bounds are unchanged.
