@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Removed redundant pitch-control caches
+
+- Ratio retargets now evaluate their current owned anchors directly, avoiding four redundant whole-frame interpolations. Fixed-Hz edits capture each current frequency directly into its anchor before timeline changes. Remove the two unused four-element scratch arrays per pooled slot and obsolete pitch-ramp mask bits; the existing frame counters still govern pitch curves, completion and retuning.
+- Paired fresh-process Node.js 26 measurements at 48 kHz reduced warmed 16-voice standard ratio/combined ramp rendering time by about 3.2–5.0%. Short static/fixed-Hz controls were noisy, including regressions; longer warmup/sampling measured the standard static control 0.2% slower and high mixed fixed-Hz control 2.6% faster. Gains are workload-dependent.
+- All 5,760 complete stereo PCM/retained numeric-state/lifecycle comparisons matched across algorithms, qualities, rates, waveform mixtures, simultaneous ratio/Hz edits, restored ratio mode, live tuning, tiny/fractional spans, stealing and reuse. Deliberately removed private caches/mask bits are excluded from state comparison; the independent Fourier trajectory regression remains applicable.
+
 ### Lazy operator-level ramp caches
 
 - Moving operator levels are already evaluated analytically by rendering and quietest admission. Skip their redundant whole-frame cache writes until completion or retargeting; holding a ramp at its exact current value also materializes that value before clearing the ramp.

@@ -216,8 +216,8 @@ interface ActiveVoice {
   modIndex: number; amDepth: number; pmDepth: number;
   pitchFrom: number; pitchTarget: number; pitchStart: number; pitchFrames: number;
   scalarValues: Float64Array; scalarFrom: Float64Array; scalarTargets: Float64Array; scalarStarts: Float64Array; scalarFrames: Float64Array;
-  ratios: Float64Array; ratioFrom: Float64Array; ratioTargets: Float64Array; ratioStart: number; ratioFrames: number;
-  frequencies: Float64Array; frequencyFrom: Float64Array; frequencyTargets: Float64Array; frequencyStart: number; frequencyFrames: number;
+  ratioFrom: Float64Array; ratioTargets: Float64Array; ratioStart: number; ratioFrames: number;
+  frequencyFrom: Float64Array; frequencyTargets: Float64Array; frequencyStart: number; frequencyFrames: number;
   envelopeStart: Float64Array; envelopeFromDb: Float64Array; envelopeEdited: Uint8Array; releaseStarts: Float64Array;
   /** Whether retained timing was computed without inherited optional dependencies. */
   envelopeTimingCacheable: boolean;
@@ -311,8 +311,6 @@ const PAN_RAMP = 2;
 const MODULATION_RAMP = 4;
 const OPERATOR_RAMP = 8;
 const ENGINE_RAMP = 16;
-const RATIO_RAMP = 32;
-const FREQUENCY_RAMP = 64;
 const SCALAR_FIELDS = ['feedback', 'lfoRate', 'amDepth', 'pmDepth', 'gain'] as const;
 
 /** Feedback scale in half-turns per unit output: pi/128 * value up to 1, then
@@ -409,8 +407,8 @@ function createVoiceSlot(oversample: number): ActiveVoice {
     modIndex: 0, amDepth: 0, pmDepth: 0, pitchFrom: 0, pitchTarget: 0, pitchStart: 0, pitchFrames: 0,
     scalarValues: new Float64Array(SCALAR_FIELDS.length), scalarFrom: new Float64Array(SCALAR_FIELDS.length),
     scalarTargets: new Float64Array(SCALAR_FIELDS.length), scalarStarts: new Float64Array(SCALAR_FIELDS.length), scalarFrames: new Float64Array(SCALAR_FIELDS.length),
-    ratios: new Float64Array(4), ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
-    frequencies: new Float64Array(4), frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
+    ratioFrom: new Float64Array(4), ratioTargets: new Float64Array(4), ratioStart: 0, ratioFrames: 0,
+    frequencyFrom: new Float64Array(4), frequencyTargets: new Float64Array(4), frequencyStart: 0, frequencyFrames: 0,
     envelopeStart: new Float64Array(4), envelopeFromDb: new Float64Array(4), envelopeEdited: new Uint8Array(4), releaseStarts: new Float64Array(4),
     envelopeTimingCacheable: false,
     lfoTurns: 0, lfoCycle: 0, lfoLive: false,
@@ -495,10 +493,6 @@ function advanceControls(active: ActiveVoice): void {
     }
     if (modulationChanged) updateModulation(active);
     if (!pending) active.controlRamps &= ~ENGINE_RAMP;
-  }
-  if (ramps & RATIO_RAMP) {
-    for (let op = 0; op < 4; op++) active.ratios[op] = rampAt(active.ratioFrom[op], active.ratioTargets[op], active.ratioStart, active.ratioFrames, frame);
-    if (frame >= active.ratioStart + active.ratioFrames) active.controlRamps &= ~RATIO_RAMP;
   }
 }
 
@@ -1580,13 +1574,13 @@ export class Synth {
       let envelopeTimingCacheable = true;
       for (let i = 0; i < 4; i++) {
         const op = voice.ops[i];
-        active.ratios[i] = active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
+        active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
         // Optional fields are read only when own: an omitted one must not fall through to
         // Object.prototype, where an inherited value would bypass the snapshot's validation.
         const frequencyOverride = Object.hasOwn(op, 'frequency') ? op.frequency : undefined;
         const rateKeyScale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
         active.frequencyTargets[i] = frequencyOverride ?? 0;
-        active.frequencies[i] = active.frequencyFrom[i] = frequencyOverride ?? frequency * op.ratio;
+        active.frequencyFrom[i] = frequencyOverride ?? frequency * op.ratio;
         const scale = Object.hasOwn(op, 'keyScale') ? op.keyScale : undefined;
         const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
           (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
@@ -1861,30 +1855,25 @@ export class Synth {
       if (active.scalarFrames[field] !== 0) active.controlRamps |= ENGINE_RAMP;
     }
     if (active.controlRamps & ENGINE_RAMP) advanceControls(active);
-    if (operatorRatios !== undefined || operatorFrequencies !== undefined) {
+    if (operatorFrequencies !== undefined) {
       // Sample ongoing pitch-independent Hz before changing either timeline.
-      for (let op = 0; op < 4; op++) active.frequencies[op] = rampedFrequency(active, op, active.elapsed);
+      for (let op = 0; op < 4; op++) active.frequencyFrom[op] = rampedFrequency(active, op, active.elapsed);
     }
     if (operatorRatios !== undefined) {
       for (let op = 0; op < 4; op++) {
-        active.ratioFrom[op] = active.ratios[op];
+        active.ratioFrom[op] = rampAt(active.ratioFrom[op], active.ratioTargets[op],
+          active.ratioStart, active.ratioFrames, active.elapsed);
         active.ratioTargets[op] = operatorRatios[op];
-        if (frames === 0) active.ratios[op] = operatorRatios[op];
       }
       active.ratioStart = active.elapsed;
       active.ratioFrames = frames;
-      if (frames !== 0) active.controlRamps |= RATIO_RAMP;
-      else active.controlRamps &= ~RATIO_RAMP;
     }
     if (operatorFrequencies !== undefined) {
       for (let op = 0; op < 4; op++) {
-        active.frequencyFrom[op] = active.frequencies[op];
         active.frequencyTargets[op] = operatorFrequencies[op] ?? 0;
       }
       active.frequencyStart = active.elapsed;
       active.frequencyFrames = frames;
-      if (frames !== 0) active.controlRamps |= FREQUENCY_RAMP;
-      else active.controlRamps &= ~FREQUENCY_RAMP;
     }
     if (operatorRatios !== undefined || operatorFrequencies !== undefined) this.retuneVoice(active);
     if (operatorADSR !== undefined) {
@@ -2195,10 +2184,7 @@ export class Synth {
     }
     if (frequencyRamping) {
       if (active.elapsed >= active.ratioStart + active.ratioFrames) active.ratioFrames = 0;
-      if (active.elapsed >= active.frequencyStart + active.frequencyFrames) {
-        active.frequencyFrames = 0;
-        active.controlRamps &= ~FREQUENCY_RAMP;
-      }
+      if (active.elapsed >= active.frequencyStart + active.frequencyFrames) active.frequencyFrames = 0;
       if (active.ratioFrames === 0 && active.frequencyFrames === 0) this.retuneVoice(active);
     }
     active.lastSample = output * active.scalarValues[4];
