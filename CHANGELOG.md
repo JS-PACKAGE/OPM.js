@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Hoisted voice-stealing policy flags
+
+- Resolve quietest/release-first policy flags once before scanning candidates instead of repeating string comparisons inside the loop. Priority filtering, release preference, audibility evaluation and sequence tie-breaking retain their original order.
+- Paired Node.js 26 measurements reduced 32-voice burst admission time by about 2.5–3.5% for oldest/release-first. Quietest controls improved 0.7–1.7%; eight-voice controls varied within 0.8%. These are admission workloads, not rendering throughput.
+- Complete stereo PCM, priority rejection, terminal callbacks, stolen IDs and active ownership matched across 270 stages covering all quality/stealing profiles, capacities and uniform/mixed priorities. Existing stealing and callback regressions cover the changed selection.
+
 ### Skipped automatic-ID duplicate scans
 
 - Search active note IDs only when the caller supplied an ID. Before automatic allocation the request ID is undefined, so it cannot match any admitted positive integer; explicit validation, monotonic allocation and exhaustion checks are unchanged.

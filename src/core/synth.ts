@@ -1529,6 +1529,7 @@ export class Synth {
   stealingIndex(voicePriority: number): number {
     let chosen = -1;
     let quietest = 0;
+    const preferQuiet = this.stealing === 'quietest', preferReleased = this.stealing === 'release-first';
     for (let index = 0; index < this.voices.length; index++) {
       const candidate = this.voices[index];
       if (candidate.voicePriority > voicePriority) continue;
@@ -1536,13 +1537,13 @@ export class Synth {
       if (current && candidate.voicePriority > current.voicePriority) continue;
       let preferred = !current || candidate.voicePriority < current.voicePriority;
       let audibility = 0;
-      if (this.stealing === 'quietest') audibility = voiceAudibility(candidate, this.sampleRate);
+      if (preferQuiet) audibility = voiceAudibility(candidate, this.sampleRate);
       if (current && candidate.voicePriority === current.voicePriority) {
         preferred = candidate.sequence < current.sequence;
-        if (this.stealing === 'release-first') {
+        if (preferReleased) {
           const released = candidate.releaseTime >= 0, currentReleased = current.releaseTime >= 0;
           if (released !== currentReleased) preferred = released;
-        } else if (this.stealing === 'quietest' && audibility !== quietest) preferred = audibility < quietest;
+        } else if (preferQuiet && audibility !== quietest) preferred = audibility < quietest;
       }
       if (preferred) {
         chosen = index;
