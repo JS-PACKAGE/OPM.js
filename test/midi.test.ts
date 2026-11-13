@@ -141,6 +141,14 @@ test('malformed, out-of-range and unsupported packets are counted without touchi
   const { opm, performance, input, adapter, errors } = await setup();
   try {
     const bad: number[][] = [[], [0x90, 60], [0x90, 60, 100, 1], [0x90, 200, 100], [0x40, 1, 1], [0xf8], [0xf0, 1, 0xf7], [0xc0, 5]];
+    for (const status of [0x80, 0x90, 0xa0, 0xb0, 0xc0, 0xd0, 0xe0]) {
+      const length = status === 0xc0 || status === 0xd0 ? 2 : 3;
+      for (let index = 1; index < length; index++) {
+        const packet = length === 2 ? [status, 64] : [status, 60, 64];
+        packet[index] = 128;
+        bad.push(packet);
+      }
+    }
     for (const packet of bad) input.send(...packet);
     for (const listener of [...input.listeners]) listener({ data: null });
     assert.equal(adapter.snapshot.ignoredMessages, bad.length + 1);

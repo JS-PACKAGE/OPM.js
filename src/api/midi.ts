@@ -266,7 +266,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       const status = data[0]! & 0xf0;
       const channel = data[0]! & 0x0f;
       const one = status === 0xc0 || status === 0xd0 ? 2 : 3;
-      if (data.length !== one || data.subarray(1).some(byte => byte > 0x7f)) { ignored++; return; }
+      if (data.length !== one || data[1]! > 0x7f || one === 3 && data[2]! > 0x7f) { ignored++; return; }
       if (channel >= parts) { ignored++; return; }
       if (status === 0x80 || status === 0x90 && data[2] === 0) {
         const key = `${input}\u0000${channel}\u0000${data[1]}`;

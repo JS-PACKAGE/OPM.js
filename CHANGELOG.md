@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Allocation-free MIDI packet data-byte checks
+
+- Validate the one or two channel-message data bytes directly instead of allocating a typed-array subview and callback scan per packet. Status, packet length, channel limits and dispatch semantics are unchanged.
+- Paired Node.js 26 adapter-only measurements with an instrumented downstream host reduced pressure/bend/expression dispatch time by about 58–62%, note-pair time by 22–24% and invalid-packet time by 71–73%. These isolate adapter overhead and are not end-to-end synthesis or physical MIDI latency claims.
+- All 6,400 dispatch/error/snapshot packet comparisons matched across status bytes, packet lengths and seven-bit boundaries. The malformed-packet regression now checks every channel-message data-byte position.
+
 ### Reused live-control validation keys
 
 - Classify operator tuples once per input field without allocating a temporary name list. Ramp dependency checks reuse the already validated own-key snapshot instead of enumerating the newly constructed result again; raw caller objects still validate on every call.
