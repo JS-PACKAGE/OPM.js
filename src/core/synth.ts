@@ -439,6 +439,41 @@ function rampedFrequency(active: ActiveVoice, op: number, frame: number): number
   return rampAt(active.frequencyFrom[op], target, active.frequencyStart, active.frequencyFrames, frame);
 }
 
+/** Shares ramp clocks while retaining multiply-before-divide interpolation. */
+function prepareFrequencies(active: ActiveVoice, deltas: Float64Array, curves: Float64Array): void {
+  const start = active.elapsed, middle = start + 0.5, end = start + 1;
+  const ratioFrames = active.ratioFrames, ratioStart = active.ratioStart, ratioEnd = ratioStart + ratioFrames;
+  const frequencyFrames = active.frequencyFrames, frequencyStart = active.frequencyStart, frequencyEnd = frequencyStart + frequencyFrames;
+  const ratioDone0 = ratioFrames === 0 || start >= ratioEnd;
+  const ratioDoneM = ratioFrames === 0 || middle >= ratioEnd;
+  const ratioDone1 = ratioFrames === 0 || end >= ratioEnd;
+  const frequencyDone0 = frequencyFrames === 0 || start >= frequencyEnd;
+  const frequencyDoneM = frequencyFrames === 0 || middle >= frequencyEnd;
+  const frequencyDone1 = frequencyFrames === 0 || end >= frequencyEnd;
+  const ratioTime0 = start - ratioStart, ratioTimeM = middle - ratioStart, ratioTime1 = end - ratioStart;
+  const frequencyTime0 = start - frequencyStart, frequencyTimeM = middle - frequencyStart, frequencyTime1 = end - frequencyStart;
+  const ratioFrom = active.ratioFrom, ratioTargets = active.ratioTargets;
+  const frequencyFrom = active.frequencyFrom, frequencyTargets = active.frequencyTargets;
+  const tuned = active.tunedFrequency, scales = active.frequencyScales, increments = active.baseIncrements;
+  for (let op = 0; op < 4; op++) {
+    let target0 = frequencyTargets[op], targetM = target0, target1 = target0;
+    if (!target0) {
+      const origin = ratioFrom[op], target = ratioTargets[op], difference = target - origin;
+      target0 = tuned * (ratioDone0 ? target : origin + difference * ratioTime0 / ratioFrames);
+      targetM = tuned * (ratioDoneM ? target : origin + difference * ratioTimeM / ratioFrames);
+      target1 = tuned * (ratioDone1 ? target : origin + difference * ratioTime1 / ratioFrames);
+    }
+    const origin = frequencyFrom[op], scale = scales[op];
+    const from = (frequencyDone0 ? target0 : origin + (target0 - origin) * frequencyTime0 / frequencyFrames) * scale;
+    const mid = (frequencyDoneM ? targetM : origin + (targetM - origin) * frequencyTimeM / frequencyFrames) * scale;
+    const to = (frequencyDone1 ? target1 : origin + (target1 - origin) * frequencyTime1 / frequencyFrames) * scale;
+    const curve = 2 * (to - 2 * mid + from);
+    increments[op] = from;
+    deltas[op] = to - from - curve;
+    curves[op] = curve;
+  }
+}
+
 function pitchEnvelopeAt(active: ActiveVoice, time: number): number {
   const envelope = active.pitchEnvelope;
   if (!envelope) return 0;
@@ -2053,20 +2088,8 @@ export class Synth {
     // is smoothed over that single frame. stepPitch applies them per substep.
     const incrementDeltas = active.incrementDeltas, incrementCurves = active.incrementCurves;
     if (dynamicPitch) {
-      const next = active.elapsed + 1;
       preparePitch(active, frame, this.sampleRate, oversample);
-      if (frequencyRamping) {
-        for (let op = 0; op < 4; op++) {
-          const scale = active.frequencyScales[op];
-          const from = rampedFrequency(active, op, active.elapsed) * scale;
-          const middle = rampedFrequency(active, op, active.elapsed + 0.5) * scale;
-          const to = rampedFrequency(active, op, next) * scale;
-          const curve = 2 * (to - 2 * middle + from);
-          active.baseIncrements[op] = from;
-          incrementDeltas[op] = to - from - curve;
-          incrementCurves[op] = curve;
-        }
-      }
+      if (frequencyRamping) prepareFrequencies(active, incrementDeltas, incrementCurves);
     }
     frame[4] = pmFactor;
     // Reuse folded levels between operator edits while AM is disabled.

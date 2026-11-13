@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared frequency-ramp frame clocks
+
+- Prepare all four operators' start/midpoint/end Hz samples with shared ratio/Hz clocks and completion tests. Keep fixed-Hz selection independent per operator, the original multiply-before-divide order, post-interpolation frequency scaling and quadratic coefficient formula. The reference-only, void helper reuses existing arrays.
+- Paired fresh-process Node.js 26 measurements at 48 kHz reduced warmed 16-voice standard ratio-only ramp rendering time by about 10–15% and combined ratio/Hz ramps by 5–15%; fixed-Hz-only differences were variable. Short static controls included a 4.2% slowdown; longer warmup/sampling measured standard mixed static 1.1% slower and high mixed static 0.4% faster. This is not a universal throughput gain.
+- All 5,760 complete stereo PCM/numeric-state/lifecycle comparisons matched across algorithms, qualities, rates, waveform mixtures, coupled ramps, retargeting, restored ratio mode, live tuning/glide, tiny/fractional spans, stealing and pooled reuse. Existing independent Fourier trajectory coverage remains unchanged.
+
 ### Removed redundant pitch-control caches
 
 - Ratio retargets now evaluate their current owned anchors directly, avoiding four redundant whole-frame interpolations. Fixed-Hz edits capture each current frequency directly into its anchor before timeline changes. Remove the two unused four-element scratch arrays per pooled slot and obsolete pitch-ramp mask bits; the existing frame counters still govern pitch curves, completion and retuning.
