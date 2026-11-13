@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Lazy MIDI RPN channel snapshots
+
+- Preserved SMF imports now create RPN snapshots only for channels with RPN-related controller traffic. Dense own undefined placeholders replace eager construction of all sixteen records and its Array.from callback. Bends before that traffic use the unchanged, unconditionally validated initial range; partial/null/NRPN selection, clamping, zero ranges, warnings and channel ownership are unchanged.
+- Paired fresh-process Node.js 26 measurements with longer samples, warmup and both pair orders reduced zero-/one-note preserved import cost by about 14–17% and tested sparse 64-note cases by 2–5%. Fully warmed 1K-note notes-only imports stayed within 1%; dense sixteen-channel RPN cases were 2–3% slower, while controller-heavy cases varied about ±2%. Shorter warmup included a 34% slowdown in the changed 1K-note path and 10% in unchanged legacy controls. This is an explicit sparse-file allocation/setup tradeoff with warmup-dependent results, not a universal import or synthesis/deadline gain.
+- All 5,692 complete import results and 746 rejection cases matched, including fractional/signed-zero ranges, selectors, unselected data entry, channel/track isolation, sustain, EOF policies, malformed/native/shared inputs and truncation; native metadata getter reads stayed zero. A consumer regression covers pre-RPN fractional range, ignored data entry, a selected zero range and an inherited channel-index hook. Scoped A/C review is recorded in SECURITY.md.
+
 ### Direct full-buffer WAV headers
 
 - Write full-export headers directly into the newly allocated complete WAV, removing the temporary 44-/58-byte header array and its copy. Streaming still allocates and returns an independent header; both callers share the private writer. Keep reserved zeros, fact/data sizes, RIFF padding, endian stores, sample encoding and header/accounting state unchanged.

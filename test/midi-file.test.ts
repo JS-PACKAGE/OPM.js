@@ -306,6 +306,22 @@ test('expressive import snapshots pre-onset state, including silent expression, 
   assert.ok(Object.isFrozen(result.lossSummary.preservedControls[0]));
 });
 
+test('preserved bends retain initial range until their channel selects and changes RPN', () => {
+  const bytes = smf([[
+    0, 0xef, 127, 127, 0, 0x9f, 60, 127,
+    0, 0xbf, 6, 0, 0, 0xef, 127, 127,
+    0, 0xbf, 101, 0, 0, 0xbf, 100, 0,
+    0, 0xbf, 6, 0, 0, 0xbf, 38, 0,
+    0, 0xef, 127, 127, 120, 0x8f, 60, 0, ...end,
+  ]]);
+  const result = withNamedAccessor('15', () => importMidiFile(bytes, {
+    controls: 'preserve', pitchBendRange: 2.5, channelVoices: { 15: 'brass' },
+  }), Object.freeze({ msb: 0, lsb: 0, semitones: 99, cents: 0, range: 99 }));
+  assert.equal(result.setterHits, 0);
+  assert.deepEqual(result.value.events.flatMap(event => event.type === 'control' ? [event.controls.pitch] : []), [2.5, 2.5, 0]);
+  assert.equal(result.value.warnings.find(warning => warning.code === 'ignored-channel')?.count, 1);
+});
+
 test('held and sustained channel gates receive updates, while poly pressure addresses the newest pressed duplicate', () => {
   const bytes = smf([[
     0, 0x90, 60, 127, 0, 0x90, 60, 96,

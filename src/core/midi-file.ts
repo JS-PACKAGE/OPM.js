@@ -5,7 +5,7 @@ import type { TempoPoint, TimeSignature } from './transport.js';
 import type { NoteControls } from './synth.js';
 import { validateNoteControls } from './synth.js';
 import { midiVoiceName, midiVoiceMap, midiRpnState, midiRpnControl } from './midi-state.js';
-import type { MidiVoiceMap } from './midi-state.js';
+import type { MidiVoiceMap, MidiRpnState } from './midi-state.js';
 
 export const MAX_MIDI_FILE_BYTES = 16 * 1024 * 1024;
 export const MAX_MIDI_FILE_TRACKS = 128;
@@ -278,7 +278,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   // Initial bend-range validation is unconditional, even when these snapshots are skipped.
   const states = preserve ? Array.from({ length: 16 }, () => ({ volume: 1, expression: 1, pitch: 0, pan: 0, modulation: 1 })) : [];
   const currentPrograms = new Uint8Array(16);
-  const rpn = preserve ? Array.from({ length: 16 }, () => midiRpnState(range)) : [];
+  // Own placeholders keep lazy channel writes clear of inherited index accessors.
+  const rpn: (MidiRpnState | undefined)[] = preserve ? [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ] : [];
   function append(event: BeatSequenceEvent): void {
     if (events.length >= MAX_LONG_SEQUENCE_EVENTS) throw new RangeError('MIDI generated beat events exceed event budget');
     events.push(event);
@@ -315,7 +319,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       if (programs.has(item.a)) preserved.set('program-change', (preserved.get('program-change') ?? 0) + 1);
       else warn('ignored-program', 'Unmapped program changes were omitted; channel/default voice fallback remains in effect');
     } else if (item.kind === 'rpn') {
-      if (midiRpnControl(rpn[item.channel], item.a, item.b)) {
+      const state = rpn[item.channel] ?? (rpn[item.channel] = midiRpnState(range));
+      if (midiRpnControl(state, item.a, item.b)) {
         preserved.set('pitch-bend-range', (preserved.get('pitch-bend-range') ?? 0) + 1);
       } else warn('ignored-channel', 'Unsupported channel messages (including banks, NRPN and unselected data entry) were omitted');
     } else if (item.kind === 'expression') {
@@ -337,7 +342,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       }
       if (item.command === 0xe0) {
         const bend = item.b * 128 + item.a - 8192;
-        state.pitch = bend / (bend < 0 ? 8192 : 8191) * rpn[item.channel].range;
+        state.pitch = bend / (bend < 0 ? 8192 : 8191) * (rpn[item.channel]?.range ?? range);
         controls = { pitch: state.pitch };
       } else if (item.command === 0xd0 || item.a === 1) {
         state.modulation = 1 + (item.command === 0xd0 ? item.a : item.b) / 127;
