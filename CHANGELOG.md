@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Sanitized undamped reverb history
+
+- A running effects engine now specializes each channel's zero-damping comb loop. Comb taps are already sanitized on write, so their exact value can replace the repeated filter arithmetic and cleanup; retain low-pass history, feedback writes, wet sums and all delay warming. Every nonzero damping value keeps the original recurrence.
+- Paired fresh-process Node.js 26 128-frame effects measurements, including input restoration, found about 11% lower bypass cost and 9% lower undamped-reverb cost after longer warmup; shorter chorus-only/undamped mixed cases improved about 4–9%. Nonzero-damping/static/live controls ranged from 0.6% faster to 1.9% slower: an explicit branch/code-size tradeoff, not a universal audio-throughput or deadline guarantee.
+- All 3,510 complete PCM/delay-ring/owned-state comparisons matched over 8–192 kHz, signed zero and tiny positive damping, invalid/extreme samples, aliasing, interrupted parameter/order changes, bypass and reset. Scoped DSP safety review is recorded in SECURITY.md.
+
 ### Settled effects block housekeeping
 
 - Stereo effects now check once per synchronous buffer whether parameter/order smoothing is active. Settled blocks skip redundant per-sample ramp checks; moving blocks retain the original updates throughout, including transitions that finish inside a block. All chorus/reverb processing and bypass history warming remain unchanged.

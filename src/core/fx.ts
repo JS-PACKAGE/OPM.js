@@ -186,7 +186,16 @@ class Engine implements StereoEffects {
       const delayed = preDelay === 0 ? source : integralPreDelay ? pre.readInteger(preDelay) : pre.read(preDelay);
       pre.push(source);
       let sum = 0;
-      for (let i = 0; i < 4; i++) {
+      if (damping === 0) {
+        // Comb cells are already sanitized; zero damping passes them through exactly.
+        for (let i = 0; i < 4; i++) {
+          const index = channel * 4 + i, comb = this.combs[index]!;
+          const out = comb.data[comb.position]!;
+          this.low[index] = out;
+          const gain = p[13 + index]!;
+          comb.push((1 - gain) * delayed + gain * this.low[index]!); sum += out * .25;
+        }
+      } else for (let i = 0; i < 4; i++) {
         const index = channel * 4 + i, comb = this.combs[index]!;
         const out = comb.data[comb.position]!;
         this.low[index] = clean(out * (1 - damping) + this.low[index]! * damping);
