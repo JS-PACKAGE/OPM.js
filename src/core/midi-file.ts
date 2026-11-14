@@ -352,7 +352,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       } else warn('ignored-channel', 'Unsupported channel messages (including banks, NRPN and unselected data entry) were omitted');
     } else if (item.kind === 'expression') {
       const beat = item.tick / ppqn;
-      let controls: NoteControls;
+      let field: ExpressiveField, value: number;
       // Set by the modulation branch itself, so no property read can disagree with it.
       let isModulation = false;
       if (item.command === 0xa0) {
@@ -372,21 +372,24 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       if (item.command === 0xe0) {
         const bend = item.b * 128 + item.a - 8192;
         state.pitch = bend / (bend < 0 ? 8192 : 8191) * (rpn[item.channel]?.range ?? range);
-        controls = { pitch: state.pitch };
+        field = 'pitch'; value = state.pitch;
       } else if (item.command === 0xd0 || item.a === 1) {
         state.modulation = 1 + (item.command === 0xd0 ? item.a : item.b) / 127;
-        controls = { modulation: state.modulation };
+        field = 'modulation'; value = state.modulation;
         isModulation = true;
       } else if (item.a === 10) {
         state.pan = Math.max(-1, (item.b - 64) / 63);
-        controls = { pan: state.pan };
+        field = 'pan'; value = state.pan;
       } else {
         if (item.a === 7) state.volume = item.b / 127; else state.expression = item.b / 127;
-        controls = { expression: state.volume * state.expression };
+        field = 'expression'; value = state.volume * state.expression;
       }
       const owners = owned[item.channel];
       if (owners) for (const held of owners) append({ type: 'control', id: held.event.id, beat,
-        controls: isModulation ? { modulation: held.modulation ?? controls.modulation } : { ...controls },
+        controls: isModulation ? { modulation: held.modulation ?? value }
+          : field === 'pitch' ? { pitch: value }
+          : field === 'pan' ? { pan: value }
+          : { expression: value },
       });
     } else if (item.kind === 'sustain') {
       const mask = 1 << item.channel;

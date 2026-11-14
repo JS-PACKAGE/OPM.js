@@ -4,6 +4,24 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-literal MIDI expression snapshots
+
+- Preserved channel expression keeps its selected field/value in scalar locals and creates each owner's fresh snapshot directly with fixed property literals. This removes the source-level per-message temporary control object and object-spread traversal, not the required individual snapshots. Numeric state updates, poly-pressure overrides, owner order, sustain and own-data properties remain unchanged; snapshots are never shared. No retained state/cache, buffer/view, dependency or public API was added.
+- Six fresh-process Node.js 26 pairs per order measured complete public SMF imports with raw-option validation/allocation. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| 128 expression groups, one owner | +5.1–5.6% | +3.5–4.7% |
+| 32 expression groups, eight owners | +8.6–9.8% | +9.7–10.7% |
+| 16 expression groups, sixteen owners | +7.8–7.9% | +5.7–6.4% |
+| 128 pre-onset expression groups | +1.7–2.1% | +2.0–2.3% |
+| 16 eight-owner groups with sustained-gate expression | +10.0–10.7% | +10.1–10.5% |
+| 64-note preserved mixed format-1 / running-status import | +2.4% | +2.5–2.6% |
+| Note-only / RPN / omitted-expression controls | −1.5% to +0.5% | −1.4% to +0.5% |
+
+- Control regressions remain in the report, not claimed as gains. A computed-key snapshot variant regressed fanout workloads and was rejected; fewer source-level objects alone do not establish a speedup. These host-/workload-dependent import medians are not synthesis, browser/device, CPU-time-reduction, heap-byte or GC guarantees.
+- Source comparisons match all 4,452 result/error descriptor/alias graphs: all 4,037 accepted imports compile into identical elapsed-time scores and all 415 rejections retain their errors. Coverage includes one/four/sixteen owners, repeated pitches, pre-onset state, held/sustained expression, sticky poly overrides, both formats, running status, large ticks and normal/offset/shadowed views, with unchanged input bytes and zero caller source/option getter calls. All 44 existing MIDI file/program tests pass, including inherited-setter and expression/sustain isolation regressions.
+
 ### Consumer-scoped MIDI beat conversion
 
 - SMF import now computes `tick / PPQN` inside the existing tempo, preserved-expression and note-on branches. Meter, program, RPN, sustain and note-off records retain their tick-only work without that unused conversion. Division order, wire sorting, ownership, warning/loss ordering, validation and budgets are unchanged. No branch, cache, retained state, buffer/view, dependency or public API was added.
