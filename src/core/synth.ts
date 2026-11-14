@@ -2177,9 +2177,16 @@ export class Synth {
     }
     if (pmTargeted) {
       const targets = active.pmTargets, factors = active.pmFactors;
-      for (let op = 0; op < 4; op++) {
-        const pm = targets[op];
-        factors[op] = pm === 1 ? pmFactor : !pmEnabled || pm === 0 ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
+      const first = targets[0];
+      if (first === targets[1] && first === targets[2] && first === targets[3]) {
+        // Equal targets repeat the identical exponent; share only within this frame.
+        const factor = first === 1 ? pmFactor : !pmEnabled || first === 0 ? 1 : fastExp2(pmDepth * first * tremolo / 1200);
+        factors[0] = factor; factors[1] = factor; factors[2] = factor; factors[3] = factor;
+      } else {
+        for (let op = 0; op < 4; op++) {
+          const pm = targets[op];
+          factors[op] = pm === 1 ? pmFactor : !pmEnabled || pm === 0 ? 1 : fastExp2(pmDepth * pm * tremolo / 1200);
+        }
       }
     }
     const gliding = active.pitchFrames !== 0;

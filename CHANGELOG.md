@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Share identical PM targets within each frame
+
+- Four equal per-operator PM targets now reuse one factor during the current frame, with the original target-zero/one cases and exact multiply/divide order. Distinct targets retain the original loop. Shared/global PM preparation, all four target values and left-to-right factor stores are preserved. No cross-frame cache, retained state, buffer/view, dependency or public API was added.
+- Six fresh-process Node.js 26 pairs per order measured complete four-voice, 48 kHz stereo rendering in 128-frame blocks, including LFO and target routing. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Uniform 0.5 PM targets, noise LFO, eco/standard/high | +3.3–6.1% | +3.2–6.1% |
+| Zero PM targets, square LFO, eco/standard/high | +1.0–2.5% | +1.0–2.5% |
+| Disabled PM with uniform targets, standard | +0.1–0.3% | +0.1–0.3% |
+| Nonuniform sparse targets, sine LFO, eco/standard/high | −0.9% to +0.4% | −0.9% to +0.5% |
+| Distinct fractional / omitted / all-unity targets, standard | −0.3% to +0.2% | −0.3% to +0.1% |
+
+- Nonuniform targets pay a classification check; their measured regressions and controls are not hidden or claimed as gains. These host-/workload-dependent Node medians are not browser/device, CPU-time-reduction, heap-byte or GC guarantees.
+- Stereo PCM, complete active/fading voice numeric state, filter/DC/spill values and callbacks match across 1,344 chunk-independent lifecycle cases and 16,128 checkpoints, including depth/rate ramps, glides, disabled/re-enabled PM, pool reuse, 504 filter-fault and 504 mix-fault cases. Another 960 selector/depth cases and 270 injected nonfinite-target cases preserve full voice/filter bits and errors across all three qualities, including signed zero, subnormals, every binary selector mask and individual/all-slot faults. All 12 existing engine/reference tests pass, including uniform-target depth scaling through live controls and recycled notes.
+
 ### Skip zero high-word mixing for held-noise LFO cycles
 
 - The stateless held-noise hash now recognizes integer cycles fitting in uint32 from the already-computed low word. Their high word is exactly zero, so it skips that division, floor and multiplication; negative, fractional, nonfinite and larger cycles retain full mixing. The integer XOR result, finalizer, seed, output scale, seeking and note/global synchronization are unchanged. No generator state, cache, allocation, dependency or public API was added.
