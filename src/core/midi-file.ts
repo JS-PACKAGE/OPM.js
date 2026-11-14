@@ -191,6 +191,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   let eventCount = 0;
   let tempoCount = 0;
   let endTick = 0;
+  let wireOrdered = true;
   for (let track = 0; track < trackCount; track++) {
     reader.tag('MTrk');
     const trackLength = reader.u32();
@@ -200,6 +201,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     let tick = 0;
     let running = 0;
     let ended = false;
+    const wireStart = wire.length;
     while (input.offset < input.end) {
       if (++eventCount > MAX_MIDI_FILE_EVENTS) throw new RangeError('MIDI file exceeds event budget');
       tick += input.vlq();
@@ -280,10 +282,13 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       } else throw new RangeError('System status is not a framed MIDI file event');
     }
     if (!ended) throw new RangeError('MIDI track is missing end-of-track');
+    // Each track is monotone; empty tracks have no captured boundary to compare.
+    if (wireOrdered && wireStart > 0 && wireStart < wire.length &&
+        wire[wireStart].tick < wire[wireStart - 1].tick) wireOrdered = false;
   }
   if (reader.offset !== reader.end) throw new RangeError('MIDI file has trailing bytes or undeclared tracks');
-  // Stable sorting preserves source order for tick/track ties; a single track is already ordered.
-  if (trackCount > 1) wire.sort((a, b) => a.tick - b.tick || a.track - b.track);
+  // Stable sorting retains tick/track ties when captured track ranges overlap.
+  if (!wireOrdered) wire.sort((a, b) => a.tick - b.tick || a.track - b.track);
   const events: BeatSequenceEvent[] = [];
   const queues = new Map<number, NoteQueue>();
   let liveCount = 0;

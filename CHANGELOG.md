@@ -4,6 +4,30 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Monotone MIDI track concatenation
+
+- SMF import classifies captured track boundaries after validating each track. Ticks are already nondecreasing within a track; concatenation retains global tick/track order when every captured track starts at or after the preceding captured track's last tick. Empty tracks contribute no boundary and equal ticks already retain ascending file-track order. Such format-1 files now avoid the redundant whole-array stable sort. Interleaved or descending ranges retain the original comparator and stable sort.
+- The change adds only function-local scalar ordering/index bookkeeping, not a full-array ordering scan, retained state/cache, buffer/view, dependency or public API. Cumulative ticks, all byte reads/admission/budgets, parse-before-execute ordering, warnings/loss, note/control ownership and timing arithmetic remain unchanged.
+- Six fresh-process Node.js 26 pairs per order measured complete public imports, including raw-option validation/allocation, separately for compiler-emitted development modules and minified distribution modules. Percentages are relative throughput from median wall and user+system CPU time per import; positive means faster:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| 16-note ordered format-1 / running status | +10.5–10.6% | +10.6% | +11.3–12.5% | +11.3–12.5% |
+| 256-note ordered format-1 / running status | +22.6–22.8% | +22.0–22.1% | +18.1–21.6% | +17.3–20.5% |
+| 2048-note ordered format-1 / running status | +22.5–22.6% | +11.9–12.6% | +25.7–27.6% | +16.9–17.7% |
+| Three ordered 128-note tracks, preserved controls | +16.3–16.4% | +16.5% | +14.3–18.3% | +14.6–18.6% |
+| Ordered tracks separated by empty-clock gaps | +13.8–18.0% | +7.6–11.9% | +13.8–14.5% | +6.4–7.3% |
+| 64-note preserved mixed format-1 / running status | +7.8–12.5% | +7.9–12.3% | +14.3–14.6% | +15.0–15.3% |
+| 64-note legacy mixed format-1 / running status | +4.1–8.1% | +4.6–8.9% | +6.1–6.7% | +7.0–7.4% |
+| Format-1 byte-boundary / sustained-expression fixture | +7.8–8.0% | +7.8–8.0% | +6.7–9.6% | +6.7–9.6% |
+| Interleaved tracks, original-sort fallback | −1.0% to −0.1% | −0.9% to −0.2% | −2.3% to −1.5% | −1.9% to −1.4% |
+| Reversed tracks, original-sort fallback | +0.9–1.2% | +0.9–1.2% | −2.6% to +0.7% | −1.9% to +0.8% |
+| Late conductor metadata, original-sort fallback | +0.1–1.4% | +0.2–1.3% | −1.6% to +0.4% | −1.3% to +0.3% |
+| Unchanged format-0 notes/program/RPN/sustain controls | −1.1% to +3.4% | −1.0% to +3.3% | −1.9% to +2.1% | −1.8% to +2.1% |
+
+- Fallback/control regressions remain reported, not claimed as gains. These host-/workload-dependent import measurements are not synthesis, browser/device, CPU-time-reduction, heap-byte or GC guarantees.
+- Source and distribution comparisons match all 8,190 result/error descriptor/alias graphs: all 7,743 accepted imports compile into identical elapsed-time scores and all 447 rejections retain their errors. Coverage includes ordered/equal-boundary/interleaved/same-first overlapping/reversed/empty-gap/late-conductor/empty/split-gate tracks, cross-track FIFO and sustain, sticky poly pressure, running status, full tempo/meter bytes, large cumulative ticks and normal/offset/shadowed native views. Backing bytes remain unchanged, with zero caller source/option getter or inherited tick getter/setter calls. All 44 existing MIDI file/program tests pass, including consumer-visible cross-track control and sustain regressions.
+
 ### Fixed-literal MIDI expression snapshots
 
 - Preserved channel expression keeps its selected field/value in scalar locals and creates each owner's fresh snapshot directly with fixed property literals. This removes the source-level per-message temporary control object and object-spread traversal, not the required individual snapshots. Numeric state updates, poly-pressure overrides, owner order, sustain and own-data properties remain unchanged; snapshots are never shared. No retained state/cache, buffer/view, dependency or public API was added.
