@@ -327,8 +327,8 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     released |= 1 << held.channel;
   }
   for (const item of wire) {
-    const beat = item.tick / ppqn;
     if (item.kind === 'tempo') {
+      const beat = item.tick / ppqn;
       const bpm = 60000000 / item.a;
       const last = tempos[tempos.length - 1];
       if (last.beat === beat) {
@@ -351,6 +351,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         preserved!.set('pitch-bend-range', (preserved!.get('pitch-bend-range') ?? 0) + 1);
       } else warn('ignored-channel', 'Unsupported channel messages (including banks, NRPN and unselected data entry) were omitted');
     } else if (item.kind === 'expression') {
+      const beat = item.tick / ppqn;
       let controls: NoteControls;
       // Set by the modulation branch itself, so no property read can disagree with it.
       let isModulation = false;
@@ -399,6 +400,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         }
       }
     } else if (item.kind === 'on') {
+      const beat = item.tick / ppqn;
       const name = (item.channel === 9 ? drums?.get(item.a) : undefined) ??
         programs?.get(currentPrograms[item.channel]) ?? voices.get(item.channel);
       if (name === undefined) warn('default-voice', 'Unmapped MIDI notes use defaultVoice');

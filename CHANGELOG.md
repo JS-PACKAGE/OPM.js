@@ -4,6 +4,24 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Consumer-scoped MIDI beat conversion
+
+- SMF import now computes `tick / PPQN` inside the existing tempo, preserved-expression and note-on branches. Meter, program, RPN, sustain and note-off records retain their tick-only work without that unused conversion. Division order, wire sorting, ownership, warning/loss ordering, validation and budgets are unchanged. No branch, cache, retained state, buffer/view, dependency or public API was added.
+- Six fresh-process Node.js 26 pairs per order measured complete public imports of native SMF bytes, including raw-option validation and allocation. Fixtures use 480 PPQN; program/RPN-heavy files have four such messages per note. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| 16-note legacy import | +0.7–1.6% | +0.7–1.6% |
+| 256-note legacy import | −1.1% to 0.0% | −1.2% to 0.0% |
+| 128-note program-heavy import | +2.7–3.6% | +2.7–3.1% |
+| 128-note sustain-heavy import | +1.1–1.5% | +1.0–1.5% |
+| 128-note preserved RPN import | +1.1–1.4% | +1.1–1.3% |
+| 128-note expression / tempo / meter controls | −0.3% to +0.9% | −0.2% to +0.9% |
+| 64-note preserved mixed format-1 / running-status import | −0.5% to +0.5% | −0.3% to +1.5% |
+
+- Large-note regressions and mixed/control variation are retained, not claimed as gains. These host-/workload-dependent import medians are not synthesis, browser/device, CPU-time-reduction, heap-byte or GC guarantees.
+- Source comparisons match 3,790 complete result/error cases: all 3,375 accepted imports compile into matching elapsed-time scores, and all 415 rejections retain their errors. Values, own descriptors, freeze state, alias graphs, warnings/loss summaries and input bytes match across both formats, running status, normal/offset/shadowed views, PPQN/cumulative-tick boundaries, malformed prefixes, byte mutations and strict options, with zero caller source/option getter calls. All 44 existing MIDI file/program tests pass.
+
 ### Share identical PM targets within each frame
 
 - Four equal per-operator PM targets now reuse one factor during the current frame, with the original target-zero/one cases and exact multiply/divide order. Distinct targets retain the original loop. Shared/global PM preparation, all four target values and left-to-right factor stores are preserved. No cross-frame cache, retained state, buffer/view, dependency or public API was added.
