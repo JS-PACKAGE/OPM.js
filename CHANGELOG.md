@@ -4,6 +4,35 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled effects parameter ramps
+
+- A bounded buffer-entry scan detects when all 21 private controls compare equal to their targets and no current value is -0. Their original intermediate updates cannot change their bits, so that call skips the redundant control arithmetic/stores. A moving control or current -0 retains the complete original loop; the exact final target copy still applies every target bit at the original frame.
+- This is not early completion: remaining-frame counts, phase/clock, effect-order fade, feedback and warmed bypass history continue unchanged. No epsilon, new state/cache, allocation, buffer/view, dependency, public API or finite/denormal/clipping/admission guard change is introduced.
+- Six fresh-process Node.js 26 pairs per order measured complete core effect processing with identical native continuous-source refill. Core updates are included in automation profiles. Percentages are relative median throughput from wall and user+system CPU time per frame, separately for compiler-emitted development and minified distribution modules; positive means faster:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Dry bypass, 48 kHz / 128 frames | −0.3% to −0.1% | −0.3% to −0.1% | −0.8% to +0.8% | −0.8% to +0.8% |
+| Steady modulated chorus, 48 kHz / 128 frames | 0.0–0.1% | 0.0–0.1% | +0.1% | +0.1% |
+| Steady reverb, 48 kHz / 128 frames | +0.1–0.2% | +0.1–0.2% | −1.9% to +2.2% | −1.9% to +2.3% |
+| Steady combined effects, 48 kHz / 128 frames | +0.1% | +0.1% | +0.2–1.0% | +0.2–1.0% |
+| Steady reversed effects, 48 kHz / 128 frames | −0.1% to +1.3% | −0.1% to +1.3% | +0.4–1.3% | +0.4–1.3% |
+| Steady combined effects, 192 kHz / 128 frames | +0.4–0.5% | +0.4–0.5% | −0.7% to +0.4% | −0.7% to +0.4% |
+| Steady combined effects, one frame | −1.4% to −0.9% | −1.4% to −0.9% | −1.1% to −0.7% | −1.1% to −0.7% |
+| Steady combined effects, 4096 frames | −1.1% to 0.0% | −1.1% to 0.0% | −0.1% to +0.3% | −0.1% to +0.3% |
+| Continuous rate-only ramps, 48 kHz / 128 frames | −0.5% to +0.1% | −0.5% to +0.1% | −1.0% to +0.6% | −1.0% to +0.5% |
+| Continuous rate-only ramps, 192 kHz / 128 frames | +0.3–0.5% | +0.3–0.6% | −1.4% to −0.7% | −1.4% to −0.7% |
+| Identical nonzero parameter replacement, 48 kHz / 128 frames | +9.6–11.9% | +9.5–11.7% | +9.6–13.7% | +9.6–13.6% |
+| Signed-zero parameter replacement, 48 kHz / 128 frames | +20.2–20.5% | +20.2–20.4% | +22.7–22.9% | +22.7–22.8% |
+| All-active parameter/order ramps, 48 kHz / 128 frames | −1.6% to −0.5% | −1.6% to −0.6% | −0.7% to −0.1% | −0.6% to −0.1% |
+| Order-only replacement, 48 kHz / 128 frames | +10.1–13.1% | +10.0–13.1% | +10.7–11.2% | +10.7–11.1% |
+| Identical dry parameter replacement, 48 kHz / 128 frames | +26.1–27.8% | +26.1–27.7% | +26.0–26.7% | +26.0–26.6% |
+
+- All steady, moving and dense-automation control regressions remain reported. These host-/workload-dependent core measurements are not browser/device deadlines, synthesis-wide gains, CPU-time-reduction percentages or heap-byte/GC guarantees.
+- Source and distribution match all 336 lifecycle cases, 10,752 complete state checkpoints and 3,456,264 processed stereo frames each: public sample bytes and every original private scalar/descriptor/ring-buffer state remain identical. Coverage includes eight admitted sample rates, wet/dry and tiny mix, both effect orders, signed-zero parameter replacement, no-op updates, exact endpoints, mid-ramp retargeting, whole/128/irregular chunks, zero-length calls, reset, future bypass activation, offset sentinels and nonfinite/extreme input. All 22 existing core effects and effects-protocol tests pass.
+- Native Chromium 156 additionally matches the frozen distribution across nine browser-core lifecycle cases, 225 complete state checkpoints and 118,578 stereo frames. Four real `OfflineAudioContext` / `AudioWorkletNode` renders match all 65,536 stereo PCM frames against the original core, including dry, combined, reversed-order and signed-zero parameter replacement, with no protocol errors. All 593 tests, type checking and the dependency/dynamic-code security gate pass.
+- Realtime `AudioContext` smoke did not pass on this host: independent native oscillator probes without OPM also stopped advancing in Chromium and WebKit, while Firefox timed out. Offline native-worklet proof does not establish realtime, physical-device or listening acceptance. No sandbox/autoplay/CSP policy, production fallback or host audio service was changed.
+
 ### Monotone MIDI track concatenation
 
 - SMF import classifies captured track boundaries after validating each track. Ticks are already nondecreasing within a track; concatenation retains global tick/track order when every captured track starts at or after the preceding captured track's last tick. Empty tracks contribute no boundary and equal ticks already retain ascending file-track order. Such format-1 files now avoid the redundant whole-array stable sort. Interleaved or descending ranges retain the original comparator and stable sort.

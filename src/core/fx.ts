@@ -216,12 +216,18 @@ class Engine implements StereoEffects {
     const count = frames(left, right, offset, length);
     // No callbacks can retarget controls during this synchronous buffer traversal.
     const smoothing = this.remaining > 0 || this.order !== this.snapshot.order || this.orderGain < 1;
+    // Settled values need no intermediate stores, except -0 can change sign.
+    let steadyControls = count > 0 && this.remaining > 1;
+    if (steadyControls) for (let i = 0; i < 21; i++) {
+      const value = this.current[i]!;
+      if (value !== this.target[i] || Object.is(value, -0)) { steadyControls = false; break; }
+    }
     for (let frame = offset; frame < offset + count; frame++) {
       if (smoothing) {
         if (this.remaining > 0) {
           // Keep exact target bits at the endpoint, rather than one last arithmetic step.
           if (this.remaining === 1) this.current.set(this.target);
-          else for (let i = 0; i < 21; i++) this.current[i] = this.current[i]! + (this.target[i]! - this.current[i]!) / this.remaining;
+          else if (!steadyControls) for (let i = 0; i < 21; i++) this.current[i] = this.current[i]! + (this.target[i]! - this.current[i]!) / this.remaining;
           this.remaining--;
         }
         if (this.order !== this.snapshot.order) { this.orderGain = Math.max(0, this.orderGain - 1 / this.ramp); if (this.orderGain === 0) this.order = this.snapshot.order; }
