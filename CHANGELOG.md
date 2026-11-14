@@ -4,6 +4,31 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Silent operator-noise clock fractions
+
+- The existing zero-envelope frame keeps each noise operator's fractional clock and fixed step in numeric locals across its oversamples, then stores the final fraction once. Every original addition, floor, LFSR update and subtraction remains in order; multiplying a frame step would change floating-point hold boundaries.
+- Envelope qualification, static-level-zero bypass, pitch/phase, noise seed/reset, feedback, fades, voice recycling, counters and finite-output guards are unchanged. There is no new retained cache/state, buffer/view, explicit per-render allocation, dependency, public API or voice-format change. Operator-level mute and square-wave AM alone do not select this envelope fast path.
+- Source and minified comparisons each preserve exact stereo PCM and complete instance-data descriptor/alias graphs and native-array bytes through 764 lifecycles, 18400 checkpoints and 2467360 stereo frames. Coverage includes all eight algorithms, all qualities, 8000..192000 Hz clocks, admission, chunk offsets, controls, pristine zero-sustain holds and reactivation, release, stealing, panic, recycling and numerical-fault probes.
+- Chromium 156 native OfflineAudioContext/AudioWorklet pairs preserve all PCM bytes and lifecycle/diagnostic events in 15 scenarios covering 164480 stereo frames, with nonzero output after reactivation and no processing errors. Standard gates pass: 593 tests, type checking and security checks. This does not establish real-time device/MIDI deadlines or human-listening acceptance.
+- Six fresh-process Node.js 26 pairs per order measure complete 128-frame stereo Synth.render calls after admission and warmup. Reference and candidate copies use equal-length sibling paths in the same package context, following an identical-code A/A calibration. Percentages are relative median throughput from wall and user+system CPU time per frame; positive means faster. Ranges cover both orders and every profile in a grouped row, not confidence intervals or a universal CPU reduction:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| ADSR-silent all-noise, 8 voices, 8 kHz / eco, 20/8000/20000 Hz holds | +5.7–8.8% | +5.7–8.8% | +5.2–18.3% | +5.2–18.3% |
+| ADSR-silent all-noise, 8 voices, 48 kHz / standard, 20/8000/20000 Hz holds | +8.1–20.2% | +8.1–20.2% | +13.4–21.2% | +13.4–21.1% |
+| ADSR-silent all-noise, 8 voices, 192 kHz / high, 20/8000/20000 Hz holds | +30.1–35.3% | +30.1–35.3% | +30.0–33.6% | +30.0–33.6% |
+| ADSR-silent mixed, 8 voices, 8 kHz / eco, 20/8000/20000 Hz holds | +1.4–4.0% | +1.4–3.8% | +2.1–15.0% | +2.1–15.0% |
+| ADSR-silent mixed, 8 voices, 48 kHz / standard, 20/8000/20000 Hz holds | +1.5–5.8% | +1.5–5.8% | +2.5–8.3% | +2.5–8.3% |
+| ADSR-silent mixed, 8 voices, 192 kHz / high, 20/8000/20000 Hz holds | +4.4–10.8% | +4.4–10.9% | +5.1–12.0% | +5.1–12.0% |
+| ADSR-silent all-noise, 1 voice, all three clock/quality profiles | +6.4–23.3% | +6.5–23.3% | +8.6–20.5% | +8.6–20.5% |
+| ADSR-silent all-noise, 32 voices, all three clock/quality profiles | +6.4–40.3% | +6.4–40.3% | +15.4–37.2% | +15.4–37.2% |
+| ADSR-silent sine controls, 8 voices, all three clock/quality profiles | −0.3% to +0.5% | −0.3% to +0.5% | −2.0% to +1.9% | −2.0% to +1.9% |
+| Audible all-noise controls, 1/8/32 voices, tested clock/hold combinations | −1.0% to +3.2% | −1.0% to +3.2% | −0.4% to +0.8% | −0.4% to +0.8% |
+| Audible carrier-noise / late-noise / mixed controls, 8 voices | −0.2% to +0.5% | −0.2% to +0.5% | −2.3% to +2.2% | −2.5% to +2.1% |
+| Audible sine controls, 1/8/32 voices | −0.6% to +0.3% | −0.7% to +0.3% | −2.7% to +2.4% | −2.7% to +2.4% |
+| Operator-level mute controls, all-noise / mixed, 8 voices | −1.3% to 0.0% | −1.3% to 0.0% | +0.1–0.5% | +0.1–0.5% |
+| Square-wave AM controls, all-noise / mixed / sine, 8/32 voices | −0.9% to +1.4% | −0.9% to +1.4% | −0.7% to +0.8% | −0.7% to +0.8% |
+
 ### Settled effects parameter ramps
 
 - A bounded buffer-entry scan detects when all 21 private controls compare equal to their targets and no current value is -0. Their original intermediate updates cannot change their bits, so that call skips the redundant control arithmetic/stores. A moving control or current -0 retains the complete original loop; the exact final target copy still applies every target bit at the original frame.

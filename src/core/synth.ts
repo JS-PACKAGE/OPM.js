@@ -1451,12 +1451,16 @@ function silentFrame(active: ActiveVoice, out: Float64Array, dynamicPitch: boole
   // Noise keeps its own clock while silent; a zero static level never sounds.
   for (let op = 0; op < 4; op++) {
     if (waveforms[op] !== 8 || levels[op] === 0) continue;
+    // Keep each fractional addition; a multiplied frame step changes hold boundaries.
+    let turns = noiseTurns[op];
+    const step = noiseSteps[op];
     for (let sub = 0; sub < oversample; sub++) {
-      const turns = noiseTurns[op] + noiseSteps[op];
+      turns += step;
       const ticks = Math.floor(turns);
       for (let tick = 0; tick < ticks; tick++) noiseStates[op] = advanceNoise(noiseStates[op]);
-      noiseTurns[op] = turns - ticks;
+      turns -= ticks;
     }
+    noiseTurns[op] = turns;
   }
   // Folded amplitudes multiply a zero gain here; keep their non-finite state counted.
   if (!Number.isFinite(p0 + p1 + p2 + p3 + frame[0] + frame[1] + frame[2] + frame[3])) return false;
