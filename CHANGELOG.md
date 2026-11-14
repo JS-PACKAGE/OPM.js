@@ -4,6 +4,25 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Paired native mono PCM24 stores
+
+- Undithered mono PCM24 calls of at least 128 frames on little-endian hosts now pack adjacent samples into three aligned Int16 words. The private output view covers only the even-sample prefix; an odd final sample keeps the scalar three-byte writer and its finite-range check. RIFF padding remains separate from both data and chunk bytes. Small calls, other endianness and dither retain their existing byte paths; the stereo packed loop is unchanged.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding with validation and allocation. Positive values below mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Mono 128/129-frame chunks | +26.3–29.6% | +20.7–25.0% |
+| Mono 8,192/65,535/65,536-frame chunks | +82.5–88.6% | +76.0–84.3% |
+| Mono 128-frame full files | +14.0–18.8% | +11.3–16.2% |
+| Mono 65,537-frame full files | +88.8–99.6% | +81.3–85.9% |
+| One/16-frame mono byte-path controls | −2.0% to +1.5% | −2.1% to +0.8% |
+| Unchanged stereo PCM24 control | −6.1% to −1.4% | −1.1% to +2.4% |
+| Unchanged mono PCM24 dither control | +0.2–2.7% | −0.8% to 0.0% |
+| Unchanged mono PCM16 control | +0.1–3.3% | −0.2% to +0.6% |
+
+- Tiny-call trade-offs and order-sensitive controls are retained in the report, not claimed as speedups. These are workload-/host-dependent Node medians, not browser/device, CPU-time-reduction, heap-byte or GC guarantees. Selected calls add one ephemeral output-prefix view, no caller-buffer wrapper or retained PCM. Samples remain captured/validated/quantized in order; packed pair writes remain private until the complete call succeeds.
+- Source comparisons preserve the 360-case WAV matrix, 228 rejections, 360 transfers, Float32 corpus and 14 boundary files. Native-constructor checks cover both channels, even/odd spans and transfer detachment in 24 native and 24 forced-portable cases; forced dispatch is not actual big-endian hardware acceptance. Thirty-six mono full/incremental growth, zero-shrink, missing-last-sample, repair/retry and transfer cases preserve bounds and errors. Ten direct prefix-span checks leave odd tails and padding untouched. The existing padding regression now checks nonzero final samples at 1/129/257/65,537 frames, full/stream equality and data-only chunk sizes. All 15 targeted WAV tests pass; scoped A/C review is in SECURITY.md.
+
 ### Packed native stereo PCM24 stores
 
 - Undithered stereo PCM24 calls of at least 128 frames on little-endian hosts now write each six-byte frame as three aligned Int16 words. The middle word joins the left sample's high byte and the right sample's low byte; casts discard only unused high bits. The existing captured native constructor adds one ephemeral view over owned output, with no caller-buffer wrapper or retained PCM. Mono, smaller calls, other endianness and dither retain their byte writers.

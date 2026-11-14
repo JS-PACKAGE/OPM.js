@@ -164,13 +164,24 @@ test('dither options validate', () => {
 });
 
 test('monoPCM24 pads RIFF but not the data chunk', () => {
-  const encoder = createWavEncoder({ sampleRate: 8000, channels: 1, format: 'pcm24', totalFrames: 1 });
-  const header = encoder.header();
-  assert.equal(new DataView(header.buffer).getUint32(40, true), 3);
-  assert.equal(new DataView(header.buffer).getUint32(4, true), 40);
-  assert.deepEqual(encoder.encode({ left: Float32Array.of(-1) }), Uint8Array.of(0, 0, 128));
-  assert.deepEqual(encoder.finalize(), Uint8Array.of(0));
-  assert.equal(encoder.byteLength, 48);
+  for (const frames of [1, 129, 257, 65537]) {
+    const left = new Float32Array(frames); left[frames - 1] = -1;
+    const encoder = createWavEncoder({ sampleRate: 8000, channels: 1, format: 'pcm24', totalFrames: frames });
+    const header = encoder.header(), view = new DataView(header.buffer);
+    assert.equal(view.getUint32(40, true), frames * 3);
+    assert.equal(view.getUint32(4, true), 36 + frames * 3 + 1);
+    const parts = [header];
+    for (let start = 0; start < frames; start += 65536) {
+      const end = Math.min(frames, start + 65536), chunk = encoder.encode({ left: left.subarray(start, end) });
+      assert.equal(chunk.byteLength, (end - start) * 3); parts.push(chunk);
+    }
+    const padding = encoder.finalize(); assert.deepEqual(padding, Uint8Array.of(0)); parts.push(padding);
+    const bytes = join(parts);
+    assert.equal(bytes.byteLength, 44 + frames * 3 + 1);
+    assert.equal(encoder.byteLength, bytes.byteLength);
+    assert.equal(decode24(bytes, 44 + (frames - 1) * 3), -8388608);
+    assert.deepEqual(bytes, encodeWav({ left, sampleRate: 8000, format: 'pcm24' }));
+  }
 });
 
 test('stream accounting survives invalid partial input, underrun, overrun and wrong channel shapes', () => {
