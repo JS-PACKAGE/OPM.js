@@ -14,19 +14,29 @@ test('WAV authenticates native channels and ignores shadowed metadata accessors'
   assert.equal(data.getInt16(46, true), -8192);
 
   const pattern = [0xbf800000, 0x80000000, 0x80000001, 0x00000001, 0, 0x3f800000];
-  for (const frames of [127, 128, 129]) for (const suffix of [0, 3]) {
-    const buffer = new ArrayBuffer(12 + frames * 4 + suffix);
+  for (const frames of [127, 128, 129, 1023, 1024, 1025]) for (const suffix of [0, 3]) {
+    const buffer = new ArrayBuffer(12 + frames * 4 + suffix), otherBuffer = new ArrayBuffer(frames * 4 + suffix);
     const channel = new Float32Array(buffer, 12, frames), words = new Uint32Array(buffer, 12, frames);
-    for (let frame = 0; frame < frames; frame++) words[frame] = pattern[frame % pattern.length];
-    for (const key of ['length', 'buffer', 'byteOffset', 'byteLength', 'constructor']) {
-      Object.defineProperty(channel, key, { get() { reads++; throw new Error('WAV must not read caller metadata'); } });
+    const right = new Float32Array(otherBuffer, 0, frames), rightWords = new Uint32Array(otherBuffer, 0, frames);
+    for (let frame = 0; frame < frames; frame++) {
+      words[frame] = pattern[frame % pattern.length]; rightWords[frame] = pattern[(frames - 1 - frame) % pattern.length];
     }
-    const encoded = encodeWav({ left: channel, sampleRate: 8000, format: 'float32' }), view = new DataView(encoded.buffer);
-    assert.equal(encoded.byteOffset, 0);
-    assert.equal(encoded.byteLength, 58 + frames * 4);
-    assert.equal(view.getUint16(20, true), 3);
-    assert.equal(view.getUint32(54, true), frames * 4);
-    for (let frame = 0; frame < frames; frame++) assert.equal(view.getUint32(58 + frame * 4, true), pattern[frame % pattern.length]);
+    for (const source of [channel, right]) for (const key of ['length', 'buffer', 'byteOffset', 'byteLength', 'constructor']) {
+      Object.defineProperty(source, key, { get() { reads++; throw new Error('WAV must not read caller metadata'); } });
+    }
+    for (const second of [undefined, right, channel]) {
+      const channels = second === undefined ? 1 : 2;
+      const encoded = encodeWav({ left: channel, right: second, sampleRate: 8000, format: 'float32' }), view = new DataView(encoded.buffer);
+      assert.equal(encoded.byteOffset, 0);
+      assert.equal(encoded.byteLength, 58 + frames * channels * 4);
+      assert.equal(view.getUint16(20, true), 3);
+      assert.equal(view.getUint32(54, true), frames * channels * 4);
+      for (let frame = 0; frame < frames; frame++) {
+        const offset = 58 + frame * channels * 4;
+        assert.equal(view.getUint32(offset, true), pattern[frame % pattern.length]);
+        if (second !== undefined) assert.equal(view.getUint32(offset + 4, true), pattern[(second === channel ? frame : frames - 1 - frame) % pattern.length]);
+      }
+    }
   }
 
   const oversized = new Float32Array(4_000_001);

@@ -4,6 +4,23 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Size-adaptive native word reads for full stereo float WAVs
+
+- Full stereo float32 files of at least 1,024 frames now use fixed-length native Uint32 source prefixes and explicit LE DataView stores, preserving left-before-right capture/validation/store order. Identical left/right arrays share the private source view, not a captured sample value. Existing intrinsic metadata getters bypass caller properties; short/shrunken sources retain scalar rejection. Smaller files, mono, streaming, integer formats and dither retain their writers.
+- An initial 128-frame activation lost 2.4–3.6% CPU throughput there; full-file dispatch now keeps calls below 1,024 frames on their original scalar writer. Six fresh-process Node.js 26 pairs per order measured the adaptive path with real 48 kHz validation/allocation. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Stereo 1,024/1,025-frame full files | +3.1–9.2% | +3.1–7.1% |
+| Stereo 8,192/65,536-frame full files | +9.3–12.0% | +8.8–10.8% |
+| One/128/1,023-frame scalar controls | −0.8% to +2.5% | −0.2% to +1.8% |
+| Unchanged full mono float control | +0.3–1.1% | +0.8–1.4% |
+| Unchanged streaming stereo float control | +0.1–0.7% | +0.5–0.7% |
+| Unchanged full stereo PCM24 control | −0.2% to +1.6% | 0.0% to +2.4% |
+
+- Controls are not claimed as improvements; some scalar-control arithmetic means remain negative despite positive medians. These host-/workload-dependent Node medians are not browser/device, CPU-time-reduction, heap-byte or GC guarantees. Selected calls add two ephemeral source views, or one for identical channel arrays, without copied/retained PCM or a concurrent-writer snapshot guarantee. Source prefixes exclude unused bytes and growth. Output still owns a zero-offset buffer with float data at byte 58; signed zero, subnormals, finite -1..1 validation, headers, transfers and PRNG are unchanged. Actual big-endian hardware remains unverified.
+- Source comparisons preserve 360 WAV cases, 228 rejections and 360 transfers. The 1,002,569-pattern Float32 classification corpus preserves 497,553 raw patterns per channel and rejects 2,704 native-sized left/right cases per implementation. Thirty-two actual growth, zero/missing-last shrink, detachment, repair and transfer cases per implementation preserve admitted prefixes and errors. Another 384 source-alias/metadata/span/transfer cases cover four storage types, distinct offsets, unused odd-byte suffixes and the 1,023/1,024/1,025-frame boundary, with zero metadata getter calls. Existing regressions now decode both distinct and identical stereo channel bits around both float thresholds, and exercise first/middle/last invalid samples and atomic retry at 1,025 frames. All 15 targeted WAV tests pass; scoped A/C review is in SECURITY.md.
+
 ### Native word reads for full mono float WAVs
 
 - Full mono float32 encoding of at least 128 frames now reads the admitted source prefix through a captured native Uint32 view, validates the IEEE754 magnitude bits, and writes each sample with one little-endian DataView Uint32 store. This avoids float widening/narrowing without a four-byte store loop. Small files keep their scalar writer; stereo, streaming, integer formats and dither keep their existing writers.

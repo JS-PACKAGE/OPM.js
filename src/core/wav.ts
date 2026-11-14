@@ -216,6 +216,23 @@ function encodeFullMonoFloat32Words(bytes: Uint8Array, offset: number, left: Flo
   return ditherSeed;
 }
 
+// Full-file dispatch amortizes two source views; keep left-before-right captures.
+function encodeFullStereoFloat32Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
+  if (typedArrayLength.call(left) < frames || typedArrayLength.call(right) < frames) return encodeInto(bytes, offset, left, right, frames, config, ditherSeed);
+  const leftSamples = new NativeUint32Array(typedArrayBuffer.call(left), typedArrayOffset.call(left), frames);
+  const rightSamples = right === left ? leftSamples : new NativeUint32Array(typedArrayBuffer.call(right), typedArrayOffset.call(right), frames);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let frame = 0; frame < frames; frame++, offset += 8) {
+    const first = leftSamples[frame];
+    if (first === undefined || (first & 0x7fffffff) > 0x3f800000) throw new RangeError('WAV samples must be finite and in -1..1');
+    view.setUint32(offset, first, true);
+    const second = rightSamples[frame];
+    if (second === undefined || (second & 0x7fffffff) > 0x3f800000) throw new RangeError('WAV samples must be finite and in -1..1');
+    view.setUint32(offset + 4, second, true);
+  }
+  return ditherSeed;
+}
+
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   // Float PCM needs validation and endian conversion, but no integer quantization.
@@ -377,7 +394,7 @@ export function encodeWav(input: WavOptions): Uint8Array {
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
     : !config.dither && config.format === 'pcm24' ? (LITTLE_ENDIAN ? (config.channels === 1 ? encodeMonoPcm24Words : encodeStereoPcm24Words) : encodePcm24)
-      : config.format === 'float32' && config.channels === 1 ? encodeFullMonoFloat32Words
+      : config.format === 'float32' ? (config.channels === 1 ? encodeFullMonoFloat32Words : chunk.frames >= 1024 ? encodeFullStereoFloat32Words : encodeInto)
         : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);

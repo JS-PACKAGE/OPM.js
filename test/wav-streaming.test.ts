@@ -208,7 +208,7 @@ test('stream accounting survives invalid partial input, underrun, overrun and wr
 });
 
 test('every WAV format rejects non-finite and adjacent out-of-range samples without committing partial chunks', () => {
-  for (const format of ['pcm16', 'pcm24', 'float32'] as const) for (const dither of format === 'float32' ? [false] : [false, true]) for (const channels of [1, 2] as const) for (const frames of [5, 257]) {
+  for (const format of ['pcm16', 'pcm24', 'float32'] as const) for (const dither of format === 'float32' ? [false] : [false, true]) for (const channels of [1, 2] as const) for (const frames of [5, 257, 1025]) {
     const pattern = Float32Array.of(-1, -0, 2 ** -149, 0.125, 1);
     const left = Float32Array.from({ length: frames }, (_, i) => pattern[i % pattern.length]), right = channels === 2 ? left.map(value => -value) : undefined;
     const encoder = createWavEncoder({ sampleRate: 8000, channels, totalFrames: left.length, format, dither });
