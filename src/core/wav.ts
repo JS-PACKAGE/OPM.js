@@ -26,8 +26,11 @@ const MAX_CHUNK_FRAMES = 65536;
 const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype);
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
 const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
+const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get! as (this: unknown) => ArrayBufferLike;
+const typedArrayOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset')!.get! as (this: unknown) => number;
 const NativeFloat32Array = Float32Array;
 const NativeInt16Array = Int16Array;
+const NativeUint32Array = Uint32Array;
 const typedArraySet = Float32Array.prototype.set;
 const LITTLE_ENDIAN = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
 
@@ -199,6 +202,20 @@ function encodeMonoPcm24Words(bytes: Uint8Array, offset: number, left: Float32Ar
   return 0;
 }
 
+// Native Float32/Uint32 views share bit order; DataView still writes portable LE bytes.
+function encodeFullMonoFloat32Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
+  if (frames < 128 || typedArrayLength.call(left) < frames) return encodeInto(bytes, offset, left, right, frames, config, ditherSeed);
+  const samples = new NativeUint32Array(typedArrayBuffer.call(left), typedArrayOffset.call(left), frames);
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  for (let frame = 0; frame < frames; frame++, offset += 4) {
+    const word = samples[frame];
+    // Clearing the IEEE754 sign bit orders magnitudes, including subnormals and NaNs.
+    if (word === undefined || (word & 0x7fffffff) > 0x3f800000) throw new RangeError('WAV samples must be finite and in -1..1');
+    view.setUint32(offset, word, true);
+  }
+  return ditherSeed;
+}
+
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   // Float PCM needs validation and endian conversion, but no integer quantization.
@@ -360,7 +377,8 @@ export function encodeWav(input: WavOptions): Uint8Array {
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
     : !config.dither && config.format === 'pcm24' ? (LITTLE_ENDIAN ? (config.channels === 1 ? encodeMonoPcm24Words : encodeStereoPcm24Words) : encodePcm24)
-      : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
+      : config.format === 'float32' && config.channels === 1 ? encodeFullMonoFloat32Words
+        : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);
   encodeSamples(bytes, config.headerBytes, chunk.left, chunk.right, chunk.frames, config, config.dither ? DITHER_SEED : 0);

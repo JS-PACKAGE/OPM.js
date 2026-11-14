@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { encodeWav } from '../src/core/index.js';
 
-test('WAV authenticates native channels and ignores shadowed length accessors', () => {
+test('WAV authenticates native channels and ignores shadowed metadata accessors', () => {
   let reads = 0;
   const left = Float32Array.of(0.25, -0.25);
   Object.defineProperty(left, 'length', { get() { reads++; return 4_000_001; } });
@@ -12,6 +12,22 @@ test('WAV authenticates native channels and ignores shadowed length accessors', 
   assert.equal(data.getUint32(40, true), 4);
   assert.equal(data.getInt16(44, true), 8192);
   assert.equal(data.getInt16(46, true), -8192);
+
+  const pattern = [0xbf800000, 0x80000000, 0x80000001, 0x00000001, 0, 0x3f800000];
+  for (const frames of [127, 128, 129]) for (const suffix of [0, 3]) {
+    const buffer = new ArrayBuffer(12 + frames * 4 + suffix);
+    const channel = new Float32Array(buffer, 12, frames), words = new Uint32Array(buffer, 12, frames);
+    for (let frame = 0; frame < frames; frame++) words[frame] = pattern[frame % pattern.length];
+    for (const key of ['length', 'buffer', 'byteOffset', 'byteLength', 'constructor']) {
+      Object.defineProperty(channel, key, { get() { reads++; throw new Error('WAV must not read caller metadata'); } });
+    }
+    const encoded = encodeWav({ left: channel, sampleRate: 8000, format: 'float32' }), view = new DataView(encoded.buffer);
+    assert.equal(encoded.byteOffset, 0);
+    assert.equal(encoded.byteLength, 58 + frames * 4);
+    assert.equal(view.getUint16(20, true), 3);
+    assert.equal(view.getUint32(54, true), frames * 4);
+    for (let frame = 0; frame < frames; frame++) assert.equal(view.getUint32(58 + frame * 4, true), pattern[frame % pattern.length]);
+  }
 
   const oversized = new Float32Array(4_000_001);
   Object.defineProperty(oversized, 'length', { get() { reads++; return 1; } });

@@ -4,6 +4,24 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Native word reads for full mono float WAVs
+
+- Full mono float32 encoding of at least 128 frames now reads the admitted source prefix through a captured native Uint32 view, validates the IEEE754 magnitude bits, and writes each sample with one little-endian DataView Uint32 store. This avoids float widening/narrowing without a four-byte store loop. Small files keep their scalar writer; stereo, streaming, integer formats and dither keep their existing writers.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding with validation and allocation. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Mono 128-frame full files | +2.1–2.8% | +2.4–2.9% |
+| Mono 8,192-frame full files | +23.7–25.5% | +23.5–25.2% |
+| Mono 65,536/65,537-frame full files | +5.2–10.6% | +3.9–9.5% |
+| One-frame scalar control | −1.0% to +1.0% | −0.8% to +1.6% |
+| Unchanged full stereo float control | −1.6% to +0.4% | −1.6% to +0.7% |
+| Unchanged streaming mono float control | +0.8–1.2% | +0.1–6.3% |
+| Unchanged full mono PCM16 control | 0.0% to +0.6% | +0.4% |
+
+- Order-sensitive controls are reported, not claimed as improvements. These are host-/workload-dependent Node medians, not browser/device, CPU-time-reduction, heap-byte or GC guarantees. Selected calls add one ephemeral fixed-length source view, not copied or retained PCM. Captured intrinsic buffer/offset getters bypass caller metadata; explicit frame count excludes unused suffix bytes and concurrent growth. A source shortened before writing falls back to the scalar rejection path. Output still starts at byteOffset 0 with float data at byte 58; signed zero, subnormals, finite -1..1 validation and owned transfer remain unchanged. Native float/integer views share the agent's byte order; DataView explicitly writes LE. Actual big-endian hardware remains unverified.
+- Source proofs preserve the 360-case WAV matrix, 228 rejections and 360 transfers; 1,002,569 sampled IEEE bit classifications match native Float32 range checks. Full files preserve all 497,553 accepted source patterns, reject 1,352 invalid patterns, and survive 16 growth/shrink/missing-last/detachment/repair cases per implementation. Another 192 metadata-shadowing, source-prefix and output-transfer cases cover four storage types, offsets, native thresholds and odd caller-buffer byte lengths, with zero metadata getter calls. The native authentication regression now decodes signed-zero/subnormal/rail bits from offset source views at 127/128/129 frames with shadowed metadata and unused suffix bytes. All 15 targeted WAV tests pass; scoped A/C review is in SECURITY.md.
+
 ### Paired native mono PCM24 stores
 
 - Undithered mono PCM24 calls of at least 128 frames on little-endian hosts now pack adjacent samples into three aligned Int16 words. The private output view covers only the even-sample prefix; an odd final sample keeps the scalar three-byte writer and its finite-range check. RIFF padding remains separate from both data and chunk bytes. Small calls, other endianness and dither retain their existing byte paths; the stereo packed loop is unchanged.
