@@ -27,6 +27,7 @@ const typedArrayPrototype: object = Object.getPrototypeOf(Float32Array.prototype
 const typedArrayLength = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'length')!.get! as (this: unknown) => number;
 const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag)!.get! as (this: unknown) => string | undefined;
 const NativeFloat32Array = Float32Array;
+const NativeInt16Array = Int16Array;
 const typedArraySet = Float32Array.prototype.set;
 const LITTLE_ENDIAN = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
 
@@ -103,6 +104,30 @@ function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, righ
     if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
     const secondSample = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
     bytes[offset + 2] = secondSample & 255; bytes[offset + 3] = (secondSample >> 8) & 255;
+  }
+  return 0;
+}
+
+// PCM16 data starts at aligned byte 0/44; native words are selected only on little-endian hosts.
+function encodePcm16Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
+  // Amortize the extra output view over at least one ordinary audio quantum.
+  if (frames < 128) return encodePcm16(bytes, offset, left, right, frames);
+  const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, right === undefined ? frames : frames * 2);
+  if (right === undefined) {
+    for (let frame = 0; frame < frames; frame++) {
+      const value = left[frame];
+      if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+      samples[frame] = Math.floor(value * (value < 0 ? 32768 : 32767) + 0.5);
+    }
+    return 0;
+  }
+  for (let frame = 0, index = 0; frame < frames; frame++, index += 2) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    samples[index] = Math.floor(first * (first < 0 ? 32768 : 32767) + 0.5);
+    const second = right[frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    samples[index + 1] = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
   }
   return 0;
 }
@@ -247,7 +272,7 @@ function encodeStereoDither(bytes: Uint8Array, offset: number, left: Float32Arra
 export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const data = sequenceOwnData(options, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const config = layout(data);
-  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
     : !config.dither && config.format === 'pcm24' ? encodePcm24
       : config.format === 'float32' && LITTLE_ENDIAN
         ? config.channels === 1 ? encodeMonoFloat32 : encodeStereoFloat32
@@ -289,7 +314,7 @@ export function encodeWav(input: WavOptions): Uint8Array {
   const chunk = channels(data.left, data.right);
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
-  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? encodePcm16
+  const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
     : !config.dither && config.format === 'pcm24' ? encodePcm24
       : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   const bytes = new Uint8Array(config.byteLength);

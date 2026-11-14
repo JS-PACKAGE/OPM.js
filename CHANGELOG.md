@@ -4,6 +4,26 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Size-adaptive native PCM16 stores
+
+- Undithered PCM16 exports now use a captured native Int16Array view over owned output storage on little-endian hosts, replacing two byte stores with one word store per sample. Calls shorter than 128 frames retain the byte writer to avoid the extra view's fixed cost; big-endian hosts keep the portable byte path. The private cutoff is a measured cost policy, not a public contract or universal optimum. Larger calls add one ephemeral view, not retained PCM or an input-buffer wrapper.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding with validation and allocation. Positive values below mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Mono 128-frame chunks | +14.7–19.0% | +13.5–23.5% |
+| Stereo 128-frame chunks | +10.1–12.2% | +8.4–10.6% |
+| Mono 65,536-frame chunks | +47.5–48.0% | +45.4–52.0% |
+| Stereo 65,536-frame chunks | +30.2–30.6% | +29.0–31.7% |
+| Mono 128-frame full files | +6.9–8.6% | +6.8–7.9% |
+| Stereo 65,536-frame full files | +30.9–33.2% | +29.0–30.8% |
+| One/16-frame mono/stereo byte-path controls | −0.6% to +2.2% | −0.5% to +2.0% |
+| Unchanged stereo PCM24 chunk control | +3.1–3.8% | +2.2–2.7% |
+| Unchanged stereo PCM16 dither chunk control | +0.1% | −0.1% to +0.1% |
+
+- An unconditional native-view trial regressed tiny chunks and was not retained. Final short-call/control figures do not establish speedups; these are host-/order-dependent Node medians, not browser/device, heap-byte or GC guarantees. Headers, integer rounding, finite-range checks, left/right capture order, dither, byte ownership and transaction accounting are unchanged.
+- Source comparisons preserve the 360-case WAV matrix, 228 rejections, 360 transfers and 743,207-value rounding corpus. Fourteen additional files exercise 1/16/127/128/129/65,536/65,537-frame full and bounded-stream boundaries; 16 shared-growth/resizable-shrink/retry/transfer cases preserve admitted prefixes and errors. Native-constructor instrumentation checks 24 owned-view/transfer cases and a separate 24-case forced portable-dispatch matrix: only selected larger calls construct a native view. This is not actual big-endian hardware acceptance. Decoded half-LSB/rail regression coverage now spans both channels and multiple chunk sizes; all 15 targeted WAV tests pass. Scoped A/C review is recorded in SECURITY.md.
+
 ### Exact undithered Float32 PCM rounding
 
 - The fixed PCM16/PCM24 writers now use `floor(scaled + 0.5)` for admitted undithered native Float32 samples. Their integer-scale products have at most 47 significant bits, preserving the original rounded integer bytes, including negative half-ties and encoded signed zero. Arbitrary doubles and TPDF dither keep the original rounding path; sample capture/validation, byte order, headers, accounting and public formats are unchanged. No allocation, retained field or dependency is added.
