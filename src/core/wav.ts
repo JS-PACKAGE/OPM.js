@@ -155,6 +155,24 @@ function encodePcm24(bytes: Uint8Array, offset: number, left: Float32Array, righ
   return 0;
 }
 
+// Six stereo PCM24 bytes form three aligned LE16 words; the middle joins Lhi8/Rlo8.
+function encodeStereoPcm24Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
+  if (frames < 128) return encodePcm24(bytes, offset, left, right, frames);
+  const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, frames * 3);
+  for (let frame = 0, index = 0; frame < frames; frame++, index += 3) {
+    const first = left[frame];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const firstSample = Math.floor(first * (first < 0 ? 8388608 : 8388607) + 0.5);
+    samples[index] = firstSample;
+    const second = right![frame];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const secondSample = Math.floor(second * (second < 0 ? 8388608 : 8388607) + 0.5);
+    samples[index + 1] = ((firstSample >>> 16) & 255) | (secondSample << 8);
+    samples[index + 2] = secondSample >> 8;
+  }
+  return 0;
+}
+
 // Capture each native sample once, including shared buffers; no metadata getters run.
 function encodeInto(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number, config: Layout, ditherSeed: number): number {
   // Float PCM needs validation and endian conversion, but no integer quantization.
@@ -273,7 +291,7 @@ export function createWavEncoder(options: WavEncoderOptions): WavEncoder {
   const data = sequenceOwnData(options, ['sampleRate', 'channels', 'format', 'totalFrames', 'dither'], ['sampleRate', 'channels', 'totalFrames'], 'WAV encoder options');
   const config = layout(data);
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
-    : !config.dither && config.format === 'pcm24' ? encodePcm24
+    : !config.dither && config.format === 'pcm24' ? (config.channels === 2 && LITTLE_ENDIAN ? encodeStereoPcm24Words : encodePcm24)
       : config.format === 'float32' && LITTLE_ENDIAN
         ? config.channels === 1 ? encodeMonoFloat32 : encodeStereoFloat32
         : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
@@ -315,7 +333,7 @@ export function encodeWav(input: WavOptions): Uint8Array {
   if (chunk.frames < 1 || chunk.frames > MAX_WAV_FRAMES) throw new RangeError('WAV channels must be matching Float32Arrays of1..4000000 frames');
   const config = layout({ sampleRate: data.sampleRate, channels: chunk.right === undefined ? 1 : 2, format: data.format, dither: data.dither, totalFrames: chunk.frames });
   const encodeSamples: typeof encodeInto = !config.dither && config.format === 'pcm16' ? (LITTLE_ENDIAN ? encodePcm16Words : encodePcm16)
-    : !config.dither && config.format === 'pcm24' ? encodePcm24
+    : !config.dither && config.format === 'pcm24' ? (config.channels === 2 && LITTLE_ENDIAN ? encodeStereoPcm24Words : encodePcm24)
       : config.dither && config.channels === 2 ? encodeStereoDither : encodeInto;
   const bytes = new Uint8Array(config.byteLength);
   writeHeader(bytes, config);

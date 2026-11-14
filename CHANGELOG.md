@@ -4,6 +4,25 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Packed native stereo PCM24 stores
+
+- Undithered stereo PCM24 calls of at least 128 frames on little-endian hosts now write each six-byte frame as three aligned Int16 words. The middle word joins the left sample's high byte and the right sample's low byte; casts discard only unused high bits. The existing captured native constructor adds one ephemeral view over owned output, with no caller-buffer wrapper or retained PCM. Mono, smaller calls, other endianness and dither retain their byte writers.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz encoding with validation and allocation. Positive values below mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Stereo 128-frame chunks | +19.3–20.7% | +17.4–19.0% |
+| Stereo 8,192/65,536-frame chunks | +34.4–41.9% | +32.4–38.9% |
+| Stereo 128-frame full files | +12.1–15.4% | +10.7–15.1% |
+| Stereo 65,536-frame full files | +34.9–37.5% | +32.4–34.9% |
+| One/16-frame stereo byte-path controls | −1.4% to +0.7% | −1.3% to +1.0% |
+| Unchanged mono PCM24 control | −0.2% to +2.4% | −0.5% to +4.7% |
+| Unchanged stereo PCM24 dither control | +0.0–0.4% | +0.0–0.4% |
+| Unchanged stereo PCM16 control | +0.6–2.4% | +0.1–2.1% |
+
+- The small one-frame regression is retained as a trade-off, not hidden by the large-buffer gains; unchanged controls do not establish speedups. These are workload-/host-dependent Node medians, not browser/device, heap-byte or GC guarantees. Source capture, finite-range validation and quantization remain left before right. The private left high byte is stored with the right low byte after right validation; failures still expose no partial output or committed frames.
+- A numerical packing proof covers all 16,777,216 signed 24-bit values per channel over 16,777,216 paired six-byte cases, not every cross-product pair. Source comparisons preserve 360 complete WAV cases, 228 rejections, 360 transfers and the 743,207-value Float32 corpus; 14 additional files check native/byte cutovers and bounded streaming. Sixteen resize/growth/retry/transfer cases and 24 native plus 24 forced-portable view/transfer cases preserve ownership and bounds; forced dispatch is not actual big-endian hardware acceptance. Existing decoded-byte regression tests cover half-LSBs/rails across chunk sizes, and finite-range/atomic-retry tests now cover first/middle/last invalid samples in both short and native-sized batches. All 15 targeted WAV tests pass; scoped A/C review is in SECURITY.md.
+
 ### Size-adaptive native PCM16 stores
 
 - Undithered PCM16 exports now use a captured native Int16Array view over owned output storage on little-endian hosts, replacing two byte stores with one word store per sample. Calls shorter than 128 frames retain the byte writer to avoid the extra view's fixed cost; big-endian hosts keep the portable byte path. The private cutoff is a measured cost policy, not a public contract or universal optimum. Larger calls add one ephemeral view, not retained PCM or an input-buffer wrapper.
