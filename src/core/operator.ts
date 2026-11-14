@@ -95,8 +95,10 @@ function halfWave(t: number, dt: number): number {
   // step<=0.25 keeps the peak at t=1/4 outside both windows, so value<=1.
   const step = Math.min(dt, 0.25);
   const p = t < 0.5 ? t : t - 0.5;
-  const x = (p < 0.25 ? p : 0.5 - p) / step;
-  if (x >= 1) return value;
+  const distance = p < 0.25 ? p : 0.5 - p;
+  // Compare the support first so samples outside the corners need no division.
+  if (distance >= step) return value;
+  const x = distance / step;
   const y = 1 - x;
   return value + TAU * step * y * y * y / 6;
 }

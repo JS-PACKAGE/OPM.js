@@ -4,6 +4,21 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skip half-wave correction divisions outside their support
+
+- Compare the corner distance against the existing positive, clamped polyBLAMP width before division. Outside the correction window the old quotient was discarded; inside it, division and every correction multiply/add retain their original order. Finite-angle checks, nonpositive/NaN-step handling, the quarter-turn cap and all other waveforms are unchanged. No allocation, retained cache, state, dependency or public API was added.
+- Six fresh-process Node.js 26 pairs per order measured complete four-voice, 48 kHz stereo rendering in 128-frame blocks. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| All-half operators, eco/standard/high | +0.1–1.5% | +0.7–1.6% |
+| Half/sine/square operators, eco/standard/high | +0.0–1.0% | +0.0–1.0% |
+| Nominal 4–16 kHz fixed-Hz half operators, eco/standard/high | +0.4–7.5% | +0.4–7.2% |
+| Unchanged standard-quality sine/saw/square controls | −0.8% to +1.2% | −0.8% to +1.1% |
+
+- The fixed-Hz results have substantial order-dependent spread; controls are not claimed as gains. These small, host-/workload-dependent Node medians are not browser/device, CPU-time-reduction, heap-byte or GC guarantees.
+- Exact source comparisons passed 6,016,422 positive-binary64 support predicates and 1,381,640 waveform scalar cases, including signed zero, subnormals, adjacent support boundaries, huge/nonfinite angles and default/nonfinite widths. Stereo PCM, complete active/fading voice numeric state, filter/DC/spill values and callbacks matched across 1,152 chunk-independent lifecycle cases and 13,824 checkpoints, including 432 filter-fault and 432 mix-fault cases. All 16 existing operator/waveform regressions passed.
+
 ### Size-adaptive native word reads for full stereo float WAVs
 
 - Full stereo float32 files of at least 1,024 frames now use fixed-length native Uint32 source prefixes and explicit LE DataView stores, preserving left-before-right capture/validation/store order. Identical left/right arrays share the private source view, not a captured sample value. Existing intrinsic metadata getters bypass caller properties; short/shrunken sources retain scalar rejection. Smaller files, mono, streaming, integer formats and dither retain their writers.
