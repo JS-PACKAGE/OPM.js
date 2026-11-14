@@ -4,6 +4,33 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled edited sustain-rate floors
+
+- After the original scalar stores finish a frame, a held post-attack/decay operator at exact zero under a positive sustain rate cannot rise without another edit. When every remaining exact operator meets that condition and all other segments are constant, the existing gain cache can settle. A nonzero scalar gain exits qualification early; no second dB evaluation is added. Constant positive operators can share that cached vector, so partially audible voices can benefit too.
+- The original void storeGain helper and all substep stores remain unchanged, avoiding new floating-point call arguments/results. Still-moving gains, unfinished transitions, release and numerical faults retain their original path. Noise/LFO clocks, phase, feedback/history, fades, voice priority, recycling, counters and finite-output guards are preserved. No retained cache/state, buffer/view, explicit per-render allocation, dependency, public API or voice-format field is added.
+- Source and minified probes each preserve exact stereo PCM, original DSP scalar/native-array bytes and own-data descriptor/alias graphs through 2489 lifecycles, 67731 checkpoints and 18661137 stereo frames. Only the values of the existing gainsSteady/silentGains booleans are excluded from equality; their types/descriptors remain checked. Cases include all algorithms and qualities, 8000..192000 Hz clocks, floor crossing, initial floor targets, partial floor/moving/constant tuples, live transitions, LFOs, reactivation, release/stealing, panic/recycling and cached-gain/noise-clock faults.
+- Existing consumer regressions cover edited sustain-rate decay, held-zero clock continuity, reactivation and release; the held-zero case now keeps a positive SR through a new attack to catch incorrectly frozen reactivation. Chromium 156 additionally matches all PCM bytes and lifecycle/diagnostic events in 45 native OfflineAudioContext/AudioWorklet pairs (493440 stereo frames per implementation), covering natural, initially clamped and audible partial floors. Standard gates pass: 594 tests, type checking and security checks. Real-time device/MIDI deadlines and human-listening acceptance remain unverified.
+- Six fresh-process Node.js 26 pairs per order measure complete 128-frame stereo Synth.render calls, with admission, live edits, prescribed settling and warmup outside the clock. Reference and candidate use equal-length sibling roots in the same package context after identical-code A/A calibration. All 45 profiles assert actual gain-cache/envelope routes before and after measurement; moving-SR controls must remain above the floor and partial-floor targets must remain audible. Percentages are relative median throughput from wall and user+system CPU time per frame; positive means faster. Ranges include both orders and every grouped profile, not confidence intervals or universal CPU reductions:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Natural SR floor, all-noise, 8 voices, 8 kHz / eco, 20/20000 Hz holds | +219.1–274.5% | +219.3–274.9% | +238.2–256.9% | +238.8–257.7% |
+| Natural SR floor, all-noise, 8 voices, 48 kHz / standard, 20/20000 Hz holds | +373.8–426.1% | +373.7–425.9% | +356.3–414.6% | +356.8–414.8% |
+| Natural SR floor, all-noise, 8 voices, 192 kHz / high, 20/20000 Hz holds | +514.5–522.8% | +514.6–522.9% | +500.6–512.0% | +501.7–513.2% |
+| Natural SR floor, mixed, 8 voices, all three tested clocks/qualities | +319.2–867.1% | +319.6–866.9% | +336.6–817.8% | +337.4–818.7% |
+| Natural SR floor, sine, 8 voices, all three tested clocks/qualities | +336.4–715.0% | +337.1–715.5% | +309.1–676.0% | +309.9–677.6% |
+| Natural SR floor, all-noise, 1 voice, all three tested clocks/qualities | +167.4–329.1% | +167.7–328.8% | +172.5–310.1% | +173.4–310.3% |
+| Natural SR floor, all-noise, 32 voices, all three tested clocks/qualities | +218.1–559.7% | +217.7–559.8% | +235.0–579.8% | +235.2–580.2% |
+| Audible partial SR floors, all-noise, 8 voices, all three tested clocks/qualities | +137.4–156.4% | +137.8–156.9% | +142.3–157.3% | +142.9–157.8% |
+| Audible partial SR floors, mixed, 8 voices, all three tested clocks/qualities | +80.0–89.0% | +80.3–89.2% | +79.9–94.1% | +80.0–94.5% |
+| Initially floor-clamped SR, 8 voices, tested shapes/clocks | +220.5–720.2% | +220.8–718.7% | +235.0–675.1% | +235.7–677.0% |
+| Moving above-floor SR controls, 32 voices, tested shapes/clocks | −1.9% to +0.3% | −1.9% to +0.5% | −4.2% to +0.4% | −4.3% to +0.4% |
+| Positive edited-sustain controls, 8 voices, tested shapes/clocks | −0.2% to +0.8% | −0.2% to +0.9% | −0.5% to +1.9% | −0.4% to +1.9% |
+| Previously cached no-SR edited floor control, all-noise, 8 voices | −2.3% to +1.5% | −2.3% to +1.5% | +0.1–1.3% | +0.1–1.3% |
+| Audible all-noise controls, 1/8/32 voices, 48 kHz / standard | −0.5% to +1.8% | −0.5% to +1.8% | −2.0% to +0.1% | −2.0% to +0.1% |
+| Audible carrier-noise / late-noise / mixed controls, 8 voices | −0.2% to +0.3% | −0.2% to +0.3% | −0.2% to +0.3% | −0.3% to +0.3% |
+| Audible sine controls, 1/8/32 voices | −0.6% to +2.1% | −0.6% to +2.1% | −1.3% to +1.7% | −1.3% to +1.7% |
+
 ### Settled edited zero-sustain envelopes
 
 - Live ADSR edits with no sustain rate now reuse the existing constant-gain cache once attack and decay have fully elapsed. An exact floor target caches literal zero, matching gainAt rather than evaluating an exponential; positive edited targets retain their existing exponential. Unfinished transitions, sustain-rate movement and release keep their original scalar path.

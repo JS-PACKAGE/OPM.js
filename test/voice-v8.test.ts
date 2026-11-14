@@ -141,13 +141,13 @@ test('zero-sustain ADSR edits keep waveform clocks exact through reactivation an
         assert.ok(compare(129, 127).left.some(sample => sample !== 0));
         const quiet: ADSR = { ...timing, s: 0, r: 0.005 };
         edit(synth, quiet);
-        // At the floor, a positive sustain rate retains the exact scalar reference.
+        // At the floor, a positive sustain rate cannot reduce the gain further.
         edit(reference, { ...quiet, sr: 1 });
         compare(Math.ceil(rate * 0.004) + 129, 31);
         const held = compare(257, 17);
         assert.ok(held.left.every(sample => sample === 0) && held.right.every(sample => sample === 0));
         assert.deepEqual(ended, []); assert.deepEqual(referenceEnded, []);
-        const awake: ADSR = { a: 0.001, d: 0.002, s: 0.6, r: 0.005 };
+        const awake: ADSR = { a: 0.001, d: 0.002, s: 0.6, r: 0.005, sr: 0.1 };
         edit(synth, awake); edit(reference, awake);
         assert.ok(compare(1537, 127).left.some(sample => sample !== 0));
         synth.noteOff(1); reference.noteOff(1);

@@ -692,7 +692,6 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
         // Edits cache gainAt's exact floor or exponential, not the pristine patch power.
         gain = sustainDb[op] === FLOOR_DB ? 0 : sustainGain[op];
       } else {
-        steady = false;
         exact |= 1 << op;
       }
       envelopeSegment[op] = 0;
@@ -766,7 +765,15 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
     }
     envelopeGain[op] = gain;
   }
-  return steady;
+  if (!steady) return false;
+  // Post-decay scalar zero holds under a positive SR; any nonzero gain exits early.
+  for (let op = 0; op < 4; op++) {
+    if ((exact & (1 << op)) !== 0 &&
+        !(gains[op] === 0 && active.envelopeEdited[op] && active.releaseTime < 0 &&
+          sustainTimes[op] > 0 && time - active.envelopeStart[op] >= attackTimes[op] + decayTimes[op])) return false;
+  }
+  active.silentGains = gains[0] === 0 && gains[1] === 0 && gains[2] === 0 && gains[3] === 0;
+  return true;
 }
 
 /** Stores the frame's pitch factor in `frame[5]` and its per-substep ratio in
