@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Skip zero high-word mixing for held-noise LFO cycles
+
+- The stateless held-noise hash now recognizes integer cycles fitting in uint32 from the already-computed low word. Their high word is exactly zero, so it skips that division, floor and multiplication; negative, fractional, nonfinite and larger cycles retain full mixing. The integer XOR result, finalizer, seed, output scale, seeking and note/global synchronization are unchanged. No generator state, cache, allocation, dependency or public API was added.
+- Six fresh-process Node.js 26 pairs per order measured complete four-voice, 48 kHz stereo rendering in 128-frame blocks with 7.5 Hz LFO, AM and selected-voice PM. Positive values mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| Sine operators with noise LFO, eco/standard | +2.5–4.5% | +2.5–4.4% |
+| Noise operators with noise LFO, eco/standard | +1.9–3.3% | +1.9–3.3% |
+| Sine/noise operators with noise LFO, high | −0.2% to +1.1% | −0.1% to +1.1% |
+| Half operators with noise LFO, standard | +1.7–3.3% | +1.7–2.8% |
+| Unchanged sine/square-LFO controls, standard | −0.4% to +0.1% | −0.2% to +0.1% |
+
+- High-quality results are near the control-scale variation; controls are not claimed as improvements. These host-/workload-dependent Node medians are not browser/device, CPU-time-reduction, heap-byte or GC guarantees. Large-cycle controls below are correctness probes, not timed long-running sessions.
+- Source comparisons preserve 1,138,913 direct held-noise values and 254,980 radian-phase cases, including uint32 boundaries, negative/fractional/huge/nonfinite cycles, long seeks and phase rejection. Native operation probes count two rather than three integer multiplications only for uint32 cycles, retaining three outside that range; an observable numeric-coercion probe retains both conversions and its value. Stereo PCM, complete active/fading voice numeric state, filter/DC/spill values and callbacks match across 1,152 chunk-independent lifecycle cases and 13,824 checkpoints, including 192 injected large-cycle seek cases, 432 filter-fault and 432 mix-fault cases. Existing held-level regressions now also exercise long positive/negative seeks around signed/unsigned cycle boundaries.
+
 ### Skip half-wave correction divisions outside their support
 
 - Compare the corner distance against the existing positive, clamped polyBLAMP width before division. Outside the correction window the old quotient was discarded; inside it, division and every correction multiply/add retain their original order. Finite-angle checks, nonpositive/NaN-step handling, the quarter-turn cap and all other waveforms are unchanged. No allocation, retained cache, state, dependency or public API was added.

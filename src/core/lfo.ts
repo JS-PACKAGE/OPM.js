@@ -15,7 +15,10 @@ export function lfoWaveformCode(waveform: LFO['waveform']): number {
  * integer hash (xorshift-multiply finalizer), so seeking, chunking and global
  * sync reproduce the same sequence without stored generator state. */
 function lfoNoise(cycle: number): number {
-  let x = (cycle >>> 0) ^ Math.imul(Math.floor(cycle / 4294967296), 0x27d4eb2d) ^ 0x6d2b79f5;
+  const low = cycle >>> 0;
+  let x = low ^ 0x6d2b79f5;
+  // Uint32 cycles have no high word; retain full mixing outside that range.
+  if (low !== cycle) x ^= Math.imul(Math.floor(cycle / 4294967296), 0x27d4eb2d);
   x = Math.imul(x ^ (x >>> 16), 0x7feb352d);
   x = Math.imul(x ^ (x >>> 15), 0x846ca68b);
   x ^= x >>> 16;

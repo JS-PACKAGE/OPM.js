@@ -21,7 +21,13 @@ test('waveforms follow their characteristic cycle shapes', () => {
 });
 
 test('noise is deterministic, bounded and held for each cycle', () => {
-  for (let cycle = -16; cycle <= 16; cycle++) {
+  // Include long seeks around signed/unsigned cycle boundaries.
+  const cycles = [
+    ...Array.from({ length: 33 }, (_, index) => index - 16),
+    ...[2 ** 31, 2 ** 32, 2 ** 40].flatMap(boundary =>
+      [-boundary - 1, -boundary, -boundary + 1, boundary - 1, boundary, boundary + 1]),
+  ];
+  for (const cycle of cycles) {
     const phase = (cycle + 0.125) * TAU;
     const value = lfoValue(phase, 'noise');
     assert.ok(value >= -1 && value < 1);
