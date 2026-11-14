@@ -2252,11 +2252,20 @@ export class Synth {
     let output = 0;
     if (finished) {
       if (dynamicPitch) for (let sub = 0; sub < oversample; sub++) stepPitch(active, sub, oversample, frame);
+    } else if (active.silentGains) {
+      const subSamples = this.subSamples;
+      if (!silentFrame(active, subSamples, dynamicPitch, frame)) return false;
+      // Zero additions leave the +0-seeded mix unchanged; keep corrupt-pan propagation.
+      if (!Number.isFinite(panLeft) || !Number.isFinite(panRight)) {
+        for (let sub = 0; sub < oversample; sub++) {
+          mixLeft[sub] += subSamples[sub] * panLeft;
+          mixRight[sub] += subSamples[sub] * panRight;
+        }
+      }
+      output = subSamples[oversample - 1];
     } else {
       const subSamples = this.subSamples;
-      if (active.silentGains) {
-        if (!silentFrame(active, subSamples, dynamicPitch, frame)) return false;
-      } else if (active.frameKernel !== null && !operatorRamping) {
+      if (active.frameKernel !== null && !operatorRamping) {
         // Static operator levels allow the selected specialized frame.
         if (!active.frameKernel(active, subSamples, dynamicPitch)) return false;
       } else {

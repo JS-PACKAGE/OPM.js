@@ -4,6 +4,32 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Silent-voice bus accumulation
+
+- The existing all-zero-envelope branch still runs silentFrame, including every phase, pitch, noise, feedback, scratch-output and finite-state check, but no longer mixes its +0 samples into both stereo buses when its pan coefficients are finite. A bus is seeded with +0 and only accumulated, so those zero additions cannot change its value or zero sign. Nonfinite pan/gain state retains the original multiplication/addition loop and error propagation.
+- Reuse the original silentGains qualification without new state/cache, buffers/views, floating-point helper arguments/results, dependencies, API or voice-format fields. Ordinary audible and moving-envelope paths retain their existing branch count and accumulation order. FIR histories/headers, DC/saturation, counters, callbacks, reactivation and recycling stay unchanged.
+- Source and minified probes each preserve exact stereo PCM, every DSP data scalar/native-array byte and own-data descriptor/alias graphs through 2969 lifecycles, 109971 checkpoints and 24368337 stereo frames, including 480 saturation/DC/pan/gain cases, 2345568 negative-zero output samples and 9600 aliased stereo blocks. There are no data-value exclusions, including cache flags; opaque minifier identifiers use exported-prototype role and callable identity/arity instead of implementation-name pins. A further 1980 paired loud/silent pan/gain cases (648 nonfinite injections, 19764 checkpoints, 926640 frames) retain exact PCM, diagnostics and original state through recovery/recycling.
+- Chromium 156 matches all PCM bytes and lifecycle/diagnostic events in 90 real native OfflineAudioContext/AudioWorklet pairs (986880 stereo frames per implementation), including natural/constant/partial floors, both saturators, silent-side wakeup and stealing/reuse. Standard gates pass: 594 tests, type checking and security checks. Device/MIDI deadlines and human-listening acceptance remain unverified.
+- Six fresh-process Node.js 26 pairs per order measure complete 128-frame stereo renders with admission/edits/settling and 160 ms warmup outside each 400 ms measurement. Reference/candidate use equal-length sibling roots in one package context. All 48 profiles assert actual envelope, gain-cache and unchanged FIR routes before and after measurement. Percentages are relative median throughput from wall and user+system CPU time per frame; positive means faster. Ranges include both orders and every grouped target/control, not confidence intervals or universal CPU/deadline guarantees:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Zero-floor all-noise, 1 voice, tested clocks/qualities | +2.3–5.9% | +2.3–5.9% | +2.6–5.3% | +2.6–5.3% |
+| Zero-floor all-noise, 8 voices, tested clocks/qualities | +4.8–10.8% | +4.8–10.8% | +3.7–7.5% | +3.7–7.5% |
+| Zero-floor all-noise, 32 voices, tested clocks/qualities | +4.3–11.2% | +4.3–11.2% | +4.1–9.0% | +4.1–9.0% |
+| Zero-floor mixed, 8 voices, tested clocks/qualities | +5.0–11.9% | +5.1–11.9% | +5.6–9.8% | +5.6–9.8% |
+| Zero-floor sine, 8 voices, tested clocks/qualities | +4.9–8.7% | +4.9–8.7% | +3.5–7.1% | +3.5–7.1% |
+| Zero-floor all-noise, 8 voices, 8 kHz / eco, soft-knee | +5.3–5.6% | +5.3–5.5% | +3.9–4.9% | +3.9–4.9% |
+| Hard-left all-noise, 8 voices, tested clocks/qualities | 0.0–0.4% | 0.0–0.4% | −0.7% to +0.8% | −0.7% to +0.8% |
+| Hard-left sine, 8 voices, tested clocks/qualities | −0.3% to +2.3% | −0.3% to +2.3% | −2.6% to +1.7% | −2.7% to +1.7% |
+| Master +0 controls, all-noise, 8 voices, tested clocks/qualities | −0.2% to +0.4% | −0.3% to +0.4% | 0.0–1.7% | 0.0–1.7% |
+| Master −0 control, sine, 8 voices, 192 kHz / high | +0.3% | +0.3% | −0.5% to −0.2% | −0.5% to −0.2% |
+| Audible all-noise controls, 1/32 voices, tested clocks/qualities | −1.1% to +1.6% | −1.1% to +1.6% | −1.3% to +2.7% | −1.3% to +2.6% |
+| Audible sine controls, 1/8/32 voices, tested clocks/qualities | −0.8% to +3.1% | −0.8% to +3.1% | −1.3% to +2.6% | −1.3% to +2.6% |
+| Audible mixed controls, 8 voices, tested clocks/qualities | −1.2% to −0.1% | −1.2% to −0.1% | −1.0% to +0.3% | −1.0% to +0.2% |
+| Audible soft-knee sine control, 8 voices, 192 kHz / high | −1.1% to −1.0% | −1.1% to −1.0% | +0.9–1.1% | +0.9–1.1% |
+| Moving above-floor SR controls, 32 voices, tested shapes/clocks | −1.8% to +0.7% | −1.9% to +0.7% | −1.4% to +3.3% | −1.4% to +3.3% |
+
 ### Settled edited sustain-rate floors
 
 - After the original scalar stores finish a frame, a held post-attack/decay operator at exact zero under a positive sustain rate cannot rise without another edit. When every remaining exact operator meets that condition and all other segments are constant, the existing gain cache can settle. A nonzero scalar gain exits qualification early; no second dB evaluation is added. Constant positive operators can share that cached vector, so partially audible voices can benefit too.
