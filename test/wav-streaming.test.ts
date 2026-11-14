@@ -47,6 +47,35 @@ for (const format of ['pcm16', 'pcm24', 'float32'] as const) test(`${format} chu
 
 const decode24 = (bytes: Uint8Array, offset: number): number => ((bytes[offset] | bytes[offset + 1] << 8 | bytes[offset + 2] << 16) << 8) >> 8;
 
+test('undithered PCM preserves half-LSB neighbours, signed zero and rails in both channels', () => {
+  for (const format of ['pcm16', 'pcm24'] as const) {
+    const scale = format === 'pcm16' ? 32768 : 8388608;
+    const unit = 0.5 / scale, step = unit * 2 ** -23;
+    const center = Math.fround(0.5 / (scale - 1));
+    const left = Float32Array.of(-1, -unit * (1 + 2 ** -23), -unit, -unit * (1 - 2 ** -24), -0, -(2 ** -149), 2 ** -149, center - step, center, center + step, 1);
+    const right = left.slice().reverse();
+    const expected = [-scale, -1, 0, 0, 0, 0, 0, 0, 0, 1, scale - 1];
+    for (const channels of [1, 2] as const) {
+      const full = encodeWav({ left, ...(channels === 2 ? { right } : {}), sampleRate: 48000, format });
+      const encoder = createWavEncoder({ sampleRate: 48000, channels, format, totalFrames: left.length });
+      const streamed = join([
+        encoder.header(),
+        encoder.encode({ left: left.subarray(0, 3), ...(channels === 2 ? { right: right.subarray(0, 3) } : {}) }),
+        encoder.encode({ left: left.subarray(3), ...(channels === 2 ? { right: right.subarray(3) } : {}) }),
+        encoder.finalize(),
+      ]);
+      for (const bytes of [full, streamed]) {
+        const view = new DataView(bytes.buffer);
+        for (let frame = 0; frame < left.length; frame++) for (let channel = 0; channel < channels; channel++) {
+          const offset = 44 + (frame * channels + channel) * (format === 'pcm16' ? 2 : 3);
+          const actual = format === 'pcm16' ? view.getInt16(offset, true) : decode24(bytes, offset);
+          assert.equal(actual, expected[channel === 0 ? frame : left.length - 1 - frame]);
+        }
+      }
+    }
+  }
+});
+
 for (const format of ['pcm16', 'pcm24'] as const) test(`${format} TPDF dither is chunk-independent, unbiased and clamped`, () => {
   const lsb = format === 'pcm16' ? 1 / 32767 : 1 / 8388607;
   const read = (bytes: Uint8Array, i: number): number => format === 'pcm16' ? new DataView(bytes.buffer).getInt16(44 + 2 * i, true) : decode24(bytes, 44 + 3 * i);

@@ -82,12 +82,14 @@ function channels(left: unknown, right: unknown, expected?: 1 | 2): { left: Floa
 // full-buffer encodings of the same audio are byte-identical and reproducible.
 const DITHER_SEED = 0x9e3779b9;
 // Fixed PCM16 loops avoid per-sample channel/format dispatch without enlarging the generic loop.
+// These undithered Float32 products use at most 47 significant bits, leaving room
+// for floor(x + 0.5) rounding; integer bytes discard signed zero. Dither stays separate.
 function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
   if (right === undefined) {
     for (let frame = 0; frame < frames; frame++, offset += 2) {
       const value = left[frame];
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-      const sample = Math.round(value * (value < 0 ? 32768 : 32767));
+      const sample = Math.floor(value * (value < 0 ? 32768 : 32767) + 0.5);
       bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255;
     }
     return 0;
@@ -95,11 +97,11 @@ function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, righ
   for (let frame = 0; frame < frames; frame++, offset += 4) {
     const first = left[frame];
     if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    const firstSample = Math.round(first * (first < 0 ? 32768 : 32767));
+    const firstSample = Math.floor(first * (first < 0 ? 32768 : 32767) + 0.5);
     bytes[offset] = firstSample & 255; bytes[offset + 1] = (firstSample >> 8) & 255;
     const second = right[frame];
     if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    const secondSample = Math.round(second * (second < 0 ? 32768 : 32767));
+    const secondSample = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
     bytes[offset + 2] = secondSample & 255; bytes[offset + 3] = (secondSample >> 8) & 255;
   }
   return 0;
@@ -110,7 +112,7 @@ function encodePcm24(bytes: Uint8Array, offset: number, left: Float32Array, righ
     for (let frame = 0; frame < frames; frame++, offset += 3) {
       const value = left[frame];
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-      const sample = Math.round(value * (value < 0 ? 8388608 : 8388607));
+      const sample = Math.floor(value * (value < 0 ? 8388608 : 8388607) + 0.5);
       bytes[offset] = sample & 255; bytes[offset + 1] = (sample >> 8) & 255; bytes[offset + 2] = (sample >> 16) & 255;
     }
     return 0;
@@ -118,11 +120,11 @@ function encodePcm24(bytes: Uint8Array, offset: number, left: Float32Array, righ
   for (let frame = 0; frame < frames; frame++, offset += 6) {
     const first = left[frame];
     if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    const firstSample = Math.round(first * (first < 0 ? 8388608 : 8388607));
+    const firstSample = Math.floor(first * (first < 0 ? 8388608 : 8388607) + 0.5);
     bytes[offset] = firstSample & 255; bytes[offset + 1] = (firstSample >> 8) & 255; bytes[offset + 2] = (firstSample >> 16) & 255;
     const second = right[frame];
     if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    const secondSample = Math.round(second * (second < 0 ? 8388608 : 8388607));
+    const secondSample = Math.floor(second * (second < 0 ? 8388608 : 8388607) + 0.5);
     bytes[offset + 3] = secondSample & 255; bytes[offset + 4] = (secondSample >> 8) & 255; bytes[offset + 5] = (secondSample >> 16) & 255;
   }
   return 0;

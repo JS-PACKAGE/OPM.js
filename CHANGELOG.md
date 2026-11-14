@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Exact undithered Float32 PCM rounding
+
+- The fixed PCM16/PCM24 writers now use `floor(scaled + 0.5)` for admitted undithered native Float32 samples. Their integer-scale products have at most 47 significant bits, preserving the original rounded integer bytes, including negative half-ties and encoded signed zero. Arbitrary doubles and TPDF dither keep the original rounding path; sample capture/validation, byte order, headers, accounting and public formats are unchanged. No allocation, retained field or dependency is added.
+- Six fresh-process Node.js 26 pairs per order measured real 48 kHz streaming chunk encoding with validation and allocation. Positive values below mean higher median throughput:
+
+| Tested workload | Wall throughput | CPU throughput |
+| --- | --- | --- |
+| 128-frame mono/stereo PCM16/PCM24 | +2.0–3.6% | +1.5–3.9% |
+| 8,192/65,536-frame stereo PCM16 | +5.8–6.6% | +5.8–6.9% |
+| 8,192/65,536-frame stereo PCM24 | +4.0–5.6% | +3.4–5.0% |
+| Unchanged 65,536-frame stereo PCM24 dither control | +0.1–0.3% | +0.1–0.4% |
+| Unchanged 65,536-frame stereo float32 control | −0.2% to +0.1% | −0.5% |
+
+- These are workload-/host-dependent Node medians, not universal browser/device, full-file, heap-byte or GC guarantees. One candidate-first 8,192-frame PCM24 order had arithmetic-mean wall/CPU changes of −1.4%/−0.6% despite positive medians; unchanged controls do not establish speedups.
+- Source comparisons match 360 complete WAV cases, 228 rejection checks and 360 transfers with zero metadata getter calls. An independent 1,486,966-check rounding corpus covers 743,207 distinct Float32 values, every PCM16 half-integer threshold and neighbouring inputs, a PCM24 threshold grid, random words, subnormals, signed zeros and rails; all four full-file format/channel combinations match bounded streaming bytes. A consumer regression checks decoded half-LSB neighbours and rails in both channels; all 15 targeted WAV tests pass. Scoped A/C review is recorded in SECURITY.md.
+
 ### Fixed-width WAV header chunk IDs
 
 - WAV headers now write the fixed RIFF/WAVE/fmt/fact/data IDs as big-endian ASCII words through their existing DataView, removing the local per-character text helper. Numeric fields remain little-endian; PCM/float headers, fact sample count, zero cbSize, data sizes, padding, sample bytes and transfer/accounting behavior are unchanged. No buffer/view, retained field, dependency or public format/API is added.
