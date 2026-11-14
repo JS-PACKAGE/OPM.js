@@ -4,6 +4,31 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Settled edited zero-sustain envelopes
+
+- Live ADSR edits with no sustain rate now reuse the existing constant-gain cache once attack and decay have fully elapsed. An exact floor target caches literal zero, matching gainAt rather than evaluating an exponential; positive edited targets retain their existing exponential. Unfinished transitions, sustain-rate movement and release keep their original scalar path.
+- The existing zero-envelope frame can then handle that held silence without repeatedly preparing identical substep gains. Noise/LFO clocks, phase and feedback, fades, voice priority, release, recycling, counters and finite-output guards are preserved. No retained state/cache, buffer/view, explicit per-render allocation, dependency, public API or voice-format field is added.
+- Source and minified probes each preserve exact stereo PCM and original DSP scalar/native-array bytes and own-data descriptor/alias graphs through 1769 lifecycles, 48206 checkpoints and 11895297 stereo frames. Only the values of the existing gainsSteady and silentGains cache-qualification booleans are excluded from equality; their boolean types and property descriptors remain checked. Cases cover all eight algorithms and qualities, 8000..192000 Hz clocks, zero/tiny/clamped targets, transition boundaries, LFOs, controls, reactivation, release, stealing, recycling and numerical faults.
+- A consumer regression compares zero-sustain edits with a floor-clamped positive-sustain-rate reference through audible attack, exact held silence, reactivation and release in 288 voice cases. Chromium 156 additionally preserves all PCM bytes and lifecycle/diagnostic events in 15 native OfflineAudioContext/AudioWorklet pairs (164480 stereo frames per implementation), including stealing an edited-silent note. Standard gates pass: 594 tests, type checking and security checks. Real-time device/MIDI deadlines and human-listening acceptance remain unverified.
+- Six fresh-process Node.js 26 pairs per order measure complete 128-frame stereo Synth.render calls after admission, the live edit and warmup. Reference and candidate copies use equal-length sibling paths in the same package context, following identical-code A/A calibration. All 45 profiles assert their actual gain-cache and envelope routes before and after measurement. Percentages are relative median throughput from wall and user+system CPU time per frame; positive means faster. Ranges cover both orders and every profile in a grouped row, not confidence intervals, universal CPU reductions or audible-workload speedups:
+
+| Tested workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Edited-floor all-noise, 8 voices, 8 kHz / eco, 20/20000 Hz holds | +219.5–277.4% | +219.7–277.9% | +239.3–259.9% | +239.9–260.8% |
+| Edited-floor all-noise, 8 voices, 48 kHz / standard, 20/20000 Hz holds | +361.5–440.0% | +361.5–439.8% | +331.3–404.2% | +332.5–404.4% |
+| Edited-floor all-noise, 8 voices, 192 kHz / high, 20/20000 Hz holds | +493.0–524.4% | +493.1–524.5% | +482.0–508.5% | +482.9–509.3% |
+| Edited-floor mixed, 8 voices, all three tested clocks/qualities | +314.0–834.6% | +315.1–835.7% | +338.3–811.5% | +338.8–812.8% |
+| Edited-floor sine, 8 voices, all three tested clocks/qualities | +337.7–691.2% | +337.4–690.9% | +313.5–654.4% | +314.3–656.9% |
+| Edited-floor all-noise, 1 voice, all three tested clocks/qualities | +162.1–330.5% | +162.4–330.2% | +171.7–320.6% | +172.3–320.9% |
+| Edited-floor all-noise, 32 voices, all three tested clocks/qualities | +221.3–572.6% | +221.4–572.5% | +230.3–555.5% | +230.6–556.5% |
+| Positive edited-sustain controls, 8 voices, tested shapes/clocks | −0.9% to +1.4% | −0.9% to +1.3% | −2.6% to −0.1% | −2.4% to −0.1% |
+| Edited-floor SR controls, 8 voices, tested shapes/clocks | −2.0% to +0.6% | −1.9% to +0.6% | −3.2% to +1.3% | −3.1% to +1.3% |
+| Pristine zero-sustain controls, 8 voices, tested shapes/clocks | −0.6% to +1.1% | −0.6% to +1.1% | −1.3% to +1.5% | −1.5% to +1.5% |
+| Audible all-noise controls, 1/8/32 voices, tested clocks/holds | −0.6% to +2.3% | −0.6% to +2.5% | −1.8% to +0.3% | −1.8% to +0.4% |
+| Audible carrier-noise / late-noise / mixed controls, 8 voices | −0.3% to +0.3% | −0.3% to +0.3% | −3.8% to +2.8% | −3.8% to +2.8% |
+| Operator-level mute controls, noise/mixed, 8 voices | −0.1% to +0.8% | −0.1% to +0.8% | −2.4% to +0.3% | −2.4% to +0.3% |
+| Audible sine controls, 1/8/32 voices | −1.4% to +1.5% | −1.5% to +1.5% | −0.7% to +1.3% | −0.7% to +1.2% |
+
 ### Silent operator-noise clock fractions
 
 - The existing zero-envelope frame keeps each noise operator's fractional clock and fixed step in numeric locals across its oversamples, then stores the final fraction once. Every original addition, floor, LFSR update and subtraction remains in order; multiplying a frame step would change floating-point hold boundaries.

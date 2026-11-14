@@ -108,6 +108,59 @@ test('edited held gains follow later ADSR edits, sustain-rate decay, reactivatio
   }
 });
 
+test('zero-sustain ADSR edits keep waveform clocks exact through reactivation and release', () => {
+  const shapes = [
+    ['sine', 'sine', 'sine', 'sine'],
+    ['noise', 'noise', 'noise', 'noise'],
+    ['sine', 'noise', 'saw', 'sine'],
+  ] as const;
+  for (const rate of [8000, 48000]) for (const quality of ['eco', 'standard', 'high'] as const) {
+    for (const algorithm of [0, 1, 2, 3, 4, 5, 6, 7] as const) for (const waveforms of shapes) {
+      for (const timing of [{ a: 0, d: 0 }, { a: 0.001, d: 0.002 }]) {
+        const voice: Voice = {
+          version: 8, name: 'edited-floor-clocks', algorithm, feedback: 5, modIndex: 2,
+          lfo: { rate: 0, amDepth: 0, pmDepth: 0, waveform: 'sine' },
+          ops: waveforms.map((waveform, index) => ({
+            ratio: index + 1, level: 0.35, detune: index * 3, waveform, noiseRate: 20000,
+            adsr: { a: 0, d: 0, s: 0.6, r: 0.005 },
+          })) as Voice['ops'],
+        };
+        const synth = new Synth(rate, 1, { quality, mixGain: 0.125 });
+        const reference = new Synth(rate, 1, { quality, mixGain: 0.125 });
+        const ended: [number, string][] = [], referenceEnded: [number, string][] = [];
+        synth.onVoiceEnded = (id, reason) => { ended.push([id, reason]); };
+        reference.onVoiceEnded = (id, reason) => { referenceEnded.push([id, reason]); };
+        synth.noteOn(voice, 60, 1); reference.noteOn(voice, 60, 1);
+        const compare = (frames: number, chunk: number) => {
+          const actual = stereo(synth, frames, chunk);
+          assert.deepEqual(actual, stereo(reference, frames, 19), `${rate}/${quality}/${algorithm}/${waveforms.join('+')}`);
+          return actual;
+        };
+        const edit = (target: Synth, adsr: ADSR) =>
+          assert.equal(target.updateNote(1, { operatorADSR: [adsr, adsr, adsr, adsr] }), true);
+        assert.ok(compare(129, 127).left.some(sample => sample !== 0));
+        const quiet: ADSR = { ...timing, s: 0, r: 0.005 };
+        edit(synth, quiet);
+        // At the floor, a positive sustain rate retains the exact scalar reference.
+        edit(reference, { ...quiet, sr: 1 });
+        compare(Math.ceil(rate * 0.004) + 129, 31);
+        const held = compare(257, 17);
+        assert.ok(held.left.every(sample => sample === 0) && held.right.every(sample => sample === 0));
+        assert.deepEqual(ended, []); assert.deepEqual(referenceEnded, []);
+        const awake: ADSR = { a: 0.001, d: 0.002, s: 0.6, r: 0.005 };
+        edit(synth, awake); edit(reference, awake);
+        assert.ok(compare(1537, 127).left.some(sample => sample !== 0));
+        synth.noteOff(1); reference.noteOff(1);
+        const released = compare(Math.ceil(rate * 0.02), 37);
+        assert.ok(released.left.subarray(-64).every(sample => sample === 0));
+        assert.ok(released.right.subarray(-64).every(sample => sample === 0));
+        assert.deepEqual(ended, [[1, 'ended']]); assert.deepEqual(referenceEnded, ended);
+        assert.equal(synth.errorCount, 0); assert.equal(reference.errorCount, 0);
+      }
+    }
+  }
+});
+
 test('recycled prepared patches restore canonical sustain after live ADSR edits and patch switches', () => {
   for (const quality of ['eco', 'standard', 'high'] as const) {
     const options = { quality, saturation: 'soft-knee' as const };

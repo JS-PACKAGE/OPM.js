@@ -687,10 +687,10 @@ function prepareGains(active: ActiveVoice, subTimes: Float64Array, sampleRate: n
       // only multiply it), so its envelope cannot change the output.
       envelopeSegment[op] = 0;
     } else if (active.envelopeEdited[op]) {
-      if (active.releaseTime < 0 && sustainTimes[op] === 0 && sustainDb[op] > FLOOR_DB &&
+      if (active.releaseTime < 0 && sustainTimes[op] === 0 && sustainDb[op] >= FLOOR_DB &&
           time - active.envelopeStart[op] >= attackTimes[op] + decayTimes[op]) {
-        // Edits cache gainAt's exponential; pristine patch gains keep their canonical power.
-        gain = sustainGain[op];
+        // Edits cache gainAt's exact floor or exponential, not the pristine patch power.
+        gain = sustainDb[op] === FLOOR_DB ? 0 : sustainGain[op];
       } else {
         steady = false;
         exact |= 1 << op;
