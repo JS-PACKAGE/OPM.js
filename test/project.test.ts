@@ -95,6 +95,10 @@ test('project text admits the exact byte limit and preserves the worst-case UTF-
   const surrogate = String.fromCharCode(0xd800);
   assert.throws(() => parseScoreProject(surrogate.repeat(boundary)), SyntaxError);
   assert.throws(() => parseScoreProject(surrogate.repeat(boundary + 1)), RangeError);
+  for (const separator of ['\u2028', '\u2029']) {
+    const text = json + ' '.repeat(MAX_SCORE_PROJECT_BYTES - json.length - 1) + separator;
+    assert.throws(() => parseScoreProject(text), RangeError);
+  }
 });
 
 test('soft-knee saturation and DC blocking round-trip while default projects omit the fields', () => {

@@ -86,10 +86,16 @@ function settingsSnapshot(input: unknown): ScoreProjectSettings {
   });
 }
 
+function exceedsUTF8Budget(text: string, limit: number): boolean {
+  // UTF-16 length bounds UTF-8 bytes from below; three times it bounds them from above.
+  const length = text.length;
+  return length > limit || (length * 3 > limit && new TextEncoder().encode(text).byteLength > limit);
+}
+
 function boundedJSON(project: ScoreProject | ArrangementProject, label = 'Score'): string {
   const json = JSON.stringify(project);
-  // Accepted textual fields are ASCII names; normalized snapshots contain no caller serialization hooks.
-  if (json.length > MAX_SCORE_PROJECT_BYTES) throw new RangeError(`${label} project exceeds byte budget`);
+  // Inherited JSON hooks can replace ASCII snapshots with non-ASCII text.
+  if (exceedsUTF8Budget(json, MAX_SCORE_PROJECT_BYTES)) throw new RangeError(`${label} project exceeds byte budget`);
   return json;
 }
 
@@ -102,7 +108,7 @@ function serializeSnapshot(project: ScoreProject | ArrangementProject, label = '
 function projectInput(source: string | object, label: string): unknown {
   if (typeof source !== 'string') return source;
   // Three UTF-8 bytes per UTF-16 code unit is an upper bound; small inputs need no buffer.
-  if (source.length > MAX_SCORE_PROJECT_BYTES || (source.length * 3 > MAX_SCORE_PROJECT_BYTES && new TextEncoder().encode(source).byteLength > MAX_SCORE_PROJECT_BYTES)) {
+  if (exceedsUTF8Budget(source, MAX_SCORE_PROJECT_BYTES)) {
     throw new RangeError(`${label} project exceeds byte budget`);
   }
   return JSON.parse(source) as unknown;
@@ -126,7 +132,7 @@ function voicesSnapshot(rawVoices: unknown, label = 'Score'): { voices: Readonly
     registry.set(key, prepareVoice(descriptor.value as VoiceInput));
   }
   for (const key of [...registry.keys()].sort()) voices[key] = registry.get(key) as PreparedVoice;
-  if (JSON.stringify(voices).length > MAX_BANK_BYTES) throw new RangeError('Project voices exceed 256 KiB byte budget');
+  if (exceedsUTF8Budget(JSON.stringify(voices), MAX_BANK_BYTES)) throw new RangeError('Project voices exceed 256 KiB byte budget');
   return { voices: Object.freeze(voices), registry };
 }
 

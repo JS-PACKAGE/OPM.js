@@ -395,7 +395,7 @@ The redundant score snapshot binding is dropped after frame-queue construction; 
 
 ### Portable score projects and MIDI files (introduced in v1.9)
 
-`parseScoreProject(source: string | object)` returns a canonical frozen `ScoreProject` with `version: 1`, beat `events`, normalized `tempoMap`, `timeSignature`, named complete `voices`, and synthesis `settings` (`sampleRate`, `quality`, `maxVoices`, `mixGain`, `tuning`, `stealing`, plus `saturation` only when it is `'soft-knee'` and `dcBlock` only when it is `true`, so default projects serialize as before). `serializeScoreProject(project)` emits bounded canonical JSON. Projects are limited to 8 MiB, 65,536 events and 128 voices (256 KiB total voice JSON); notes refer to stored voice names, with omitted voice requiring stored `brass`. Missing tempo/meter/settings normalize to 120 BPM, 4/4 and the normal synthesis defaults.
+`parseScoreProject(source: string | object)` returns a canonical frozen `ScoreProject` with `version: 1`, beat `events`, normalized `tempoMap`, `timeSignature`, named complete `voices`, and synthesis `settings` (`sampleRate`, `quality`, `maxVoices`, `mixGain`, `tuning`, `stealing`, plus `saturation` only when it is `'soft-knee'` and `dcBlock` only when it is `true`, so default projects serialize as before). `serializeScoreProject(project)` emits bounded canonical JSON. Projects are limited to 8 MiB of UTF-8 serialized input/output, 65,536 events and 128 voices (256 KiB total UTF-8 voice JSON); notes refer to stored voice names, with omitted voice requiring stored `brass`. Missing tempo/meter/settings normalize to 120 BPM, 4/4 and the normal synthesis defaults.
 
 ```js
 import { parseScoreProject, serializeScoreProject, compileBeatSequence } from 'opm.js/core';
@@ -420,7 +420,7 @@ const saved = serializeScoreProject(project);
 
 These additions are included in v1.10; the historical v1.9 archive remains unchanged.
 
-`parseArrangementProject(source: string | object)` / `serializeArrangementProject(project)` are available from root and core. The separate `ArrangementProject` format is version 1 and stores named `layers`, `sections`, `initialSection`, normalized `tempoMap`/`timeSignature`, named complete `voices` and the same synthesis `settings` as score projects. Limits are 8 MiB, 128 voices/256 KiB voice JSON, 16 layers, 32 sections, 256 beats per loop and 65,536 total events. Live and saved definitions share validation; score-project version 1 is unchanged.
+`parseArrangementProject(source: string | object)` / `serializeArrangementProject(project)` are available from root and core. The separate `ArrangementProject` format is version 1 and stores named `layers`, `sections`, `initialSection`, normalized `tempoMap`/`timeSignature`, named complete `voices` and the same synthesis `settings` as score projects. Limits are 8 MiB of UTF-8 serialized input/output, 128 voices/256 KiB UTF-8 voice JSON, 16 layers, 32 sections, 256 beats per loop and 65,536 total events. Live and saved definitions share validation; score-project version 1 is unchanged.
 
 ```js
 import { parseArrangementProject, serializeArrangementProject } from 'opm.js/core';

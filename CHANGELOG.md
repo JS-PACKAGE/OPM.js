@@ -4,6 +4,35 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### UTF-8 project byte budgets
+
+- Score and Arrangement project parsing/serialization now apply the documented UTF-8 byte caps to the actual normalized JSON strings, including inherited Object/Array toJSON results. Previously, an inherited hook could produce non-ASCII text whose UTF-16 length fit while its UTF-8 representation exceeded the 8 MiB project or 256 KiB voice budget. Oversized results now reject with the existing RangeError messages.
+- One private predicate reuses the original raw-text lower/three-times-upper UTF-16 bounds and native TextEncoder measurement. It does not guess ASCII safety from prototype membership or add a character scan, trust/cache mechanism, format or dependency. Small strings require no encoded buffer; near-budget output receives the real byte measurement. Normalization, own-data admission, detachment, public declarations, within-budget hook results/traces, original JSON passes and DSP math stay unchanged. The facade's existing null-prototype voice-bank export is unaffected.
+- Source and minified comparisons each preserve 47 complete project workflows/16608564 canonical JSON bytes, 90 descriptor/alias graphs, 28 existing refusals, 12 legacy inherited-hook cases and two mutation workflows. Each additionally preserves 84 exact-limit hook pairs and 32 existing overflow refusals, with 116 matching hook traces; 52 oversized Unicode/adversarial-hook cases deliberately reject earlier. Twenty-two raw-text pairs preserve 18 refusals, exact-limit ASCII input and UTF-8-before-JSON-parse error priority, including final U+2028/U+2029 and lone surrogates. Two facade controls receive zero prototype hooks. Two isolated permanent regressions cover all four project APIs and both prototype families.
+- Chromium 156.0.8078.4 native modules preserve 36 project pairs/391470 JSON bytes/2736 events and six legacy hook cases, plus the same 190 UTF-8 boundary/adversarial records. No AudioContext is started; this is not live AudioWorklet, physical-device/MIDI or listening acceptance.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements use six fresh process pairs in each order, equal-length complete module roots, 160 ms warmup and at least 400 ms cumulative measured whole-project API-batch time per child. Construction and full initial/final output checks are outside timing. Wall includes common dispatch/batch/clock overhead; process user+system CPU includes the common checksum loop. All fourteen workloads and both orders are retained as relative-throughput median ranges (reference/candidate minus one), including the 4186672-byte canonical output and 4/8 MiB padded ASCII inputs. This change is retained for byte-budget correctness, not blanket acceleration, heap/allocation/GC counts, confidence intervals or real-time guarantees.
+
+| Complete project workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Empty Score serialization | +0.2–0.7% | +0.1–0.6% | +0.2–0.3% | 0.0–0.3% |
+| One-note Score snapshot serialization | −0.3% to −0.1% | −0.6% to −0.1% | +0.2–1.2% | −0.2% to +0.9% |
+| 256-note Score snapshot serialization | +0.1–0.4% | +0.3–1.2% | −2.2% to +0.2% | −2.6% to +0.4% |
+| 8192-note Score snapshot serialization | −0.1% to +0.4% | −0.9% to +0.5% | −1.9% to +0.5% | −1.4% to +1.2% |
+| 16-note Arrangement snapshot serialization | +0.4–0.8% | +0.4–0.6% | −1.5% to +0.8% | −0.5% to +0.9% |
+| 512-note Arrangement snapshot serialization | +0.2–1.2% | +0.1–1.2% | −4.0% to −0.3% | −3.9% to −0.3% |
+| 256-note raw Score serialization | −0.9% to +0.3% | −1.3% to +0.2% | −0.2% to +0.3% | −0.1% |
+| 512-note frozen Arrangement serialization | +1.1–1.2% | +0.9–1.3% | −2.6% to +2.4% | −2.5% to +2.7% |
+| 256-note Score JSON parsing | −0.2% to +1.0% | 0.0–0.4% | −0.6% to +1.6% | −2.9% to +0.5% |
+| 512-note Arrangement object parsing | 0.0–0.8% | +0.1–0.8% | −3.5% to +0.8% | −2.8% to +0.8% |
+| 32768-note Score serialization, 4186672 output bytes | −2.6% to +0.1% | −0.5% to +0.1% | 0.0–1.1% | +0.3–0.5% |
+| One-note Score parsing, 4 MiB padded ASCII input | +0.1–0.2% | 0.0–0.8% | −0.1% to +0.1% | −0.1% to +0.3% |
+| One-note Score parsing, 8 MiB padded ASCII input | −0.2% | −0.2% to −0.1% | −1.2% to −0.1% | −1.6% to 0.0% |
+| 16-note Arrangement parsing, 8 MiB padded ASCII input | −0.5% to −0.2% | −1.1% to −0.3% | −3.4% to +4.5% | −3.6% to +2.7% |
+
+Verification: all 600 tests pass, together with TypeScript/public/core-only declaration checks, the 42-source/55-built security gate and the empty runtime-dependency listing. The public project declaration remains byte-identical. The scoped integration-owner A/C review is recorded in SECURITY.md.
+
+
 ### Exact-alias render admission
 
 - Synth.render shares the captured native kind/length admission result only when its two output arguments are the exact same object. Distinct views still validate independently, including equal-buffer and overlapping views. Bounds, error/reentrancy order, buffer write order, public declarations, voice format and sound math stay unchanged; this is not mono downmix or a cross-call metadata cache. The idle path retains its existing single-fill behavior for exact aliases.

@@ -159,3 +159,48 @@ test('object input cannot bypass the normalized voice-bank or total serialized b
     ...Array.from({ length: 40000 }, (): BeatSequenceEvent => ({ type: 'control', id: 1, beat: 1, controls }))];
   assert.throws(() => parseArrangementProject({ ...input, layers: [{ ...input.layers[0], events }] }), /byte budget/);
 });
+
+test('inherited JSON hooks cannot bypass project UTF-8 byte budgets', () => {
+  const score = parseScoreProject({ version: 1, events: [], voices: { lead: brass } });
+  const arrangement = parseArrangementProject(source());
+  const operations = [
+    () => parseScoreProject(score), () => serializeScoreProject(score),
+    () => parseArrangementProject(arrangement), () => serializeArrangementProject(arrangement),
+  ];
+  const payload = 'é'.repeat(Math.floor(MAX_ARRANGEMENT_PROJECT_BYTES / 2) + 1);
+  for (const prototype of [Object.prototype, Array.prototype]) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+    try {
+      Object.defineProperty(prototype, 'toJSON', { configurable: true, value: function(this: object, key: string): unknown {
+        if (prototype === Object.prototype ? Object.hasOwn(this, 'settings') && Object.hasOwn(this, 'voices') : key === 'tempoMap') return payload;
+        return this;
+      } });
+      for (const operation of operations) assert.throws(operation, RangeError);
+    } finally {
+      Reflect.deleteProperty(prototype, 'toJSON');
+      if (descriptor) Object.defineProperty(prototype, 'toJSON', descriptor);
+    }
+  }
+});
+
+test('inherited JSON hooks cannot bypass normalized project voice UTF-8 byte budgets', () => {
+  const score = parseScoreProject({ version: 1, events: [], voices: { lead: brass } });
+  const arrangement = parseArrangementProject(source());
+  const operations = [
+    () => parseScoreProject(score), () => serializeScoreProject(score),
+    () => parseArrangementProject(arrangement), () => serializeArrangementProject(arrangement),
+  ];
+  const payload = 'é'.repeat(Math.floor(MAX_BANK_BYTES / 2) + 1);
+  for (const prototype of [Object.prototype, Array.prototype]) {
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+    try {
+      Object.defineProperty(prototype, 'toJSON', { configurable: true, value: function(this: object, key: string): unknown {
+        return (prototype === Object.prototype ? Object.hasOwn(this, 'ops') : key === 'ops') ? payload : this;
+      } });
+      for (const operation of operations) assert.throws(operation, RangeError);
+    } finally {
+      Reflect.deleteProperty(prototype, 'toJSON');
+      if (descriptor) Object.defineProperty(prototype, 'toJSON', descriptor);
+    }
+  }
+});
