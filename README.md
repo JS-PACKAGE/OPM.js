@@ -584,6 +584,8 @@ A voice has four operators, an algorithm (0–7), and integer patch feedback (0�
 
 For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, and exactly four complete operators are required; the optional metadata/defaults are described above. Unknown fields, accessors, sparse operator arrays, incorrect types, non-finite numbers, and out-of-range values are rejected.
 
+Strict version admission captures one own-data descriptor value for both validation and feature gates. Omission defaults to v8; a present own `undefined`, `null`, accessor, or unsupported value is rejected without coercing that value.
+
 | Voice field | Allowed values |
 | --- | --- |
 | `version`, `name` | Version 8; legacy 1–7 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |

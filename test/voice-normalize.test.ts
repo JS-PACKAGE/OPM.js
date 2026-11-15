@@ -68,6 +68,48 @@ test('nested accessors and sparse operator slots are rejected without reading ge
   assert.equal(getterCalls, 0);
 });
 
+test('version gates reject the captured object even when later descriptors report a valid scalar', () => {
+  let probes = 0, coercions = 0;
+  const invalid = { valueOf() { coercions++; return 8; } };
+  const input = new Proxy(voice(), {
+    getOwnPropertyDescriptor(target, key) {
+      const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+      if (key === 'version' && ++probes < 4) return { ...descriptor, value: invalid };
+      return descriptor;
+    },
+  });
+  assert.throws(() => normalizeVoice(input), RangeError);
+  assert.equal(coercions, 0);
+});
+
+test('a changing version accessor cannot read inherited descriptor values', () => {
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, 'value');
+  let probes = 0, inheritedReads = 0, getterCalls = 0, failure: unknown;
+  const accessor = { configurable: true, enumerable: true, get() { getterCalls++; return 8; } };
+  Object.setPrototypeOf(accessor, null);
+  const input = new Proxy(voice(), {
+    getOwnPropertyDescriptor(target, key) {
+      if (key === 'version' && ++probes > 1) return accessor;
+      return Reflect.getOwnPropertyDescriptor(target, key);
+    },
+  });
+  const hook: PropertyDescriptor = Object.create(null);
+  hook.configurable = true;
+  hook.get = () => { inheritedReads++; return 8; };
+  Object.defineProperty(Object.prototype, 'value', hook);
+  try {
+    normalizeVoice(input);
+  } catch (error) {
+    failure = error;
+  } finally {
+    Reflect.deleteProperty(Object.prototype, 'value');
+    if (original) Object.defineProperty(Object.prototype, 'value', original);
+  }
+  assert.ok(failure instanceof TypeError);
+  assert.equal(inheritedReads, 0);
+  assert.equal(getterCalls, 0);
+});
+
 test('legacy formats retain their old operator and LFO boundaries', () => {
   const { waveform: _, ...lfo } = voice().lfo;
   for (const version of [1, 2, 3] as const) {

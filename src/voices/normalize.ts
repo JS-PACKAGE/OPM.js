@@ -63,8 +63,11 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  const version = field(input, 'version') ?? 8;
-  if (Object.hasOwn(input, 'version') && ![1, 2, 3, 4, 5, 6, 7, 8].includes(field(input, 'version') as number)) {
+  // Validate the same snapshot used by every gate, even if a Proxy changes later descriptors.
+  const versionDescriptor = Object.getOwnPropertyDescriptor(input, 'version');
+  if (versionDescriptor !== undefined && !Object.hasOwn(versionDescriptor, 'value')) throw new TypeError('voice.version must be data');
+  const version: unknown = versionDescriptor === undefined ? 8 : versionDescriptor.value;
+  if (versionDescriptor !== undefined && ![1, 2, 3, 4, 5, 6, 7, 8].includes(version as number)) {
     throw new RangeError('Unsupported voice version');
   }
   if ((version as number) < 5 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');

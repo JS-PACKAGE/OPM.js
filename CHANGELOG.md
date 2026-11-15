@@ -4,6 +4,35 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Atomic voice version snapshots
+
+- Strict voice admission now validates and uses one own-data version descriptor snapshot. Only absence defaults to v8; explicit undefined/null/nonmembers and a present accessor still reject. A changing Proxy can no longer validate a later scalar while earlier captured data reaches numeric feature gates, or turn a later accessor descriptor into an inherited descriptor-value read.
+- Transparent Proxy comparisons deliberately reduce own-version descriptor queries from four to two, or missing-version queries from two to one, including the unchanged structural scan. All non-version reflection order, valid results, own-data descriptors, input/output alias graphs, detachment, private prepared membership, formats, declarations and sound math remain unchanged.
+- Source and minified proofs each preserve 1080 voice pairs/1022400 JSON bytes, 16 bit-exact pure-DSP pairs/19875 stereo frames, 57 existing refusals, nine adjusted reflection traces, 45 ordinary prototype cases and two mutable-copy workflows. Whole project comparisons preserve 44 workflows/4048548 JSON bytes, 84 descriptor/alias graphs, 28 refusals, 12 inherited JSON-hook cases and two raw mutation workflows.
+- Each build also preserves 39 ordinary version cases across all three conversion APIs. Six intentional malformed-Proxy refusal pairs eliminate 48 numeric coercions and six inherited descriptor-value getter reads from the extended fixtures, with zero own getter calls. Two permanent regressions cover the inconsistent captured scalar and changing accessor; no general promise of zero JavaScript Proxy-trap execution is made.
+- Chromium 156 native modules preserve 360 voice pairs/300600 JSON bytes, ten bit-exact pure-DSP pairs/12525 stereo frames, two mutable-copy workflows, and 36 project pairs/391470 JSON bytes/2736 events with six JSON-hook cases. Its additional version-boundary cases preserve the same 39 ordinary results and six stricter refusals with zero new coercions or inherited descriptor-value reads. No live AudioContext is started.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements use six fresh process pairs in each order, equal-length module roots, 160 ms warmup and at least 400 ms cumulative measured API-batch time per child. Fixtures and initial output checks are outside timing; complete facade/score consumers include their actual registry lookup and raw validation. The table retains every measured workload and both orders as relative-throughput median ranges (reference/candidate minus one), including negative controls. Results are small and mixed: this change is retained for correctness, not a blanket speedup, DSP/audio, heap/GC, confidence-interval or real-time-deadline claim. Physical-device/MIDI and listening acceptance remain unverified.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Prepared minimal normalization | +0.5–1.4% | +0.5–1.3% | +0.5–0.7% | +0.5% |
+| Prepared expressive v8 normalization | +0.8% | +0.8–0.9% | −1.2% to +0.3% | −1.2% to +0.1% |
+| Prepared expressive v8 preparation | +0.6–0.9% | +0.6–1.0% | −1.1% to +0.5% | −1.0% to +0.5% |
+| Prepared identity lookup control | −2.1% to +0.6% | −3.0% to +0.2% | −0.1% to +0.5% | −1.3% to +0.8% |
+| Raw v1 normalization | −2.1% to −0.2% | −2.0% to −0.2% | +0.3–1.6% | +0.2–1.6% |
+| Raw v8 normalization | +0.1–1.3% | +0.2–1.3% | +0.3–2.5% | +0.3–2.6% |
+| Omitted-version raw normalization | −0.5% to −0.2% | −0.5% to −0.3% | −0.5% to +0.4% | −0.5% to +0.5% |
+| Foreign-frozen v8 normalization | +0.5–3.6% | +0.5–3.6% | −0.5% to +1.1% | −0.5% to +1.1% |
+| Forged v8 preparation | +0.2–1.1% | +0.2–1.0% | −1.0% to +0.1% | −1.0% to 0.0% |
+| One-note project serialization | −0.9% to +1.4% | −0.7% to +1.5% | +0.1–0.4% | +0.1–0.4% |
+| Default facade construction | +1.0–1.3% | +0.9–1.2% | +0.3–3.3% | +0.3–3.3% |
+| Same-name facade load | −0.2% to +0.6% | −0.1% to +0.7% | −0.5% to +1.0% | −0.5% to +0.9% |
+| Raw Map, 128-note preflight | 0.0–1.9% | −2.0% to +0.9% | +1.1–4.0% | −1.2% to +1.9% |
+| Canonical bank, 128-note control | −0.5% to −0.4% | −0.7% to −0.3% | −1.2% to +1.6% | −1.1% to +0.7% |
+
+Verification: all 598 tests pass, together with TypeScript/public/core-only declaration checks, the 42-source/55-built security gate and the empty runtime-dependency listing. The public normalizer declaration remains byte-identical.
+
 ### Canonical facade prepared snapshots
 
 - The facade now uses the existing strict prepareVoice producer instead of duplicating deep-freeze construction. Its default brass patch and same-own-name loadVoice snapshots keep that exact immutable producer identity; overriding or supplying a missing name still returns a fresh deeply frozen transformed root without producer membership. All raw loads and raw browser notes still validate and detach every call. replaceVoiceBank, public signatures, voice format, worklet messages, sound math and per-note DSP state are unchanged; no marker, collection, cache, dependency or trust API is added.
