@@ -640,6 +640,8 @@ Validation and copying use the same captured own-data values at each object/arra
 
 `opm.replaceVoiceBank()` applies the bank's whole-input validation before swapping lookups. Only its plain empty-array input is a clearing operation; `parseVoiceBank('[]')` still rejects an empty bank. Removing/replacing a name does not alter immutable patches already queued or sounding.
 
+`loadVoice()` also checks the current registry after voice validation: metadata callbacks cannot fill or replace it and then admit a 129th voice. Replacing an existing name at capacity remains valid.
+
 Typed callers can pass frozen parser snapshots directly: `opm.replaceVoiceBank([...parseVoiceBank(examples).values()])`. A readonly outer array is also accepted; complete-voice validation and detached copying still apply.
 
 Unlike strict single-voice normalization, `validateVoice()`, `parseVoiceBank()`, and `renderNote()` **clamp finite out-of-range numeric fields** to the schema limits. Invalid types, non-finite values, unknown fields, unsupported versions, and invalid algorithm/feedback enums still fail. `validateVoice()` handles one complete voice; `bounded()` clamps a finite number; `LIMITS`, `MAX_BANK_BYTES`, and `MAX_BANK_VOICES` expose the bounds.

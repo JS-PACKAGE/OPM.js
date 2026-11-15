@@ -930,6 +930,51 @@ test('registry size is bounded, replacement frees capacity, and disposed bank op
   } finally { await opm.dispose(); }
 });
 
+test('voice loading rechecks the current registry after raw validation callbacks', async () => {
+  for (const mode of ['fill-in-place', 'replace-map', 'replace-existing-name', 'leave-one-slot', 'retain-existing-name']) {
+    const opm = new OPM(), name = 'outer_voice';
+    opm.replaceVoiceBank([]);
+    const raw = structuredClone(brass);
+    raw.feedback = brass.feedback === 0 ? 1 : 0;
+    if (mode === 'replace-existing-name' || mode === 'retain-existing-name') {
+      opm.loadVoice(name, brass);
+      for (let index = 1; index < 128; index++) opm.loadVoice(`voice_${index}`, brass);
+    }
+    let entered = false;
+    const input = new Proxy(raw, {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (key === 'version' && !entered) {
+          entered = true;
+          if (mode === 'fill-in-place' || mode === 'leave-one-slot') {
+            const length = mode === 'leave-one-slot' ? 127 : 128;
+            for (let index = 0; index < length; index++) opm.loadVoice(`voice_${index}`, brass);
+          } else if (mode === 'replace-map' || mode === 'retain-existing-name') {
+            opm.replaceVoiceBank(Array.from({ length: 128 }, (_, index) => ({
+              ...brass, name: mode === 'retain-existing-name' && index === 0 ? name : `voice_${index}`,
+            })));
+          } else {
+            opm.removeVoice(name);
+            opm.loadVoice('replacement', brass);
+          }
+        }
+        return descriptor;
+      },
+    });
+    try {
+      if (mode === 'leave-one-slot' || mode === 'retain-existing-name') {
+        opm.loadVoice(name, input);
+        assert.equal(opm.voices.get(name)!.feedback, raw.feedback);
+      } else {
+        assert.throws(() => opm.loadVoice(name, input), /128/);
+        assert.equal(opm.voices.has(name), false);
+      }
+      assert.equal(entered, true);
+      assert.equal(opm.voices.size, 128);
+    } finally { await opm.dispose(); }
+  }
+});
+
 test('valid array banks cannot export beyond the UTF-8 output budget', async () => {
   const opm = new OPM();
   const detailed: Voice = { version: 8, name: 'detailed', algorithm: 0, feedback: 7, modIndex: 15.123456789012345,

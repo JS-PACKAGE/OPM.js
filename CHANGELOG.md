@@ -4,6 +4,32 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Post-validation bank capacity
+
+- Fixed a facade admission gap: raw voice metadata callbacks could fill the registry, replace its map, or exchange a previously present outer name after `loadVoice()` checked capacity, allowing a 129th voice. Loading now captures the current registry after validation, checks capacity/name presence again and commits to that same map. The original early guard still rejects a full bank before invoking raw metadata. Caller-approved nested mutations remain intact on rejection; existing-name replacement at capacity is still allowed.
+- One permanent consumer regression covers three refusals and two legal reentrant loads. Native source/minified proofs additionally accept loading into a newly cleared registry, preserve early-rejection and numeric-validation priority, and retain all 128 complete load/reflection pairs/30352 caller input events without filtering. No new raw descriptor probe, cache, identity, API/type/format/dependency or DSP arithmetic change is introduced; export-cache work was deferred to repair this invariant first.
+- Each source/minified build preserves 3072 voice pairs/2275584 canonical ASCII bytes, 12 bank/facade pairs/580 voices, 24 bit-identical PCM pairs/30060 stereo frames, 77 ordinary refusal pairs, descriptor/alias graphs, detached mutations and all 18 previous captured-data/bounds/atomicity cases. Public facade/schema/normalizer/core declarations are byte-identical.
+- Chromium 156.0.8078.4 native modules pass the same complete comparisons, corrected admission cases and unfiltered load traces with zero page errors. No AudioContext is started; live AudioWorklet, physical-device/MIDI and listening acceptance remain unverified.
+
+This is a correctness repair, not a speedup claim. Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against a2384cc with twelve complete-consumer profiles, six fresh process pairs per order in both orders (288 children per build), equal-length complete module roots, 60 ms warmup and at least 120 ms cumulative measured API-batch time per child. Load profiles alternate two different programs and include the public defensive registry read, including its 128-entry copy in the full-bank case. Fixture construction, complete wire-equivalence admission and child output-length checks are outside timing. Wall includes common dispatch/clock overhead; user+system CPU includes the common checksum loop. Entries are median relative-throughput ranges (reference/candidate time minus one), not time reductions, confidence intervals, physical allocation/GC counts or deadline guarantees. All negative and unrelated controls are retained.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw minimal v8 load + registry read | −0.1 to 0.0% | −0.2 to 0.0% | −1.0 to 0.0% | −1.0 to 0.0% |
+| Raw expressive v8 load + registry read | −0.2 to −0.1% | −0.3 to +0.2% | −0.4 to −0.1% | −0.4 to −0.2% |
+| Raw v1 load + registry read | −0.8 to +0.3% | −0.8 to +0.3% | −0.9 to −0.5% | −1.0 to −0.6% |
+| Frozen expressive v8 load + registry read | +0.2 to +1.5% | +0.2 to +1.5% | −1.5 to +0.7% | −1.7 to +0.7% |
+| Prepared minimal v8 load + registry read | −0.6 to +0.4% | −0.5 to +0.5% | +0.3 to +0.6% | +0.4 to +0.8% |
+| Prepared expressive v8 load + registry read | 0.0 to +0.6% | −0.1 to +0.3% | 0.0 to +0.5% | 0.0 to +0.5% |
+| Renamed prepared v8 load + registry read | −0.2 to +0.4% | −0.1 to +0.4% | +0.2% | +0.1 to +0.2% |
+| Full-bank prepared load + registry read | −1.3 to +1.3% | −1.4 to +0.2% | −0.6 to −0.1% | −0.9 to −0.1% |
+| 16-voice replace + export control | +0.1 to +4.1% | +0.1 to +3.8% | −0.4 to +0.4% | −0.6 to 0.0% |
+| 128-voice export control | −1.1 to −1.0% | −0.5 to −0.4% | +0.1 to +0.4% | +0.1 to +0.3% |
+| Prepared normalization control | −1.5 to −0.7% | −1.5 to −0.6% | −0.9 to +0.5% | −0.9 to +0.4% |
+| Complete offline-note control | −0.3 to +0.3% | −0.8 to +0.3% | −0.3 to −0.1% | −0.2 to +0.2% |
+
+Verification: scoped integration-owner A/C review, 609 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, empty runtime dependencies, unchanged public declarations and native browser/generated-documentation proofs. This is not independent release/publication approval.
+
 ### Captured voice-bank data
 
 - Complete-voice validation now checks and copies the same captured own-data values, including nested expressive records. Previously, later descriptor callbacks could install root getters after validation, produce an invalid voice name, or substitute/coerce a version. Bank/operator/target arrays now capture bounded own-data length and slots before child validation; a changing property read can no longer expand direct bank parsing past 128 voices. The facade already bounded its outer array but also benefits from fixed complete-voice validation.

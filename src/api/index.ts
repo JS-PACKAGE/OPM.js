@@ -419,7 +419,10 @@ export class OPM {
     voiceName(name);
     if (!this._voices.has(name) && this._voices.size >= MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
     const patch = frozenPatch(voice, name);
-    this._voices.set(name, patch);
+    // Raw validation can reenter bank methods and fill or replace the registry.
+    const bank = this._voices;
+    if (!bank.has(name) && bank.size >= MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
+    bank.set(name, patch);
   }
 
   /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
