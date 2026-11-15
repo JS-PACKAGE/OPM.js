@@ -320,7 +320,7 @@ export class OPM {
   private _voices: Map<string, NormalizedVoice>;
   /** @internal */
   private _voiceIds: Map<string, number>;
-  /** @internal Content keys avoid repeated serialization for immutable named patches. */
+  /** @internal Content keys avoid repeated serialization for immutable owned patches. */
   private _patchKeys: WeakMap<NormalizedVoice, string>;
   /** @internal */
   private _nextVoiceId: number;
@@ -755,17 +755,16 @@ export class OPM {
     if (!Number.isSafeInteger(endFrame)) throw new RangeError('duration exceeds safe sample frames');
     if (!Number.isSafeInteger(this.nextId) || this.nextId <= 0) throw new RangeError('Note ID space exhausted');
     let patch: NormalizedVoice | undefined;
-    let rawKey: string | undefined;
     if (typeof voice === 'string') patch = this._voices.get(voice);
     else {
-      // Every raw call validates a fresh snapshot; mutations must not bypass validation.
+      // Raw inputs need fresh validation; private prepared identities may be reused.
       patch = frozenPatch(voice as VoiceInput);
-      rawKey = JSON.stringify(patch);
     }
     if (!patch) throw new RangeError('Unknown voice');
     let key = this._patchKeys.get(patch);
     if (key === undefined) {
-      key = rawKey ?? JSON.stringify(patch);
+      // Inherited JSON hooks must not determine sound-registration identity.
+      key = JSON.stringify(bankJsonData(patch));
       this._patchKeys.set(patch, key);
     }
     let voiceId = this._voiceIds.get(key);

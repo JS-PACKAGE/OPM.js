@@ -646,6 +646,8 @@ Repeated exports of an unchanged registry reuse its bounded canonical JSON strin
 
 Genuine `prepareVoice()` snapshots are reused during facade admission. Raw inputs, frozen copies and wrappers still undergo validation; registry renaming creates its own frozen root while sharing only immutable prepared data. `normalizeVoice()` continues to return fresh mutable copies.
 
+Internal sound-registration keys ignore inherited Object/Array serialization hooks. `toJSON` cannot make distinct programs share a registration or interrupt note admission. Raw mutable voices still validate before every key lookup; genuine prepared snapshots can reuse their immutable cached key.
+
 Typed callers can pass frozen parser snapshots directly: `opm.replaceVoiceBank([...parseVoiceBank(examples).values()])`. A readonly outer array is also accepted; complete-voice validation and detached copying still apply.
 
 Unlike strict single-voice normalization, `validateVoice()`, `parseVoiceBank()`, and `renderNote()` **clamp finite out-of-range numeric fields** to the schema limits. Invalid types, non-finite values, unknown fields, unsupported versions, and invalid algorithm/feedback enums still fail. `validateVoice()` handles one complete voice; `bounded()` clamps a finite number; `LIMITS`, `MAX_BANK_BYTES`, and `MAX_BANK_VOICES` expose the bounds.

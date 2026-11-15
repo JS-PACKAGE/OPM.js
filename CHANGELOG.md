@@ -4,6 +4,41 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Hook-independent patch registration
+
+- Fixed an internal sound-identity bug: inherited Object/Array toJSON functions could give distinct validated programs the same registration key, and getters could throw before note admission. Both raw and named key producers now converge on the existing immutable-patch cache; a miss serializes the existing owned-data/null-prototype copier. Raw inputs still normalize before every lookup, while genuine prepared identities no longer compute and discard a temporary JSON key on cache hits.
+- The old source/minified builds each failed twelve production API/processor software-context cases: six function-hook cases rendered incorrect PCM and six getter-hook cases threw. Each repaired build passes all twelve with zero hook reads, no exceptions and bit-identical audible reference PCM over 6144 stereo frames. A permanent consumer regression covers Object/Array functions/getters and named edits, raw and prepared inputs.
+- Seventy-two additional cross-build API/processor PCM pairs preserve 36864 stereo frames across every algorithm, versions 1/5/8, named/raw/prepared forms and immediate/future/repeated programs. Existing 3072 voice pairs/2275584 canonical ASCII bytes, 12 banks/580 voices, 24 PCM pairs/30060 stereo frames, 77 refusals, descriptor/alias graphs, captured-data/capacity/cache/isolation histories and 128 unfiltered raw load traces/30352 events remain unchanged. The 1024 prepared admission pairs/6048 root events/512 detachment checks/16 additional PCM pairs also remain unchanged.
+
+This correctness repair is retained despite cold raw/clone/wrapper key-serialization costs, not advertised as a universal speedup. Matched Node 26.7 / V8 14.6 darwin-arm64 comparisons against 32ef3a4 use sixteen profiles, six fresh process pairs per order in both orders (384 children per build), equal-length module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Dispatch profiles use an explicit software WebAudio platform fixture with synchronous structured-clone ports and the actual production processor. Each measured cycle calls public future play and immediate stop; diagnostics before/after timing verify zero active/pending/rejected notes, so capacity exhaustion is not mistaken for throughput.
+
+Two alternating programs and their receiver registrations are primed outside timing; raw/clone/wrapper and raw named-edit calls still rebuild/canonicalize keys each cycle. Named/prepared immutable key caches remain warm. Dispatch uses 32-call batches; public validation, key generation/cache lookup, port cloning, production receive/cancellation, checksum and common clock overhead stay inside timing. Fixture construction, ID/control-phase admission checks and diagnostics are outside timing; timbres are independently checked by the PCM proofs above. These are software-context control/dispatch measurements, not native AudioContext, audio-thread, rendered-sample, browser-audio or deadline measurements.
+
+Entries are median relative-throughput changes (reference/candidate minus one) ranged across the two process orders, not time reductions or confidence intervals. User+system CPU includes common checksum/clock work; all negative and unrelated controls are retained. No physical allocation/GC count is inferred.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw minimal v8 play + cancel | −15.8 to −15.4% | −17.1 to −17.0% | −16.5 to −16.1% | −16.9 to −16.7% |
+| Raw expressive v8 play + cancel | −20.4 to −19.7% | −11.9 to −11.4% | −20.2 to −19.2% | −10.2 to −9.6% |
+| Raw v1 play + cancel | −16.1 to −15.3% | −17.5 to −16.7% | −16.2 to −16.0% | −15.7 to −15.6% |
+| Frozen v8 play + cancel | −20.1 to −19.6% | −11.5 to −11.2% | −19.0 to −18.6% | −9.3 to −8.9% |
+| Prepared minimal v8 play + cancel | +19.0 to +20.8% | +18.5 to +21.2% | +22.5 to +23.9% | +23.9 to +25.9% |
+| Prepared expressive v8 play + cancel | +37.1 to +39.7% | +35.9 to +37.4% | +36.2 to +40.3% | +33.4 to +39.0% |
+| Wrapped prepared v8 play + cancel | −18.6 to −18.4% | −10.3 to −9.3% | −18.5 to −18.2% | −9.8 to −9.5% |
+| Named cached v8 play + cancel | −0.1 to +0.8% | +0.5 to +1.2% | −0.3 to +0.7% | −1.6 to +2.3% |
+| Raw named edit + play + cancel | −20.0 to −19.8% | −10.8% | −19.8 to −19.2% | −9.5 to −8.7% |
+| Prepared named edit + play + cancel | +0.4 to +0.8% | +0.8% | −0.4% | −0.8 to +0.2% |
+| Prepared minimal load + registry read | +0.4 to +1.0% | −0.1 to +1.2% | −0.9 to +0.4% | −1.4 to +0.6% |
+| Raw minimal load + registry read | −1.0 to +0.3% | −0.8 to +0.1% | −0.5 to +0.2% | −0.4 to 0.0% |
+| Warm 128-voice export control | −1.6 to +2.0% | −2.5 to +3.4% | +1.1 to +2.1% | +1.3 to +2.5% |
+| Prepared mutable normalization control | −0.3 to +0.9% | −0.3 to +0.8% | −0.2 to −0.1% | −0.2 to −0.1% |
+| Complete offline-note control | +0.1 to +0.2% | 0.0 to +0.2% | −0.4 to −0.2% | −0.2% |
+| Mixed 16-voice replace + export control | +0.3 to +0.5% | +0.2 to +0.5% | +0.3 to +0.4% | +0.4% |
+
+Verification: scoped integration-owner A/C review, 612 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies and byte-identical facade/schema/normalizer/core declarations. No release/publication, native live AudioWorklet, physical-device/MIDI or listening acceptance is claimed.
+
+Chromium 156.0.8078.4 modules pass all twelve hook cases and 72 cross-build API/processor PCM pairs using the explicitly identified software platform fixture, plus all existing pure bank/prepared/captured-data/capacity/cache/isolation/raw-reflection comparisons. There are zero page errors; no native AudioContext or audio thread is started. Generated documentation is checked on its actual browser surface.
+
 ### Prepared facade admission
 
 - The facade's single frozenPatch wrapper now uses the existing private preparedVoiceValue helper already used by Synth and sequence admission, rather than rebuilding genuine prepared data. Matching-name inputs retain the owned immutable snapshot; registry renaming still defines/freezes a new root sharing only immutable descendants. Constructor/default, load and direct-play callers use this wrapper. No new cache, trust flag or producer is added.

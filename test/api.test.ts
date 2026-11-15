@@ -912,6 +912,53 @@ test('bank exports use registry names, frozen detached entries and no inherited 
   }
 });
 
+test('inherited JSON hooks cannot collide patch registrations or alter rendered sound', async () => {
+  for (const prototype of [Object.prototype, Array.prototype]) {
+    for (const kind of ['function', 'getter']) for (const form of ['named-edit', 'raw', 'prepared']) {
+      const opm = new OPM(), reference = new OPM();
+      await opm.start();
+      await reference.start();
+      const sounding: Voice = structuredClone(brass), silent: Voice = structuredClone(brass);
+      sounding.name = silent.name = 'same_program';
+      silent.ops.forEach(operator => { operator.level = 0; });
+      const inputs = form === 'prepared' ? [prepareVoice(sounding), prepareVoice(silent)] : [sounding, silent];
+      const play = (host: OPM) => {
+        if (form === 'named-edit') {
+          host.loadVoice('edited', inputs[0]!);
+          host.playNote({ voice: 'edited', note: 69, velocity: 0.3 });
+          host.loadVoice('edited', inputs[1]!);
+          host.playNote({ voice: 'edited', note: 69, velocity: 0.3 });
+        } else {
+          for (const voice of inputs) host.playNote({ voice, note: 69, velocity: 0.3 });
+        }
+      };
+      let reads = 0;
+      try {
+        play(reference);
+        const saved = Object.getOwnPropertyDescriptor(prototype, 'toJSON');
+        try {
+          Object.defineProperty(prototype, 'toJSON', kind === 'function'
+            ? { configurable: true, value() { reads++; return 'same-registration-key'; } }
+            : { configurable: true, get() { reads++; throw new Error('inherited JSON hook executed'); } });
+          play(opm);
+        } finally {
+          if (saved) Object.defineProperty(prototype, 'toJSON', saved);
+          else Reflect.deleteProperty(prototype, 'toJSON');
+        }
+        assert.equal(reads, 0);
+        let heard = false;
+        for (let block = 0; block < 4; block++) {
+          const actual = render(opm), expected = render(reference);
+          heard ||= audible(expected.left) || audible(expected.right);
+          assert.deepEqual(actual.left, expected.left);
+          assert.deepEqual(actual.right, expected.right);
+        }
+        assert.equal(heard, true);
+      } finally { await opm.dispose(); await reference.dispose(); }
+    }
+  }
+});
+
 test('prepared facade inputs stay immutable while frozen copies and wrappers still validate', async () => {
   const opm = new OPM();
   const raw: Voice = structuredClone(brass);
