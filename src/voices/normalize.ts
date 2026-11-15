@@ -84,9 +84,14 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
   const ops = [undefined, undefined, undefined, undefined] as unknown as Operator[];
   for (let i = 0; i < 4; i++) {
-    const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
-    if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
-    const op = descriptor.value as object;
+    let op: object;
+    // Private producers freeze their owned data slots before root registration.
+    if (known) op = rawOps[i] as object;
+    else {
+      const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
+      if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
+      op = descriptor.value as object;
+    }
     if (op && typeof op === 'object' && (version as number) < 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate requires voice version 7');
     if (!known) object(op, ['ratio', 'level', 'detune', 'adsr'],
       (version as number) >= 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :

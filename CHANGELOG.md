@@ -4,6 +4,36 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Private prepared operator slots
+
+- Normalized copies of privately registered immutable prepared voices now read their owned native operator-array slots directly. The sole producer creates four own data cells, copies and validates their operators, then freezes every owned operator/ADSR/key-scale object, array and root before registration. The fast path avoids repeating native slot-descriptor construction and explicit String(i) calls; it adds no flag arguments, helper abstraction, cache, brand, public type, format or dependency. Every unregistered raw/frozen/forged/Proxy root retains the original own-data slot checks and reflection order. Array type/length, captured field/name/version and all numeric/legacy checks, detached mutable copies, freezing and DSP math remain unchanged.
+- Source and minified proofs each preserve 1080 valid voice pairs/1022400 canonical bytes, 16 bit-identical PCM pairs/19875 stereo frames, 57 existing refusals, all 72 exact raw root/nested/array traces, 45 ordinary-prototype cases, six signed-zero graphs, two mutation workflows, 24 captured-field/name refusals and 45 strict version cases. Each also proves 17 immutable producer-tuple pairs, 136 own frozen slot descriptors, blocked mutation/detached copies and 36 malformed raw/frozen/Proxy/frozen-Proxy consumer pairs, including Array-subclass input becoming an owned native array. The 53 complete project workflows and 190 UTF-8 compatibility records match. Existing owned/frozen-slot, private identity, raw rejection and detached-copy consumers already cover the branch; no wiring-only test is added.
+- Chromium 156.0.8078.4 native modules preserve 36 project pairs/391470 bytes/2736 events, six JSON-hook cases, 360 voice pairs/300600 bytes, ten bit-identical PCM pairs/12525 stereo frames and all raw reflection/version/prototype/signed-zero/refusal controls with zero page errors. No AudioContext is started; live AudioWorklet, physical-device/MIDI and listening acceptance remain unverified.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 whole-API measurements compare against commit ab708e0, which already reuses private operator-array shape. All seventeen profiles and both orders use six fresh process pairs per order, equal-length complete module roots, 160 ms warmup and at least 400 ms cumulative measured API-batch time per child. Construction and full initial/final output checks are outside timing; wall includes common batch/clock/dispatch overhead and user+system CPU includes the common checksum loop. Entries are relative-throughput median ranges (reference/candidate time minus one), not CPU-time reductions, actual heap/GC counts, confidence intervals or real-time guarantees. All identity/canonical-bank, raw/frozen/forged and real-Proxy controls are retained.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Prepared minimal voice normalization | +6.3–10.2% | +6.2–10.0% | +7.3–9.1% | +7.1–9.0% |
+| Prepared full v8 voice normalization | +2.1–3.1% | +2.1–3.0% | +4.0–4.2% | +3.9–4.2% |
+| Prepared full v8 voice preparation | +0.6–1.8% | +0.6–1.7% | +2.4–4.2% | +2.5–4.2% |
+| Prepared value identity control | +0.4–1.8% | −0.5% to +1.6% | −1.5% to +0.8% | −2.0% to −0.2% |
+| Raw v1 voice normalization | +0.2–0.8% | +0.2–0.8% | −1.3% to −0.4% | −1.4% to −0.4% |
+| Raw v8 voice normalization | +0.2–1.7% | +0.2–1.6% | +1.2–1.3% | +1.3–1.4% |
+| Raw v8 normalization, omitted version | −1.2% to −0.6% | −1.2% to −0.6% | −1.8% to +0.3% | −2.0% to +0.1% |
+| Frozen unbranded v8 normalization | −0.8% to −0.3% | −0.8% to −0.2% | −1.7% to +0.6% | −1.9% to +0.7% |
+| Forged frozen v8 preparation | +0.1–0.4% | −0.2% to +0.4% | −1.5% to −0.7% | −1.9% to −0.6% |
+| One-note Score serialization | −3.2% to −1.3% | −3.6% to −1.9% | −1.2% to +3.1% | −0.6% to +3.6% |
+| Default OPM construction | −0.6% to +0.3% | −0.6% to +0.3% | −1.8% to +0.4% | −1.9% to +0.4% |
+| Same-name facade voice load | −0.4% to −0.1% | −1.4% to −0.1% | +0.1–0.5% | +0.4–0.5% |
+| 128-note raw-map preflight | +0.2–0.7% | −0.9% to +0.7% | −1.2% to +3.3% | −2.0% to +1.4% |
+| 128-note canonical-bank control | −0.5% to +2.2% | −0.5% to +1.8% | −1.7% to +0.1% | −2.0% to 0.0% |
+| Prepared minimal voice preparation | +7.7–7.9% | +7.6–7.7% | +7.0–9.8% | +6.6–9.8% |
+| 256-note prepared Score serialization | −2.3% to +0.9% | −2.1% to +0.8% | −1.2% to +0.9% | −1.2% to +1.1% |
+| Real Proxy(prepared) normalization control | −1.0% to +0.7% | −1.1% to +0.7% | +0.3–0.7% | +0.3–0.5% |
+
+Verification: integration-owner scoped A/C review, 602 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies, unchanged public normalizer declaration and native browser/generated-documentation proofs. This is not independent release/publication approval.
+
 ### Private prepared operator arrays
 
 - The normalized-copy path now reuses the operator-array shape already established for module-private prepared producer identities. Those producers create, validate and freeze an owned dense four-slot array before registration; copying no longer enumerates its keys again. Array type/length, every slot own-data descriptor, all captured field/name/version and numeric/legacy checks, detached output construction and deep freezing remain. Raw, unbranded frozen, forged and Proxy-wrapped inputs keep the complete original shape path. No new identity, cache, collection, flag arguments, public type, format, dependency or DSP math is introduced.
