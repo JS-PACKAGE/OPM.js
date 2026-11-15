@@ -636,6 +636,8 @@ Import `parseVoiceBank` from `opm.js/voices/schema.js` in Node, or `./opm/voices
 
 A bank must be an **array** of 1–128 complete versioned voices; wrap individual JSON examples in `[...]`. Every bank entry requires `version`, `name`, `algorithm`, `feedback`, `modIndex`, `lfo`, and four complete operators; names must be unique. JSON strings are capped at 256 KiB in UTF-8. The [schema module](./dist/voices/voice.schema.js) exports `voiceSchema`; the [example bank module](./dist/voices/examples.js) exports `examples`. Import `examples` from `opm.js/voices/examples.js` (Node) or `./opm/voices/examples.js` (browser) and pass it to `parseVoiceBank(examples)`. External JSON banks remain supported.
 
+Validation and copying use the same captured own-data values at each object/array boundary. Bank, operator and LFO-target lengths and slots are captured before child validation; a later metadata callback cannot replace an already checked value or extend bank traversal. Caller getters and substituted property reads are not used as validated data. Proxy metadata traps can still execute caller code: parsing is not a JavaScript sandbox. Detached frozen results, finite-value clamping and legacy version gates are unchanged.
+
 `opm.replaceVoiceBank()` applies the bank's whole-input validation before swapping lookups. Only its plain empty-array input is a clearing operation; `parseVoiceBank('[]')` still rejects an empty bank. Removing/replacing a name does not alter immutable patches already queued or sounding.
 
 Typed callers can pass frozen parser snapshots directly: `opm.replaceVoiceBank([...parseVoiceBank(examples).values()])`. A readonly outer array is also accepted; complete-voice validation and detached copying still apply.

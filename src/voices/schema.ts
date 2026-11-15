@@ -79,7 +79,7 @@ export const LIMITS: Readonly<Record<LimitKey, readonly [number, number]>> = Obj
   breakpoint: [0, 127], leftDbPerOctave: [0, 24], rightDbPerOctave: [0, 24],
 });
 
-function record(value: unknown, keys: readonly string[], label: string, optional: readonly string[] = []): asserts value is Record<string, unknown> {
+function record(value: unknown, keys: readonly string[], label: string, optional: readonly string[] = []): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {
     throw new TypeError(`${label} must be a plain object`);
@@ -89,13 +89,17 @@ function record(value: unknown, keys: readonly string[], label: string, optional
     throw new TypeError(`${label} has missing or unknown fields`);
   }
   for (const key of keys) {
-    if (!Object.hasOwn(value, key)) throw new TypeError(`${label}.${key} is required`);
+    if (!own.includes(key)) throw new TypeError(`${label}.${key} is required`);
   }
+  const data: Record<string, unknown> = Object.create(null);
   for (const key of own) {
-    if (!Object.hasOwn(Object.getOwnPropertyDescriptor(value, key)!, 'value')) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+    if (!descriptor || !Object.hasOwn(descriptor, 'value')) {
       throw new TypeError(`${label}.${String(key)} must be data`);
     }
+    data[key as string] = descriptor.value;
   }
+  return data;
 }
 
 export function bounded(value: unknown, min: number, max: number, label = 'number'): number {
@@ -111,24 +115,31 @@ function integer(value: unknown, max: number, label: string): Algorithm {
   }
   return value as Algorithm;
 }
-function array(value: unknown, min: number, max: number, label: string): asserts value is unknown[] {
-  if (!Array.isArray(value) || value.length < min || value.length > max) {
+function array(value: unknown, min: number, max: number, label: string): unknown[] {
+  if (!Array.isArray(value)) throw new TypeError(`${label} has invalid length`);
+  const descriptor = Object.getOwnPropertyDescriptor(value, 'length');
+  const length: unknown = descriptor && Object.hasOwn(descriptor, 'value') ? descriptor.value : undefined;
+  if (typeof length !== 'number' || !Number.isInteger(length) || length < min || length > max) {
     throw new TypeError(`${label} has invalid length`);
   }
-  if (Reflect.ownKeys(value).length !== value.length + 1) throw new TypeError(`${label} has unknown fields`);
-  // Reject sparse arrays and accessor elements without invoking accessors.
-  for (let i = 0; i < value.length; i++) {
+  const values: unknown[] = Reflect.ownKeys(value);
+  if (values.length !== length + 1) throw new TypeError(`${label} has unknown fields`);
+  // Reuse the native dense key array: these own slots cannot reach inherited setters.
+  // Capture each checked value before another descriptor trap can change its source.
+  for (let i = 0; i < length; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError(`${label} must contain data`);
+    values[i] = descriptor.value;
   }
+  values.length = length;
+  return values;
 }
 
 /** @internal Canonical immutable targets; only bank parsing clamps finite numbers. */
 export function lfoTargets(value: unknown, clamp = false): LFOTargets {
-  array(value, 4, 4, 'LFO targets');
-  const targets: [number, number, number, number] = [0, 0, 0, 0];
+  const targets = array(value, 4, 4, 'LFO targets');
   for (let i = 0; i < 4; i++) {
-    const item: unknown = Object.getOwnPropertyDescriptor(value, String(i))!.value;
+    const item = targets[i];
     if (typeof item === 'boolean') {
       targets[i] = item ? 1 : 0;
     } else {
@@ -137,7 +148,7 @@ export function lfoTargets(value: unknown, clamp = false): LFOTargets {
       targets[i] = target;
     }
   }
-  return Object.freeze(targets);
+  return Object.freeze(targets) as LFOTargets;
 }
 
 /** Callers gate `noise` to voice version 8. */
@@ -161,63 +172,63 @@ export function operatorWaveform(value: unknown): OperatorWaveform {
 }
 
 function frozenKeyScale(scale: unknown): NonNullable<Operator['keyScale']> {
-  record(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
-  if (!Number.isInteger(scale.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
+  const data = record(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], 'keyScale');
+  if (!Number.isInteger(data.breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
   return Object.freeze({
-    breakpoint: numeric(scale.breakpoint, 'breakpoint'),
-    leftDbPerOctave: numeric(scale.leftDbPerOctave, 'leftDbPerOctave'),
-    rightDbPerOctave: numeric(scale.rightDbPerOctave, 'rightDbPerOctave'),
+    breakpoint: numeric(data.breakpoint, 'breakpoint'),
+    leftDbPerOctave: numeric(data.leftDbPerOctave, 'leftDbPerOctave'),
+    rightDbPerOctave: numeric(data.rightDbPerOctave, 'rightDbPerOctave'),
   });
 }
 
 function frozenPitchEnvelope(envelope: unknown): NonNullable<Voice['pitchEnvelope']> {
-  record(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], 'pitchEnvelope');
-  return Object.freeze({ a: numeric(envelope.a, 'a'), d: numeric(envelope.d, 'd'), r: numeric(envelope.r, 'r'),
-    initial: numeric(envelope.initial, 'initial'), peak: numeric(envelope.peak, 'peak'),
-    sustain: numeric(envelope.sustain, 'sustain'), final: numeric(envelope.final, 'final') });
+  const data = record(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], 'pitchEnvelope');
+  return Object.freeze({ a: numeric(data.a, 'a'), d: numeric(data.d, 'd'), r: numeric(data.r, 'r'),
+    initial: numeric(data.initial, 'initial'), peak: numeric(data.peak, 'peak'),
+    sustain: numeric(data.sustain, 'sustain'), final: numeric(data.final, 'final') });
 }
 
 export function validateVoice(input: unknown): FrozenVoice {
-  record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice', ['pitchEnvelope', 'pan']);
-  if (input.version !== 1 && input.version !== 2 && input.version !== 3 && input.version !== 4 && input.version !== 5 && input.version !== 6 && input.version !== 7 && input.version !== 8) throw new RangeError('Unsupported voice version');
-  const version = input.version as number;
-  if (version < 5 && Object.hasOwn(input, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
-  if (version < 8 && Object.hasOwn(input, 'pan')) throw new TypeError('voice pan requires voice version 8');
-  if (typeof input.name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(input.name)) {
+  const data = record(input, ['version', 'name', 'algorithm', 'feedback', 'modIndex', 'lfo', 'ops'], 'voice', ['pitchEnvelope', 'pan']);
+  const version = data.version;
+  if (version !== 1 && version !== 2 && version !== 3 && version !== 4 && version !== 5 && version !== 6 && version !== 7 && version !== 8) throw new RangeError('Unsupported voice version');
+  if (version < 5 && Object.hasOwn(data, 'pitchEnvelope')) throw new TypeError('pitchEnvelope requires voice version 5 or later');
+  if (version < 8 && Object.hasOwn(data, 'pan')) throw new TypeError('voice pan requires voice version 8');
+  const name = data.name;
+  if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) {
     throw new TypeError('Voice name must contain 1..64 letters, digits, underscores or hyphens');
   }
-  array(input.ops, 4, 4, 'ops');
-  record(input.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo',
+  const operators = array(data.ops, 4, 4, 'ops');
+  const lfoData = record(data.lfo, ['rate', 'amDepth', 'pmDepth'], 'lfo',
     version >= 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
-      input.version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : input.version === 4 ? ['waveform'] : []);
+      version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : version === 4 ? ['waveform'] : []);
   // Conditional object spreads define own data (CreateDataProperty): no inherited setter
   // or descriptor-field hook can intercept an approved optional field.
-  const rate = numeric(input.lfo.rate, 'rate');
-  const amDepth = numeric(input.lfo.amDepth, 'amDepth');
-  const pmDepth = numeric(input.lfo.pmDepth, 'pmDepth');
-  const waveform = Object.hasOwn(input.lfo, 'waveform') ? lfoWaveform(input.lfo.waveform) : 'sine';
+  const rate = numeric(lfoData.rate, 'rate');
+  const amDepth = numeric(lfoData.amDepth, 'amDepth');
+  const pmDepth = numeric(lfoData.pmDepth, 'pmDepth');
+  const waveform = Object.hasOwn(lfoData, 'waveform') ? lfoWaveform(lfoData.waveform) : 'sine';
   if (version < 8 && waveform === 'noise') throw new RangeError('noise LFO requires voice version 8');
   const lfo: LFO = Object.freeze({ rate, amDepth, pmDepth, waveform,
-    ...(Object.hasOwn(input.lfo, 'delay') ? { delay: numeric(input.lfo.delay, 'delay') } : {}),
-    ...(Object.hasOwn(input.lfo, 'sync') ? { sync: lfoSync(input.lfo.sync) } : {}),
-    ...(Object.hasOwn(input.lfo, 'phase') ? { phase: numeric(input.lfo.phase, 'phase') } : {}),
-    ...(Object.hasOwn(input.lfo, 'amTargets') ? { amTargets: lfoTargets(input.lfo.amTargets, true) } : {}),
-    ...(Object.hasOwn(input.lfo, 'pmTargets') ? { pmTargets: lfoTargets(input.lfo.pmTargets, true) } : {}) });
+    ...(Object.hasOwn(lfoData, 'delay') ? { delay: numeric(lfoData.delay, 'delay') } : {}),
+    ...(Object.hasOwn(lfoData, 'sync') ? { sync: lfoSync(lfoData.sync) } : {}),
+    ...(Object.hasOwn(lfoData, 'phase') ? { phase: numeric(lfoData.phase, 'phase') } : {}),
+    ...(Object.hasOwn(lfoData, 'amTargets') ? { amTargets: lfoTargets(lfoData.amTargets, true) } : {}),
+    ...(Object.hasOwn(lfoData, 'pmTargets') ? { pmTargets: lfoTargets(lfoData.pmTargets, true) } : {}) });
   // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
   const ops = [undefined, undefined, undefined, undefined] as unknown as FrozenOperator[];
   for (let i = 0; i < 4; i++) {
-    const op = input.ops[i];
-    if (op && typeof op === 'object' && version < 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate require voice version 7');
-    record(op, ['ratio', 'level', 'detune', 'adsr'], 'operator',
+    const source = operators[i];
+    if (source && typeof source === 'object' && version < 7 && (Object.hasOwn(source, 'waveform') || Object.hasOwn(source, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate require voice version 7');
+    const op = record(source, ['ratio', 'level', 'detune', 'adsr'], 'operator',
       version >= 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :
       version === 1 ? [] : version === 2 ? ['keyScale'] : version === 5 || version === 6 ?
         ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale'] : ['keyScale', 'velocitySensitivity']);
-    record(op.adsr, ['a', 'd', 's', 'r'], 'adsr', ['sr']);
-    // One own-property probe, so a proxy cannot answer the gate and the read differently.
-    const hasSr = Object.hasOwn(op.adsr, 'sr');
+    const envelope = record(op.adsr, ['a', 'd', 's', 'r'], 'adsr', ['sr']);
+    const hasSr = Object.hasOwn(envelope, 'sr');
     if (hasSr && version < 8) throw new TypeError('adsr.sr requires voice version 8');
-    const adsr: ADSR = { a: numeric(op.adsr.a, 'a'), d: numeric(op.adsr.d, 'd'), s: numeric(op.adsr.s, 's'), r: numeric(op.adsr.r, 'r'),
-      ...(hasSr ? { sr: numeric(op.adsr.sr, 'sr') } : {}) };
+    const adsr: ADSR = { a: numeric(envelope.a, 'a'), d: numeric(envelope.d, 'd'), s: numeric(envelope.s, 's'), r: numeric(envelope.r, 'r'),
+      ...(hasSr ? { sr: numeric(envelope.sr, 'sr') } : {}) };
     ops[i] = Object.freeze({ ratio: numeric(op.ratio, 'ratio'), level: numeric(op.level, 'level'),
       detune: numeric(op.detune, 'detune'), adsr: Object.freeze(adsr),
       ...(Object.hasOwn(op, 'velocitySensitivity') ? { velocitySensitivity: numeric(op.velocitySensitivity, 'velocitySensitivity') } : {}),
@@ -228,12 +239,12 @@ export function validateVoice(input: unknown): FrozenVoice {
       ...(Object.hasOwn(op, 'keyScale') ? { keyScale: frozenKeyScale(op.keyScale) } : {}) });
   }
   // Canonical key order: an optional voice pan sits between modIndex and lfo.
-  return Object.freeze({ version: 8, name: input.name,
-    algorithm: integer(input.algorithm, 7, 'algorithm'), feedback: integer(input.feedback, 7, 'feedback'),
-    modIndex: numeric(input.modIndex, 'modIndex'),
-    ...(Object.hasOwn(input, 'pan') ? { pan: numeric(input.pan, 'pan') } : {}),
+  return Object.freeze({ version: 8, name,
+    algorithm: integer(data.algorithm, 7, 'algorithm'), feedback: integer(data.feedback, 7, 'feedback'),
+    modIndex: numeric(data.modIndex, 'modIndex'),
+    ...(Object.hasOwn(data, 'pan') ? { pan: numeric(data.pan, 'pan') } : {}),
     lfo, ops: Object.freeze(ops) as unknown as Voice['ops'],
-    ...(Object.hasOwn(input, 'pitchEnvelope') ? { pitchEnvelope: frozenPitchEnvelope(input.pitchEnvelope) } : {}) } as Voice);
+    ...(Object.hasOwn(data, 'pitchEnvelope') ? { pitchEnvelope: frozenPitchEnvelope(data.pitchEnvelope) } : {}) } as Voice);
 }
 
 export function parseVoiceBank(source: string | readonly unknown[]): Map<string, FrozenVoice> {
@@ -245,10 +256,10 @@ export function parseVoiceBank(source: string | readonly unknown[]): Map<string,
     }
     input = JSON.parse(input);
   }
-  array(input, 1, MAX_BANK_VOICES, 'voice bank');
+  const values = array(input, 1, MAX_BANK_VOICES, 'voice bank');
   const bank = new Map<string, FrozenVoice>();
-  for (let i = 0; i < input.length; i++) {
-    const voice = validateVoice(input[i]);
+  for (let i = 0; i < values.length; i++) {
+    const voice = validateVoice(values[i]);
     if (bank.has(voice.name)) throw new TypeError(`Duplicate voice: ${voice.name}`);
     bank.set(voice.name, voice);
   }

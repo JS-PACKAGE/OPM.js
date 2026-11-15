@@ -4,6 +4,34 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Captured voice-bank data
+
+- Complete-voice validation now checks and copies the same captured own-data values, including nested expressive records. Previously, later descriptor callbacks could install root getters after validation, produce an invalid voice name, or substitute/coerce a version. Bank/operator/target arrays now capture bounded own-data length and slots before child validation; a changing property read can no longer expand direct bank parsing past 128 voices. The facade already bounded its outer array but also benefits from fixed complete-voice validation.
+- LFO targets reuse the native dense own-key array as their captured numeric output, avoiding a second slot-descriptor pass and separate output tuple. Intermediate record snapshots have null prototypes; optional fields still use own-data construction. All scalar/clamping, legacy, enum, detached-copy and freezing rules remain. No cache, trust shortcut, public API/type/format/dependency or DSP arithmetic changes. Proxy metadata traps remain caller code, not a sandbox boundary.
+- Six permanent consumer regressions cover late root/operator/bank accessors, changing length/version and LFO targets across strict and normalized consumers. Source and minified builds each preserve 3072 voice pairs/2275584 canonical ASCII bytes, 12 bank/facade pairs/580 voices, 24 bit-identical PCM pairs/30060 stereo frames, 77 ordinary refusal pairs, descriptor/alias graphs and detached mutations. All seven original reproductions now have zero getters/coercions and one bounded bank entry; 18 additional mutation/bounds/facade-atomicity cases pass. Raw property-read changes are intentional: observed strict reads fall from 29776 to zero, and normalizer reads from 1536 to 384 through captured LFO-target arrays. No unchanged-Proxy-trace claim is made.
+- Chromium 156.0.8078.4 native modules pass the same full consumer/audio comparisons and 18 corrected cases with zero page errors. No AudioContext is started; live AudioWorklet, physical-device/MIDI and listening acceptance remain unverified.
+
+This correctness fix is retained despite its bank-loading cost. Native CPU profiles still identify record validation as the dominant schema path. Collected-allocation sampling estimates 23.8% more schema-attributed allocation for 8192 complete mixed-bank parses/131072 voices; this includes collected temporaries, not retained/peak heap, object types/counts or GC frequency.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 whole-API measurements compare against aca5fe9. Each build runs twelve profiles, six fresh process pairs per order in both orders (288 children), equal-length complete module roots, 60 ms warmup and at least 120 ms cumulative measured API-batch time per child. Input construction and complete output checks are outside timing; all validation/copying and the facade cycle's export are inside. Wall includes common dispatch/clock overhead; user+system CPU includes the common checksum loop. Entries are median relative-throughput ranges (reference/candidate time minus one), not time reductions, confidence intervals or deadline guarantees. Negative controls and the offline-note slowdown are retained; only LFO-target normalization improves here.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Complete minimal v8 validation | −13.8 to −13.6% | −13.6 to −13.3% | −13.6 to −13.4% | −13.3 to −13.1% |
+| Complete expressive v8 validation | −11.5 to −11.4% | −10.9 to −10.5% | −11.7 to −11.4% | −14.0 to −13.9% |
+| One-voice array bank | −12.7 to −12.1% | −12.0 to −11.2% | −13.2 to −12.9% | −15.2 to −15.0% |
+| 16-voice mixed-version array bank | −13.4 to −12.8% | −17.4 to −15.6% | −14.1 to −10.6% | −15.7 to −12.3% |
+| 128-voice array bank | −12.5 to −10.9% | −6.2 to −5.0% | −14.3 to −13.5% | −15.4 to −15.2% |
+| 16-voice mixed-version JSON bank | −10.1 to −9.6% | −9.4 to −9.0% | −10.9 to −10.4% | −9.9 to −9.4% |
+| 128-voice JSON bank | −7.8 to −7.1% | −6.3 to −5.2% | −9.1 to −7.7% | −7.4 to −5.7% |
+| 16-voice facade replace + export | −8.5 to −7.4% | −7.7 to −6.8% | −9.8 to −8.7% | −8.8 to −7.7% |
+| 128-voice facade export | −10.0 to −9.8% | −10.2 to −9.7% | −7.9 to −7.3% | −8.2 to −7.0% |
+| Raw expressive normalization control | +2.3 to +2.5% | +2.1 to +2.4% | +1.7 to +2.4% | +1.7 to +2.3% |
+| Prepared normalization control | +4.6 to +4.8% | +4.6 to +4.8% | +5.3 to +6.1% | +5.3 to +6.1% |
+| Complete offline-note control | −1.2 to −0.7% | −1.6 to −1.0% | −1.1 to −0.8% | −1.8 to −1.3% |
+
+Verification: scoped integration-owner A/C review, 608 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, empty runtime dependency tree, byte-identical public schema/normalizer/facade/core declarations and native browser/generated-documentation proofs. This is not independent release/publication approval.
+
 ### Private prepared operator slots
 
 - Normalized copies of privately registered immutable prepared voices now read their owned native operator-array slots directly. The sole producer creates four own data cells, copies and validates their operators, then freezes every owned operator/ADSR/key-scale object, array and root before registration. The fast path avoids repeating native slot-descriptor construction and explicit String(i) calls; it adds no flag arguments, helper abstraction, cache, brand, public type, format or dependency. Every unregistered raw/frozen/forged/Proxy root retains the original own-data slot checks and reflection order. Array type/length, captured field/name/version and all numeric/legacy checks, detached mutable copies, freezing and DSP math remain unchanged.
