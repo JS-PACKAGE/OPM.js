@@ -4,6 +4,21 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Expected-path deployment matching
+
+- Existing copyAssets deployments use their already validated expected-path Set to classify listed assets without repeating each file's walk-time lstat. Primitive readdir names, fresh root/directory checks and manifest regular-file/size admission remain intact; every expected asset still receives a fresh regular-file and exact-size check immediately before its original SHA-256 read. No Dirent metadata, extra Set, traversal, persistent state, host-stat cache or parallelism is introduced.
+- Source and minified probes each preserve all 225 deployed files and 1939873 bytes across three fixtures, exact manifest/result values and ordinary rwx permissions. Fresh-copy filesystem API traces are identical; reused non-lstat operations retain their exact order and all target hash reads. Sixteen real-filesystem cases per build preserve static acceptance, including harmless empty directories, and reject extra/missing/oversized data, links, directories and sockets without host writes. Ordinary prototype name hooks cannot redirect the primitive-name walk.
+- The fresh regular-file check also rejects a same-size symlink substituted after enumeration but before hashing, without reading its target; the previous implementation admitted the controlled matching-content link. An isolated child-process regression covers this edge. All 595 tests, type checking, security checks and the empty runtime-dependency listing pass. The real executable passes copy/reuse/help/usage/refusal and 166-asset loopback HTTP integrity checks, including corrupt-byte and unsafe-URL rejection. No public API, deployment format, dependency or audio-render change.
+- Six fresh-process Node.js 26 pairs per order measure complete copyAssets calls with equal-length sibling implementation roots, 160 ms warm-up and at least 400 ms cumulative measured copy time per child. Fixture setup and destination cleanup are outside each wall/user+system CPU interval. The immutable installed fixture has 167 output files and 1904997 asset bytes excluding its manifest. lstat counts are native filesystem API calls for the entire operation, not kernel syscalls or GC counts. All fresh-copy controls, including the negative source-minimal result, remain visible below; percentages are relative median deployment throughput, not confidence intervals, disk IOPS, audio throughput or universal guarantees, and depend on the filesystem and OS cache:
+
+| Complete copyAssets workload | lstat calls, before → after | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- | --- |
+| Existing matching minimal tree, 17 files | 64 → 48 | +6.8–7.2% | +6.7–7.1% | +5.6–6.5% | +5.8–6.0% |
+| Existing matching nested tree, 41 files | 145 → 105 | +7.1–8.5% | +6.8–7.6% | +8.0–9.7% | +7.6–8.1% |
+| Existing matching installed tree, 167 files | 523 → 357 | +6.9–7.0% | +7.0–7.1% | +6.3–7.0% | +6.4–6.8% |
+| Fresh minimal tree, 17 files (control) | Unchanged | −3.0% to +0.6% | −1.7% to −0.1% | −0.1% to +1.5% | +0.1% |
+| Fresh installed tree, 167 files (control) | Unchanged | +0.5–0.6% | −0.5% to +0.5% | +0.5–1.0% | +0.8–1.6% |
+
 ### Adjacent staged-asset directories
 
 - Fresh copyAssets deployments remember only the last established parent inside their private staging transaction, avoiding repeated recursive mkdir calls for adjacent files. No directory Set, extra traversal, parallel copying, source/host metadata caching or persistent state is introduced.

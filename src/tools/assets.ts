@@ -127,12 +127,19 @@ async function matching(destination: string, manifest: Manifest): Promise<boolea
   async function walk(directory: string, prefix = ''): Promise<boolean> {
     for (const name of await readdir(directory)) {
       const path = prefix + name;
-      const stat = await lstat(join(directory, name));
-      if (stat.isSymbolicLink()) return false;
-      if (stat.isDirectory()) { if (!await walk(join(directory, name), `${path}/`)) return false; }
-      else {
-        if (!stat.isFile() || !expected.has(path) || ++count > expected.size) return false;
-        if (path === MANIFEST) manifestSize = stat.size;
+      // Expected assets get fresh type/size checks below, immediately before hashing.
+      if (expected.has(path)) {
+        if (++count > expected.size) return false;
+        if (path === MANIFEST) {
+          const stat = await lstat(join(directory, name));
+          if (!stat.isFile()) return false;
+          manifestSize = stat.size;
+        }
+      } else {
+        const target = join(directory, name);
+        const stat = await lstat(target);
+        if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
+        if (!await walk(target, `${path}/`)) return false;
       }
     }
     return true;
@@ -144,7 +151,7 @@ async function matching(destination: string, manifest: Manifest): Promise<boolea
   for (const asset of manifest.assets) {
     const path = join(destination, ...asset.path.split('/'));
     const stat = await lstat(path);
-    if (stat.size !== asset.bytes || digest(await readFile(path)) !== asset.sha256) return false;
+    if (!stat.isFile() || stat.size !== asset.bytes || digest(await readFile(path)) !== asset.sha256) return false;
   }
   return true;
 }

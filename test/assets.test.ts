@@ -79,6 +79,49 @@ test('copyAssets atomically creates a complete verified tree and never overwrite
   } finally { await rm(temp, { recursive: true, force: true }); }
 });
 
+test('existing deployment rejects a file replaced by a same-size symlink before hashing', async () => {
+  const { root, temp } = await fixture();
+  try {
+    const destination = join(temp, 'deployment');
+    await copyAssets({ destination, packageRoot: root });
+    const program = `
+      import assert from 'node:assert/strict';
+      import fs from 'node:fs/promises';
+      import { syncBuiltinESMExports } from 'node:module';
+      import { dirname, join, resolve } from 'node:path';
+      import { copyAssets } from ${JSON.stringify(new URL('../src/tools/assets.js', import.meta.url).href)};
+      const destination = ${JSON.stringify(destination)}, packageRoot = ${JSON.stringify(root)};
+      const target = join(destination, 'api', 'index.js'), metadata = join(destination, 'opm-assets.json');
+      const bytes = await fs.readFile(target);
+      // Match lstat's symlink size to the expected payload; size and hash alone admit it.
+      const relative = '../../' + 'x'.repeat(bytes.length - 6);
+      const outside = resolve(dirname(target), relative);
+      await fs.writeFile(outside, bytes);
+      const originalReadFile = fs.readFile;
+      let swapped = false, targetReads = 0;
+      fs.readFile = async (path, ...args) => {
+        if (path === target) targetReads++;
+        const result = await originalReadFile(path, ...args);
+        if (path === metadata && !swapped) {
+          swapped = true;
+          await fs.rm(target);
+          await fs.symlink(relative, target);
+        }
+        return result;
+      };
+      syncBuiltinESMExports();
+      try {
+        await assert.rejects(copyAssets({ destination, packageRoot }));
+        assert.equal(swapped, true);
+        assert.equal(targetReads, 0);
+      } finally { fs.readFile = originalReadFile; syncBuiltinESMExports(); }
+      assert.equal(await fs.readlink(target), relative);
+      assert.deepEqual(await fs.readFile(outside), bytes);
+    `;
+    execFileSync(process.execPath, ['--input-type=module', '-e', program], { encoding: 'utf8' });
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
 test('a distribution missing any entry point, including the effects worklet, is rejected before copying', async () => {
   for (const missing of REQUIRED) {
     const { root, temp } = await fixture();
