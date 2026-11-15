@@ -4,6 +4,20 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Adjacent staged-asset directories
+
+- Fresh copyAssets deployments remember only the last established parent inside their private staging transaction, avoiding repeated recursive mkdir calls for adjacent files. No directory Set, extra traversal, parallel copying, source/host metadata caching or persistent state is introduced.
+- Canonical overlap/symlink admission, file/count/byte and companion/LICENSE checks, every COPYFILE_EXCL copy, staged-target SHA-256, manifest generation, publication checks and failure cleanup remain unchanged. Source and minified probes each match all 225 deployed files and 1939511 bytes across minimal, nested and installed-tree fixtures, including manifest/result values and ordinary rwx permissions. Non-mkdir filesystem API operations retain their exact order; three reuse cases and four injected mkdir/copy/content/publication failures preserve host data and remove private staging.
+- The actual node bin/opm-assets.js executable passes fresh copy, immutable reuse, help, usage errors, host-file refusal, a complete 166-asset loopback HTTP integrity check, corrupt-byte rejection and unsafe-URL rejection with the original 0/1/2 exit classes. All 594 tests, type checking and security checks pass; npm ls --omit=dev is empty. No public API, deployment format, dependency or runtime-audio change.
+- Six fresh-process Node.js 26 pairs per order measure complete copyAssets calls, using equal-length sibling implementation roots and identical immutable package fixtures. Each child warms for 160 ms and collects at least 400 ms of cumulative measured copy time; fixture setup and destination removal are outside each wall/user+system CPU interval. The installed fixture contains 167 output files and 1904635 asset bytes excluding its manifest. Positive percentages mean relative median deployment throughput, not disk IOPS or audio-render throughput; ranges include both orders and the unchanged reuse control. mkdir counts include the outer destination-parent call. Results depend on the filesystem and OS cache and are not confidence intervals or universal performance guarantees:
+
+| Complete deployment workload | mkdir calls, before → after | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- | --- |
+| Fresh minimal tree, 17 files | 17 → 6 | +4.7–6.5% | +5.2–5.6% | +5.7–6.5% | +6.4% |
+| Fresh nested tree, 41 files | 41 → 11 | +5.6% | +5.3–6.8% | +6.9–7.2% | +7.0–7.6% |
+| Fresh installed tree, 167 files | 167 → 10 | +9.7–9.9% | +8.9–9.2% | +8.2–8.9% | +8.2–9.9% |
+| Existing matching installed tree, 167 files | 0 → 0 | −0.2% to +0.2% | −0.2% to +0.2% | −0.2% to +0.1% | −0.3% to 0.0% |
+
 ### Control-free offline onset maps
 
 - Offline frame planning no longer builds an onset lookup for immutable scores containing notes and explicit stops but no controls. The independent note-only qualification is preserved: explicit stops still run, including cancellation of pending onsets. Controlled and unregistered snapshots retain the original lookup and ordering paths.

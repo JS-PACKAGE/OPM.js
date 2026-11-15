@@ -184,9 +184,15 @@ export async function copyAssets(options: CopyAssetsOptions): Promise<AssetDeplo
   await mkdir(dirname(destination), { recursive: true });
   const staging = await mkdtemp(join(dirname(destination), '.opm-assets-'));
   try {
+    // Remember only adjacent parents inside this fresh private staging tree.
+    let previousDirectory = staging;
     for (const asset of manifest.assets) {
       const target = join(staging, ...asset.path.split('/'));
-      await mkdir(dirname(target), { recursive: true });
+      const directory = dirname(target);
+      if (directory !== previousDirectory) {
+        await mkdir(directory, { recursive: true });
+        previousDirectory = directory;
+      }
       await copyFile(asset.path === 'LICENSE' ? join(root, 'LICENSE') : join(source, ...asset.path.split('/')), target, constants.COPYFILE_EXCL);
       if (digest(await readFile(target)) !== asset.sha256) throw new Error('Distribution changed during copying');
     }
