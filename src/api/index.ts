@@ -148,6 +148,8 @@ interface EventObserver {
   listener: ((event: OPMEvent) => void) | undefined;
 }
 const EVENT_OBSERVERS = new WeakMap<OPM, Set<EventObserver>>();
+// Replacement creates a new owned map; successful in-place edits invalidate its bounded export.
+const BANK_EXPORTS = new WeakMap<Map<string, NormalizedVoice>, string>();
 const COMMAND_NAMES: readonly CommandName[] = ['stop', 'updateNote', 'allNotesOff', 'panic', 'setMixGain', 'setTuning'];
 const CONTEXT_STATES: readonly ContextState[] = ['running', 'suspended', 'interrupted', 'closed'];
 
@@ -423,6 +425,7 @@ export class OPM {
     const bank = this._voices;
     if (!bank.has(name) && bank.size >= MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
     bank.set(name, patch);
+    BANK_EXPORTS.delete(bank);
   }
 
   /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
@@ -444,19 +447,26 @@ export class OPM {
   removeVoice(name: string): boolean {
     if (this._disposed) throw new Error('OPM is disposed');
     voiceName(name);
-    return this._voices.delete(name);
+    const bank = this._voices;
+    const removed = bank.delete(name);
+    if (removed) BANK_EXPORTS.delete(bank);
+    return removed;
   }
 
   /** Canonical versioned entries, detached from the immutable registry and UTF-8 bounded. */
   exportVoiceBank(): string {
     if (this._disposed) throw new Error('OPM is disposed');
-    if (this._voices.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
-    const entries = Array.from(this._voices.values(), patch => validateVoice(patch));
+    const bank = this._voices;
+    if (bank.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
+    const cached = BANK_EXPORTS.get(bank);
+    if (cached !== undefined) return cached;
+    const entries = Array.from(bank.values(), patch => validateVoice(patch));
     const output = JSON.stringify(bankJsonData(entries));
     // Validated text fields and canonical keys are ASCII, so character and UTF-8 byte counts match.
     if (output.length > MAX_BANK_BYTES) {
       throw new RangeError('Voice bank exceeds 256 KiB');
     }
+    BANK_EXPORTS.set(bank, output);
     return output;
   }
 
@@ -936,6 +946,7 @@ export class OPM {
   dispose(): Promise<void> {
     if (this._disposePromise) return this._disposePromise;
     this._disposed = true;
+    BANK_EXPORTS.delete(this._voices);
     const finish = () => {
       const observers = EVENT_OBSERVERS.get(this);
       if (observers) {

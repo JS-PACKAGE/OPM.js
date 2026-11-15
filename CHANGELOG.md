@@ -4,6 +4,38 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Immutable bank export cache
+
+- Repeated `exportVoiceBank()` calls on an unchanged registry now reuse its successful bounded canonical JSON string. The module-private weak cache is keyed by the owned native map, not raw caller data or a public identity flag. A miss retains full validation, null-prototype copying and the 256 KiB UTF-8 limit; oversized output is never cached. Disposed/capacity checks precede cache hits.
+- Successful loads invalidate after the final post-validation commit, including when raw metadata first mutates/replaces/clears the registry and exports an intermediate bank. Successful removals invalidate; replacement/clear use new map identities, and dispose drops the current entry. Failed/no-op operations preserve valid current content. Each owned map retains at most one successful bounded string, and weak keys do not keep replaced maps alive.
+- Added a consumer regression for repeated exports after overwrite/remove/replace/clear, defensive map edits and nested mutation/replacement/export. Existing inherited-JSON-hook coverage now exercises warm and newly invalidated exports; oversized-output coverage checks repeated refusal. Native source/minified comparisons each preserve 38 complete history-wire pairs, four independent-host wire pairs and 64 complete alternating workload-wire pairs. Five reentrant cases per build cover mutation/replacement/clear and failed raw/capacity admission; getter/function inherited JSON hooks remain uncalled.
+- Source/minified/Chromium 156.0.8078.4 each retain 3072 voice pairs/2275584 canonical ASCII bytes, 12 bank/facade pairs/580 voices, 24 bit-identical PCM pairs/30060 stereo frames, 77 ordinary refusals, descriptor/alias graphs, detached mutations, all 18 captured-data cases, post-validation capacity behavior and 128 complete unfiltered load/reflection pairs/30352 caller events. Browser cache histories/isolation also pass with zero page errors, without starting an AudioContext. Normalizer/schema/worklet/DSP source and public declarations remain unchanged.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against 50b1023: sixteen whole-consumer profiles, six fresh process pairs per order in both orders (384 children per build), equal-length complete module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Warm profiles alternate two independently populated banks, serialize both before timing and measure 256-call batches; cache lookup/guards, dispatch, a rolling output-character/length checksum and common clock overhead remain inside timing. Cold profiles include complete public replacement/parsing/export; invalidation profiles include load or remove/load/export, and registry-read controls include defensive map copies. Fixture construction and full alternating wire admission are outside timing.
+
+Warm rows show rounded median throughput ratios (reference/candidate); other rows show median relative-throughput changes (reference/candidate minus one), each ranged across the two orders. The very large warm ratios compare full canonical validation/copy/serialization against returning an existing primitive string: these JIT-hot batched cache-hit results are not one-off API latency, cold-path, application, DSP or browser speedup claims. CPU includes user+system and common checksum overhead. Negative controls remain visible; no confidence interval, physical allocation/GC count or deadline guarantee is claimed.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Warm unchanged empty bank | 19.8–20.1× | 16.7× | 20.0–20.1× | 16.8–16.9× |
+| Warm unchanged 1-voice bank | 2009–2026× | 2018–2043× | 2064–2066× | 2085–2086× |
+| Warm unchanged 8-voice bank | 15234–15252× | 15152–15243× | 14984–15447× | 15080–15416× |
+| Warm unchanged 128-voice bank | 241096–244435× | 226475–230403× | 239043–240616× | 226692–228165× |
+| Cold replace + export 1 voice | +2.1 to +2.9% | −0.2 to +1.5% | +1.6 to +2.1% | +1.7 to +2.4% |
+| Cold replace + export 16 voices | −0.9 to −0.2% | −0.7 to +0.3% | −0.2% | −0.2 to +0.3% |
+| Cold replace + export 128 voices | −0.7 to −0.6% | +0.3 to +0.5% | −1.1 to +0.3% | −0.8 to +0.2% |
+| Raw load + export 1 voice | −0.5 to +0.1% | −1.0 to −0.5% | −0.4 to +0.2% | −1.2 to −0.5% |
+| Prepared load + export 1 voice | −0.1 to +0.4% | −0.5 to −0.4% | −1.4 to +1.0% | −1.4 to −0.1% |
+| Prepared load + export 128 voices | −0.5 to +0.6% | −1.0 to +0.7% | −1.5 to −0.3% | −1.4 to −0.4% |
+| Prepared remove + load + export 128 voices | −0.5% | −0.5 to −0.3% | −0.4 to −0.1% | −0.3 to +0.7% |
+| Raw minimal load + registry read | −0.7 to +0.3% | −0.7 to +0.3% | −1.0 to +0.3% | −0.9 to +0.3% |
+| Prepared minimal load + registry read | −0.6 to −0.3% | −0.6 to −0.2% | −1.0% | −1.0 to −0.9% |
+| Full-bank prepared load + registry read | −1.7 to +0.1% | −2.2 to +0.5% | −0.6 to +0.6% | −0.9 to +1.6% |
+| Prepared normalization control | −0.6 to +0.6% | −0.5 to +0.5% | +0.2 to +0.3% | +0.1 to +0.3% |
+| Complete offline-note control | 0.0 to +1.5% | 0.0 to +2.1% | 0.0 to +0.1% | +0.1% |
+
+Verification: scoped integration-owner A/C review, 610 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies, byte-identical facade/schema/normalizer/core declarations and native browser/generated-documentation proofs. No release/publication, live AudioWorklet, physical-device/MIDI or listening acceptance is claimed.
+
 ### Post-validation bank capacity
 
 - Fixed a facade admission gap: raw voice metadata callbacks could fill the registry, replace its map, or exchange a previously present outer name after `loadVoice()` checked capacity, allowing a 129th voice. Loading now captures the current registry after validation, checks capacity/name presence again and commits to that same map. The original early guard still rejects a full bank before invoking raw metadata. Caller-approved nested mutations remain intact on rejection; existing-name replacement at capacity is still allowed.

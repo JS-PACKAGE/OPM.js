@@ -886,10 +886,16 @@ test('bank exports use registry names, frozen detached entries and no inherited 
     assert.throws(() => { snapshot.ops[0].adsr.a = 10; }, TypeError);
     assert.deepEqual(snapshot.lfo.amTargets, [1, 0, 0.5, 1]);
     assert.throws(() => { (snapshot.lfo.amTargets as unknown as number[])[0] = 0; }, TypeError);
+    const plain = opm.exportVoiceBank();
     for (const prototype of [Object.prototype, Array.prototype]) {
       Object.defineProperty(prototype, 'toJSON', { configurable: true, get() { reads++; throw Error('prototype getter ran'); } });
     }
     const output = opm.exportVoiceBank();
+    assert.equal(output, plain);
+    const feedback = brass.feedback === 0 ? 1 : 0;
+    opm.loadVoice('registered', { ...brass, feedback });
+    const changed = opm.exportVoiceBank();
+    assert.equal((JSON.parse(changed) as CompleteVoiceInput[])[0]!.feedback, feedback);
     assert.equal(reads, 0);
     const exported = JSON.parse(output) as CompleteVoiceInput[];
     assert.equal(exported[0]!.name, 'registered');
@@ -904,6 +910,54 @@ test('bank exports use registry names, frozen detached entries and no inherited 
     else Reflect.deleteProperty(Array.prototype, 'toJSON');
     await opm.dispose();
   }
+});
+
+test('repeated bank exports follow in-place edits, replacements and reentrant loads', async () => {
+  const opm = new OPM();
+  const changed: Voice = { ...brass, feedback: brass.feedback === 0 ? 1 : 0 };
+  try {
+    opm.replaceVoiceBank([]);
+    assert.equal(opm.exportVoiceBank(), '[]');
+    opm.loadVoice('edited', brass);
+    const original = opm.exportVoiceBank();
+    opm.loadVoice('edited', changed);
+    const edited = opm.exportVoiceBank();
+    assert.notEqual(edited, original);
+    assert.equal(parseVoiceBank(edited).get('edited')!.feedback, changed.feedback);
+    (opm.voices as Map<string, unknown>).clear();
+    assert.equal(opm.removeVoice('missing'), false);
+    assert.equal(opm.exportVoiceBank(), edited);
+    assert.equal(opm.removeVoice('edited'), true);
+    assert.equal(opm.exportVoiceBank(), '[]');
+    opm.replaceVoiceBank([{ ...brass, name: 'replacement' }]);
+    assert.deepEqual([...parseVoiceBank(opm.exportVoiceBank()).keys()], ['replacement']);
+    opm.replaceVoiceBank([]);
+    assert.equal(opm.exportVoiceBank(), '[]');
+
+    for (const mode of ['mutate', 'replace']) {
+      opm.replaceVoiceBank([{ ...brass, name: 'kept' }]);
+      opm.exportVoiceBank();
+      let entered = false;
+      const raw = new Proxy(structuredClone(brass), {
+        getOwnPropertyDescriptor(target, key) {
+          if (key === 'version' && !entered) {
+            entered = true;
+            if (mode === 'mutate') opm.loadVoice('nested', changed);
+            else opm.replaceVoiceBank([{ ...changed, name: 'nested' }]);
+            const names = mode === 'mutate' ? ['kept', 'nested'] : ['nested'];
+            assert.deepEqual([...parseVoiceBank(opm.exportVoiceBank()).keys()], names);
+          }
+          return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+      });
+      opm.loadVoice('outer', raw);
+      assert.equal(entered, true);
+      const bank = parseVoiceBank(opm.exportVoiceBank());
+      assert.deepEqual([...bank.keys()], mode === 'mutate' ? ['kept', 'nested', 'outer'] : ['nested', 'outer']);
+      assert.equal(bank.get('nested')!.feedback, changed.feedback);
+      assert.equal(bank.get('outer')!.feedback, brass.feedback);
+    }
+  } finally { await opm.dispose(); }
 });
 
 test('registry size is bounded, replacement frees capacity, and disposed bank operations reject', async () => {
@@ -992,6 +1046,7 @@ test('valid array banks cannot export beyond the UTF-8 output budget', async () 
   })) as Voice['ops'], };
   try {
     opm.replaceVoiceBank(Array.from({ length: 128 }, (_, index) => ({ ...detailed, name: String(index).padStart(64, 'v') })));
+    assert.throws(() => opm.exportVoiceBank(), /256 KiB/);
     assert.throws(() => opm.exportVoiceBank(), /256 KiB/);
     assert.equal(opm.voices.size, 128, 'failed export leaves the registry intact');
     opm.replaceVoiceBank([detailed]);
