@@ -80,7 +80,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   if ((version as number) < 8 && Object.hasOwn(input, 'pan')) throw new TypeError('voice pan requires voice version 8');
   const rawOps = field(input, 'ops');
   if (!Array.isArray(rawOps) || rawOps.length !== 4) throw new TypeError('ops must contain four operators');
-  if (Reflect.ownKeys(rawOps).length !== 5) throw new TypeError('ops has unknown fields');
+  if (!known && Reflect.ownKeys(rawOps).length !== 5) throw new TypeError('ops has unknown fields');
   // Own placeholder slots: later index writes cannot reach inherited indexed accessors.
   const ops = [undefined, undefined, undefined, undefined] as unknown as Operator[];
   for (let i = 0; i < 4; i++) {
