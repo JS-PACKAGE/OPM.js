@@ -213,7 +213,7 @@ function voiceName(name: unknown): asserts name is string {
   if (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name)) throw new TypeError('Invalid voice name');
 }
 
-/** Only validated snapshots reach this copier; null prototypes exclude inherited JSON hooks. */
+/** Inputs are owned data-only snapshots; null prototypes exclude inherited JSON hooks. */
 function bankJsonData(value: unknown): unknown {
   if (value === null || typeof value !== 'object') return value;
   if (Array.isArray(value)) {
@@ -223,7 +223,7 @@ function bankJsonData(value: unknown): unknown {
     return result;
   }
   const result: Record<string, unknown> = Object.create(null);
-  for (const key of Object.keys(value)) result[key] = bankJsonData(Object.getOwnPropertyDescriptor(value, key)!.value);
+  for (const key of Object.keys(value)) result[key] = bankJsonData((value as Record<string, unknown>)[key]);
   return result;
 }
 
