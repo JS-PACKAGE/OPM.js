@@ -4,6 +4,35 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Exact-alias render admission
+
+- Synth.render shares the captured native kind/length admission result only when its two output arguments are the exact same object. Distinct views still validate independently, including equal-buffer and overlapping views. Bounds, error/reentrancy order, buffer write order, public declarations, voice format and sound math stay unchanged; this is not mono downmix or a cross-call metadata cache. The idle path retains its existing single-fill behavior for exact aliases.
+- Source and minified proofs each preserve 2969 lifecycles, 109971 full-state checkpoints and 24368337 stereo frames, including 480 mapping cases, 9600 aliased blocks and 2345568 negative-zero samples. PCM, every DSP scalar, own-data descriptors, alias graphs and typed DSP bytes agree. Opaque callables compare arity and alias identity, not minifier-dependent names or function source.
+- Each build also preserves 50 native-buffer pairs, including 22 refusals, six across-call resize/growth pairs and two additional retirement-callback/reentrant-render pairs. Same and distinct/overlapping outputs, shadow metadata/fill/tag getters, subclasses, cross-realm views, detached/resizable buffers and growable SharedArrayBuffer views agree with zero caller getter reads or numeric coercions. Failures preserve engine state and buffers. Concurrent GSAB scheduling is not measured; its nonshrinking safety follows the original first-left-length bound.
+- Chromium 156.0.8078.4 native ES modules additionally preserve 216 paired pure-DSP lifecycles, 3456 full-state checkpoints and 442368 stereo frames, including 1152 exact-alias blocks, four shadow-metadata pairs and three atomic malformed-input refusals. All eight algorithms, three mapped rate/quality settings, sine/mixed/noise shapes, same/distinct/overlapping views, voice pan, release and readmission agree. No AudioContext is started; this is not live audio, AudioWorklet continuity, physical-device/MIDI or listening acceptance.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements use six fresh process pairs in each order, equal-length module roots, 160 ms warmup and at least 400 ms cumulative measured whole-render API-batch time per child. Construction and initial byte/frame checks are outside timing. Wall includes common batch/dispatch/clock overhead; process user+system CPU also includes the common batch/checksum loop. Every profile and both orders are retained as relative-throughput median ranges (reference/candidate minus one), including negative controls. The stable gain is idle exact-alias admission, not oscillator/active-voice blanket acceleration, mono downmix, allocation/GC counts, confidence intervals, AudioWorklet continuity or real-time-deadline guarantees.
+
+| Complete render workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Idle exact alias, 1 frame | +11.7–12.2% | +11.7–12.2% | +11.7–13.2% | +11.8–13.2% |
+| Idle exact alias, 128 frames | +8.7–8.8% | +8.7–8.8% | +7.8–11.9% | +7.8–11.9% |
+| Idle exact alias, 1024 frames | +2.5–4.6% | +2.5–4.5% | +3.2–4.2% | +3.2–4.2% |
+| Idle distinct stereo, 128 frames (control) | +1.6–2.1% | +1.3–2.1% | −1.5% to +0.9% | −1.4% to +0.8% |
+| Idle distinct overlapping views, 128 frames (control) | −0.8% to +1.4% | −0.8% to +1.4% | +2.5–3.5% | +2.4–3.6% |
+| Idle exact alias, offset 13 / 128 frames | +6.7–7.2% | +6.7–7.2% | +7.3–8.5% | +7.3–8.5% |
+| One sine voice, exact alias / 128 frames | −0.5% to +1.4% | −0.5% to +1.4% | −0.2% to +0.5% | −0.2% to +0.5% |
+| Eight sine voices, exact alias / 128 frames | −0.2% to +0.5% | −0.2% to +0.4% | −0.1% to +0.4% | −0.1% to +0.4% |
+| Eight sine voices, distinct stereo / 128 frames (control) | 0.0–0.2% | 0.0–0.2% | +0.1–0.2% | +0.1–0.2% |
+| One mixed-wave voice, exact alias / 128 frames | +0.5% | +0.5% | +0.4–0.6% | +0.5–0.6% |
+| Eight mixed-wave voices, distinct stereo / 128 frames (control) | 0.0–0.3% | 0.0–0.3% | +0.5–0.6% | +0.5–0.6% |
+| Eight noise voices, exact alias / 128 frames | 0.0–0.2% | 0.0–0.2% | +0.1–0.2% | +0.1–0.2% |
+| Eight noise voices, distinct stereo / 128 frames (control) | −0.4% to +0.1% | −0.4% to +0.1% | −0.2% to +0.2% | −0.2% to +0.2% |
+| One high-quality sine voice, exact alias / 128 frames | +0.1% | +0.1% | +0.2% | +0.2% |
+| One eco sine voice, distinct stereo / 128 frames (control) | +0.4–2.7% | +0.3–2.7% | +2.3–2.9% | +2.3–2.9% |
+
+Verification: all 598 tests pass, together with TypeScript/public/core-only declaration checks, the 42-source/55-built security gate and the empty runtime-dependency listing. The public synth declaration remains byte-identical.
+
 ### Atomic voice version snapshots
 
 - Strict voice admission now validates and uses one own-data version descriptor snapshot. Only absence defaults to v8; explicit undefined/null/nonmembers and a present accessor still reject. A changing Proxy can no longer validate a later scalar while earlier captured data reaches numeric feature gates, or turn a later accessor descriptor into an inherited descriptor-value read.

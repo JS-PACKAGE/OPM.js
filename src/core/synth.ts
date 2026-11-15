@@ -2374,10 +2374,12 @@ export class Synth {
 
   render(left: Float32Array, right: Float32Array, offset = 0, length?: number): void {
     if (this.rendering) throw new Error('render cannot be called reentrantly');
-    if (typedArrayKind.call(left) !== 'Float32Array' || typedArrayKind.call(right) !== 'Float32Array') {
+    // Identical outputs share native metadata; overlapping views still validate separately.
+    const sameOutput = right === left;
+    if (typedArrayKind.call(left) !== 'Float32Array' || (!sameOutput && typedArrayKind.call(right) !== 'Float32Array')) {
       throw new RangeError('render requires native Float32Arrays');
     }
-    const leftLength = typedArrayLength.call(left), rightLength = typedArrayLength.call(right);
+    const leftLength = typedArrayLength.call(left), rightLength = sameOutput ? leftLength : typedArrayLength.call(right);
     if (!Number.isSafeInteger(offset) || offset < 0) {
       throw new RangeError('render requires an in-bounds offset and length');
     }
@@ -2390,7 +2392,7 @@ export class Synth {
     if (this.voices.length === 0 && this.fades.length === 0 && this.spillRemaining === 0 && this.decimatorIdleMask === DECIMATOR_IDLE_BOTH &&
         dcState[0] === 0 && dcState[1] === 0 && dcState[2] === 0 && dcState[3] === 0) {
       typedArrayFill.call(left, 0, offset, offset + length);
-      if (right !== left) typedArrayFill.call(right, 0, offset, offset + length);
+      if (!sameOutput) typedArrayFill.call(right, 0, offset, offset + length);
       (this as MutableCounters).currentFrame += length;
       return;
     }
