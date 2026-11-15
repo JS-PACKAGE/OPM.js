@@ -1,4 +1,4 @@
-import { normalizeVoice } from '../voices/normalize.js';
+import { prepareVoice } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import { MAX_BANK_BYTES, MAX_BANK_VOICES, parseVoiceBank, validateVoice } from '../voices/schema.js';
 import type { CompleteVoiceInput, FrozenVoice, NormalizedVoice, VoiceInput } from '../voices/schema.js';
@@ -196,18 +196,13 @@ function ownData(value: unknown, allowed: readonly string[], label: string): Rec
 }
 
 function frozenPatch(input: VoiceInput, name?: string): NormalizedVoice {
-  const normalized = normalizeVoice(input);
-  // A spread defines `name` as own data; assigning it could reach an inherited setter.
-  const patch = name === undefined ? normalized : { ...normalized, name };
-  for (const op of patch.ops) {
-    Object.freeze(op.adsr);
-    if (Object.hasOwn(op, 'keyScale')) Object.freeze(op.keyScale);
-    Object.freeze(op);
+  const patch = prepareVoice(input);
+  // Keep the existing producer identity only when the registry leaves its data unchanged.
+  if (name === undefined || (Object.hasOwn(patch, 'name') && patch.name === name)) {
+    return patch as unknown as NormalizedVoice;
   }
-  Object.freeze(patch.ops);
-  Object.freeze(patch.lfo);
-  if (Object.hasOwn(patch, 'pitchEnvelope')) Object.freeze(patch.pitchEnvelope);
-  return Object.freeze(patch);
+  // A spread defines `name` as own data; assigning it could reach an inherited setter.
+  return Object.freeze({ ...patch, name }) as unknown as NormalizedVoice;
 }
 
 function voiceName(name: unknown): asserts name is string {

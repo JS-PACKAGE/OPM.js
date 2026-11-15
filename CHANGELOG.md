@@ -4,6 +4,27 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Canonical facade prepared snapshots
+
+- The facade now uses the existing strict prepareVoice producer instead of duplicating deep-freeze construction. Its default brass patch and same-own-name loadVoice snapshots keep that exact immutable producer identity; overriding or supplying a missing name still returns a fresh deeply frozen transformed root without producer membership. All raw loads and raw browser notes still validate and detach every call. replaceVoiceBank, public signatures, voice format, worklet messages, sound math and per-note DSP state are unchanged; no marker, collection, cache, dependency or trust API is added.
+- Source and minified proofs each preserve 720 bank pairs and 1008240 canonical JSON bytes with exact input/output alias graphs, plus 1440 short/long score pairs and 3127200 JSON bytes with exact per-event own-data descriptors. Canonical producer roots intentionally share immutable identity across score notes under the existing README contract; raw and transformed controls remain detached. Forty-eight paired mono-slot reuse/live-control renders preserve 90336 stereo frames across all three quality profiles, with zero error diagnostics.
+- Each build also agrees on two default-bank flows, 28 atomic refusals, 24 named ordinary Object/Array prototype getter/setter cases, six inherited JSON-hook cases and two bank/source-edit lifecycles, with zero caller getter reads or unexpected prototype callbacks. The facade public declaration remains byte-identical.
+- Chromium 156 native ES modules preserve 288 bank pairs and 383964 JSON bytes, 576 score pairs and 1173552 JSON bytes, 24 bit-exact pure-DSP pairs and 45600 stereo frames, two default-bank flows, two own-name prototype guards, six JSON-hook cases and two mutation lifecycles. The real facade remains audio-inert; no live AudioContext is started.
+- All 596 tests pass, along with TypeScript/public/core-only declaration checks, the 42-source/55-built security gate and the empty runtime-dependency listing.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements use six fresh process pairs in each order, equal-length module roots, 160 ms warmup and at least 400 ms of measured batch work per child. Fixtures and initial output checks stay outside timing; each score call includes the actual defensive registry Map lookup where applicable, all raw event validation and complete short/long preflight. Ranges below are per-order relative throughput medians (reference/candidate minus one); cold construction/load tradeoffs and every negative control remain visible. These are preflight results, not DSP/render-loop, end-to-end audio, heap/GC, confidence-interval or real-time-deadline claims. Physical-device/MIDI and human-listening acceptance remain unverified.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Default facade construction | −1.9% to +1.7% | −2.4% to +1.3% | −1.7% to −1.5% | −1.6% to −1.5% |
+| Same-name expressive voice load | −0.4% to −0.3% | −0.5% to −0.3% | −2.0% to −1.2% | −1.9% to −1.2% |
+| Renamed / nameless load controls | −1.3% to −0.7% | −1.4% to −0.7% | −4.1% to −1.2% | −4.0% to −1.3% |
+| Default bank, 128-note preflight | +637.7–639.5% | +652.9–660.3% | +667.6–674.1% | +693.5–702.8% |
+| Same-name bank, 1-note preflight | +698.0–699.0% | +713.6–721.7% | +721.0–725.3% | +752.0–763.5% |
+| Same-name bank, 128-note preflight | +1472.9–1485.2% | +1680.4–1703.6% | +1519.1–1530.3% | +1717.6–1749.1% |
+| Same-name bank, 4096-note long preflight | +1515.6–1521.4% | +1777.9–1781.4% | +1412.0–1454.9% | +1599.7–1645.5% |
+| Renamed / raw / forged / parsed bank controls | −1.5% to +1.5% | −2.2% to +5.7% | −2.2% to +1.1% | −2.0% to +3.9% |
+
 ### Prepared voice shape reuse
 
 - normalizeVoice and prepareVoice reuse only the existing private identity of deeply frozen producer inputs to avoid repeating plain-object shape scans. Raw, merely frozen, copied and Proxy inputs retain the original structural validation and reflection order. All original field reads, scalar/version/enum/range checks, operator tuple/own-cell checks, optional own-property gates and target tuple conversion remain; normalized copies are still fresh and editable, and prepared copies remain deeply frozen. No cache, brand, API, voice format, dependency or render-loop change is introduced.

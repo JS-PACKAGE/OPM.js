@@ -361,6 +361,8 @@ const wav = encodeWav({ left: offline.left, right: offline.right, sampleRate: of
 
 Sequence preparation and offline render helpers may share exact immutable `PreparedVoice` identities from the same library instance, including named registry values. Raw voices still validate and detach per note; frozen lookalikes and proxies do not inherit trust. Only immutable data is shared—oscillator, envelope and live-control state remain per note.
 
+`OPM`'s default `brass` patch and `loadVoice(name, voice)` snapshots whose own voice name already matches `name` use that same prepared producer. Supplying or overriding a name keeps a fresh, deeply frozen transformed snapshot without private producer membership; `replaceVoiceBank` is unchanged. Every raw load or raw browser note still validates and detaches before preparation.
+
 An exact event array returned by this library instance's `prepareSequence`/`prepareLongSequence` may reuse its immutable snapshot on later preparation/render preflight. Other arrays take normal validation; options and every applicable score/frame/engine limit still apply, and queues/DSP state stay fresh. A weak metadata entry may keep the snapshot wrapper while its array is held externally; otherwise-unheld key/value cycles can be collected, without an immediate-GC guarantee.
 
 Structured clone does not transfer private prepared trust. Within each offline Worker job, every distinct cloned patch identity is fully revalidated once into a new private immutable snapshot; repeated clone references can then share it. This is not content deduplication, and raw caller patches still detach per note before posting.
