@@ -1041,6 +1041,40 @@ test('repeated bank exports follow in-place edits, replacements and reentrant lo
   } finally { await opm.dispose(); }
 });
 
+test('bank exports stay canonical across shared prepared identities and registry renames', async () => {
+  const left = new OPM(), right = new OPM();
+  const shared = prepareVoice({ ...brass, name: 'shared' });
+  const changed = prepareVoice({ ...brass, name: 'shared', feedback: brass.feedback === 0 ? 1 : 0 });
+  try {
+    for (const host of [left, right]) {
+      host.replaceVoiceBank([]);
+      host.loadVoice('shared', shared);
+    }
+    const original = left.exportVoiceBank();
+    assert.equal(right.exportVoiceBank(), original);
+    assert.equal(JSON.stringify([...parseVoiceBank(original).values()]), original);
+
+    left.loadVoice('other', changed);
+    left.exportVoiceBank();
+    right.loadVoice('renamed', shared);
+    assert.deepEqual([...parseVoiceBank(right.exportVoiceBank()).keys()], ['shared', 'renamed']);
+    left.loadVoice('shared', changed);
+    assert.equal(parseVoiceBank(left.exportVoiceBank()).get('shared')!.feedback, changed.feedback);
+    const independent = parseVoiceBank(right.exportVoiceBank());
+    assert.equal(independent.get('shared')!.feedback, shared.feedback);
+    assert.equal(independent.get('renamed')!.feedback, shared.feedback);
+
+    left.removeVoice('shared');
+    left.loadVoice('shared', shared);
+    const readded = left.exportVoiceBank(), bank = parseVoiceBank(readded);
+    assert.deepEqual([...bank.keys()], ['other', 'shared']);
+    assert.equal(bank.get('shared')!.feedback, shared.feedback);
+    assert.equal(bank.get('other')!.feedback, changed.feedback);
+    right.replaceVoiceBank([...bank.values()]);
+    assert.equal(right.exportVoiceBank(), readded);
+  } finally { await Promise.all([left.dispose(), right.dispose()]); }
+});
+
 test('registry size is bounded, replacement frees capacity, and disposed bank operations reject', async () => {
   const opm = new OPM();
   try {

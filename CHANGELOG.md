@@ -4,6 +4,49 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Immutable patch export snapshots
+
+- Cold bank exports now reuse existing fully validated canonical snapshots keyed only by immutable private-bank patch identities. A miss still uses the complete formatter; every cold output retains the null-prototype JSON copier, canonical field order, serialization-hook isolation and whole-bank byte/count guards. Raw admission, public mutable-copy behavior and disposed-host rejection are unchanged.
+- Committed loads and successful removals invalidate the bounded whole-bank text while retaining export history as an undefined cache value. Only registries with that history populate new per-patch memo entries, avoiding eager snapshot population on first-time one-off exports. Replacement/clear still create new map identities; disposal deletes the whole-map entry. The marker is allocation policy, not a new input trust flag.
+- Source and minified comparisons preserve 3072 voice pairs/2275584 canonical ASCII bytes, 12 banks/580 voices, 24 PCM pairs/30060 stereo frames, 77 refusals, descriptor/alias graphs, captured-data/capacity/cache/isolation histories and 128 complete raw metadata traces/30352 events. Eighteen additional complete-wire pairs cover shared prepared identities across hosts, renames/removals/readds, parser copies, reentrant inner exports and frozen forgery rejection; the new permanent regression checks exact canonical bytes and independent host membership. All 64 alternating complete workload-wire pairs match.
+- The twelve hook-independent production API/processor cases, 72 cross-build API/processor PCM pairs/36864 stereo frames, and 1024 prepared admission pairs/6048 root events/512 detachment checks/16 additional PCM pairs remain correct. Processor checks use the explicit software WebAudio fixture, not native AudioContext or audio-thread scheduling.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against a32c3f5: sixteen complete-consumer profiles, six fresh process pairs per order in both orders (384 children per build), equal-length module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Partial-edit cases alternate distinct programs, invalidate whole-bank text on every call and include complete cold export plus checksum. Raw cases retain full admission validation; prepared cases use genuine pre-created snapshots. All-new replacement exports use freshly parsed identities; warm controls alternate independent primed registries. Fixture preparation and complete wire admission are outside timing, not the corresponding API work. Load/read controls include the public defensive Map copy; the complete offline-note control may validate inputs and is not an isolated DSP control.
+
+Entries are median relative-throughput changes (reference/candidate minus one) ranged over both process orders, not time reductions or confidence intervals. CPU is user+system. Negative single-entry, first-time replacement, warm-cache and unrelated controls are retained; this is not a universal export speedup. No direct-play, live DSP, native browser audio or application deadline improvement is claimed.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw edit + export, 1 voice | −1.8 to −0.8% | −2.8 to +1.7% | −1.8 to +1.2% | −0.5 to +2.8% |
+| Raw edit + export, 16 voices | +105.8 to +108.6% | +115.1 to +117.9% | +104.1 to +107.8% | +113.3 to +117.2% |
+| Raw edit + export, 128 voices | +135.9 to +138.3% | +155.9 to +158.5% | +142.5% | +167.0 to +169.0% |
+| Prepared edit + export, 1 voice | +124.2 to +131.6% | +136.4 to +142.0% | +133.8 to +135.6% | +144.1 to +145.7% |
+| Prepared edit + export, 16 voices | +134.1 to +136.2% | +150.0 to +152.3% | +135.9 to +136.2% | +152.6 to +152.9% |
+| Prepared edit + export, 128 voices | +141.5 to +143.2% | +160.2 to +166.9% | +146.0 to +146.3% | +175.4 to +176.2% |
+| Remove + prepared reload + export, 16 voices | +137.8 to +143.8% | +154.6 to +161.5% | +136.2 to +137.7% | +153.2 to +154.9% |
+| Remove + prepared reload + export, 128 voices | +136.9 to +138.8% | +159.1 to +161.6% | +147.2 to +147.3% | +177.3 to +184.7% |
+| All-new replace + export, 16 voices | −0.1 to +0.2% | +0.1 to +0.2% | −0.1 to 0.0% | +0.1 to +0.2% |
+| All-new replace + export, 128 voices | +0.2 to +2.5% | −0.1 to +2.4% | −1.9 to −0.3% | −2.4 to +0.3% |
+| Warm unchanged 1-voice export control | −0.1 to +0.2% | 0.0 to +0.2% | −0.2 to +0.6% | −1.1 to +0.9% |
+| Warm unchanged 128-voice export control | −3.1 to −2.3% | −3.4 to −2.1% | −1.6 to 0.0% | −1.6 to −0.3% |
+| Raw load + defensive registry read control | −2.8 to +0.9% | −2.6 to +0.7% | −1.2 to −0.1% | −1.4 to +0.4% |
+| Prepared load + defensive registry read control | +0.2 to +0.5% | −0.1 to +1.2% | −0.3 to +1.3% | +0.4 to +1.4% |
+| Mixed 16-voice parse control | −0.5 to +1.2% | −0.4 to +1.2% | −0.6 to +0.6% | −0.6 to +1.2% |
+| Complete offline-note control | −0.2 to −0.1% | −0.3 to −0.1% | 0.0 to +0.1% | −0.2 to +0.1% |
+
+Native CPU profiles located repeated canonical validation/descriptor capture. Fixed-count collected-heap sampling uses a 16 KiB interval after 256 common warmup calls; whole-bank text is invalidated every measured call, with 131072 exported voices per workload. Estimates include common runtime/profiling work, not physical object types, physical allocated/retained bytes or GC counts.
+
+| Native collected-heap workload | Fixed API calls | Reference estimated bytes | Candidate estimated bytes | Estimated reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Prepared edit + cold export, 128 voices | 1024 | 7662063000 | 3178388168 | 58.52% |
+| Raw edit + cold export, 16 voices | 8192 | 7944072096 | 3730750192 | 53.04% |
+
+The prepared reference has one unattributed sample estimated at 18528 bytes, reported separately from the tree; other runs have none. Memo entries can keep additional canonical data live as long as their immutable keys remain reachable, including externally retained prepared/registry snapshots. These warmed collected-allocation estimates do not establish retained-memory savings, first-export costs or GC-pause improvements.
+
+Verification: scoped integration-owner A/C review, 613 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies and byte-identical facade/schema/normalizer/core declarations. No public API/type/format/dependency, DSP formula or worklet protocol change, release/publication, native live AudioWorklet, physical-device/MIDI or listening acceptance is claimed.
+
+Chromium 156.0.8078.4 modules pass all eighteen shared-identity wire pairs, twelve hook cases, 72 cross-build API/processor PCM pairs and existing pure bank/prepared/captured-data/capacity/cache/isolation/raw-reflection comparisons, with zero page errors. Native AudioContext and audio-thread scheduling are not exercised.
+
 ### Indexed numeric bounds
 
 - Removed iterator-dependent destructuring and trailing-argument spread from the two private per-field numeric validators. Both capture the existing module-defined readonly LIMITS pair once and read slots 0/1 directly. Bounds construction/mutability, current per-call values, strict single-voice rejection, finite-only bank clamping and legacy-format/enum/integer rules remain unchanged. No cache, trust flag, API/type/format/dependency or DSP change is introduced.

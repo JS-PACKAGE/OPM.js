@@ -148,8 +148,10 @@ interface EventObserver {
   listener: ((event: OPMEvent) => void) | undefined;
 }
 const EVENT_OBSERVERS = new WeakMap<OPM, Set<EventObserver>>();
-// Replacement creates a new owned map; successful in-place edits invalidate its bounded export.
-const BANK_EXPORTS = new WeakMap<Map<string, NormalizedVoice>, string>();
+// Edits retain an existing registry entry as undefined, invalidating its text but keeping export history.
+const BANK_EXPORTS = new WeakMap<Map<string, NormalizedVoice>, string | undefined>();
+// Only immutable private-bank patches key reuse of fully validated canonical snapshots.
+const BANK_VOICE_SNAPSHOTS = new WeakMap<NormalizedVoice, FrozenVoice>();
 const COMMAND_NAMES: readonly CommandName[] = ['stop', 'updateNote', 'allNotesOff', 'panic', 'setMixGain', 'setTuning'];
 const CONTEXT_STATES: readonly ContextState[] = ['running', 'suspended', 'interrupted', 'closed'];
 
@@ -425,7 +427,7 @@ export class OPM {
     const bank = this._voices;
     if (!bank.has(name) && bank.size >= MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
     bank.set(name, patch);
-    BANK_EXPORTS.delete(bank);
+    if (BANK_EXPORTS.get(bank) !== undefined) BANK_EXPORTS.set(bank, undefined);
   }
 
   /** Atomically replaces the registry. Only an empty plain array (not JSON "[]") clears it. */
@@ -449,7 +451,7 @@ export class OPM {
     voiceName(name);
     const bank = this._voices;
     const removed = bank.delete(name);
-    if (removed) BANK_EXPORTS.delete(bank);
+    if (removed && BANK_EXPORTS.get(bank) !== undefined) BANK_EXPORTS.set(bank, undefined);
     return removed;
   }
 
@@ -460,7 +462,15 @@ export class OPM {
     if (bank.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
     const cached = BANK_EXPORTS.get(bank);
     if (cached !== undefined) return cached;
-    const entries = Array.from(bank.values(), patch => validateVoice(patch));
+    const rememberSnapshots = BANK_EXPORTS.has(bank);
+    const entries = Array.from(bank.values(), patch => {
+      let entry = BANK_VOICE_SNAPSHOTS.get(patch);
+      if (entry === undefined) {
+        entry = validateVoice(patch);
+        if (rememberSnapshots) BANK_VOICE_SNAPSHOTS.set(patch, entry);
+      }
+      return entry;
+    });
     const output = JSON.stringify(bankJsonData(entries));
     // Validated text fields and canonical keys are ASCII, so character and UTF-8 byte counts match.
     if (output.length > MAX_BANK_BYTES) {

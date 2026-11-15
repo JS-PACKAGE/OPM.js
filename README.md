@@ -644,6 +644,8 @@ Validation and copying use the same captured own-data values at each object/arra
 
 Repeated exports of an unchanged registry reuse its bounded canonical JSON string. Loading, removing, replacing or clearing voices updates the next export; raw validation callbacks cannot leave an intermediate cached snapshot behind. Cold and warm exports both ignore inherited serialization hooks. Oversized output is never cached, and disposed hosts still reject exports.
 
+Cold exports reuse frozen canonical snapshots of unchanged owned patches. Only registries with export history add new per-patch memo entries; misses still use full canonical validation and every output retains JSON-hook isolation and size limits. Weak memo data can remain live as long as its immutable patch; sampled allocation reductions are not retained-memory savings.
+
 Genuine `prepareVoice()` snapshots are reused during facade admission. Raw inputs, frozen copies and wrappers still undergo validation; registry renaming creates its own frozen root while sharing only immutable prepared data. `normalizeVoice()` continues to return fresh mutable copies.
 
 Internal sound-registration keys ignore inherited Object/Array serialization hooks. `toJSON` cannot make distinct programs share a registration or interrupt note admission. Raw mutable voices still validate before every key lookup; genuine prepared snapshots can reuse their immutable cached key.
