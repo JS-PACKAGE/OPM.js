@@ -4,6 +4,22 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Single-pass bounded project JSON
+
+- Score and arrangement serializers share their existing complete snapshot construction with the public parsers, avoiding a discarded full-project JSON string when ordinary Object/Array prototypes contain no `toJSON`. All own-data validation, detachment, canonical field/name/control order, voice-bank and total byte budgets, reference checks and beat/second horizons remain in place. Public parsers still check serialized size before returning; no cache, new trust marker, schema, API or dependency is added.
+- Ordinary inherited `toJSON` properties retain the original two bounded serialization passes. Source and minified comparisons each match 42 raw/parsed/foreign-frozen cases and 4048548 canonical JSON bytes, 84 own-data descriptor/alias graphs, 28 refusals, zero caller property getter reads and two mutable-input lifecycles. Twelve native hook cases per build include Object/Array hooks, noncallable getters, self-deletion, second-pass oversized output and installation during input validation. Generated public declarations remain byte-identical.
+- Chromium 156 native ES modules additionally match 36 browser case pairs, 391470 JSON bytes, 2736 input events, descriptor/alias graphs, unchanged caller inputs and six inherited-hook cases. All 595 tests, type checking, security checks and the empty runtime-dependency listing pass. This is JSON serialization evidence, not live-audio or physical-device acceptance.
+- Six fresh-process Node.js 26.7.0 pairs per order measure complete API calls from equal-length sibling implementation roots, with 160 ms warm-up and at least 400 ms cumulative measured call time per child; fixture construction is outside timing. Percentages compare median wall and user+system CPU throughput, include both orders and every measured parse control, and are not confidence intervals, heap/GC measurements, audio throughput or universal guarantees. Negative parse controls remain visible; no cause or general parser speed-up is inferred from their variation:
+
+| Complete project workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Empty score serialization | +43.3–47.9% | +43.2–48.3% | +40.6–44.1% | +40.7–45.0% |
+| One-note score serialization | +19.9–20.3% | +18.9–19.4% | +20.9–21.8% | +18.8–20.1% |
+| 256 / 8192-note score snapshot serialization | +3.1–17.7% | +2.2–16.1% | +6.2–12.1% | +6.2–11.9% |
+| 16 / 512-note arrangement snapshot serialization | +7.3–32.2% | +6.0–24.1% | +8.9–13.0% | +8.7–13.1% |
+| Raw score / foreign-frozen arrangement serialization | +10.6–15.4% | +10.3–14.1% | +8.3–13.4% | +8.1–17.7% |
+| Score text / arrangement object parsing (controls) | −1.7% to +1.0% | −2.3% to +0.3% | −3.6% to +10.6% | −6.9% to +5.6% |
+
 ### Expected-path deployment matching
 
 - Existing copyAssets deployments use their already validated expected-path Set to classify listed assets without repeating each file's walk-time lstat. Primitive readdir names, fresh root/directory checks and manifest regular-file/size admission remain intact; every expected asset still receives a fresh regular-file and exact-size check immediately before its original SHA-256 read. No Dirent metadata, extra Set, traversal, persistent state, host-stat cache or parallelism is introduced.

@@ -93,6 +93,12 @@ function boundedJSON(project: ScoreProject | ArrangementProject, label = 'Score'
   return json;
 }
 
+function serializeSnapshot(project: ScoreProject | ArrangementProject, label = 'Score'): string {
+  // Preserve the original second pass when ordinary inherited JSON hooks can observe it.
+  if ('toJSON' in Object.prototype || 'toJSON' in Array.prototype) boundedJSON(project, label);
+  return boundedJSON(project, label);
+}
+
 function projectInput(source: string | object, label: string): unknown {
   if (typeof source !== 'string') return source;
   // Three UTF-8 bytes per UTF-16 code unit is an upper bound; small inputs need no buffer.
@@ -130,8 +136,7 @@ function requireNamedVoices(events: readonly BeatSequenceEvent[]): void {
   }
 }
 
-/** Parse strict versioned own-data input, detach all nested data and freeze the snapshot. */
-export function parseScoreProject(source: string | object): ScoreProject {
+function scoreProjectSnapshot(source: string | object): ScoreProject {
   const input = projectInput(source, 'Score');
   const data = sequenceOwnData(input, ['version', 'events', 'tempoMap', 'timeSignature', 'voices', 'settings'],
     ['version', 'events', 'voices'], 'score project');
@@ -145,17 +150,22 @@ export function parseScoreProject(source: string | object): ScoreProject {
   const result: ScoreProject = Object.freeze({ version: 1, events: Object.freeze(events), tempoMap,
     timeSignature: normalizeTimeSignature(data.timeSignature as TimeSignature | undefined),
     voices: Object.freeze(voices), settings: settingsSnapshot(data.settings === undefined ? {} : data.settings) });
+  return result;
+}
+
+/** Parse strict versioned own-data input, detach all nested data and freeze the snapshot. */
+export function parseScoreProject(source: string | object): ScoreProject {
+  const result = scoreProjectSnapshot(source);
   boundedJSON(result);
   return result;
 }
 
 /** Canonical compact JSON: stable field order, sorted patch names, normalized defaults. */
 export function serializeScoreProject(project: ScoreProject): string {
-  return boundedJSON(parseScoreProject(project));
+  return serializeSnapshot(scoreProjectSnapshot(project));
 }
 
-/** Parse a self-contained arrangement using the same definition boundary as createArrangement. */
-export function parseArrangementProject(source: string | object): ArrangementProject {
+function arrangementProjectSnapshot(source: string | object): ArrangementProject {
   const data = sequenceOwnData(projectInput(source, 'Arrangement'),
     ['version', 'layers', 'sections', 'initialSection', 'tempoMap', 'timeSignature', 'voices', 'settings'],
     ['version', 'layers', 'sections', 'initialSection', 'voices'], 'arrangement project');
@@ -171,11 +181,17 @@ export function parseArrangementProject(source: string | object): ArrangementPro
     tempoMap: definition.tempoMap, timeSignature: definition.timeSignature, voices,
     settings: settingsSnapshot(data.settings === undefined ? {} : data.settings),
   });
+  return result;
+}
+
+/** Parse a self-contained arrangement using the same definition boundary as createArrangement. */
+export function parseArrangementProject(source: string | object): ArrangementProject {
+  const result = arrangementProjectSnapshot(source);
   boundedJSON(result, 'Arrangement');
   return result;
 }
 
 /** Canonical compact JSON for a definition, never a live Arrangement object. */
 export function serializeArrangementProject(project: ArrangementProject): string {
-  return boundedJSON(parseArrangementProject(project), 'Arrangement');
+  return serializeSnapshot(arrangementProjectSnapshot(project), 'Arrangement');
 }
