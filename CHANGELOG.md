@@ -4,6 +4,46 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Indexed numeric bounds
+
+- Removed iterator-dependent destructuring and trailing-argument spread from the two private per-field numeric validators. Both capture the existing module-defined readonly LIMITS pair once and read slots 0/1 directly. Bounds construction/mutability, current per-call values, strict single-voice rejection, finite-only bank clamping and legacy-format/enum/integer rules remain unchanged. No cache, trust flag, API/type/format/dependency or DSP change is introduced.
+- Source and minified comparisons each preserve 2184 numeric-edge pairs over all 26 bounds, including exact error classes/messages, negative zero, hostile coercions/accessors and malformed/non-finite values; getter/coercion counts remain zero. Existing 3072 voice pairs/2275584 canonical ASCII bytes, 12 banks/580 voices, 24 PCM pairs/30060 stereo frames, 77 refusals, descriptor/alias graphs, prepared admission, captured-data, capacity/cache/isolation and 128 full raw metadata traces/30352 events match. All 64 alternating complete workload-wire pairs also match.
+- The twelve hook-independent production API/processor cases and 72 cross-build API/processor PCM pairs remain correct; the latter cover all algorithms, versions 1/5/8, named/raw/prepared inputs and immediate/future/repeated programs over 36864 stereo frames. The separate 1024 prepared admission pairs/6048 root events/512 detachment checks/16 PCM pairs remain unchanged. These processor checks use an explicit software WebAudio fixture, not native AudioContext or audio-thread scheduling.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against ff157a5: sixteen complete-consumer profiles, six fresh process pairs per order in both orders (384 children per build), equal-length module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Fixtures and complete alternating wire-admission checks are outside timing; normalization/validation/parsing, detached copying, complete cold replace/export work, checksum and common clock overhead stay inside. Load/read cases include the public defensive registry copy; warm cached export is an unaffected control. The complete offline-note control may itself validate inputs; it is not an isolated DSP negative control.
+
+Entries are median relative-throughput changes (reference/candidate minus one) ranged over both process orders, not time reductions or confidence intervals. CPU is user+system; negative and unrelated controls are retained. No live DSP, constructor, direct-play, native browser audio or application deadline speedup is claimed.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw minimal normalization | +9.1 to +9.9% | +9.6 to +10.4% | +10.2 to +11.7% | +10.8 to +12.2% |
+| Raw expressive normalization | +8.3 to +9.2% | +8.3 to +9.6% | +9.3 to +10.0% | +9.8 to +10.3% |
+| Prepared minimal mutable normalization | +27.1 to +27.8% | +27.3 to +27.8% | +26.8 to +27.8% | +27.0 to +27.9% |
+| Prepared expressive mutable normalization | +21.8 to +23.1% | +24.9 to +25.8% | +22.5 to +22.8% | +25.7 to +26.0% |
+| Complete minimal voice validation | +27.0 to +28.3% | +27.2 to +28.4% | +27.5 to +28.2% | +27.7 to +28.4% |
+| Complete expressive voice validation | +26.9 to +27.7% | +36.8 to +38.2% | +28.4 to +28.9% | +39.7 to +39.8% |
+| Mixed array parse, 16 voices | +27.0 to +27.6% | +43.9 to +44.7% | +25.8 to +28.0% | +42.8 to +45.8% |
+| Mixed array parse, 128 voices | +27.2 to +30.4% | +48.7 to +57.5% | +21.5 to +23.7% | +28.5 to +30.8% |
+| Mixed JSON parse, 16 voices | +18.2 to +18.4% | +25.1 to +25.2% | +18.1 to +18.3% | +25.0 to +25.2% |
+| Mixed JSON parse, 128 voices | +16.7 to +17.9% | +24.1 to +25.5% | +22.2 to +22.3% | +35.3 to +35.6% |
+| Replace + cold export, 16 voices | +17.3 to +19.0% | +24.4 to +26.1% | +17.6 to +18.2% | +25.2 to +25.3% |
+| Replace + cold export, 128 voices | +19.7 to +20.0% | +29.5 to +29.8% | +13.8 to +14.1% | +17.4 to +17.9% |
+| Raw expressive load + registry read | +8.5 to +9.7% | +8.8 to +9.8% | +7.2 to +8.6% | +7.9 to +8.5% |
+| Prepared load + registry read control | −0.5 to −0.4% | −0.7 to −0.5% | −1.3 to +0.3% | −1.0 to +0.1% |
+| Warm 128-voice export control | −2.0 to +0.5% | −1.4 to +0.1% | −1.0 to −0.8% | −0.9 to −0.5% |
+| Complete offline-note control | +1.5 to +1.6% | +2.1 to +2.2% | +2.7 to +3.1% | +3.7 to +4.0% |
+
+Native CPU/allocation profiles identified numeric bounds iteration in complete raw load/read and mixed-bank parsing. Fixed-count heap sampling uses a 16 KiB interval and includes collected objects and common runtime/profiling work. Numeric iterator-next frames disappear. These whole-tree estimates do not identify physical object types, physical allocated/retained bytes or GC counts.
+
+| Native collected-heap workload | Fixed API calls | Reference estimated bytes | Candidate estimated bytes | Estimated reduction |
+| --- | ---: | ---: | ---: | ---: |
+| Expressive raw load + defensive registry read | 32768 | 1408811768 | 1095212760 | 22.26% |
+| Mixed 16-voice array parse (131072 voices) | 8192 | 6666517984 | 3744404928 | 43.83% |
+
+Verification: scoped integration-owner A/C review, 612 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies and byte-identical facade/schema/normalizer/core declarations. No release/publication, native live AudioWorklet, physical-device/MIDI or listening acceptance is claimed.
+
+Chromium 156.0.8078.4 modules pass all 2184 numeric-edge pairs, twelve hook cases, 72 cross-build API/processor PCM pairs and existing pure bank/prepared/captured-data/capacity/cache/isolation/raw-reflection comparisons, with zero page errors. No native AudioContext or audio thread is started.
+
 ### Hook-independent patch registration
 
 - Fixed an internal sound-identity bug: inherited Object/Array toJSON functions could give distinct validated programs the same registration key, and getters could throw before note admission. Both raw and named key producers now converge on the existing immutable-patch cache; a miss serializes the existing owned-data/null-prototype copier. Raw inputs still normalize before every lookup, while genuine prepared identities no longer compute and discard a temporary JSON key on cache hits.

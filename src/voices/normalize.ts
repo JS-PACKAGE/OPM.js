@@ -20,7 +20,8 @@ function object(value: unknown, required: readonly string[], optional: readonly 
 }
 
 function number(value: unknown, key: keyof typeof LIMITS): number {
-  const [min, max] = LIMITS[key];
+  const bounds = LIMITS[key];
+  const min = bounds[0], max = bounds[1];
   if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
     throw new RangeError(`${key} must be finite and in ${min}..${max}`);
   }

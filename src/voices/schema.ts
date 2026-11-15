@@ -108,7 +108,10 @@ export function bounded(value: unknown, min: number, max: number, label = 'numbe
   }
   return Math.min(max, Math.max(min, value));
 }
-const numeric = (value: unknown, key: LimitKey) => bounded(value, ...LIMITS[key], key);
+const numeric = (value: unknown, key: LimitKey) => {
+  const bounds = LIMITS[key];
+  return bounded(value, bounds[0], bounds[1], key);
+};
 function integer(value: unknown, max: number, label: string): Algorithm {
   if (!Number.isInteger(value) || typeof value !== 'number' || value < 0 || value > max) {
     throw new RangeError(`${label} must be an integer in 0..${max}`);
