@@ -4,6 +4,25 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Control-free offline onset maps
+
+- Offline frame planning no longer builds an onset lookup for immutable scores containing notes and explicit stops but no controls. The independent note-only qualification is preserved: explicit stops still run, including cancellation of pending onsets. Controlled and unregistered snapshots retain the original lookup and ordering paths.
+- Partition the existing private frozen-score cache by control presence during validation. Each completed score still has one weak cache entry; one additional module-initialized WeakMap avoids per-score metadata objects and another event traversal. Frozen snapshot reuse, raw per-occurrence detachment, budgets, release bounds, rounding, tie order and diagnostics remain unchanged. No DSP, public API, score/voice field, Worker protocol or dependency changes.
+- Source and minified comparisons each match 36 lifecycles, 1152 registered/forged/origin queue cases, 54968 checkpoints, 53312 borrowed chunks and 185184 stereo frames with exact PCM bytes, own-data descriptors and alias graphs. All 432 snapshot-identity checks and 24 malformed-input/error cases agree. Instrumented frame planning removes all 18 onset Maps and 246 entry writes in the note/stop and pending-stop targets; controlled and already-optimized note-only cases retain their original allocation counts. These are allocation-operation counts, not a GC-causation claim.
+- Chromium 156 matches direct browser PCM and capacity plus 24 real module Worker runs across 12 note-only, note/stop, controlled and pending-stop cases at 8/44.1/96 kHz. All 97304 encoded WAV bytes, transferred-chunk acknowledgement progress and event/error diagnostics agree with the reference and direct full-buffer export. Twelve forged getter snapshots retain generic read order and their injected controls. Standard gates pass: 594 tests, type checking and security checks. Hardware/MIDI deadlines and human-listening acceptance remain unverified.
+- Six fresh-process Node.js 26 pairs per order measure complete public estimateSequenceCapacity calls at 48 kHz, including validation, queue construction and capacity calculation. All fixtures share a prepared patch; prepared-score rows reuse immutable event arrays, while raw rows validate event objects each call. Equal-length sibling module roots, 160 ms warmup and 400 ms measurements are used for both source and shipped minified code. Positive wall/CPU percentages mean relative median planning throughput, not audio-render throughput; ranges include both orders and every declared control, not confidence intervals or universal performance guarantees:
+
+| Complete capacity-planning workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Prepared note/stop score, 1 note | +3.3–3.5% | +3.3–3.5% | +3.1–4.2% | +3.1–4.2% |
+| Prepared note/stop score, 128 notes | +15.6–15.8% | +15.6–15.8% | +15.2–15.3% | +15.2–15.3% |
+| Prepared note/stop score, 4096 notes | +18.3–19.2% | +16.2–17.3% | +18.9–19.0% | +16.8–17.0% |
+| Raw note/stop events, 128 notes | +2.0–2.4% | +1.2–2.9% | +2.1–3.5% | +1.2–4.4% |
+| Prepared note-only control, 128 notes | +0.2–0.7% | +0.2–0.9% | −1.1% to −0.2% | −0.9% to −0.3% |
+| Prepared controlled score, 128 notes | +0.7% | +0.6–0.7% | +1.5–2.4% | +1.4–2.3% |
+| Raw note-only control, 128 notes | −0.6% to +0.6% | −0.6% to +0.6% | −0.8% to +0.1% | −0.9% to +0.8% |
+| Raw controlled events, 128 notes | 0.0–0.1% | −1.1% to −0.7% | −0.1% to +0.3% | −0.3% to +0.3% |
+
 ### Silent-voice bus accumulation
 
 - The existing all-zero-envelope branch still runs silentFrame, including every phase, pitch, noise, feedback, scratch-output and finite-state check, but no longer mixes its +0 samples into both stereo buses when its pan coefficients are finite. A bus is seeded with +0 and only accumulated, so those zero additions cannot change its value or zero sign. Nonfinite pan/gain state retains the original multiplication/addition loop and error propagation.

@@ -56,7 +56,9 @@ const NO_REQUIRED_FIELDS = [] as const;
 const DEFAULT_PREPARE_OPTIONS = Object.freeze({ voices: undefined });
 
 // Only our frozen output arrays may reuse validation metadata, never caller inputs.
-const scoreSnapshots = new WeakMap<object, SequenceSnapshot>();
+// Split by control presence without adding metadata objects or another event pass.
+const controlFreeScoreSnapshots = new WeakMap<object, SequenceSnapshot>();
+const controlledScoreSnapshots = new WeakMap<object, SequenceSnapshot>();
 
 const typedArrayLength = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Float32Array.prototype) as object, 'length')!.get!;
 const typedArrayFill = Float32Array.prototype.fill;
@@ -113,7 +115,7 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
     catch { throw new TypeError('voices must be a Map'); }
   }
   if (!Array.isArray(events)) throw new TypeError('events must be an array');
-  const cached = scoreSnapshots.get(events);
+  const cached = controlFreeScoreSnapshots.get(events) ?? controlledScoreSnapshots.get(events);
   if (cached && cached.events.length <= maxEvents && cached.endTime <= maxSeconds &&
       (long || cached.noteCount <= MAX_SEQUENCE_NOTES && cached.reservedSlots <= MAX_SEQUENCE_SLOTS)) return cached;
   const length = Object.getOwnPropertyDescriptor(events, 'length')?.value as number;
@@ -132,6 +134,7 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
   Object.setPrototypeOf(snapshot, null);
   const notes = new Set<number>();
   let reservedSlots = 0;
+  let hasControls = false;
   let endTime = 0;
   for (let index = 0; index < length; index++) {
     const descriptor = Object.getOwnPropertyDescriptor(events, String(index));
@@ -175,6 +178,7 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
       reservedSlots++;
       if (type === 'stop') snapshot[index] = Object.freeze({ type: 'stop', id, time });
       else {
+        hasControls = true;
         const value = data.controls;
         let controls = clonedControls?.get(value as object);
         if (controls === undefined) {
@@ -192,7 +196,7 @@ function prepareScore(events: readonly SequenceEvent[], options: Pick<SequenceOp
     if (event.type !== 'note' && !notes.has(event.id)) throw new RangeError('Unknown sequence note id');
   }
   const score = Object.freeze({ events: Object.freeze(snapshot), noteCount: notes.size, reservedSlots, endTime });
-  scoreSnapshots.set(score.events, score);
+  (hasControls ? controlledScoreSnapshots : controlFreeScoreSnapshots).set(score.events, score);
   return score;
 }
 
@@ -202,8 +206,10 @@ const EVENT_ORDER = { stop: 0, note: 1, control: 2 } as const;
 /** Shared sample-frame ordering, including automatic releases and pending controls. */
 export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin = 0): { queue: SequenceFrameEvent[]; length: number } {
   // Only privately registered immutable metadata can prove the non-note pass unnecessary.
-  const noteOnly = scoreSnapshots.get(score.events) === score && score.noteCount === score.events.length;
-  const onsets = noteOnly ? undefined : new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
+  const controlFree = controlFreeScoreSnapshots.get(score.events) === score;
+  const noteOnly = controlFree && score.noteCount === score.events.length;
+  // Explicit stops do not read onsets; unregistered snapshots retain the generic path.
+  const onsets = controlFree ? undefined : new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
   const queue: SequenceFrameEvent[] = [];
   let lastFrame = 0;
   let ordered = true;
