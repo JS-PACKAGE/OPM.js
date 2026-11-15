@@ -141,6 +141,29 @@ test('prepared identity is trusted only after validation and snapshots are deepl
   assert.throws(() => preparedVoiceValue({ ...voice(), lfo: { ...voice().lfo, waveform: 'invalid' } } as unknown as VoiceInput));
 });
 
+test('normalizing a prepared patch detaches mutable envelopes and expressive objects', () => {
+  const source = voice();
+  source.ops[0].keyScale = { breakpoint: 60, leftDbPerOctave: 1, rightDbPerOctave: 2 };
+  source.pitchEnvelope = { a: 0.1, d: 0.2, r: 0.3, initial: 0, peak: 100, sustain: 0, final: 0 };
+  const prepared = prepareVoice(source);
+  const copy = normalizeVoice(prepared as unknown as VoiceInput);
+  copy.ops[0].ratio = 3;
+  copy.ops[0].adsr.s = 0.25;
+  copy.ops[0].keyScale!.breakpoint = 48;
+  copy.pitchEnvelope!.peak = 200;
+  copy.lfo.rate = 7;
+  assert.equal(copy.ops[0].ratio, 3);
+  assert.equal(copy.ops[0].adsr.s, 0.25);
+  assert.equal(copy.ops[0].keyScale!.breakpoint, 48);
+  assert.equal(copy.pitchEnvelope!.peak, 200);
+  assert.equal(copy.lfo.rate, 7);
+  assert.equal(prepared.ops[0].ratio, source.ops[0].ratio);
+  assert.equal(prepared.ops[0].adsr.s, source.ops[0].adsr.s);
+  assert.equal(prepared.ops[0].keyScale!.breakpoint, 60);
+  assert.equal(prepared.pitchEnvelope!.peak, 100);
+  assert.equal(prepared.lfo.rate, source.lfo.rate);
+});
+
 test('current targets accept booleans and bounded weights as detached immutable numeric tuples', () => {
   const amTargets: [boolean, boolean, number, number] = [true, false, 0.5, 1];
   const pmTargets: [number, number, boolean, boolean] = [0, 0.25, true, false];

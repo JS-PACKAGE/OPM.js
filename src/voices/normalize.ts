@@ -31,8 +31,8 @@ function field(value: object, key: PropertyKey): unknown {
   return Object.getOwnPropertyDescriptor(value, key)?.value;
 }
 
-function keyScaleValue(scale: unknown): NonNullable<Operator['keyScale']> {
-  object(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], [], 'keyScale');
+function keyScaleValue(scale: object, known: boolean): NonNullable<Operator['keyScale']> {
+  if (!known) object(scale, ['breakpoint', 'leftDbPerOctave', 'rightDbPerOctave'], [], 'keyScale');
   const breakpoint = number(field(scale, 'breakpoint'), 'breakpoint');
   if (!Number.isInteger(breakpoint)) throw new RangeError('breakpoint must be a MIDI integer');
   return { breakpoint,
@@ -40,8 +40,8 @@ function keyScaleValue(scale: unknown): NonNullable<Operator['keyScale']> {
     rightDbPerOctave: number(field(scale, 'rightDbPerOctave'), 'rightDbPerOctave') };
 }
 
-function pitchEnvelopeValue(envelope: unknown): NonNullable<NormalizedVoice['pitchEnvelope']> {
-  object(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], [], 'pitchEnvelope');
+function pitchEnvelopeValue(envelope: object, known: boolean): NonNullable<NormalizedVoice['pitchEnvelope']> {
+  if (!known) object(envelope, ['a', 'd', 'r', 'initial', 'peak', 'sustain', 'final'], [], 'pitchEnvelope');
   return { a: number(field(envelope, 'a'), 'a'), d: number(field(envelope, 'd'), 'd'), r: number(field(envelope, 'r'), 'r'),
     initial: number(field(envelope, 'initial'), 'initial'), peak: number(field(envelope, 'peak'), 'peak'),
     sustain: number(field(envelope, 'sustain'), 'sustain'), final: number(field(envelope, 'final'), 'final') };
@@ -49,8 +49,10 @@ function pitchEnvelopeValue(envelope: unknown): NonNullable<NormalizedVoice['pit
 
 // Copy only approved own data fields: callers may mutate or reuse their voice after noteOn.
 export function normalizeVoice(source: VoiceInput): NormalizedVoice {
-  const input: unknown = source;
-  object(input, ['algorithm', 'feedback', 'ops'], ['name', 'lfo', 'version', 'modIndex', 'pitchEnvelope', 'pan'], 'voice');
+  const input = source;
+  // Only private frozen producer identities skip shape scans; checks and fresh copies remain.
+  const known = preparedVoices.has(input);
+  if (!known) object(input, ['algorithm', 'feedback', 'ops'], ['name', 'lfo', 'version', 'modIndex', 'pitchEnvelope', 'pan'], 'voice');
   const algorithm = field(input, 'algorithm');
   const feedback = field(input, 'feedback');
   if (!Number.isInteger(algorithm) || typeof algorithm !== 'number' || algorithm < 0 || algorithm > 7 ||
@@ -75,14 +77,14 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
   for (let i = 0; i < 4; i++) {
     const descriptor = Object.getOwnPropertyDescriptor(rawOps, String(i));
     if (!descriptor || !Object.hasOwn(descriptor, 'value')) throw new TypeError('ops must contain four data operators');
-    const op: unknown = descriptor.value;
+    const op = descriptor.value as object;
     if (op && typeof op === 'object' && (version as number) < 7 && (Object.hasOwn(op, 'waveform') || Object.hasOwn(op, 'noiseRate'))) throw new TypeError('operator waveform and noiseRate requires voice version 7');
-    object(op, ['ratio', 'level', 'detune', 'adsr'],
+    if (!known) object(op, ['ratio', 'level', 'detune', 'adsr'],
       (version as number) >= 7 ? ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate'] :
       version === 1 ? [] : version === 2 ? ['keyScale'] : version === 5 || version === 6 ?
         ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale'] : ['keyScale', 'velocitySensitivity'], 'operator');
-    const adsr = field(op, 'adsr');
-    object(adsr, ['a', 'd', 's', 'r'], ['sr'], 'adsr');
+    const adsr = field(op, 'adsr') as object;
+    if (!known) object(adsr, ['a', 'd', 's', 'r'], ['sr'], 'adsr');
     // One own-property probe, so a proxy cannot answer the gate and the read differently.
     const hasSr = Object.hasOwn(adsr, 'sr');
     if (hasSr && (version as number) < 8) throw new TypeError('adsr.sr requires voice version 8');
@@ -102,13 +104,13 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
       ...(Object.hasOwn(op, 'rateKeyScale') ? { rateKeyScale: number(field(op, 'rateKeyScale'), 'rateKeyScale') } : {}),
       ...(Object.hasOwn(op, 'waveform') ? { waveform: operatorWaveform(field(op, 'waveform')) } : {}),
       ...(Object.hasOwn(op, 'noiseRate') ? { noiseRate: number(field(op, 'noiseRate'), 'noiseRate') } : {}),
-      ...(Object.hasOwn(op, 'keyScale') ? { keyScale: keyScaleValue(field(op, 'keyScale')) } : {}),
+      ...(Object.hasOwn(op, 'keyScale') ? { keyScale: keyScaleValue(field(op, 'keyScale') as object, known) } : {}),
     };
   }
   let lfo: LFO = ZERO_LFO;
   if (Object.hasOwn(input, 'lfo')) {
-    const rawLfo = field(input, 'lfo');
-    object(rawLfo, ['rate', 'amDepth', 'pmDepth'], (version as number) >= 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
+    const rawLfo = field(input, 'lfo') as object;
+    if (!known) object(rawLfo, ['rate', 'amDepth', 'pmDepth'], (version as number) >= 6 ? ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets'] :
       version === 5 ? ['waveform', 'delay', 'sync', 'phase'] : version === 4 ? ['waveform'] : [], 'lfo');
     const rate = number(field(rawLfo, 'rate'), 'rate');
     const amDepth = number(field(rawLfo, 'amDepth'), 'amDepth');
@@ -126,7 +128,7 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
     modIndex: Object.hasOwn(input, 'modIndex') ? number(field(input, 'modIndex'), 'modIndex') : 4,
     ...(Object.hasOwn(input, 'pan') ? { pan: number(field(input, 'pan'), 'pan') } : {}),
     ...(name !== undefined ? { name: name as string } : {}),
-    ...(Object.hasOwn(input, 'pitchEnvelope') ? { pitchEnvelope: pitchEnvelopeValue(field(input, 'pitchEnvelope')) } : {}) };
+    ...(Object.hasOwn(input, 'pitchEnvelope') ? { pitchEnvelope: pitchEnvelopeValue(field(input, 'pitchEnvelope') as object, known) } : {}) };
 }
 
 const preparedVoices = new WeakSet<object>();

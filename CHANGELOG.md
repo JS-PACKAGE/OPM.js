@@ -4,6 +4,25 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Prepared voice shape reuse
+
+- normalizeVoice and prepareVoice reuse only the existing private identity of deeply frozen producer inputs to avoid repeating plain-object shape scans. Raw, merely frozen, copied and Proxy inputs retain the original structural validation and reflection order. All original field reads, scalar/version/enum/range checks, operator tuple/own-cell checks, optional own-property gates and target tuple conversion remain; normalized copies are still fresh and editable, and prepared copies remain deeply frozen. No cache, brand, API, voice format, dependency or render-loop change is introduced.
+- Source and minified comparisons each preserve 1080 normalization/preparation/lookup pairs and 1022400 JSON bytes with exact own-data descriptors, input/output alias graphs and unchanged caller inputs. Six Proxy read-order pairs, 57 refusals, 45 ordinary Object/Array prototype cases and two mutable-copy workflows agree, with zero caller getter reads or prototype getter/setter calls. Sixteen paired pure-DSP renders preserve 19875 stereo frames and zero error diagnostics; the standalone render fixture supplies the same explicit required bank-format name on both sides.
+- Whole project consumers additionally preserve 42 canonical raw/parsed/foreign-frozen cases and 4048548 JSON bytes, 84 descriptor/alias graphs, 28 refusals, two mutable-input workflows and 12 inherited JSON-hook cases per build. Public declarations remain byte-identical. A permanent regression protects editing a normalized prepared patch without mutating its source.
+- Chromium 156 native ES modules preserve 360 voice pairs and 300600 JSON bytes, ten pure-DSP pairs and 12525 stereo frames, two mutable-copy workflows, and 36 project pairs with 391470 JSON bytes, 2736 input events and six JSON-hook cases. All 596 tests, type checking, security checks and the empty runtime-dependency listing pass. This is not live-audio, physical-device/MIDI or listening acceptance.
+- Six fresh-process Node.js 26.7.0 pairs per order measure complete API calls in batches from equal-length sibling roots, with 160 ms warm-up and at least 400 ms cumulative measured call time per child. Fixture construction is outside timing. Percentages compare median wall and user+system CPU throughput; every raw/frozen/forged/lookup control and both orders are included, along with common batch/checksum overhead. These are not confidence intervals, allocation/GC counts, render-loop throughput or universal guarantees:
+
+| Complete voice/project workload | Dev wall | Dev CPU | Dist wall | Dist CPU |
+| --- | --- | --- | --- | --- |
+| Prepared minimal patch: complete normalizeVoice | +120.9–121.5% | +122.0–122.7% | +120.3–124.7% | +121.4–125.5% |
+| Prepared expressive v8: complete normalizeVoice | +104.1–104.4% | +104.0–104.4% | +104.2–104.3% | +104.0–104.2% |
+| Prepared expressive v8: complete prepareVoice | +94.5–95.3% | +94.4–95.2% | +95.2–96.6% | +95.2–96.4% |
+| Prepared identity lookup (unchanged control) | 0.0–1.5% | −0.6% to −0.3% | −0.1% to +0.5% | −0.5% to +0.4% |
+| Raw v1 / v8 normalization (controls) | 0.0–1.4% | 0.0–1.4% | −2.3% to +0.4% | −2.3% to +0.4% |
+| Foreign-frozen / forged-copy normalization and preparation (controls) | −0.7% to +2.0% | −0.7% to +2.1% | −0.7% to +1.1% | −0.7% to +1.1% |
+| One-note complete project serialization | +23.9–25.0% | +20.7–22.5% | +23.9–24.6% | +20.9–22.6% |
+| 256-note complete project serialization | +1.3–2.1% | +1.6–2.4% | +0.5–4.7% | +0.5–4.9% |
+
 ### Single-pass bounded project JSON
 
 - Score and arrangement serializers share their existing complete snapshot construction with the public parsers, avoiding a discarded full-project JSON string when ordinary Object/Array prototypes contain no `toJSON`. All own-data validation, detachment, canonical field/name/control order, voice-bank and total byte budgets, reference checks and beat/second horizons remain in place. Public parsers still check serialized size before returning; no cache, new trust marker, schema, API or dependency is added.
