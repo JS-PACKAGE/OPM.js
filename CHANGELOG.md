@@ -4,6 +4,41 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Prepared facade admission
+
+- The facade's single frozenPatch wrapper now uses the existing private preparedVoiceValue helper already used by Synth and sequence admission, rather than rebuilding genuine prepared data. Matching-name inputs retain the owned immutable snapshot; registry renaming still defines/freezes a new root sharing only immutable descendants. Constructor/default, load and direct-play callers use this wrapper. No new cache, trust flag or producer is added.
+- Raw inputs, frozen clones, parsed-unbranded snapshots and Proxy wrappers still take full existing normalization/validation. Public prepareVoice and normalizeVoice contracts remain unchanged, including fresh mutable normalized envelopes/expressive objects. A permanent consumer regression covers matching/renamed immutable loads, mutable caller detachment, a malformed frozen clone and throwing wrapper metadata. Current-map capacity and post-commit bank-export invalidation are retained.
+- Native source/minified comparisons each preserve 1024 complete admission pairs across versions 1–8, all algorithms, minimal/full shapes, four input forms and matching/renamed names, with 6048 unfiltered root metadata events, 512 caller-copy detachment checks and 16 additional bit-identical PCM pairs/15248 stereo frames. Existing comparisons retain 3072 voice pairs/2275584 canonical ASCII bytes, 12 banks/580 voices, 24 PCM pairs/30060 stereo frames, 77 ordinary refusals, descriptor/alias graphs, detached mutations, all 18 captured-data cases, capacity/cache/isolation histories and 128 unfiltered raw load/reflection pairs/30352 events. All 64 alternating complete workload-wire pairs match.
+
+Native CPU sampling first identified normalization/descriptor/number iteration rather than the name guard as the prepared-load bottleneck. A fixed-count collected heap sample of 131072 alternating genuine prepared minimal loads with defensive registry reads estimates 95.64% fewer bytes across the complete sampled tree after reuse; private-normalizer frames disappear while map/iterator work remains. The retained profiles include common runtime/profiling work and do not identify physical object types, physical allocated/retained bytes or GC counts.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against db424c9: sixteen complete-consumer profiles, six fresh process pairs per order in both orders (384 children per build), equal-length module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Loads alternate two different programs and consume the public defensive registry read, including the 128-entry copy in the full-bank case. Load/export cases include complete serialization after each edit. Fixture construction and complete four-phase alternating wire admission are outside timing; dispatch/checksum/clock overhead remains inside, with user+system CPU recorded.
+
+The four prepared load/read rows show rounded median throughput ratios; other rows show median relative-throughput changes (reference/candidate minus one). Ranges span the two process orders, not confidence intervals. These results do not claim faster public prepareVoice/normalizeVoice, raw loading, constructor startup, direct-play latency, DSP, browser audio or application deadlines; negative and unrelated controls remain visible.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw minimal v8 load + registry read | −0.7 to +1.0% | −0.7 to +1.0% | 0.0 to +1.6% | 0.0 to +1.0% |
+| Raw expressive v8 load + registry read | −0.4 to +0.7% | −0.5 to 0.0% | −0.3 to −0.1% | −0.6 to −0.2% |
+| Raw v1 load + registry read | −0.5 to +1.9% | −0.5 to +1.8% | −0.1 to 0.0% | −0.7 to −0.2% |
+| Frozen expressive v8 load + registry read | −0.4 to +0.2% | −0.3 to +0.1% | −0.3 to +0.8% | −0.7 to +0.6% |
+| Prepared minimal v8 load + registry read | 20.09–20.18× | 18.89–18.90× | 20.38–20.43× | 19.22–19.27× |
+| Prepared expressive v8 load + registry read | 47.04–47.05× | 44.34–44.38× | 47.28–47.62× | 44.78–45.09× |
+| Renamed prepared v8 load + registry read | 34.95–34.99× | 33.49–33.50× | 35.36–35.41× | 33.98–34.00× |
+| Full-bank prepared load + registry read | 2.79–2.81× | 2.75–2.77× | 2.77–2.81× | 2.77–2.80× |
+| Mixed 16-voice bank parse control | −1.1 to +0.3% | −1.3 to +0.4% | 0.0 to +0.4% | −0.1 to +0.3% |
+| Mixed 16-voice replace + export control | −0.3 to −0.1% | −0.8 to +0.3% | −2.3 to +0.4% | −2.2 to +0.2% |
+| Warm 128-voice export control | −0.5 to +0.4% | −0.2 to 0.0% | −0.7 to +0.8% | −1.3 to +1.1% |
+| Prepared mutable normalization control | +0.2 to +0.4% | +0.2 to +0.6% | −0.2 to +0.6% | −0.2 to +0.6% |
+| Complete offline-note control | 0.0 to +0.2% | +0.2 to +0.3% | −0.1% | −0.1 to 0.0% |
+| Raw load + export 1 voice | +0.3 to +0.4% | +0.4 to +0.5% | −0.3 to +0.6% | −0.3 to +0.1% |
+| Prepared load + export 1 voice | +25.7 to +26.3% | +34.9 to +36.6% | +24.9 to +25.4% | +35.4 to +35.6% |
+| Prepared load + export 128 voices | −0.3 to +0.5% | −0.8 to +0.2% | +0.2 to +2.1% | +0.1 to +2.7% |
+
+Verification: scoped integration-owner A/C review, 611 passing tests, strict source/development/public/core-only TypeScript checks, source/generated security gates, zero runtime dependencies and byte-identical facade/schema/normalizer/core declarations. No release/publication, live AudioWorklet, physical-device/MIDI or listening acceptance is claimed.
+
+Chromium 156.0.8078.4 native modules pass the complete prepared/caller-detachment/root-trace/additional-PCM corpus alongside all existing bank/captured-data/capacity/cache/isolation/raw-reflection comparisons, with zero page errors and no AudioContext. Generated documentation is checked on its actual browser surface.
+
 ### Immutable bank export cache
 
 - Repeated `exportVoiceBank()` calls on an unchanged registry now reuse its successful bounded canonical JSON string. The module-private weak cache is keyed by the owned native map, not raw caller data or a public identity flag. A miss retains full validation, null-prototype copying and the 256 KiB UTF-8 limit; oversized output is never cached. Disposed/capacity checks precede cache hits.

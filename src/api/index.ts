@@ -1,4 +1,4 @@
-import { prepareVoice } from '../voices/normalize.js';
+import { preparedVoiceValue } from '../voices/normalize.js';
 import { brass } from '../voices/brass.js';
 import { MAX_BANK_BYTES, MAX_BANK_VOICES, parseVoiceBank, validateVoice } from '../voices/schema.js';
 import type { CompleteVoiceInput, FrozenVoice, NormalizedVoice, VoiceInput } from '../voices/schema.js';
@@ -198,7 +198,7 @@ function ownData(value: unknown, allowed: readonly string[], label: string): Rec
 }
 
 function frozenPatch(input: VoiceInput, name?: string): NormalizedVoice {
-  const patch = prepareVoice(input);
+  const patch = preparedVoiceValue(input);
   // Keep the existing producer identity only when the registry leaves its data unchanged.
   if (name === undefined || (Object.hasOwn(patch, 'name') && patch.name === name)) {
     return patch as unknown as NormalizedVoice;

@@ -3,7 +3,7 @@ import test, { after } from 'node:test';
 import { OPM, createLookaheadScheduler } from '../src/api/index.js';
 import type { LookaheadNote, OPMEvent, OPMOptions, PlayNoteOptions, StopOptions, Voice } from '../src/api/index.js';
 import { brass } from '../src/voices/brass.js';
-import { Synth } from '../src/core/synth.js';
+import { Synth, prepareVoice } from '../src/core/synth.js';
 import { withIndexedAccessors } from './indexed-accessors-harness.js';
 import { MAX_BANK_BYTES, parseVoiceBank } from '../src/voices/schema.js';
 import type { CompleteVoiceInput } from '../src/voices/schema.js';
@@ -910,6 +910,40 @@ test('bank exports use registry names, frozen detached entries and no inherited 
     else Reflect.deleteProperty(Array.prototype, 'toJSON');
     await opm.dispose();
   }
+});
+
+test('prepared facade inputs stay immutable while frozen copies and wrappers still validate', async () => {
+  const opm = new OPM();
+  const raw: Voice = structuredClone(brass);
+  raw.name = 'prepared';
+  const targets: [number, number, number, number] = [0.25, 0.5, 0.75, 1];
+  raw.lfo = { ...raw.lfo, amTargets: targets, pmTargets: targets };
+  const prepared = prepareVoice(raw);
+  try {
+    opm.replaceVoiceBank([]);
+    opm.loadVoice('prepared', prepared);
+    opm.loadVoice('renamed', prepared);
+    raw.ops[0].level = 0;
+    targets.fill(0);
+    for (const name of ['prepared', 'renamed']) {
+      const patch = opm.voices.get(name)!;
+      assert.equal(patch.name, name);
+      assert.equal(patch.ops[0].level, prepared.ops[0].level);
+      assert.deepEqual(patch.lfo.amTargets, [0.25, 0.5, 0.75, 1]);
+      assert.throws(() => { patch.ops[0].adsr.a = 10; }, TypeError);
+      assert.throws(() => { (patch.lfo.amTargets as unknown as number[])[0] = 0; }, TypeError);
+    }
+    const bank = opm.exportVoiceBank();
+    const forged = structuredClone(prepared) as unknown as Voice;
+    forged.ops[0].ratio = NaN;
+    Object.freeze(forged);
+    assert.throws(() => opm.loadVoice('forged', forged), /ratio/);
+    const wrapped = new Proxy(prepared, {
+      getOwnPropertyDescriptor() { throw new TypeError('wrapped metadata'); },
+    });
+    assert.throws(() => opm.loadVoice('wrapped', wrapped), /wrapped metadata/);
+    assert.equal(opm.exportVoiceBank(), bank);
+  } finally { await opm.dispose(); }
 });
 
 test('repeated bank exports follow in-place edits, replacements and reentrant loads', async () => {

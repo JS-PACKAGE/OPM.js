@@ -644,6 +644,8 @@ Validation and copying use the same captured own-data values at each object/arra
 
 Repeated exports of an unchanged registry reuse its bounded canonical JSON string. Loading, removing, replacing or clearing voices updates the next export; raw validation callbacks cannot leave an intermediate cached snapshot behind. Cold and warm exports both ignore inherited serialization hooks. Oversized output is never cached, and disposed hosts still reject exports.
 
+Genuine `prepareVoice()` snapshots are reused during facade admission. Raw inputs, frozen copies and wrappers still undergo validation; registry renaming creates its own frozen root while sharing only immutable prepared data. `normalizeVoice()` continues to return fresh mutable copies.
+
 Typed callers can pass frozen parser snapshots directly: `opm.replaceVoiceBank([...parseVoiceBank(examples).values()])`. A readonly outer array is also accepted; complete-voice validation and detached copying still apply.
 
 Unlike strict single-voice normalization, `validateVoice()`, `parseVoiceBank()`, and `renderNote()` **clamp finite out-of-range numeric fields** to the schema limits. Invalid types, non-finite values, unknown fields, unsupported versions, and invalid algorithm/feedback enums still fail. `validateVoice()` handles one complete voice; `bounded()` clamps a finite number; `LIMITS`, `MAX_BANK_BYTES`, and `MAX_BANK_VOICES` expose the bounds.
