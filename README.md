@@ -586,6 +586,8 @@ For `OPM`, `Synth.noteOn()`, and `normalizeVoice()`, `algorithm`, `feedback`, an
 
 Strict version admission captures one own-data descriptor value for both validation and feature gates. Omission defaults to v8; a present own `undefined`, `null`, accessor, or unsupported value is rejected without coercing that value.
 
+Each strict voice field read checks and uses the same captured own-data descriptor. Optional `name` presence and type validation share that descriptor too: a later Proxy answer cannot hide an invalid captured name or make the reader use an inherited descriptor value. These per-field checks do not make an entire mutable voice graph atomic or prevent caller-supplied Proxy traps from executing JavaScript.
+
 | Voice field | Allowed values |
 | --- | --- |
 | `version`, `name` | Version 8; legacy 1–7 accepted only with original fields; name: 1–64 ASCII letters, digits, `_`, or `-` |

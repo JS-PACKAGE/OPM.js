@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { normalizeVoice, prepareVoice, preparedVoiceValue } from '../src/voices/normalize.js';
 import { brass } from '../src/voices/brass.js';
 import { validateVoice } from '../src/voices/schema.js';
-import type { FourOperators, Operator, VoiceInput } from '../src/voices/schema.js';
+import type { FourOperators, Operator, Voice, VoiceInput } from '../src/voices/schema.js';
 
 function voice() {
   return { ...brass, lfo: { ...brass.lfo }, ops: brass.ops.map(op => ({ ...op, adsr: { ...op.adsr } })) as FourOperators };
@@ -108,6 +108,72 @@ test('a changing version accessor cannot read inherited descriptor values', () =
   assert.ok(failure instanceof TypeError);
   assert.equal(inheritedReads, 0);
   assert.equal(getterCalls, 0);
+});
+
+test('changing field accessors cannot supply inherited descriptor values', () => {
+  type Wrap = <T extends object>(value: T) => T;
+  const cases: { key: string; input: (source: Voice, wrap: Wrap) => VoiceInput }[] = [
+    { key: 'algorithm', input: (source, wrap) => wrap(source) },
+    { key: 'name', input: (source, wrap) => wrap(source) },
+    { key: 'ratio', input: (source, wrap) => { source.ops[0] = wrap(source.ops[0]); return source; } },
+    { key: 's', input: (source, wrap) => { source.ops[0].adsr = wrap(source.ops[0].adsr); return source; } },
+    { key: 'rate', input: (source, wrap) => { source.lfo = wrap(source.lfo); return source; } },
+    { key: 'breakpoint', input: (source, wrap) => { source.ops[0].keyScale = wrap(source.ops[0].keyScale!); return source; } },
+    { key: 'peak', input: (source, wrap) => { source.pitchEnvelope = wrap(source.pitchEnvelope!); return source; } },
+  ];
+  for (const convert of [normalizeVoice, prepareVoice, preparedVoiceValue]) for (const spec of cases) {
+    const source = voice();
+    source.ops[0].keyScale = { breakpoint: 60, leftDbPerOctave: 1, rightDbPerOctave: 2 };
+    source.pitchEnvelope = { a: 0.1, d: 0.2, r: 0.3, initial: 0, peak: 100, sustain: 0, final: 0 };
+    const original = Object.getOwnPropertyDescriptor(Object.prototype, 'value');
+    let probes = 0, inheritedReads = 0, getterCalls = 0, failure: unknown;
+    const accessor: PropertyDescriptor = Object.create(null);
+    accessor.configurable = true;
+    accessor.enumerable = true;
+    accessor.get = () => { getterCalls++; throw new Error('caller getter ran'); };
+    const wrap: Wrap = target => new Proxy(target, {
+      getOwnPropertyDescriptor(object, key) {
+        if (key === spec.key && ++probes > 1) return accessor;
+        return Reflect.getOwnPropertyDescriptor(object, key);
+      },
+    });
+    const input = spec.input(source, wrap), hook: PropertyDescriptor = Object.create(null);
+    hook.configurable = true;
+    hook.get = () => { inheritedReads++; throw new Error('inherited descriptor value ran'); };
+    try {
+      Object.defineProperty(Object.prototype, 'value', hook);
+      convert(input);
+    } catch (error) {
+      failure = error;
+    } finally {
+      Reflect.deleteProperty(Object.prototype, 'value');
+      if (original) Object.defineProperty(Object.prototype, 'value', original);
+    }
+    assert.ok(failure instanceof TypeError, spec.key);
+    assert.equal(inheritedReads, 0, spec.key);
+    assert.equal(getterCalls, 0, spec.key);
+  }
+});
+
+test('a later missing-name report cannot hide the captured invalid name', () => {
+  for (const convert of [normalizeVoice, prepareVoice, preparedVoiceValue]) {
+    let probes = 0, coercions = 0;
+    const foreign = { toString() { coercions++; return 'foreign'; } };
+    const input = new Proxy(voice(), {
+      getOwnPropertyDescriptor(target, key) {
+        const descriptor = Reflect.getOwnPropertyDescriptor(target, key);
+        if (key === 'name') {
+          probes++;
+          if (probes === 2) return { ...descriptor, value: foreign };
+          if (probes > 2) return undefined;
+        }
+        return descriptor;
+      },
+    });
+    assert.throws(() => convert(input), TypeError);
+    assert.equal(coercions, 0);
+    assert.equal(Object.isFrozen(foreign), false);
+  }
 });
 
 test('legacy formats retain their old operator and LFO boundaries', () => {

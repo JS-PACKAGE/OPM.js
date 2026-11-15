@@ -4,6 +4,36 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Captured own-data voice fields
+
+- Strict voice copying now validates and uses the same native own-data descriptor for every field. A later Proxy accessor can no longer supply an inherited descriptor value after passing the initial shape scan. Optional name presence/type/value also share one descriptor, preventing a later missing-property report from admitting and trusting a mutable caller-owned name object. Two permanent consumer regressions exercise normalizeVoice(), prepareVoice() and preparedVoiceValue(), all seven representative root/nested field classes, zero getter/coercion reads and caller ownership.
+- Source and minified proofs each preserve 1080 valid voice pairs/1022400 canonical bytes, 16 bit-identical PCM pairs/19875 stereo frames, 57 existing refusals, 72 root/nested Proxy comparisons, 45 ordinary-prototype cases, six signed-zero graphs and two mutation workflows. Every raw reflection trace retains its original events/order except one obsolete optional-name presence query per observed root. Strict version admission is unchanged. The 53 complete project workflows, 102 descriptor/alias graphs, 28 project refusals, 12 JSON-hook cases and 190 UTF-8 compatibility records also match.
+- Chromium 156.0.8078.4 native modules reproduce the 21 inherited-value substitutions and three mutable-name escapes in the old build, then verify all 24 fixed refusals with zero caller getters or page errors. They also preserve 36 project pairs, 360 voice pairs and ten bit-identical PCM pairs. No AudioContext is started: live worklet, physical-device/MIDI and listening acceptance remain unverified. No intermediate node snapshots, caches, call-site flag convention, public signature, format, dependency or DSP rule is added.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements retain all seventeen complete API workloads and both process orders: six fresh pairs per order, equal-length complete module roots, 160 ms warmup and at least 400 ms cumulative measured API-batch time per child. Full construction and initial/final output checks stay outside timing. Entries are relative-throughput median ranges (reference/candidate time minus one), not CPU-time reductions; wall includes common batch/clock/dispatch overhead and user+system CPU includes the common checksum loop. The added per-read validation has a measured cost; this fix is retained for type/ownership/prototype correctness, not blanket acceleration, allocation/GC counts, confidence intervals or real-time guarantees.
+
+| Complete API workload | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Prepared minimal voice normalization | −10.0% to −9.1% | −9.8% to −8.8% | −10.0% to −9.9% | −9.8% to −9.7% |
+| Prepared full v8 voice normalization | −9.8% to −9.2% | −9.8% to −8.9% | −9.5% to −9.0% | −9.4% to −8.9% |
+| Prepared full v8 voice preparation | −8.8% to −8.6% | −8.7% to −8.5% | −9.8% to −8.6% | −9.8% to −8.6% |
+| Prepared value identity control | +0.5–0.7% | +0.5–0.9% | −0.1% to +0.8% | 0.0–0.3% |
+| Raw v1 voice normalization | −4.8% to −3.7% | −4.8% to −3.8% | −4.6% to −4.1% | −4.6% to −4.0% |
+| Raw v8 voice normalization | −5.3% to −4.6% | −5.2% to −4.6% | −4.9% to −4.5% | −4.9% to −4.5% |
+| Raw v8 normalization, omitted version | −4.9% to −4.8% | −4.8% to −4.7% | −5.7% to −5.1% | −5.7% to −5.2% |
+| Frozen unbranded v8 normalization | −5.2% to −4.9% | −5.1% to −4.8% | −5.1% to −4.7% | −5.1% to −4.7% |
+| Forged frozen v8 preparation | −5.6% to −4.9% | −5.6% to −5.0% | −5.0% to −4.1% | −5.0% to −4.3% |
+| One-note Score serialization | −2.0% to −1.3% | −1.7% to −1.0% | −2.5% to −0.1% | +0.7–0.8% |
+| Default OPM construction | −4.4% to −3.8% | −4.4% to −3.7% | −3.6% to −2.9% | −3.6% to −2.9% |
+| Same-name facade voice load | −4.8% | −4.8% to −4.7% | −5.9% to −3.9% | −5.9% to −3.9% |
+| 128-note raw-map preflight | −4.0% to −3.3% | −4.4% to −1.0% | −3.0% to −2.6% | −1.2% to +0.4% |
+| 128-note canonical-bank control | +0.4–1.2% | +0.4–1.5% | −0.8% to +0.6% | −0.8% to +0.5% |
+| Prepared minimal voice preparation | −8.1% | −7.9% | −11.5% to −9.7% | −11.4% to −9.5% |
+| 256-note prepared Score serialization | −0.6% to −0.5% | −0.7% | −1.2% to +0.4% | −1.5% to +0.1% |
+| Real Proxy(prepared) normalization control | −4.7% to −3.4% | −5.1% to −3.8% | −4.2% to −4.0% | −4.8% to −4.5% |
+
+Verification: integration-owner scoped A/C review; 602 passing tests, strict source/development/public/core-only type checks, source and generated security gates, zero runtime dependencies, unchanged public normalizer declaration and native browser/generated-documentation proofs. This is not independent release or publication approval.
+
 ### UTF-8 project byte budgets
 
 - Score and Arrangement project parsing/serialization now apply the documented UTF-8 byte caps to the actual normalized JSON strings, including inherited Object/Array toJSON results. Previously, an inherited hook could produce non-ASCII text whose UTF-16 length fit while its UTF-8 representation exceeded the 8 MiB project or 256 KiB voice budget. Oversized results now reject with the existing RangeError messages.

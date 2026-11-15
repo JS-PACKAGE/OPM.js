@@ -28,7 +28,10 @@ function number(value: unknown, key: keyof typeof LIMITS): number {
 }
 
 function field(value: object, key: PropertyKey): unknown {
-  return Object.getOwnPropertyDescriptor(value, key)?.value;
+  // A Proxy can change the descriptor after the earlier shape scan.
+  const descriptor = Object.getOwnPropertyDescriptor(value, key);
+  if (descriptor !== undefined && !Object.hasOwn(descriptor, 'value')) throw new TypeError('voice fields must be data');
+  return descriptor?.value;
 }
 
 function keyScaleValue(scale: object, known: boolean): NonNullable<Operator['keyScale']> {
@@ -59,8 +62,11 @@ export function normalizeVoice(source: VoiceInput): NormalizedVoice {
       !Number.isInteger(feedback) || typeof feedback !== 'number' || feedback < 0 || feedback > 7) {
     throw new RangeError('algorithm and feedback must be integers in 0..7');
   }
-  const name = field(input, 'name');
-  if (Object.hasOwn(input, 'name') && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
+  // Presence and validation must describe the same value, even if a Proxy changes later.
+  const nameDescriptor = Object.getOwnPropertyDescriptor(input, 'name');
+  if (nameDescriptor !== undefined && !Object.hasOwn(nameDescriptor, 'value')) throw new TypeError('voice.name must be data');
+  const name: unknown = nameDescriptor?.value;
+  if (nameDescriptor !== undefined && (typeof name !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(name))) {
     throw new TypeError('name must contain 1..64 letters, digits, underscores or hyphens');
   }
   // Validate the same snapshot used by every gate, even if a Proxy changes later descriptors.
