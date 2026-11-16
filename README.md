@@ -648,6 +648,8 @@ Cold exports reuse frozen canonical snapshots of unchanged owned patches. Only r
 
 Owned JSON copying reads existing own-data fields directly. Caller inputs still undergo descriptor-based validation and detached snapshot construction first; the null-prototype copier continues to exclude inherited JSON hooks.
 
+Owned JSON destinations lose their prototype before any fields are copied. Objects follow the existing literal-array destination convention; raw own-data validation remains separate, and inherited setters/serialization hooks still cannot intercept copying.
+
 Genuine `prepareVoice()` snapshots are reused during facade admission. Raw inputs, frozen copies and wrappers still undergo validation; registry renaming creates its own frozen root while sharing only immutable prepared data. `normalizeVoice()` continues to return fresh mutable copies.
 
 Internal sound-registration keys ignore inherited Object/Array serialization hooks. `toJSON` cannot make distinct programs share a registration or interrupt note admission. Raw mutable voices still validate before every key lookup; genuine prepared snapshots can reuse their immutable cached key.

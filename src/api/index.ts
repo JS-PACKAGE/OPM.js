@@ -222,7 +222,8 @@ function bankJsonData(value: unknown): unknown {
     for (let index = 0; index < value.length; index++) result[index] = bankJsonData(value[index]);
     return result;
   }
-  const result: Record<string, unknown> = Object.create(null);
+  const result: Record<string, unknown> = {};
+  Object.setPrototypeOf(result, null);
   for (const key of Object.keys(value)) result[key] = bankJsonData((value as Record<string, unknown>)[key]);
   return result;
 }
