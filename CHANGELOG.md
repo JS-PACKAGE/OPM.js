@@ -4,6 +4,37 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Synchronized noise operator clocks
+
+- Reuse the already-identical clock and LFSR computation for four equal-rate noise operators with nonzero static levels. Retain each fractional substep, per-operator state, phase/value/history store and finite-state check; do not multiply a frame-wide clock step or couple previously independent rates.
+- General noise kernels remain in use for differing rates, zero static levels or desynchronized clocks/states. Live operator ramps, silent-to-audible transitions, pitch/frequency ramps, steals/fades and pooled noise/periodic reuse keep exact output. No new buffers, persistent flags, public APIs, formats or dependencies.
+- Verification: 622 behavioral tests; strict source/development/public/core-only types; scoped integration-owner A/C review; 42-source/55-built security gate; empty runtime dependency tree; five byte-identical public declarations. Source/minified lifecycle summaries match across 1728 cases, 24,883,200 stereo PCM bytes, 183,983,040 typed-state bytes, 4,069,440 scalar comparisons and 36,288 checkpoints, including complete returned-slot state.
+
+Complete CPU comparison against `3d7e12f`, Node.js 26.7.0 on macOS arm64: four fresh AB/BA process pairs per row. Independent 120 ms reference calibration selects a fixed measurement count targeting approximately 220 ms; each paired variant uses identical counts and a fixed derived warm count. Measure process user+system CPU; consume rendered samples and compare final PCM/filter witnesses. Patch construction and initial held-note admission are outside render timing; admission rows retain their actual raw/prepared validation inside timing. Source/minified distributions are calibrated separately. Negative means less CPU, not a universal latency, GC, glitch or listening guarantee.
+
+| Complete workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `standard-mono1` | 0.51% | 0.25% |
+| `standard-mono8` | -1.12% | -0.67% |
+| `standard-noise1` | -17.66% | -16.53% |
+| `standard-stereo8` | 0.21% | 0.46% |
+| `eco-mono1-control` | -1.20% | 3.32% |
+| `high-mono1-control` | 1.37% | -0.20% |
+| `raw-admission-control` | 0.30% | 0.04% |
+| `standard-noise8` | -21.08% | -21.64% |
+| `standard-noise-stereo8` | -21.70% | -21.96% |
+| `eco-noise1` | -14.35% | -14.39% |
+| `high-noise1` | -23.24% | -23.09% |
+| `different-rate-noise-control` | -0.18% | -0.17% |
+| `zero-static-level-noise-control` | -0.12% | -0.03% |
+| `raw-noise-admission-control` | 0.00% | 1.32% |
+| `prepared-noise-admission-control` | 1.01% | -0.57% |
+| `prepared-sine-admission-control` | 0.39% | -1.16% |
+
+All 16 positive/negative controls are reported. Equal-rate noise improves across one/eight voices, independent stereo and all three qualities; other routes are not claimed faster. Adverse minified controls include eco sine +3.32% (two of four pairs slower; source -1.20%) and raw noise admission +1.32% (three of four slower; source 0.00%). Physical-device MIDI and human-listening acceptance remain unverified.
+
+Actual Chromium 156.0.8078.4 AudioWorklet acceptance uses a version-8 four-noise-operator voice with 8000 Hz hold rates, not a sine substitute. Trusted gesture, original same-origin/CSP/MIME restrictions, stereo/headroom, full-right pan, held/release lifecycles, suspend/resume and borrowed/owned context cleanup pass; final diagnostics have zero active voices, pending events, errors and rejected notes. Physical-device MIDI and human-listening acceptance remain unverified.
+
 ### Immutable graph-row admission snapshots
 
 - Read each frozen graph input row once per operator during core note admission. Both inherited input-index reads still run on every admission with the original receiver, nullish fallback and integer coercion order; no input holes are cached across notes.
