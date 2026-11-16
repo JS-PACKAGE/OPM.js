@@ -461,6 +461,16 @@ function prepareFrequencies(active: ActiveVoice, deltas: Float64Array, curves: F
   const ratioFrom = active.ratioFrom, ratioTargets = active.ratioTargets;
   const frequencyFrom = active.frequencyFrom, frequencyTargets = active.frequencyTargets;
   const tuned = active.tunedFrequency, scales = active.frequencyScales, increments = active.baseIncrements;
+  // Zero-valued used inputs retain their independent signed-zero calculations.
+  const sharedTarget = frequencyTargets[0], sharedScale = scales[0];
+  const shared = sharedTarget === frequencyTargets[1] && sharedTarget === frequencyTargets[2] && sharedTarget === frequencyTargets[3] &&
+    sharedScale !== 0 && sharedScale === scales[1] && sharedScale === scales[2] && sharedScale === scales[3] &&
+    (frequencyDone0 || (frequencyFrom[0] !== 0 &&
+      frequencyFrom[0] === frequencyFrom[1] && frequencyFrom[0] === frequencyFrom[2] && frequencyFrom[0] === frequencyFrom[3])) &&
+    (sharedTarget !== 0 || (ratioTargets[0] !== 0 &&
+      ratioTargets[0] === ratioTargets[1] && ratioTargets[0] === ratioTargets[2] && ratioTargets[0] === ratioTargets[3] &&
+      (ratioDone0 || (ratioFrom[0] !== 0 &&
+        ratioFrom[0] === ratioFrom[1] && ratioFrom[0] === ratioFrom[2] && ratioFrom[0] === ratioFrom[3]))));
   for (let op = 0; op < 4; op++) {
     let target0 = frequencyTargets[op], targetM = target0, target1 = target0;
     if (!target0) {
@@ -474,9 +484,18 @@ function prepareFrequencies(active: ActiveVoice, deltas: Float64Array, curves: F
     const mid = (frequencyDoneM ? targetM : origin + (targetM - origin) * frequencyTimeM / frequencyFrames) * scale;
     const to = (frequencyDone1 ? target1 : origin + (target1 - origin) * frequencyTime1 / frequencyFrames) * scale;
     const curve = 2 * (to - 2 * mid + from);
+    const delta = to - from - curve;
     increments[op] = from;
-    deltas[op] = to - from - curve;
+    deltas[op] = delta;
     curves[op] = curve;
+    if (shared && op === 0 && Number.isFinite(from + delta + curve)) {
+      for (let other = 1; other < 4; other++) {
+        increments[other] = from;
+        deltas[other] = delta;
+        curves[other] = curve;
+      }
+      break;
+    }
   }
 }
 

@@ -182,6 +182,50 @@ test('muted operator PM targets cannot change independent carrier audio during p
   }
 });
 
+test('muted operator frequency trajectories cannot change independent carrier audio', () => {
+  const steps: readonly [number, NoteControls, NoteControls][] = [
+    [97, { operatorFrequencies: tuple(660), ramp: 0.003 }, { operatorFrequencies: [330, 660, 660, 660], ramp: 0.003 }],
+    [41, { operatorFrequencies: tuple(220), ramp: 0.004 }, { operatorFrequencies: [880, 220, 220, 220], ramp: 0.004 }],
+    [53, { operatorFrequencies: [null, null, null, null], operatorRatios: tuple(0.5), ramp: 0.003 },
+      { operatorFrequencies: [null, null, null, null], operatorRatios: [2, 0.5, 0.5, 0.5], ramp: 0.003 }],
+    [73, { operatorFrequencies: tuple(880), operatorRatios: tuple(2), ramp: 0.004 },
+      { operatorFrequencies: [330, 880, 880, 880], operatorRatios: [0.125, 2, 2, 2], ramp: 0.004 }],
+    [101, { operatorFrequencies: [null, null, null, null], operatorRatios: tuple(4), ramp: 0.002 },
+      { operatorFrequencies: [null, null, null, null], operatorRatios: [1, 4, 4, 4], ramp: 0.002 }],
+    [257, { operatorFrequencies: tuple(20000), ramp: 0 }, { operatorFrequencies: [1, 20000, 20000, 20000], ramp: 0 }],
+    [61, { operatorFrequencies: tuple(1), ramp: 0.004 }, { operatorFrequencies: [880, 1, 1, 1], ramp: 0.004 }],
+  ];
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const sampleRate of [8000, 48000, 192000]) {
+    for (const hiddenDetune of [0, 700]) {
+      const synths = [new Synth(sampleRate, 1, { quality }), new Synth(sampleRate, 1, { quality })];
+      for (let index = 0; index < synths.length; index++) {
+        const patch = tone();
+        patch.ops.forEach(op => { op.level = 0.2; op.adsr = { a: 0.001, d: 0.002, s: 0.8, r: 0.003 }; });
+        if (index === 1) patch.ops[0].detune = hiddenDetune;
+        patch.lfo = { rate: 7, amDepth: 0.2, pmDepth: 120, waveform: 'sine', phase: 0.75 };
+        patch.pitchEnvelope = { a: 0.004, d: 0.006, r: 0.003, initial: 0, peak: 1200, sustain: -100, final: 0 };
+        assert.equal(synths[index].noteOn(patch, 69, 1), 1);
+        assert.equal(synths[index].updateNote(1, { operatorLevels: [0, 1, 1, 1] }), true);
+      }
+      const label = `${quality}/${sampleRate}/${hiddenDetune}`;
+      assert.deepEqual(audio(synths[0], 1), audio(synths[1], 1), label + '/initial');
+      let energy = 0;
+      for (const [frames, actualControls, referenceControls] of steps) {
+        assert.equal(synths[0].updateNote(1, actualControls), true);
+        assert.equal(synths[1].updateNote(1, referenceControls), true);
+        const actual = audio(synths[0], frames, 37), expected = audio(synths[1], frames, 53);
+        assert.deepEqual(actual, expected, label + '/' + frames);
+        for (const sample of actual) { assert.ok(Number.isFinite(sample)); energy += sample * sample; }
+      }
+      assert.ok(energy > 1e-4);
+      for (const synth of synths) assert.equal(synth.noteOff(1), true);
+      assert.deepEqual(audio(synths[0], 2048, 37), audio(synths[1], 2048, 53), label + '/release');
+      for (const synth of synths) { assert.equal(synth.errorCount, 0); assert.equal(synth.voices.length, 0); }
+    }
+  }
+});
+
+
 test('reapplying the current LFO rate preserves discontinuous phase and subsequent live edits', () => {
   for (const quality of ['eco', 'standard', 'high'] as const) {
     for (const waveform of ['saw', 'square', 'noise'] as const) for (const sync of ['note', 'global'] as const) {
