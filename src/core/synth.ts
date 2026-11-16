@@ -2409,8 +2409,15 @@ export class Synth {
     // is smoothed over that single frame. stepPitch applies them per substep.
     const incrementDeltas = active.incrementDeltas, incrementCurves = active.incrementCurves;
     if (dynamicPitch) {
-      preparePitch(active, frame, this.sampleRate, oversample);
-      if (frequencyRamping) prepareFrequencies(active, incrementDeltas, incrementCurves);
+      if (frequencyRamping) {
+        // A NaN target must retain the original nonfinite geometric ratio.
+        if (!gliding && envelope === undefined && Number.isFinite(active.pitchTarget)) {
+          const pitch = active.pitchTarget / 12;
+          frame[5] = pitch === 0 ? 1 : fastExp2(pitch);
+          frame[6] = 1;
+        } else preparePitch(active, frame, this.sampleRate, oversample);
+        prepareFrequencies(active, incrementDeltas, incrementCurves);
+      } else preparePitch(active, frame, this.sampleRate, oversample);
     }
     frame[4] = pmFactor;
     // Reuse folded levels between operator edits while AM is disabled.

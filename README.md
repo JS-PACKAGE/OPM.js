@@ -311,6 +311,9 @@ Control reuse trusts only private output identity, never raw inputs, frozen look
 
 Pooled note admission skips reinitializing inactive envelope, release and interpolation cells, and does not clear the private frame-gain buffer. Periodic patches also leave private operator-noise seeds and clocks dormant; every noise admission reseeds them before playback. Activating controls writes their interpolation inputs before use; ratio/frequency targets and the independent gain target used by `quietest` admission remain current. The existing validity resets force complete gain preparation before live frames read the buffer; finished frames bypass it. LFO target cells also remain dormant when their existing flags select shared factors; non-unity masks are fully copied even at zero initial depth, before later controls can activate them. Pool bounds, typed-state allocation policy and callback behavior are unchanged. Rendering math is unchanged.
 
+Stationary pitch during operator frequency ramps writes the same pitch factor and unit substep ratio directly when there is no glide or pitch envelope and the target is finite. Exponent division, fastExp2 rounding and both scratch stores are preserved; live glides/envelopes and nonfinite targets retain the original preparation. No persistent cache, flags or buffers are added.
+
+
 Common operator frequency ramps derive identical base/delta/curve values once per frame when the used nonzero inputs agree. Completed histories and fixed-Hz targets' dormant ratio inputs are ignored. Zero-valued used inputs retain independent signed-zero calculations, and nonfinite results retain the original per-operator calculation. Every independent store and multiply-before-divide interpolation is preserved. No buffers, flags or cross-frame caches are added.
 
 

@@ -4,6 +4,61 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Stationary pitch preparation
+
+- Specialize finite, zero-glide, envelope-free pitch preparation only inside the existing operator Hz/ratio-ramp caller dispatch, reusing its local classification and leaving the general preparation helper unchanged. Avoid the duplicate endpoint pitch/envelope queries and time arithmetic; keep the original semitone division, zero-exponent factor and `fastExp2` rounding.
+- Always write both the starting pitch factor and unit geometric ratio for the frame. Do not reuse stale scratch values or reinterpret the envelope-only `pitchSettled` flag as generic validity. Every original substep multiplication, operator step store and nonfinite/error boundary is unchanged.
+- Live glides, pitch envelopes and nonfinite targets retain the original preparation. In particular NaN endpoints must retain their nonfinite geometric ratio rather than being replaced with one. No new persistent cache, flag, buffer, allocation, API, voice format, validator, protocol, dependency or public declaration surface.
+
+Complete CPU comparison against `ce58c1f`, Node.js 26.7.0 on macOS arm64: four fresh AB/BA process pairs per row. Independent 120 ms reference calibration selects fixed counts targeting approximately 220 ms; both variants use identical measured counts and fixed derived warm counts. Measure process user+system CPU, consume rendered samples and compare final PCM/filter witnesses. Source/minified distributions calibrate separately. Patch construction and initial held-note admission are outside render timing; raw/prepared admission and per-block controls/validation remain inside. Common glides and frequency/ratio edits retarget 144-sample ramps every 128-sample block; eight-voice modes update all eight voices. The envelope mode restarts its genuine 10-second attack every 750 blocks (2 seconds of audio), with panic/admission inside timing, so warming cannot turn it into a settled-pitch benchmark. Negative means less CPU, not a universal latency, GC, glitch or listening guarantee. The two appended general-FM modes use algorithm 4 with feedback 1 and one/eight voices; all original 33 rows remain, and all voices receive the real per-block frequency controls.
+
+| Complete workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `standard-mono1` | 0.22% | -0.23% |
+| `standard-mono8` | 0.34% | -0.80% |
+| `standard-noise1` | -2.32% | 0.55% |
+| `standard-stereo8` | 1.04% | -0.57% |
+| `eco-mono1-control` | 0.89% | 0.55% |
+| `high-mono1-control` | -0.28% | -0.37% |
+| `raw-admission-control` | -0.16% | -0.71% |
+| `standard-noise8` | -0.28% | -0.20% |
+| `standard-noise-stereo8` | 0.03% | -0.31% |
+| `eco-noise1` | 0.26% | -0.08% |
+| `high-noise1` | 0.41% | 1.47% |
+| `different-rate-noise-control` | 0.39% | -0.55% |
+| `zero-static-level-noise-control` | 0.20% | 2.81% |
+| `standard-unison1` | 0.09% | -0.10% |
+| `standard-unison8` | -0.19% | -0.19% |
+| `standard-unison-stereo8` | -0.78% | -0.38% |
+| `eco-unison1` | -0.31% | 0.67% |
+| `high-unison1` | 0.54% | -0.31% |
+| `unequal-sine7-control` | 0.11% | 0.04% |
+| `feedback-sine7-control` | -0.04% | -0.43% |
+| `targeted-pm-sine7-control` | 1.42% | 0.05% |
+| `live-frequency-unison-control` | -3.14% | -6.50% |
+| `prepared-admission-control` | -0.95% | -3.00% |
+| `standard-common-glide1` | -0.58% | -1.54% |
+| `standard-common-glide8` | -0.36% | -2.45% |
+| `standard-common-glide-stereo8` | -0.72% | -2.53% |
+| `eco-common-glide1` | 0.06% | -1.69% |
+| `high-common-glide1` | 0.07% | -1.08% |
+| `standard-common-frequency1` | -3.21% | -9.02% |
+| `standard-common-ratio1` | -3.18% | -8.49% |
+| `standard-common-combined1` | -3.79% | -9.11% |
+| `standard-common-targeted-glide1` | -1.19% | -12.14% |
+| `standard-common-envelope1` | -1.14% | -9.13% |
+| `standard-fm-common-frequency1` | -2.16% | -5.67% |
+| `standard-fm-common-frequency8` | -3.12% | -10.85% |
+
+Negative CPU deltas are faster. All six stationary-pitch target medians improve: source 2.16–3.79% (all four pairs each), actual minified 5.67–10.85% (five rows all four pairs; the one-voice FM row improves three pairs and is 0.32% slower in its other pair). Keep the complete controls: minified zero-static-level noise is 2.81% slower in all four pairs, high-quality noise is 1.47% slower in three, eco unison is 0.67% slower in three, ordinary noise is 0.55% slower in three, and eco mono is 0.55% slower in two. The small unequal/targeted-PM controls are 0.04%/0.05% slower with mixed directions. Source stereo is 1.04% slower in all pairs, eco noise 0.26% slower in all pairs and targeted PM 1.42% slower in three. Unrelated glide/envelope gains are whole-distribution observations, not execution of the stationary specialization; there is no universal speedup.
+
+The first helper-growing variant was rejected after its actual minified envelope control became 6.23% slower in all four pairs despite stationary-target gains. One bounded refinement moves the specialization to the existing caller frequency-ramp dispatch and restores the original general helper. The final envelope control is 9.13% faster in all four actual minified pairs (1.14% faster in all source pairs). Both complete variant records, including all adverse controls, are retained; no third variant, quality-specific guard or unchanged-workload rerun was used to erase that regression.
+
+All 624 tests, the 55-test focused suite, strict source/development/public/core-only type checks, 42-source/55-built-module security checks and empty runtime dependencies pass; five generated declarations are byte-identical. Complete source and actual minified proofs both match the accepted core across 3,264 lifecycle and 207 containment cases: 51,881,592 PCM bytes, 547,216,895 typed-state bytes, 11,690,406 scalar comparisons and 112,335 snapshots, SHA-256 `4d8f0626688d810683762b68c887e4fd845041a0ba79119fb6e2403bcd8ab625`. Retain all 171 prior containment cases and add 36 stationary-target cases across all qualities: signed zeros, positive/negative/fractional pitches, subnormals, finite overflow and NaN/infinities. Both scratch cells, all substep advancement, nonfinite containment, callbacks and full retired/free-pool state remain exact. Existing consumer frequency/ratio audio-independence coverage remains unchanged; no wiring-only permanent test is added.
+
+A genuine Chromium 156.0.8078.4 native AudioContext/AudioWorklet runs the public two-second operator-frequency ramp without a pitch envelope: the analyser measures 937.5 Hz at 0.8 seconds toward the 1,760 Hz target, rather than the original 440 Hz. Native audio time reaches 1.269333 seconds; finite held stereo, live pan, release, preserved cancellation, suspend/resume, owned/borrowed cleanup and eight lifecycle events pass, with zero final voices, pending events, errors and rejections. The context uses the explicitly asserted experimental native `setSinkId({ type: "none" })` silent-processing mode, not a mock or SDK workaround. Physical/default-device timing, human listening and hardware fidelity remain unverified. Canonical documentation is regenerated and checked in a real browser for all 35 exact CPU rows, README invariants, search target and scoped security record; screenshots are visually inspected.
+
+
 ### Shared operator frequency-ramp derivation
 
 - Share one existing start/middle/end Hz-to-parabola derivation only when all used nonzero operator inputs agree. Retain the exact multiply-before-divide interpolation and quadratic grouping, and write every independent base/delta/curve cell in its original operator order. Applies to all algorithms, not only the aligned sine frame.
