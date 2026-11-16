@@ -4,6 +4,99 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Reentrant core note admission
+
+- Fix a stale victim index after inherited numeric graph-input getters reenter `Synth.noteOn()`. The previous path could throw a TypeError outside initialization rollback and lose two pool slots; a nested admission could also publish the pending ID twice. Do not suppress inherited input reads or prohibit reentrancy.
+- Snapshot the existing sequence and active count locally. Only if initialization changes the admitted population, recheck ID uniqueness and current victim/priority eligibility inside the existing spare-return catch. A late refusal invalidates partial prepared identity/timing and returns the spare without undoing nested notes. Normal preflight refusal, post-publication terminal callbacks, bounded fades/spill, DSP arithmetic and public APIs/types/formats remain unchanged; no persistent counter, flag, buffer, cache or explicit allocation is added.
+- Five permanent consumer regression groups cover oldest/release-first/quietest selection, audible survivors, explicit/automatic duplicate IDs, protected notes, equal-sized panic/replacement, rendering/retirement/refill, callback order, subsequent reuse and complete slot conservation. All 622 tests, strict source/development/public/core-only type checks, five byte-identical public declarations, the 42-source/55-built security gate and empty runtime dependencies pass.
+- Final source/minified proofs each pass 648 reentrant serial-audio oracle cases/11,354,112 exact stereo bytes, with 432 expected refusal/throw outcomes. Nine scenarios span raw/prepared inputs, three policies/qualities, 8000/48000 Hz, algorithms 0/7, original getter exceptions, rendered-during-getter output, priorities, unique IDs, callbacks and bounded slots. Ordinary numeric prototypes are restored in `finally`; CPU runs use separate pristine processes.
+- Healthy behavior remains exact: 1536 detune lifecycle pairs/31,039,488 PCM bytes, 46,817,280 typed-state bytes at 36,864 checkpoints and 150 scalar comparisons; another 1536 LFO pairs/23,230,464 PCM bytes, 768 operator-noise pairs/11,615,232 bytes and 198 general lifecycle pairs/12,017,424 bytes plus 76 complete-workload pairs. The 1344 general refusals, 468 raw-mask refusals including 60 accessors, and two metadata-accessor refusals retain zero getter reads and original-note playback.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 healthy-path CPU measurements compare against `7219c29`. Four fresh process pairs alternate reference-first/candidate-first order; independent reference calibration selects approximately 120 ms warmup and 220 ms measured work, with identical fixed counts in each corresponding process. Real core admission, specified controls/rendering/release/panic and consumed output checksums stay timed; construction and final pool/error checks remain outside. Same-slot fixtures verify changed immutable patches in the same physical slot before timing. The crashing reentrant baseline is not timed or rerun; corrected cases use independent serial audio oracles.
+
+| Complete healthy workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| prepared-same-capacity1 | -0.56% | 0.80% |
+| prepared-alternating-capacity1 | 0.16% | -0.86% |
+| prepared-same-capacity8 | -0.59% | -2.51% |
+| prepared-same-capacity32 | 1.51% | 1.37% |
+| prepared-alternating-capacity8 | -0.47% | -0.30% |
+| raw-same-capacity1-control | -1.51% | 0.13% |
+| raw-alternating-capacity1-control | -0.07% | 2.00% |
+| prepared-note-render32-panic | -1.50% | -0.06% |
+| prepared-note-render128-panic | -0.88% | -0.09% |
+| prepared-note-render128-high-panic | 0.92% | 0.08% |
+| prepared-immediate-release-panic | -0.88% | -0.49% |
+| prepared-edit-release-reuse-eco | -0.18% | 3.58% |
+| prepared-edit-release-reuse-standard | -1.03% | 0.52% |
+| prepared-edit-release-reuse-high | 0.27% | 0.08% |
+| prepared-quietest-capacity8 | -1.29% | -0.46% |
+| unchanged-render128-control | -1.34% | -0.26% |
+| prepared-interrupted-ramps-release-eco | -0.22% | -0.48% |
+| prepared-interrupted-ramps-release-standard | -0.83% | -1.31% |
+| prepared-interrupted-ramps-release-high | -0.19% | -0.84% |
+| prepared-immediate-ratio-panic | -0.17% | -0.39% |
+| prepared-immediate-frequency-panic | 1.14% | 4.01% |
+| prepared-immediate-operator-scalar-panic | -1.60% | -0.07% |
+| prepared-gain-buffer-eco-capacity1 | 0.15% | 0.69% |
+| prepared-gain-buffer-high-capacity1 | -0.31% | 0.10% |
+| prepared-audible-panic-unrendered-off-eco | 0.94% | 1.35% |
+| prepared-audible-panic-unrendered-off-standard | -1.20% | -1.01% |
+| prepared-audible-panic-unrendered-off-high | -3.38% | -0.01% |
+| prepared-audible-panic-unrendered-stolen-fade | -0.01% | 0.82% |
+| prepared-saw-capacity1 | 0.06% | 0.82% |
+| prepared-noise-capacity1-control | -0.35% | -2.40% |
+| prepared-mixed-noise-capacity1-control | -1.27% | -0.91% |
+| raw-noise-capacity1-control | 2.75% | 1.30% |
+| prepared-noise-render128-control | -0.62% | -0.56% |
+| prepared-mixed-noise-render128-control | 0.75% | 0.96% |
+| prepared-periodic-noise-alternating-capacity1 | 0.82% | 1.75% |
+| prepared-periodic-noise-alternating-render128 | -0.36% | -0.15% |
+| prepared-noise-edit-release-control | -0.06% | 0.48% |
+| prepared-mixed-noise-interrupted-ramps-control | -0.13% | -0.01% |
+| prepared-same-slot-periodic-switch | -0.17% | 1.28% |
+| prepared-same-slot-periodic-shape-switch | -2.33% | 0.82% |
+| prepared-same-slot-noise-switch-control | 1.59% | 0.22% |
+| prepared-same-slot-mixed-switch-control | 0.86% | -1.12% |
+| raw-same-slot-periodic-switch-control | 0.23% | 0.98% |
+| prepared-same-slot-periodic-eco-switch | -0.38% | 1.06% |
+| prepared-same-slot-periodic-high-switch | -0.07% | 0.40% |
+| prepared-full-explicit | 0.64% | -0.23% |
+| prepared-full-sensitive48 | -0.66% | 1.01% |
+| prepared-fractional-sensitive48-control | 0.05% | -1.83% |
+| prepared-fractional-omitted-control | -0.96% | 0.77% |
+| prepared-full-noise-sensitive48 | -3.29% | 0.66% |
+| raw-full-sensitive48-control | 0.53% | 0.60% |
+| prepared-full-key-scaled-sensitive48 | 0.19% | 2.73% |
+| prepared-nearest-below-full-sensitive48-control | 0.68% | 0.42% |
+| prepared-zero-velocity-sensitive48-control | 0.41% | -1.47% |
+| prepared-targets-all-unity | 0.19% | 1.82% |
+| prepared-am-targets-only | 0.54% | -0.97% |
+| prepared-pm-targets-only | 3.48% | 0.26% |
+| prepared-both-nonuniform-targets | 0.28% | 4.04% |
+| prepared-same-slot-nonuniform-omitted-target-switch | 1.82% | 0.06% |
+| prepared-targets-zero-depth-then-live-control | 0.27% | 0.15% |
+| prepared-all-zero-targets-control | 1.43% | -1.26% |
+| prepared-subnormal-near-unity-targets-control | 3.47% | 0.32% |
+| prepared-boolean-targets-control | -1.30% | 0.22% |
+| prepared-nonuniform-targets-render128-control | -0.14% | 0.40% |
+| raw-nonuniform-targets-control | -0.22% | 0.31% |
+| prepared-same-slot-unity-nonuniform-target-switch | 0.19% | 1.36% |
+| prepared-same-slot-am-pm-target-switch | 1.66% | -4.16% |
+| prepared-detune-all-zero | 1.53% | 1.89% |
+| prepared-detune-all-nonzero-control | 0.70% | -0.22% |
+| raw-detune-all-nonzero-control | -0.09% | -0.07% |
+| prepared-detune-subnormal-control | 1.51% | -0.03% |
+| prepared-detune-nearzero-control | -1.71% | 3.18% |
+| prepared-detune-bounds-control | 1.31% | 0.07% |
+| prepared-same-slot-zero-nonzero-detune-switch | -0.11% | -0.06% |
+| prepared-nonzero-detune-render128-control | 1.39% | -0.22% |
+| raw-nonzero-detune-targets-control | 0.73% | 3.23% |
+
+This is a correctness repair, not a universal performance optimization. All adverse controls are retained: minified nonuniform-target admission is +4.04%, immediate-frequency controls +4.01% and eco ADSR edit/release +3.58%; source PM-only and near-unity/subnormal-mask controls are +3.48% and +3.47%. The scalar guard avoids a second policy/ID scan on an unchanged population. These local CPU values do not establish physical allocation, retained-memory, GC-pause, native-browser performance or rendering-deadline improvements.
+
+Actual Chromium AudioWorklet smoke passes at 48000 Hz with finite stereo/pan, both complete note lifecycles, borrowed/owned context cleanup and zero final voices, pending events, DSP errors or rejections. Ancillary non-dist requests remain refused by its isolated allowlist; no control was relaxed. This change includes scoped A/C review, not independent audit, physical-device/MIDI or human-listening acceptance, nor release/publication authorization.
+
 ### Dormant LFO target cells
 
 - Use the existing `amTargeted`/`pmTargeted` validity flags to initialize only the four-cell LFO target arrays that rendering can read. Omitted and explicit all-unity masks already use shared factors. Every non-unity mask is still copied at admission, including initial zero depths/rate that later live controls can activate. No new state, cache, buffer, allocation, renderer branch, public contract or DSP formula is introduced.

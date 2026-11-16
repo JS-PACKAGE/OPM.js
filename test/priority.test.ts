@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Synth, VoiceAdmissionError, renderNote, renderSequence } from '../src/core/index.js';
+import { ALGORITHMS } from '../src/core/algorithms.js';
 import type { SequenceEvent } from '../src/core/index.js';
 import type { Voice } from '../src/voices/schema.js';
 
@@ -12,6 +13,34 @@ const audio = (synth: Synth, frames: number) => {
   synth.render(left, right);
   return { left, right };
 };
+
+function duringGraphRead(action: () => void, admit: () => number): unknown {
+  const saved = Object.getOwnPropertyDescriptor(Array.prototype, '1');
+  let armed = true, reads = 0, failure: unknown;
+  try {
+    Object.defineProperty(Array.prototype, '1', {
+      configurable: true,
+      get(this: unknown) {
+        if (armed && this === ALGORITHMS[7].inputs[0]) {
+          armed = false;
+          reads++;
+          action();
+        }
+        return undefined;
+      },
+      // Nested admissions and host arrays must still be able to create their own cells.
+      set(this: object, value: unknown) {
+        Object.defineProperty(this, '1', { value, configurable: true, enumerable: true, writable: true });
+      },
+    });
+    try { admit(); } catch (error) { failure = error; }
+  } finally {
+    if (saved) Object.defineProperty(Array.prototype, '1', saved);
+    else Reflect.deleteProperty(Array.prototype, '1');
+  }
+  assert.equal(reads, 1);
+  return failure;
+}
 
 test('lower priority never displaces a protected voice and refusal leaves the engine untouched', () => {
   const synth = new Synth(16000, 2);
@@ -175,4 +204,145 @@ test('offline scores honor maxVoices and priority admission deterministically', 
   assert.throws(() => renderSequence([{ ...score[0]!, voicePriority: 1.5 } as SequenceEvent], { sampleRate: 16000 }), RangeError);
   const unprotected = renderSequence(score.map(event => event.type === 'note' ? { ...event, voicePriority: 0 } : event), { sampleRate: 16000, maxVoices: 1 });
   assert.notDeepEqual(unprotected.left, melodyOnly.left);
+});
+
+test('nested graph admissions select the current victim and conserve audible voices and slots', () => {
+  for (const stealing of ['oldest', 'release-first', 'quietest'] as const) {
+    for (const capacity of [1, 2]) {
+      const synth = new Synth(16000, capacity, { stealing }), reference = new Synth(16000, capacity, { stealing });
+      const bound = synth.freeVoices.length, ended: [number, string][] = [], expectedEnded: [number, string][] = [];
+      synth.onVoiceEnded = (id, reason) => { ended.push([id, reason]); };
+      reference.onVoiceEnded = (id, reason) => { expectedEnded.push([id, reason]); };
+      if (capacity === 2) {
+        synth.noteOn(voice, 64, 10);
+        reference.noteOn(voice, 64, 10);
+        assert.deepEqual(audio(synth, 64), audio(reference, 64));
+      }
+      reference.noteOn(voice, 72, 2);
+      reference.noteOn(voice, 60, 1);
+      const failure = duringGraphRead(() => { synth.noteOn(voice, 72, 2); }, () => synth.noteOn(voice, 60, 1));
+      assert.equal(failure, undefined);
+      assert.equal(synth.lastStolenId, capacity === 1 ? 2 : 10);
+      assert.deepEqual(ended, expectedEnded);
+      assert.deepEqual(synth.voices.map(active => active.id), reference.voices.map(active => active.id));
+      assert.equal(synth.freeVoices.length + synth.voices.length + synth.fades.length, bound);
+      const expected = audio(reference, 256);
+      assert.ok(expected.left.some(sample => Math.abs(sample) > 0.01));
+      assert.deepEqual(audio(synth, 256), expected);
+      synth.allNotesOff();
+      reference.allNotesOff();
+      assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+      assert.deepEqual(ended, expectedEnded);
+      assert.equal(synth.freeVoices.length, bound);
+      assert.equal(synth.errorCount, 0);
+    }
+  }
+});
+
+test('a protected nested graph admission rejects the pending note without losing audio or its spare', () => {
+  const synth = new Synth(16000, 1), reference = new Synth(16000, 1), bound = synth.freeVoices.length;
+  reference.noteOn(voice, 72, 2, { voicePriority: 1 });
+  const failure = duringGraphRead(() => { synth.noteOn(voice, 72, 2, { voicePriority: 1 }); },
+    () => synth.noteOn(voice, 60, 1));
+  assert.ok(failure instanceof VoiceAdmissionError);
+  assert.deepEqual(synth.voices.map(active => active.id), [2]);
+  assert.equal(synth.noteOff(1), false);
+  assert.equal(synth.freeVoices.length + synth.voices.length + synth.fades.length, bound);
+  assert.deepEqual(audio(synth, 256), audio(reference, 256));
+  assert.equal(synth.noteOff(2), true);
+  assert.equal(reference.noteOff(2), true);
+  assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+  assert.equal(synth.freeVoices.length, bound);
+  synth.noteOn(voice, 67, 1);
+  reference.noteOn(voice, 67, 1);
+  assert.deepEqual(audio(synth, 256), audio(reference, 256));
+  synth.allNotesOff();
+  reference.allNotesOff();
+  assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+  assert.equal(synth.freeVoices.length, bound);
+  assert.equal(synth.errorCount, 0);
+});
+
+test('nested graph admissions cannot duplicate a pending explicit or automatic ID', () => {
+  for (const automatic of [false, true]) {
+    const synth = new Synth(16000, 2), reference = new Synth(16000, 2), bound = synth.freeVoices.length;
+    reference.noteOn(voice, 72, 1);
+    const failure = duringGraphRead(() => { synth.noteOn(voice, 72, 1); },
+      () => synth.noteOn(voice, 60, automatic ? undefined : 1));
+    assert.ok(failure instanceof RangeError);
+    assert.match(failure.message, /id already active/);
+    assert.deepEqual(synth.voices.map(active => active.id), [1]);
+    assert.equal(synth.freeVoices.length + synth.voices.length + synth.fades.length, bound);
+    assert.deepEqual(audio(synth, 256), audio(reference, 256));
+    assert.equal(synth.noteOff(1), true);
+    assert.equal(reference.noteOff(1), true);
+    assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+    assert.equal(synth.noteOn(voice, 67), 2);
+    assert.equal(reference.noteOn(voice, 67), 2);
+    assert.deepEqual(audio(synth, 256), audio(reference, 256));
+    synth.allNotesOff();
+    reference.allNotesOff();
+    assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+    assert.equal(synth.freeVoices.length, bound);
+    assert.equal(synth.errorCount, 0);
+  }
+});
+
+test('equal-sized nested cancellation and replacement retain higher-priority ownership', () => {
+  const synth = new Synth(16000, 2), reference = new Synth(16000, 2), bound = synth.freeVoices.length;
+  const ended: [number, string][] = [], expectedEnded: [number, string][] = [];
+  synth.onVoiceEnded = (id, reason) => { ended.push([id, reason]); };
+  reference.onVoiceEnded = (id, reason) => { expectedEnded.push([id, reason]); };
+  for (const engine of [synth, reference]) {
+    engine.noteOn(voice, 60, 10);
+    engine.noteOn(voice, 64, 11);
+  }
+  assert.deepEqual(audio(synth, 64), audio(reference, 64));
+  const replace = (engine: Synth) => {
+    engine.panic();
+    engine.noteOn(voice, 72, 20, { voicePriority: 1 });
+    engine.noteOn(voice, 74, 21, { voicePriority: 1 });
+  };
+  replace(reference);
+  const failure = duringGraphRead(() => { replace(synth); }, () => synth.noteOn(voice, 67, 1));
+  assert.ok(failure instanceof VoiceAdmissionError);
+  assert.deepEqual(ended, expectedEnded);
+  assert.deepEqual(synth.voices.map(active => active.id), [20, 21]);
+  assert.equal(synth.freeVoices.length + synth.voices.length + synth.fades.length, bound);
+  assert.deepEqual(audio(synth, 256), audio(reference, 256));
+  synth.allNotesOff();
+  reference.allNotesOff();
+  assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+  assert.deepEqual(ended, expectedEnded);
+  assert.equal(synth.freeVoices.length, bound);
+  assert.equal(synth.errorCount, 0);
+});
+
+test('rendering inside a graph getter cannot retire and refill a stale victim index', () => {
+  const synth = new Synth(16000, 2), reference = new Synth(16000, 2), bound = synth.freeVoices.length;
+  for (const engine of [synth, reference]) {
+    engine.noteOn(voice, 64, 10, { voicePriority: 1 });
+    engine.noteOn(voice, 67, 11);
+  }
+  assert.deepEqual(audio(synth, 64), audio(reference, 64));
+  assert.equal(reference.noteOff(11), true);
+  const expectedDuring = audio(reference, 1600);
+  reference.noteOn(voice, 72, 20, { voicePriority: 1 });
+  let released = false, during: ReturnType<typeof audio> | undefined;
+  const failure = duringGraphRead(() => {
+    released = synth.noteOff(11);
+    during = audio(synth, 1600);
+    synth.noteOn(voice, 72, 20, { voicePriority: 1 });
+  }, () => synth.noteOn(voice, 60, 1));
+  assert.ok(failure instanceof VoiceAdmissionError);
+  assert.equal(released, true);
+  assert.deepEqual(during, expectedDuring);
+  assert.deepEqual(synth.voices.map(active => active.id), [10, 20]);
+  assert.equal(synth.freeVoices.length + synth.voices.length + synth.fades.length, bound);
+  assert.deepEqual(audio(synth, 256), audio(reference, 256));
+  synth.allNotesOff();
+  reference.allNotesOff();
+  assert.deepEqual(audio(synth, 1600), audio(reference, 1600));
+  assert.equal(synth.freeVoices.length, bound);
+  assert.equal(synth.errorCount, 0);
 });

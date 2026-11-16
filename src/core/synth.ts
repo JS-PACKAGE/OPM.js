@@ -1709,7 +1709,8 @@ export class Synth {
     if (id === undefined && this.nextId > Number.MAX_SAFE_INTEGER) throw new RangeError('Note ID space exhausted');
     if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0)) throw new RangeError('id must be a positive safe integer');
     if (id !== undefined) for (const active of this.voices) if (active.id === id) throw new RangeError('id already active');
-    const stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
+    const admissionSequence = this.sequence, admissionSize = this.voices.length;
+    let stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
     if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
     if (id === undefined) id = this.nextId++;
     if (id >= this.nextId) this.nextId = id + 1;
@@ -1887,6 +1888,12 @@ export class Synth {
       active.previous = active.older = active.elapsed = 0;
       active.feedbackScale = feedbackGain(voice.feedback);
       active.releaseTime = active.releaseEnd = -1;
+      // Inherited graph-input getters may admit or cancel notes while this spare is held.
+      if (this.sequence !== admissionSequence + 1 || this.voices.length !== admissionSize) {
+        for (const existing of this.voices) if (existing.id === id) throw new RangeError('id already active');
+        stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
+        if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
+      }
     } catch (error) {
       // A failed spare must not retain partial coefficients or escape the pool.
       active.voice = null!;
