@@ -4,6 +4,59 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Dormant operator-noise clocks
+
+- Move the existing operator-noise seed/turn resets into the existing noise-specific admission branch. Pure sine and other periodic patches never consume these arrays and now skip both fills; every patch containing a noise operator still reseeds all four clocks before rendering. The same waveform dispatch predicates are preserved, with no additional predicate, field, cache, buffer, renderer branch or DSP formula. Held-noise LFO state remains independent and unchanged.
+- Add one public-consumer regression comparing full fresh/recycled stereo playback after noise → periodic → noise patch reuse, followed by live controls and release. It covers three qualities, 8000/48000 Hz, noise-only/mixed layouts and algorithms 0/4/7 with a held-noise LFO.
+- Final source/minified comparisons each preserve 768 dedicated noise lifecycle PCM pairs/11,615,232 exact bytes and 2304 callbacks per variant, including 384 independent fresh-engine oracle pairs. Every algorithm, all nine operator shapes, all eight preceding periodic shapes, panic/natural endings, stolen fades, reentrant replacement, subsequent live controls and exact FIR drain are covered at both rates and all qualities. Another 198 general lifecycle PCM pairs/12,017,424 exact bytes, 38 fixed-call complete-workload pairs, 1344 exact refusal pairs and two independent accessor refusals retain original-note playback, zero getter reads and fixed slot identity.
+
+Final matched Node 26.7 / V8 14.6 darwin-arm64 CPU measurements compare against `03ea335`. Each workload/build uses four fresh process pairs in alternating reference-first/candidate-first order; separate reference calibration selects approximately 120 ms warmup and 220 ms measured work. Every corresponding process executes identical fixed warmup/run counts. Actual core admission, raw validation, specified controls/rendering/release/panic and common checksums remain timed; fixture construction and final pool/error checks stay outside. Complete consumed outputs and witnesses match.
+
+Entries are median paired user+system CPU-time changes (`candidate / reference - 1`), not throughput changes or confidence intervals; negative is faster. All 38 profiles, including noise, raw, patch-alternating and adverse render/control workloads, are retained. These are local admission-path measurements, not universal rendering, physical allocation, retained-memory, GC-pause, application-deadline or native-browser performance claims.
+
+| Complete workload | Source CPU time | Minified CPU time |
+| --- | ---: | ---: |
+| prepared-same-capacity1 | -3.77% | -5.26% |
+| prepared-alternating-capacity1 | -3.59% | -2.98% |
+| prepared-same-capacity8 | -4.91% | -4.72% |
+| prepared-same-capacity32 | -5.01% | -3.53% |
+| prepared-alternating-capacity8 | -4.11% | -2.70% |
+| raw-same-capacity1-control | -0.98% | 0.91% |
+| raw-alternating-capacity1-control | -2.19% | -0.32% |
+| prepared-note-render32-panic | 0.65% | -0.55% |
+| prepared-note-render128-panic | 0.03% | -0.62% |
+| prepared-note-render128-high-panic | -0.04% | 0.72% |
+| prepared-immediate-release-panic | -4.23% | -5.89% |
+| prepared-edit-release-reuse-eco | -0.43% | -0.11% |
+| prepared-edit-release-reuse-standard | 0.07% | 0.19% |
+| prepared-edit-release-reuse-high | -0.19% | 0.11% |
+| prepared-quietest-capacity8 | -3.65% | -3.55% |
+| unchanged-render128-control | -0.32% | 0.21% |
+| prepared-interrupted-ramps-release-eco | -0.05% | -0.90% |
+| prepared-interrupted-ramps-release-standard | -0.34% | -0.91% |
+| prepared-interrupted-ramps-release-high | -0.52% | 0.73% |
+| prepared-immediate-ratio-panic | -2.63% | -3.95% |
+| prepared-immediate-frequency-panic | -4.30% | -4.25% |
+| prepared-immediate-operator-scalar-panic | -3.82% | -4.55% |
+| prepared-gain-buffer-eco-capacity1 | -7.50% | -5.74% |
+| prepared-gain-buffer-high-capacity1 | -4.60% | -5.65% |
+| prepared-audible-panic-unrendered-off-eco | -2.68% | -0.65% |
+| prepared-audible-panic-unrendered-off-standard | 0.46% | -0.45% |
+| prepared-audible-panic-unrendered-off-high | 0.49% | -0.16% |
+| prepared-audible-panic-unrendered-stolen-fade | -0.34% | -1.00% |
+| prepared-saw-capacity1 | -4.79% | -5.79% |
+| prepared-noise-capacity1-control | -4.84% | -2.51% |
+| prepared-mixed-noise-capacity1-control | -0.23% | -0.04% |
+| raw-noise-capacity1-control | -0.51% | -1.69% |
+| prepared-noise-render128-control | -0.27% | -0.15% |
+| prepared-mixed-noise-render128-control | -0.96% | 0.13% |
+| prepared-periodic-noise-alternating-capacity1 | -1.89% | -3.31% |
+| prepared-periodic-noise-alternating-render128 | 0.94% | -0.12% |
+| prepared-noise-edit-release-control | -0.35% | 0.37% |
+| prepared-mixed-noise-interrupted-ramps-control | 0.05% | 0.59% |
+
+Verification: build, all 617 tests, strict source/development/public/core-only TypeScript checks, five byte-identical generated public declarations, the 42-source/55-built security gate and empty runtime dependencies pass. Native Chromium AudioWorklet smoke passes at 48000 Hz with finite stereo/pan, full note/context lifecycle and zero final DSP errors, rejections or pending events. Its isolated allowlist still rejects ancillary non-dist requests; no production control is relaxed. Scoped A/C security review is recorded in SECURITY.md. Physical-device/MIDI and human-listening acceptance remain unverified; no release/publication is authorized.
+
 ### Prepared frame-gain validity
 
 - Remove the private frame-gain buffer clear from pooled `Synth.noteOn()`. Keep `gainsSteady = false`: every live frame prepares all four operators at every oversample position before using that buffer. Finished frames already bypass the buffer entirely, including immediate zero-release notes and stolen fades. No renderer branch, buffer size, pool policy, public API/type, voice format or DSP formula changes.

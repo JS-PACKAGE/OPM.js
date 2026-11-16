@@ -1776,10 +1776,15 @@ export class Synth {
       active.pitchEnvelope = Object.hasOwn(voice, 'pitchEnvelope') ? voice.pitchEnvelope : undefined;
       active.graph = ALGORITHMS[voice.algorithm];
       const { waveforms } = active;
-      active.frameKernel = waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0 ? SINE_FRAMES[voice.algorithm] :
-        waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8 ? WAVE_FRAMES[voice.algorithm] :
-        (waveforms[0] === 8 || levels[0] === 0) && (waveforms[1] === 8 || levels[1] === 0) &&
-        (waveforms[2] === 8 || levels[2] === 0) && (waveforms[3] === 8 || levels[3] === 0) ? noiseFrame : null;
+      if (waveforms[0] === 0 && waveforms[1] === 0 && waveforms[2] === 0 && waveforms[3] === 0) active.frameKernel = SINE_FRAMES[voice.algorithm];
+      else if (waveforms[0] !== 8 && waveforms[1] !== 8 && waveforms[2] !== 8 && waveforms[3] !== 8) active.frameKernel = WAVE_FRAMES[voice.algorithm];
+      else {
+        // Periodic patches never consume these clocks; every noise admission reseeds them.
+        active.noiseStates.fill(NOISE_SEED);
+        active.noiseTurns.fill(0);
+        active.frameKernel = (waveforms[0] === 8 || levels[0] === 0) && (waveforms[1] === 8 || levels[1] === 0) &&
+          (waveforms[2] === 8 || levels[2] === 0) && (waveforms[3] === 8 || levels[3] === 0) ? noiseFrame : null;
+      }
       if (active.frameKernel === null) {
         const carriers = active.graph.carriers;
         let noiseCarriers = true;
@@ -1869,8 +1874,6 @@ export class Synth {
       active.lastFadeGain = 1;
       active.carrierGain = HEADROOM / active.graph.carriers.length;
       active.phases.fill(0);
-      active.noiseStates.fill(NOISE_SEED);
-      active.noiseTurns.fill(0);
       active.values.fill(0);
       active.envelopeSegment.fill(0);
       active.envelopeUntil.fill(0);

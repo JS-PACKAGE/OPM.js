@@ -331,6 +331,40 @@ test('17-bit noise recurrence is maximal length and deterministic', () => {
   assert.deepEqual(audio(synth, 4096), first, 'pitch controls remain valid but cannot pitch noise');
 });
 
+test('pooled operator-noise clocks restart after periodic patch reuse and preserve subsequent live controls', () => {
+  const shapes = [['noise', 'noise', 'noise', 'noise'], ['sine', 'noise', 'saw', 'noise'], ['sine', 'saw', 'noise', 'sine']] as const;
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const rate of [8000, 48000]) {
+    for (const algorithm of [0, 4, 7] as const) for (const waveforms of shapes) {
+      const definition = tone();
+      definition.algorithm = algorithm; definition.feedback = 3; definition.modIndex = 4; definition.pan = 0.2;
+      definition.lfo = { rate: 5, amDepth: 0.2, pmDepth: 50, waveform: 'noise' };
+      definition.ops.forEach((op, index) => {
+        op.waveform = waveforms[index]; op.level = 0.2; op.ratio = index + 1; op.noiseRate = 1337 + index * 71;
+      });
+      const patch = prepareVoice(definition), periodic = prepareVoice({ ...definition,
+        ops: definition.ops.map((op, index) => ({ ...op, waveform: index % 2 ? 'saw' : 'sine' })) as Voice['ops'] });
+      const synth = new Synth(rate, 1, { quality }), fresh = new Synth(rate, 1, { quality });
+      synth.noteOn(patch, 57); audio(synth, 257); synth.panic();
+      synth.noteOn(periodic, 57); audio(synth, 129); synth.panic();
+      const id = synth.noteOn(patch, 57), expectedId = fresh.noteOn(patch, 57);
+      const compare = (frames: number): Float32Array => {
+        const left = new Float32Array(frames), right = new Float32Array(frames);
+        const expectedLeft = new Float32Array(frames), expectedRight = new Float32Array(frames);
+        synth.render(left, right); fresh.render(expectedLeft, expectedRight);
+        assert.deepEqual(left, expectedLeft); assert.deepEqual(right, expectedRight);
+        return left;
+      };
+      assert.ok(energy(compare(512)) > 1e-6);
+      const controls = { pitch: 5, glide: 0.005, operatorLevels: [0, 0.3, 0.6, 0.1] as const, ramp: 0.01 };
+      assert.equal(synth.updateNote(id, controls), true); assert.equal(fresh.updateNote(expectedId, controls), true);
+      compare(511);
+      assert.equal(synth.noteOff(id), true); assert.equal(fresh.noteOff(expectedId), true);
+      compare(2048);
+      assert.equal(synth.errorCount, 0); assert.equal(fresh.errorCount, 0);
+    }
+  }
+});
+
 test('noise-only frames match an inaudible control-ramp reference', () => {
   for (const [sampleRate, quality] of [[8000, 'eco'], [48000, 'standard'], [192000, 'high']] as const) {
     for (const algorithm of [0, 1, 2, 3, 4, 5, 6, 7] as const) {
