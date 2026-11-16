@@ -1051,6 +1051,44 @@ function sineFrame7(active: ActiveVoice, out: Float64Array, dynamicPitch: boolea
   return true;
 }
 
+/** Independent equal-phase carriers share the polynomial, not gain products. */
+function synchronizedSineFrame7(active: ActiveVoice, out: Float64Array, dynamicPitch: boolean): boolean {
+  const { phases, values, gains, steps, sineFrame: frame } = active;
+  let phase = phases[0];
+  const step = steps[0];
+  if (dynamicPitch || active.feedbackScale !== 0 || phase !== phases[1] || phase !== phases[2] || phase !== phases[3] ||
+      step !== steps[1] || step !== steps[2] || step !== steps[3] ||
+      (phase === 0 && (Object.is(phase, -0) || Object.is(phases[1], -0) || Object.is(phases[2], -0) || Object.is(phases[3], -0)))) {
+    return sineFrame7(active, out, dynamicPitch);
+  }
+  const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3], carrierGain = active.carrierGain;
+  let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
+  for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
+    const g0 = gains[base] * q0, g1 = gains[base + 1] * q1, g2 = gains[base + 2] * q2, g3 = gains[base + 3] * q3;
+    if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0) v0 = v1 = v2 = v3 = 0;
+    else {
+      // No active state is committed yet; restart the original on corrupt feedback history.
+      if (g0 !== 0 && !Number.isFinite(previous + older)) return sineFrame7(active, out, dynamicPitch);
+      const k = (phase + ROUND_MAGIC) - ROUND_MAGIC, f = phase - k;
+      const sign = 1 - 2 * (k & 1), z = f * f, z2 = z * z;
+      const p = f * ((3.141592653243751 + z * -5.1677127412212185) + z2 * (2.5501627947124317 + z * -0.5992474048092294) +
+        (z2 * z2) * (0.08203122969596048 + z * -0.007000499610629468));
+      v0 = g0 === 0 ? 0 : p * (g0 * sign); v1 = g1 === 0 ? 0 : p * (g1 * sign);
+      v2 = g2 === 0 ? 0 : p * (g2 * sign); v3 = g3 === 0 ? 0 : p * (g3 * sign);
+    }
+    const sample = (v0 + v1 + v2 + v3) * carrierGain;
+    phase += step; if (phase >= PHASE_CYCLE) phase -= PHASE_CYCLE;
+    older = previous; previous = v0;
+    if (!Number.isFinite(sample)) return false;
+    out[sub] = sample;
+  }
+  if (!Number.isFinite(phase + phase + phase + phase + v0 + v1 + v2 + v3 + older)) return false;
+  phases[0] = phase; phases[1] = phase; phases[2] = phase; phases[3] = phase;
+  values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+  active.previous = previous; active.older = older;
+  return true;
+}
+
 const SINE_FRAMES: readonly FrameKernel[] = [sineFrame0, sineFrame1, sineFrame2, sineFrame3, sineFrame4, sineFrame5, sineFrame6, sineFrame7];
 
 /* Voices mixing sine with other periodic waveforms (no noise) and static operator
@@ -1934,6 +1972,14 @@ export class Synth {
       active.pitchSettled = false;
       active.previous = active.older = active.elapsed = 0;
       active.feedbackScale = feedbackGain(voice.feedback);
+      if (active.frameKernel === sineFrame7 && active.feedbackScale === 0 &&
+          levels[0] !== 0 && levels[1] !== 0 && levels[2] !== 0 && levels[3] !== 0 && steps[0] !== 0 &&
+          steps[0] === steps[1] && steps[0] === steps[2] && steps[0] === steps[3]) {
+        const targets = active.pmTargets;
+        if (!active.pmTargeted || (targets[0] === targets[1] && targets[0] === targets[2] && targets[0] === targets[3])) {
+          active.frameKernel = synchronizedSineFrame7;
+        }
+      }
       active.releaseTime = active.releaseEnd = -1;
       // Inherited graph-input getters may admit or cancel notes while this spare is held.
       if (this.sequence !== admissionSequence + 1 || this.voices.length !== admissionSize) {

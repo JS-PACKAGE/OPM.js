@@ -4,6 +4,46 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Aligned independent sine carriers
+
+- Share only the repeated sine polynomial for aligned, independent algorithm-7 carriers. Keep each envelope/gain product, `p * (gain * sign)` order, zero-gain masking, ascending carrier sum, all four phase/value stores and operator-0 history exactly as before.
+- Conservative admission requires zero feedback, four nonzero static levels, nonzero equal steps and uniform/shared PM factors. Runtime unequal phases/steps, changed feedback, dynamic pitch or negative-zero phases use the original sine frame; generic operator ramps and every other algorithm/waveform retain their routes. No new buffers, persistent flags, public API, format or dependency.
+- Nonfinite/overflowed feedback history retains the original zero-gain masking and error behavior, including overflow between substeps. The bounded original-frame restart occurs before any active numerical-state commit; all-zero gains skip oscillator work.
+- Verification: 622 behavioral tests; strict source/development/public/core-only types; scoped integration-owner A/C review; 42-source/55-built security gate; empty runtime dependency tree; five byte-identical public declarations. Source/minified proofs match across 2880 raw/prepared lifecycle cases plus 21 numerical-containment cases: 43,614,888 stereo PCM bytes, 385,953,765 typed-state bytes, 8,381,058 scalar comparisons and 77,781 checkpoints, including complete returned-slot numerical state. Cases include independent ADSRs, all five LFO shapes, note/global sync, delayed and zero AM, feedback/pitch/frequency changes, unequal phases/steps, signed zeros, masked NaN recovery, mid-frame history overflow, steals/fades and periodic/noise recycling.
+
+Complete CPU comparison against `5ffdb8d`, Node.js 26.7.0 on macOS arm64: four fresh AB/BA process pairs per row. Independent 120 ms reference calibration selects a fixed measurement count targeting approximately 220 ms; each paired variant uses identical counts and a fixed derived warm count. Measure process user+system CPU; consume rendered samples and compare final PCM/filter witnesses. Patch construction and initial held-note admission are outside render timing; actual raw/prepared admission and per-block live-frequency validation remain inside their respective timings. Source/minified distributions are calibrated separately. Negative means less CPU, not a universal latency, GC, glitch or listening guarantee.
+
+| Complete workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `standard-mono1` | -0.27% | 0.07% |
+| `standard-mono8` | -0.57% | -2.35% |
+| `standard-noise1` | 0.10% | 0.19% |
+| `standard-stereo8` | 0.58% | 0.01% |
+| `eco-mono1-control` | -0.03% | -3.49% |
+| `high-mono1-control` | -0.03% | 0.21% |
+| `raw-admission-control` | -0.75% | 0.01% |
+| `standard-noise8` | 0.03% | -0.13% |
+| `standard-noise-stereo8` | -0.07% | 0.16% |
+| `eco-noise1` | 0.02% | -0.53% |
+| `high-noise1` | 0.09% | 0.03% |
+| `different-rate-noise-control` | 0.42% | -0.62% |
+| `zero-static-level-noise-control` | -0.25% | 0.14% |
+| `standard-unison1` | -20.16% | -17.79% |
+| `standard-unison8` | -27.04% | -26.84% |
+| `standard-unison-stereo8` | -26.48% | -26.43% |
+| `eco-unison1` | -11.34% | -12.15% |
+| `high-unison1` | -30.76% | -30.39% |
+| `unequal-sine7-control` | 0.16% | 0.29% |
+| `feedback-sine7-control` | 0.41% | 1.36% |
+| `targeted-pm-sine7-control` | -0.33% | 0.82% |
+| `live-frequency-unison-control` | 1.91% | 1.83% |
+| `prepared-admission-control` | 0.28% | 1.43% |
+
+All five unison rows improve in every source/minified pair. Adverse controls are retained: continuous independent-frequency edits are 1.91% slower in source and 1.83% in minified, in all four pairs; minified nonzero-feedback and prepared-admission controls are 1.36% and 1.43% slower in every pair. Other control variations are not claimed as improvements. The initial throwaway fixture's unsupported operator triangle and zero ratio were correctly rejected by the baseline, then corrected to the actual saw enum and supported 0.125-ratio/1-Hz lower bounds without changing production validation or reducing comparisons.
+
+Actual Chromium 156.0.8078.4 on darwin/arm64 also exercised the deployed v8 algorithm-7 aligned-sine voice through a real 48 kHz AudioWorklet and a borrowed AudioContext using the [documented native silent sink](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/setSinkId) (`setSinkId({ type: "none" })`). All original trusted-gesture, same-origin, CSP/MIME, destination-null, connection routing, finite/headroom, held stereo, full-right pan, release, suspend/resume, preserve/cancel and borrowed/owned-context cleanup assertions were retained and passed; the clock advanced to 0.976 seconds and final diagnostics had zero active voices, pending events, errors and rejected notes. The host's default-output clock stalled after 0.005333 seconds in five separate native oscillator controls loading no OPM modules, including documented unmuted launch and nonzero-gain variants; no underlying driver cause is claimed. The experimental silent-sink API is only a throwaway host-proof configuration, not an SDK requirement or fake audio source. Default-device playback and human listening remain unverified.
+
+
 ### Synchronized noise operator clocks
 
 - Reuse the already-identical clock and LFSR computation for four equal-rate noise operators with nonzero static levels. Retain each fractional substep, per-operator state, phase/value/history store and finite-state check; do not multiply a frame-wide clock step or couple previously independent rates.
