@@ -4,6 +4,10 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Scoped graph-input test fixtures
+
+- Restore both numeric prototype descriptors and the original `Array.prototype.length` after inherited graph-input getter scenarios so priority tests do not leak prototype state into later cases.
+
 ### Reentrant core note admission
 
 - Fix a stale victim index after inherited numeric graph-input getters reenter `Synth.noteOn()`. The previous path could throw a TypeError outside initialization rollback and lose two pool slots; a nested admission could also publish the pending ID twice. Do not suppress inherited input reads or prohibit reentrancy.

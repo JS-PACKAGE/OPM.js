@@ -15,7 +15,7 @@ const audio = (synth: Synth, frames: number) => {
 };
 
 function duringGraphRead(action: () => void, admit: () => number): unknown {
-  const saved = Object.getOwnPropertyDescriptor(Array.prototype, '1');
+  const saved = Object.getOwnPropertyDescriptor(Array.prototype, '1'), prototypeLength = Array.prototype.length;
   let armed = true, reads = 0, failure: unknown;
   try {
     Object.defineProperty(Array.prototype, '1', {
@@ -37,6 +37,7 @@ function duringGraphRead(action: () => void, admit: () => number): unknown {
   } finally {
     if (saved) Object.defineProperty(Array.prototype, '1', saved);
     else Reflect.deleteProperty(Array.prototype, '1');
+    Array.prototype.length = prototypeLength;
   }
   assert.equal(reads, 1);
   return failure;
