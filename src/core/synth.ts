@@ -225,7 +225,7 @@ interface ActiveVoice {
   lfoTurns: number; lfoCycle: number; lfoLive: boolean;
   /** Note-on snapshot of the voice LFO: delay, rate, phase, global sync and waveform code. */
   lfoDelay: number; lfoRate: number; lfoPhase: number; lfoGlobal: boolean; lfoCode: number;
-  /** Per-operator LFO depth scales (1 when the voice omits targets). */
+  /** Per-operator LFO depth scales, read only under their corresponding targeted flag. */
   amTargeted: boolean; pmTargeted: boolean; amTargets: Float64Array; pmTargets: Float64Array;
   tunedFrequency: number;
   /** Every operator gain is constant until release or an ADSR edit. */
@@ -1845,9 +1845,11 @@ export class Synth {
         (amTargets[0] !== 1 || amTargets[1] !== 1 || amTargets[2] !== 1 || amTargets[3] !== 1);
       active.pmTargeted = pmTargets !== undefined &&
         (pmTargets[0] !== 1 || pmTargets[1] !== 1 || pmTargets[2] !== 1 || pmTargets[3] !== 1);
-      for (let i = 0; i < 4; i++) {
-        active.amTargets[i] = amTargets?.[i] ?? 1;
-        active.pmTargets[i] = pmTargets?.[i] ?? 1;
+      if (active.amTargeted) {
+        for (let i = 0; i < 4; i++) active.amTargets[i] = amTargets![i];
+      }
+      if (active.pmTargeted) {
+        for (let i = 0; i < 4; i++) active.pmTargets[i] = pmTargets![i];
       }
       active.pitchFrom = active.pitchTarget = active.pitchStart = active.pitchFrames = 0;
       active.operatorLevels.fill(1);
