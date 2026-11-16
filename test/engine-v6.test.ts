@@ -145,6 +145,43 @@ test('uniform LFO targets preserve depth scaling across live controls and recycl
   }
 });
 
+test('muted operator PM targets cannot change independent carrier audio during pitch ramps', () => {
+  const steps: readonly [number, NoteControls?][] = [
+    [1],
+    [97, { pitch: 24, glide: 0.003 }],
+    [257, { operatorFrequencies: tuple(20000), ramp: 0 }],
+    [41, { pitch: -24, glide: 0.002 }],
+    [53, { operatorFrequencies: tuple(1), operatorRatios: tuple(0.125), ramp: 0.004 }],
+    [73, { operatorFrequencies: [null, null, null, null], operatorRatios: tuple(32), ramp: 0.003 }],
+    [1, { operatorRatios: tuple(1), pitch: 0, glide: 0, ramp: 0 }],
+    [61, { feedback: 3, ramp: 0 }],
+    [67, { feedback: 0, ramp: 0 }],
+  ];
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const sampleRate of [8000, 48000, 192000]) {
+    const synths = [new Synth(sampleRate, 1, { quality }), new Synth(sampleRate, 1, { quality })];
+    for (let index = 0; index < synths.length; index++) {
+      const patch = tone();
+      patch.ops.forEach(op => { op.level = 0.2; op.adsr = { a: 0.001, d: 0.002, s: 0.8, r: 0.003 }; });
+      patch.lfo = { rate: 7, amDepth: 0.2, pmDepth: 120, waveform: 'sine', phase: 0.75,
+        pmTargets: index === 0 ? tuple(1) : [0, 1, 1, 1] };
+      patch.pitchEnvelope = { a: 0.004, d: 0.006, r: 0.003, initial: 0, peak: 1200, sustain: -100, final: 0 };
+      assert.equal(synths[index].noteOn(patch, 69, 1), 1);
+      assert.equal(synths[index].updateNote(1, { operatorLevels: [0, 1, 1, 1] }), true);
+    }
+    let energy = 0;
+    for (const [frames, controls] of steps) {
+      if (controls) for (const synth of synths) assert.equal(synth.updateNote(1, controls), true);
+      const actual = audio(synths[0], frames, 37), expected = audio(synths[1], frames, 53);
+      assert.deepEqual(actual, expected, `${quality}/${sampleRate}/${frames}`);
+      for (const sample of actual) { assert.ok(Number.isFinite(sample)); energy += sample * sample; }
+    }
+    assert.ok(energy > 1e-4);
+    for (const synth of synths) assert.equal(synth.noteOff(1), true);
+    assert.deepEqual(audio(synths[0], 2048, 37), audio(synths[1], 2048, 53), `${quality}/${sampleRate}/release`);
+    for (const synth of synths) { assert.equal(synth.errorCount, 0); assert.equal(synth.voices.length, 0); }
+  }
+});
+
 test('reapplying the current LFO rate preserves discontinuous phase and subsequent live edits', () => {
   for (const quality of ['eco', 'standard', 'high'] as const) {
     for (const waveform of ['saw', 'square', 'noise'] as const) for (const sync of ['note', 'global'] as const) {

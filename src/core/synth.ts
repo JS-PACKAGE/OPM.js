@@ -1064,13 +1064,26 @@ function synchronizedPitchSineFrame7(active: ActiveVoice, out: Float64Array): bo
     return sineFrame7(active, out, true);
   }
   const q0 = frame[0], q1 = frame[1], q2 = frame[2], q3 = frame[3], carrierGain = active.carrierGain;
+  const stepBase = increments[0], pmFactor = active.pmTargeted ? pmFactors[0] : frame[4];
   let previous = active.previous, older = active.older, v0 = 0, v1 = 0, v2 = 0, v3 = 0;
   for (let sub = 0, base = 0; sub < out.length; sub++, base += 4) {
-    stepPitch(active, sub, out.length, frame);
+    const pitchFactor = frame[5];
+    let increment = stepBase;
+    if (frequencyRamping) {
+      const x = sub / out.length;
+      increment += x * (deltas[0] + x * curves[0]);
+    }
+    const step = Math.min(MAX_STEP, Math.min(MAX_STEP, increment * pitchFactor) * pmFactor);
+    // Zero/nonfinite results retain independent signed-zero and NaN step stores.
+    if (step === 0 || !Number.isFinite(step)) stepPitch(active, sub, out.length, frame);
+    else {
+      steps[0] = step; steps[1] = step; steps[2] = step; steps[3] = step;
+      frame[5] = pitchFactor * frame[6];
+    }
     const g0 = gains[base] * q0, g1 = gains[base + 1] * q1, g2 = gains[base + 2] * q2, g3 = gains[base + 3] * q3;
     if (g0 === 0 && g1 === 0 && g2 === 0 && g3 === 0) v0 = v1 = v2 = v3 = 0;
     else {
-      // stepPitch already advanced this substep; never restart it on an error.
+      // Pitch already advanced this substep; never restart it on an error.
       if (g0 !== 0 && !Number.isFinite(previous + older)) return false;
       const k = (phase + ROUND_MAGIC) - ROUND_MAGIC, f = phase - k;
       const sign = 1 - 2 * (k & 1), z = f * f, z2 = z * z;

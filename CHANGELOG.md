@@ -4,6 +4,58 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Shared clamped carrier pitch steps
+
+- Within the already-validated common-pitch sine frame, compute one identical nonzero finite step instead of repeating four base/parabola/PM/clamp calculations. Retain the exact inner pre-PM cap, multiplication and outer `MAX_STEP` cap, all four independent step stores and one pitch-factor advance per substep. No new buffers, flags, API, format or dependency.
+- Cache the fixed frame-local base and shared PM factor; skip the fractional-substep division when ratio/Hz ramps are absent. Existing phase/current-step, feedback, signed-zero and future-coefficient guards are unchanged.
+- Zero/nonfinite results use the original per-operator `stepPitch` calculation before any new state mutation, preserving distinct signed-zero cells and nonfinite payloads. The preliminary pure arithmetic never retries a pitch mutation or a frame. Gain/sign, waveform, phase/history, error and callback behavior are unchanged.
+- Add a public consumer regression: changing only a muted independent operator PM target cannot change audible PCM during glides, envelopes, clamping, fixed-Hz/ratio chasing, feedback and release. Compare distinct render chunks across all three qualities at 8/48/192 kHz; no private function identity, wiring or source-text assertions. The same regression also passes against the frozen accepted core.
+
+Complete CPU comparison against `2715f74`, Node.js 26.7.0 on macOS arm64: four fresh AB/BA process pairs per row. Independent 120 ms reference calibration selects fixed counts targeting approximately 220 ms; both variants use identical measured counts and fixed derived warm counts. Measure process user+system CPU, consume rendered samples and compare final PCM/filter witnesses. Source/minified distributions calibrate separately. Patch construction and initial held-note admission are outside render timing; raw/prepared admission and per-block controls/validation remain inside. Common glides and frequency/ratio edits retarget 144-sample ramps every 128-sample block; eight-voice modes update all eight voices. The envelope mode restarts its genuine 10-second attack every 750 blocks (2 seconds of audio), with panic/admission inside timing, so warming cannot turn it into a settled-pitch benchmark. Negative means less CPU, not a universal latency, GC, glitch or listening guarantee.
+
+| Workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `standard-mono1` | -0.67% | -0.07% |
+| `standard-mono8` | 0.56% | -0.49% |
+| `standard-noise1` | -0.58% | -0.15% |
+| `standard-stereo8` | 0.90% | 0.83% |
+| `eco-mono1-control` | -2.51% | 0.35% |
+| `high-mono1-control` | -0.05% | 0.12% |
+| `raw-admission-control` | -0.24% | -0.88% |
+| `standard-noise8` | -0.18% | 0.15% |
+| `standard-noise-stereo8` | 0.26% | -0.09% |
+| `eco-noise1` | -0.04% | 0.21% |
+| `high-noise1` | 0.13% | 0.26% |
+| `different-rate-noise-control` | -0.37% | 1.45% |
+| `zero-static-level-noise-control` | 0.21% | 0.30% |
+| `standard-unison1` | -0.02% | -0.53% |
+| `standard-unison8` | -1.17% | 0.45% |
+| `standard-unison-stereo8` | -0.10% | 0.03% |
+| `eco-unison1` | -0.13% | 0.07% |
+| `high-unison1` | 0.02% | 0.25% |
+| `unequal-sine7-control` | 0.02% | -0.41% |
+| `feedback-sine7-control` | -0.82% | -0.29% |
+| `targeted-pm-sine7-control` | -0.70% | 1.17% |
+| `live-frequency-unison-control` | 0.08% | -0.92% |
+| `prepared-admission-control` | -1.46% | -0.52% |
+| `standard-common-glide1` | -3.83% | -3.69% |
+| `standard-common-glide8` | -5.53% | -6.03% |
+| `standard-common-glide-stereo8` | -7.04% | -5.04% |
+| `eco-common-glide1` | -1.81% | 0.36% |
+| `high-common-glide1` | -6.99% | -5.39% |
+| `standard-common-frequency1` | -8.19% | -6.32% |
+| `standard-common-ratio1` | -5.35% | -4.77% |
+| `standard-common-combined1` | -5.44% | -4.66% |
+| `standard-common-targeted-glide1` | -9.22% | -6.85% |
+| `standard-common-envelope1` | -4.74% | -2.40% |
+
+All ten common-pitch source workloads improve in every pair; nine of ten do so in minified modules. Minified eco common glide is **0.36% slower** (three of four pairs), not a verified improvement. Source standard stereo and noise stereo controls are slower in every pair; minified standard stereo and high mono controls are slower in every pair. The minified different-rate noise and targeted-PM controls also have positive medians with three of four slower pairs. Retain every row above, including all other slower medians; do not attribute unrelated improvements to this kernel or claim a universal speedup. No quality-specific workaround is added for the eco result.
+
+Strict compilation, all 623 tests, source/development/public/core-only type checks, 42-source/55-built-module security checks and the empty runtime dependency tree pass. All five generated public declarations remain byte-identical. The focused four-file suite passes 54 tests, and the frozen accepted baseline passes all 13 engine tests including the new public consumer regression. Source and actual minified modules independently match the accepted core across 3,264 lifecycle cases and 129 containment cases: 51,880,968 PCM bytes, 545,683,025 typed-state bytes, 11,635,962 scalar comparisons and 112,257 snapshots; both proof summaries have SHA-256 `70e4f5bbd940435ee22a0d288bb06dbc0528c425449cdf03804228e3d212d853`. Retain the original 105 exception cases and add 24 across all qualities for signed-zero base cells at zero/wrapped phases, negative finite and infinite bases, and NaN shared PM with a still-advancing finite glide, including fully masked failure variants. Compare phase, each step cell, pitch-factor progression, output, callbacks and retired/free state without rerendering a failed substep.
+
+Actual Chromium runs the deployed modules through a native AudioWorklet with a two-second pitch envelope. The native experimental silent sink advances 1.000 s at 48 kHz; held stereo RMS is 0.16435/0.16435 and right-pan RMS is 0/0.14619. Trusted gesture, same-origin/CSP/MIME loading, finite headroom, release, preserve/cancel, suspend/resume and owned/borrowed cleanup checks pass; final active voices, pending events, errors and rejected notes are zero. The throwaway fixture uses native `AudioContext.setSinkId({ type: "none" })`, not fake audio APIs or an SDK sink requirement. Physical-device playback, the same-host hardware-default clock and human listening remain unverified.
+
+
 ### Aligned common-pitch sine frames
 
 - Extend only the existing aligned, independent algorithm-7 sine path to provably common glides, pitch envelopes and operator ratio/Hz ramps. Existing feedback, phase, current-step and negative-zero guards run before dynamic dispatch; unequal voices retain the original sine frame without an extra dynamic-helper call.
