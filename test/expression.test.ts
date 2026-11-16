@@ -94,6 +94,70 @@ test('prepared admissions never allocate typed state and remain bounded under re
   assert.deepEqual(audio(synth, 256), audio(fresh, 256), 'recycled phases, filters, release and controls reset');
 });
 
+test('recycled prepared slots discard interrupted ramps before fresh playback and partial controls', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const rate of [16000, 48000]) {
+    const definition = tone();
+    definition.ops.forEach((op, index) => { op.level = 0.2 / (index + 1); });
+    const patch = prepareVoice(definition);
+    const synth = new Synth(rate, 1, { quality }), reference = new Synth(rate, 1, { quality });
+    const previous = synth.noteOn(patch, 69);
+    audio(synth, 37);
+    assert.equal(synth.updateNote(previous, { feedback: 3, lfoRate: 7, amDepth: 0.3, pmDepth: 120, gain: 0.35,
+      operatorLevels: [0.2, 0.7, 0.4, 0.6], operatorRatios: [0.5, 2, 3, 4],
+      operatorFrequencies: [null, 660, null, 440], ramp: 0.02 }), true);
+    audio(synth, 73);
+    assert.equal(synth.updateNote(previous, { feedback: 1, lfoRate: 3, amDepth: 0.1, pmDepth: 60, gain: 0.65,
+      operatorLevels: [0.7, 0.1, 0.8, 0.3], operatorRatios: [3, 0.75, 2, 1.5],
+      operatorFrequencies: [880, null, 330, null], ramp: 0.03 }), true);
+    audio(synth, 19);
+    synth.panic();
+    const id = synth.noteOn(patch, 69), other = reference.noteOn(patch, 69);
+    const initial = audio(synth, 257);
+    assert.deepEqual(initial, audio(reference, 257));
+    assert.ok(initial.left.some(sample => sample !== 0));
+    const updates: NoteControls[] = [
+      { operatorLevels: [0.8, 0.4, 0.6, 0.2], gain: 0.7 },
+      { operatorRatios: [2, 1.5, 3, 0.75], ramp: 0.025 },
+      { operatorFrequencies: [880, null, 660, null], ramp: 0.013 },
+      { feedback: 2, lfoRate: 9, amDepth: 0.4, pmDepth: 80, gain: 0.5, ramp: 0.017 },
+      { operatorFrequencies: [null, null, null, null], operatorRatios: [1, 1, 1, 1] },
+    ];
+    for (const controls of updates) {
+      assert.equal(synth.updateNote(id, controls), true);
+      assert.equal(reference.updateNote(other, controls), true);
+      assert.deepEqual(audio(synth, 127), audio(reference, 127));
+    }
+    assert.equal(synth.noteOff(id), true);
+    assert.equal(reference.noteOff(other), true);
+    assert.deepEqual(audio(synth, rate / 10), audio(reference, rate / 10));
+    assert.equal(synth.noteOff(id), false);
+    assert.equal(synth.errorCount, 0); assert.equal(reference.errorCount, 0);
+  }
+});
+
+test('quietest admission scores recycled notes with fresh independent gain', () => {
+  const patch = prepareVoice(tone());
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const rate of [16000, 48000]) {
+    const synth = new Synth(rate, 2, { quality, stealing: 'quietest' });
+    const previous = synth.noteOn(patch, 69);
+    audio(synth, 37);
+    assert.equal(synth.updateNote(previous, { gain: 0.01, ramp: 0.02 }), true);
+    audio(synth, 73);
+    synth.panic();
+    const loud = synth.noteOn(patch, 69);
+    audio(synth, 257);
+    const quiet = synth.noteOn(patch, 69);
+    assert.equal(synth.updateNote(quiet, { gain: 0.75 }), true);
+    audio(synth, 257);
+    synth.noteOn(patch, 69);
+    assert.equal(synth.lastStolenId, quiet);
+    assert.equal(synth.noteOff(quiet), false);
+    assert.equal(synth.noteOff(loud), true);
+    assert.equal(synth.errorCount, 0);
+    synth.panic();
+  }
+});
+
 test('pitch stays relative to the original note and immediate controls preserve velocity and pan semantics', () => {
   const prepared = prepareVoice(tone());
   const synth = new Synth(16000), reference = new Synth(16000);

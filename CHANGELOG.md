@@ -4,6 +4,43 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Inactive interpolation state
+
+- Defer pooled operator/ratio/frequency origins, operator targets and scalar origins/start clocks until their controls activate. Remove five bulk initialization calls and the two per-operator origin assignments from `Synth.noteOn()`; keep current values, all ratio/frequency targets and every validity/frame reset. No new pool, cache, slot layout, API/type, voice format or DSP formula is introduced.
+- Initialize only scalar target slot 4 together with the existing independent gain value. `quietest` reads that gain target even without an active scalar ramp; the other scalar targets are overwritten before their nonzero clocks can read them. The gain-array reset remains unchanged. Two new public-consumer regressions cover interrupted ramps followed by fresh recycled PCM/partial controls and quietest victim ownership after a dirty gain ramp.
+- Final source/minified comparisons each preserve 198 complete lifecycle PCM pairs/12,017,424 exact bytes, plus 22 fixed-call complete-workload pairs, 1344 exact refusal pairs and two independent accessor refusals with zero getter reads. Coverage includes all algorithms/nine operator shapes, three qualities, 8000/48000 Hz, fixed-Hz/ratio switching, ramp interruption, live ADSR/release, recycled partial controls, patch switches, natural retirement, panic and reentrant steal/cancellation with bounded slot identity.
+
+Final matched Node 26.7 / V8 14.6 darwin-arm64 CPU measurements compare against `e98e499`. Every workload/build uses four fresh process pairs in alternating reference-first/candidate-first order. Separate reference calibration selects about 120 ms warmup and 220 ms measured work; corresponding processes execute identical fixed warmup/run counts. Actual core admission, raw validation, specified rendering/controls/release/panic and common checksums remain timed; fixture construction and final pool/error checks stay outside. Complete consumed outputs and witnesses match in every pair.
+
+Entries are median paired user+system CPU-time changes (`candidate / reference - 1`), not throughput changes or confidence intervals; negative is faster. All 22 profiles and adverse/unrelated controls are retained. These are local admission/control-path results, not general render, allocation/retained-memory, GC-pause, application-deadline or native-browser performance claims.
+
+| Complete workload | Source CPU time | Minified CPU time |
+| --- | ---: | ---: |
+| prepared-same-capacity1 | -13.28% | -12.19% |
+| prepared-alternating-capacity1 | -12.06% | -11.81% |
+| prepared-same-capacity8 | -11.93% | -10.50% |
+| prepared-same-capacity32 | -10.59% | -11.33% |
+| prepared-alternating-capacity8 | -7.27% | -6.22% |
+| raw-same-capacity1-control | 0.03% | -0.70% |
+| raw-alternating-capacity1-control | -0.99% | -1.36% |
+| prepared-note-render32-panic | 0.15% | -0.54% |
+| prepared-note-render128-panic | -0.34% | -0.35% |
+| prepared-note-render128-high-panic | -0.52% | -0.13% |
+| prepared-immediate-release-panic | -11.16% | -10.09% |
+| prepared-edit-release-reuse-eco | -0.83% | 0.01% |
+| prepared-edit-release-reuse-standard | -0.29% | 0.89% |
+| prepared-edit-release-reuse-high | -0.08% | -0.51% |
+| prepared-quietest-capacity8 | -10.81% | -7.70% |
+| unchanged-render128-control | -0.20% | 0.10% |
+| prepared-interrupted-ramps-release-eco | -0.03% | 0.21% |
+| prepared-interrupted-ramps-release-standard | -1.39% | -0.32% |
+| prepared-interrupted-ramps-release-high | -0.31% | 0.21% |
+| prepared-immediate-ratio-panic | -9.34% | -8.98% |
+| prepared-immediate-frequency-panic | -9.88% | -8.62% |
+| prepared-immediate-operator-scalar-panic | -10.21% | -8.61% |
+
+All 615 tests, strict source/development/public/core-only TypeScript checks, the 42-source/55-built security gate and empty runtime dependencies pass. Five generated core/facade/schema/normalizer declarations remain byte-identical. Real Chromium 156.0.8078.4 AudioWorklet smoke passes at 48000 Hz with finite stereo/pan, complete note lifecycle and context ownership/suspend/resume/restart, with zero final errors/rejections/pending events. Scoped A/C review by the integration owner preserves input validation, bounded DSP work, inactive-state validity and callback safety. Physical-device/MIDI and human-listening acceptance remain unverified; no release or publication is performed.
+
 ### Dormant voice-slot resets
 
 - Remove five four-operator typed-array fill calls from the existing pooled `Synth.noteOn()` initializer. Edited-envelope origins and release origins/steps are overwritten before activation; existing edit/release validity resets remain. Same-patch cache invalidation still observes the previous edit state before clearing it. No new pool, cache, slot layout, public type, voice format or DSP formula is introduced.

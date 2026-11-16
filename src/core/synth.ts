@@ -1724,13 +1724,12 @@ export class Synth {
       let envelopeTimingCacheable = true;
       for (let i = 0; i < 4; i++) {
         const op = voice.ops[i];
-        active.ratioFrom[i] = active.ratioTargets[i] = op.ratio;
+        active.ratioTargets[i] = op.ratio;
         // Optional fields are read only when own: an omitted one must not fall through to
         // Object.prototype, where an inherited value would bypass the snapshot's validation.
         const frequencyOverride = Object.hasOwn(op, 'frequency') ? op.frequency : undefined;
         const rateKeyScale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
         active.frequencyTargets[i] = frequencyOverride ?? 0;
-        active.frequencyFrom[i] = frequencyOverride ?? frequency * op.ratio;
         const scale = Object.hasOwn(op, 'keyScale') ? op.keyScale : undefined;
         const attenuation = scale ? Math.abs(note - scale.breakpoint) / 12 *
           (note < scale.breakpoint ? scale.leftDbPerOctave : scale.rightDbPerOctave) : 0;
@@ -1847,8 +1846,7 @@ export class Synth {
       }
       active.pitchFrom = active.pitchTarget = active.pitchStart = active.pitchFrames = 0;
       active.operatorLevels.fill(1);
-      active.operatorFrom.fill(1);
-      active.operatorTargets.fill(1);
+      // Ramp origins and operator targets are written before their clocks activate.
       active.operatorStart = active.operatorFrames = 0;
       active.tunedFrequency = frequency;
       active.ratioStart = active.ratioFrames = active.frequencyStart = active.frequencyFrames = 0;
@@ -1856,10 +1854,8 @@ export class Synth {
       active.scalarValues[1] = voice.lfo.rate;
       active.scalarValues[2] = voice.lfo.amDepth;
       active.scalarValues[3] = voice.lfo.pmDepth;
-      active.scalarValues[4] = 1;
-      active.scalarFrom.set(active.scalarValues);
-      active.scalarTargets.set(active.scalarValues);
-      active.scalarStarts.fill(0);
+      // Quietest admission reads the gain target even without an active scalar ramp.
+      active.scalarValues[4] = active.scalarTargets[4] = 1;
       active.scalarFrames.fill(0);
       // Edit/release origins and steps are written before activation.
       // Clear validity below, not dormant cells in the recycled slot.

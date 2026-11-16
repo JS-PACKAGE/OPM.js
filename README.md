@@ -309,7 +309,7 @@ Control reuse trusts only private output identity, never raw inputs, frozen look
 
 `Synth` preallocates `maxVoices + 9` state slots: logical voices, eight possible fades and one admission scratch slot. Prepared admission allocates no new per-voice typed state. Browser snapshots use a content-keyed 128-slot LRU cache; validated replacement reuses a registration ID after saturation rather than falling back to inline transport. Queued/active notes retain their original immutable prepared snapshot. Raw browser inputs still validate freshly.
 
-Pooled note admission skips reinitializing inactive envelope origins and release coefficients. Edit/release activation overwrites those cells before use; validity resets, pool bounds, typed-state allocation policy and callback behavior are unchanged. Rendering math is unchanged.
+Pooled note admission skips reinitializing inactive envelope, release and interpolation cells. Activating controls writes their interpolation inputs before use; ratio/frequency targets and the independent gain target used by `quietest` admission remain current. The existing validity resets, pool bounds, typed-state allocation policy and callback behavior are unchanged. Rendering math is unchanged.
 
 Pan uses a center-normalized constant-power law: left/right gains are `sqrt(2) * cos/sin((pan + 1) * pi / 4)` before saturation. Center preserves the previous per-channel gain; hard sides mute the opposite channel and boost the selected channel by `sqrt(2)`. This does not promise constant loudness after polyphonic saturation.
 
