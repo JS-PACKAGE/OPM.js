@@ -4,6 +4,56 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Aligned common-pitch sine frames
+
+- Extend only the existing aligned, independent algorithm-7 sine path to provably common glides, pitch envelopes and operator ratio/Hz ramps. Existing feedback, phase, current-step and negative-zero guards run before dynamic dispatch; unequal voices retain the original sine frame without an extra dynamic-helper call.
+- Check the prepared base increments, live frequency deltas/curves and targeted PM factors before sharing a polynomial. Dormant frequency coefficients are ignored when no ratio/Hz ramp is active. No new buffers, persistent flags, public API, format or dependency.
+- Keep the original `stepPitch` call first on every substep, all four independent step stores and the pitch-factor multiplication. Preserve `p * (gain * sign)`, zero-gain masks, carrier sum order, phase/value/history stores and finite checks. A corrupt nonzero operator-0 history fails after the same pitch mutation rather than restarting and consuming a substep twice.
+
+Verification: all 622 behavioral tests; strict source/development/public/core-only types; scoped integration-owner A/C review (not independent); 42-source/55-built security gate; empty runtime dependency tree; five byte-identical public declarations. Actual source/minified proofs match across 3264 raw/prepared lifecycle cases and 105 containment cases: 51,880,776 stereo PCM bytes, 545,211,065 typed-state bytes, 11,619,210 scalar comparisons and 112,233 checkpoints, including complete returned-slot state. Coverage adds overlapping common glides, fixed-Hz/ratio/quadratic ramps, pitch envelopes, uniform PM and initially equal origins with independently diverging future coefficients. The original static containment cases remain; dynamic cases also preserve the original recovery when stepPitch overwrites a corrupt prior step, signed zeros, zero-gain history masking and mid-frame history overflow.
+
+Complete CPU comparison against `948e560`, Node.js 26.7.0 on macOS arm64: four fresh AB/BA process pairs per row. Independent 120 ms reference calibration selects fixed counts targeting approximately 220 ms; both variants use identical measured counts and fixed derived warm counts. Measure process user+system CPU, consume rendered samples and compare final PCM/filter witnesses. Source/minified distributions calibrate separately. Patch construction and initial held-note admission are outside render timing; raw/prepared admission and per-block controls/validation remain inside. Common glides and frequency/ratio edits retarget 144-sample ramps every 128-sample block; eight-voice modes update all eight voices. The envelope mode restarts its genuine 10-second attack every 750 blocks (2 seconds of audio), with panic/admission inside timing, so warming cannot turn it into a settled-pitch benchmark. Negative means less CPU, not a universal latency, GC, glitch or listening guarantee.
+
+| Complete workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `standard-mono1` | -0.38% | -0.54% |
+| `standard-mono8` | 0.35% | -1.20% |
+| `standard-noise1` | -2.05% | 0.19% |
+| `standard-stereo8` | 0.25% | -0.12% |
+| `eco-mono1-control` | -1.64% | 0.49% |
+| `high-mono1-control` | -0.02% | 0.27% |
+| `raw-admission-control` | -0.98% | 0.11% |
+| `standard-noise8` | 1.68% | 0.04% |
+| `standard-noise-stereo8` | 0.16% | -0.07% |
+| `eco-noise1` | -0.09% | 0.34% |
+| `high-noise1` | 0.01% | 0.05% |
+| `different-rate-noise-control` | 0.26% | -0.21% |
+| `zero-static-level-noise-control` | 0.28% | 0.23% |
+| `standard-unison1` | -0.03% | 0.08% |
+| `standard-unison8` | 0.34% | 2.25% |
+| `standard-unison-stereo8` | 0.51% | 0.02% |
+| `eco-unison1` | -0.73% | -0.06% |
+| `high-unison1` | -2.03% | 0.46% |
+| `unequal-sine7-control` | -0.06% | -0.25% |
+| `feedback-sine7-control` | 0.78% | -0.07% |
+| `targeted-pm-sine7-control` | 0.07% | 1.18% |
+| `live-frequency-unison-control` | -0.24% | -0.78% |
+| `prepared-admission-control` | 0.21% | -1.13% |
+| `standard-common-glide1` | -14.43% | -11.20% |
+| `standard-common-glide8` | -17.36% | -12.65% |
+| `standard-common-glide-stereo8` | -16.92% | -10.59% |
+| `eco-common-glide1` | -9.69% | -6.95% |
+| `high-common-glide1` | -18.76% | -15.64% |
+| `standard-common-frequency1` | -9.50% | -8.45% |
+| `standard-common-ratio1` | -13.15% | -9.97% |
+| `standard-common-combined1` | -13.05% | -9.03% |
+| `standard-common-targeted-glide1` | -12.72% | -8.85% |
+| `standard-common-envelope1` | -15.87% | -10.34% |
+
+All ten common-pitch rows improve in every source/minified pair. All controls remain disclosed: source standard-noise8, standard-unison-stereo8 and feedback-sine7 are slower in all four pairs; minified standard-unison8 and targeted-pm-sine7 have slower medians in three pairs. The first source variant made independent-frequency edits consistently slower; the single bounded dispatch refinement stopped already-diverged voices entering the new helper, and that control is no longer slower in every final source/minified pair. Other control fluctuations are not claimed as improvements; this is not an all-path speedup.
+
+Actual Chromium 156.0.8078.4 on darwin/arm64 exercised the deployed v8 aligned algorithm-7 voice through a real 48 kHz AudioWorklet and a borrowed AudioContext using the [documented native silent sink](https://developer.mozilla.org/en-US/docs/Web/API/AudioContext/setSinkId). A two-second pitch-envelope attack keeps the held-note test genuinely dynamic. All original trusted-gesture, same-origin, CSP/MIME, destination-null, routing, finite/headroom, stereo, full-right pan, release, preserve/cancel, suspend/resume and borrowed/owned-context cleanup assertions passed. The native clock advanced to 1.029333 seconds; final diagnostics had zero active voices, pending events, errors and rejected notes. The default-output owned contexts still stop at 0.005333 seconds, matching the earlier no-OPM native oscillator controls; the experimental silent-sink API is only a throwaway host-proof configuration, not an SDK requirement or fake signal. Physical-device playback and human listening remain unverified.
+
 ### Aligned independent sine carriers
 
 - Share only the repeated sine polynomial for aligned, independent algorithm-7 carriers. Keep each envelope/gain product, `p * (gain * sign)` order, zero-gain masking, ascending carrier sum, all four phase/value stores and operator-0 history exactly as before.
