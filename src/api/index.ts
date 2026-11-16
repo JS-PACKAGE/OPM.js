@@ -150,8 +150,8 @@ interface EventObserver {
 const EVENT_OBSERVERS = new WeakMap<OPM, Set<EventObserver>>();
 // Edits retain an existing registry entry as undefined, invalidating its text but keeping export history.
 const BANK_EXPORTS = new WeakMap<Map<string, NormalizedVoice>, string | undefined>();
-// Only immutable private-bank patches key reuse of fully validated canonical snapshots.
-const BANK_VOICE_SNAPSHOTS = new WeakMap<NormalizedVoice, FrozenVoice>();
+// Only immutable private-bank patches key reuse of fully formatted canonical JSON fragments.
+const BANK_VOICE_JSON = new WeakMap<NormalizedVoice, string>();
 const COMMAND_NAMES: readonly CommandName[] = ['stop', 'updateNote', 'allNotesOff', 'panic', 'setMixGain', 'setTuning'];
 const CONTEXT_STATES: readonly ContextState[] = ['running', 'suspended', 'interrupted', 'closed'];
 
@@ -463,16 +463,24 @@ export class OPM {
     if (bank.size > MAX_BANK_VOICES) throw new RangeError('Voice bank exceeds 128 voices');
     const cached = BANK_EXPORTS.get(bank);
     if (cached !== undefined) return cached;
-    const rememberSnapshots = BANK_EXPORTS.has(bank);
+    const rememberFragments = BANK_EXPORTS.has(bank);
     const entries = Array.from(bank.values(), patch => {
-      let entry = BANK_VOICE_SNAPSHOTS.get(patch);
+      let entry = BANK_VOICE_JSON.get(patch);
       if (entry === undefined) {
-        entry = validateVoice(patch);
-        if (rememberSnapshots) BANK_VOICE_SNAPSHOTS.set(patch, entry);
+        entry = JSON.stringify(bankJsonData(validateVoice(patch)));
+        if (rememberFragments) BANK_VOICE_JSON.set(patch, entry);
       }
       return entry;
     });
-    const output = JSON.stringify(bankJsonData(entries));
+    // Add brackets only to private end slots; joining the complete output avoids wrapping the full body.
+    let output: string;
+    if (entries.length === 0) output = '[]';
+    else {
+      const last = entries.length - 1;
+      entries[0] = `[${entries[0]}`;
+      entries[last] = `${entries[last]}]`;
+      output = entries.join(',');
+    }
     // Validated text fields and canonical keys are ASCII, so character and UTF-8 byte counts match.
     if (output.length > MAX_BANK_BYTES) {
       throw new RangeError('Voice bank exceeds 256 KiB');

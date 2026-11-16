@@ -4,6 +4,44 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Canonical voice JSON fragments
+
+- Replace the existing single weak per-voice canonical memo's FrozenVoice values with complete canonical JSON fragments; no alias, second cache or trust producer is added. Misses retain complete validation, owned null-prototype copying and JSON serialization. Only internally formatted canonical values are assembled, never raw caller text.
+- Fresh dense private array slots receive the outer brackets before joining the complete output. Empty/single-entry banks, field/key order, all aggregate limits and exact bytes remain unchanged; caller arrays, voices and memo strings are not mutated. Inherited indexed setters/JSON hooks, private prepared admission, raw validation, registration identity, export-history policy, reentrant invalidation and disposed-host rejection retain their contracts.
+- A pre-edit assembly probe preserves 1292 complete canonical array pairs/1091337 ASCII bytes across eight versions/algorithms, five input forms, load/replace producers and numeric edges. Final source/minified/Chromium comparisons retain 504 hostile-field cold/warm wire pairs with zero getter/setter reads, eighteen shared-identity pairs, all 3072 voice pairs/2275584 bytes, 12 banks/580 voices, 24 PCM pairs/30060 stereo frames, 77 refusals and complete raw descriptor/capacity/cache/isolation/mutation traces. Existing six indexed-accessor regressions pass without adding implementation-pinning tests.
+- Separate twelve hook-independent production API/processor cases, 72 cross-build PCM pairs/36864 stereo frames, and 1024 prepared admission pairs/6048 root events/512 detachments/16 additional PCM pairs remain exact. Sixty-four alternating workload phases compare complete bank strings, parsed JSON graphs or dispatch IDs plus bounded diagnostics; dispatch IDs are not musical PCM. The explicit software WebAudio platform is not native AudioContext or audio-thread scheduling.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 measurements compare against 0b9399f: sixteen complete-consumer profiles, six fresh process pairs per order in both orders (384 children per build), equal-length module roots, at least 60 ms warmup and 120 ms cumulative measured API-batch time per child. Fixtures and full output admission remain outside timing; corresponding validation/copying, actual API calls, canonical assembly, public reads, checksums and common clock overhead remain inside. Native JSON.parse and its result consumption are inside the two explicitly named parse profiles; these are not validated bank-import or musical rendering benchmarks.
+
+Dispatch controls use actual production API/processor code, synchronous structured-clone ports and the explicit software platform, with two distinct primed programs and zero active voices/pending events/rejected notes before and after timing. No rendering or native browser deadline is timed. The offline-note control is complete and may validate inputs, not isolated DSP.
+
+Entries are median relative-throughput changes (reference/candidate minus one) over both process orders, not time reductions or confidence intervals. CPU is user+system. First-time all-new exports regress, as do some single-entry CPU and unrelated controls; all are retained. Large prepared/export-only cache ratios are not universal application, browser or live DSP gains.
+
+| Complete consumer | Source wall | Source CPU | Minified wall | Minified CPU |
+| --- | ---: | ---: | ---: | ---: |
+| Raw edit + cold export, 1 voice | +0.7 to +2.3% | −2.6 to 0.0% | +3.5% | −1.0 to +1.0% |
+| Raw edit + cold export, 16 voices | +282.5 to +285.1% | +250.7 to +254.6% | +279.9 to +280.7% | +247.0 to +248.4% |
+| Prepared edit + cold export, 1 voice | +1898.7 to +1934.1% | +1780.5 to +1803.5% | +1882.6 to +1884.0% | +1765.3 to +1776.8% |
+| Prepared edit + cold export, 128 voices | +6047.5 to +6055.9% | +5370.7 to +5393.4% | +6275.2 to +6296.3% | +5541.3 to +5613.8% |
+| All-new replace + export, 16 voices | −2.6 to −1.5% | −2.6 to −1.9% | −4.7 to −3.2% | −4.9 to −3.8% |
+| All-new replace + export, 128 voices | −2.5 to −1.1% | +2.7 to +4.2% | −3.6 to −1.7% | −3.6 to −1.7% |
+| Warm unchanged 128-voice export control | −2.2 to 0.0% | −1.1 to −0.7% | +0.8 to +0.9% | +0.4 to +1.3% |
+| Raw load + defensive registry read control | −0.7 to −0.1% | −0.7 to +0.1% | +0.7 to +0.9% | +0.2 to +0.9% |
+| Raw minimal future-play/stop | −0.5 to −0.4% | −0.4 to +0.9% | −4.0 to −0.4% | −6.6 to +0.1% |
+| Raw expressive future-play/stop | +0.2 to +0.4% | +0.1 to +0.2% | +0.4 to +0.5% | +0.4 to +0.7% |
+| Raw named edit + future-play/stop | 0.0 to +0.6% | −0.1 to +0.6% | −0.5 to +0.4% | −0.5 to +0.4% |
+| Prepared expressive future-play/stop control | −0.2 to +0.2% | −0.2 to +1.0% | +1.2 to +2.6% | +1.8 to +4.3% |
+| Stable named future-play/stop control | −0.7 to +0.7% | +0.1 to +1.1% | +0.1 to +0.6% | +0.4 to +1.4% |
+| Complete offline-note control | −2.0 to −0.2% | −2.8 to −0.3% | −0.1 to 0.0% | −0.3 to 0.0% |
+| Raw edit + export + JSON.parse, 16 voices | +98.1 to +101.9% | +97.8 to +103.6% | +98.0 to +101.6% | +99.0 to +101.8% |
+| Prepared edit + export + JSON.parse, 128 voices | +160.8 to +161.0% | +160.0 to +160.3% | +163.3 to +168.6% | +162.6 to +167.9% |
+
+Fixed-work native collected-heap sampling at 16 KiB uses 256 common warmups, 1024 complete prepared 128-voice edits/exports and 8192 complete raw 16-voice edits/exports (131072 exported voices per case). Prepared tree estimates fall from 862957768 to 191638168 bytes (−77.79%); raw estimates fall from 1422414528 to 797985072 (−43.90%). Prepared reference has one orphan/18736 estimated bytes and candidate zero; raw reference has two/35536 and candidate one/18880. Full native heap/CPU profiles and both-order raw measurements are preserved outside the repository.
+
+A preliminary outer-wrapper assembly showed downstream consume/charCodeAt allocation samples; one causally motivated adjustment moved brackets into private existing end slots. Those downstream frames are absent from the final prepared profile's top frames, and actual parse consumers independently retain substantial gains. These are sampled allocation estimates, not physical object/allocated-byte/retained-byte or GC-pause proof. Memo strings can remain live with their immutable weak keys; no retained-memory reduction is claimed.
+
+Verification: all 613 tests pass; strict source/development/public/core-only TypeScript checks, 42-source/55-built security gate and empty runtime dependencies pass. All four public declaration contracts remain byte-identical; rebuilt distribution is 1901028 bytes. Actual Chromium 156.0.8078.4 preserves complete canonical/hostile/cache/shared/prepared and production-processor PCM proofs with zero page errors. Scoped A/C integration-owner review is recorded in SECURITY.md. No public API/type/format/dependency, DSP formula, worklet protocol, independent release, publication, physical MIDI/device, listening or native live-audio acceptance is claimed.
+
 ### Literal-null JSON object destinations
 
 - Owned JSON object destinations now follow the existing array convention: allocate a fresh literal, then immediately clear its prototype before any copied field is written. The raw own-data snapshot record retains its original Object.create(null) construction. No caller reference or callback can reach the fresh destination before prototype removal.

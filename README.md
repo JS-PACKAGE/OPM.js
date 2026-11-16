@@ -644,7 +644,7 @@ Validation and copying use the same captured own-data values at each object/arra
 
 Repeated exports of an unchanged registry reuse its bounded canonical JSON string. Loading, removing, replacing or clearing voices updates the next export; raw validation callbacks cannot leave an intermediate cached snapshot behind. Cold and warm exports both ignore inherited serialization hooks. Oversized output is never cached, and disposed hosts still reject exports.
 
-Cold exports reuse frozen canonical snapshots of unchanged owned patches. Only registries with export history add new per-patch memo entries; misses still use full canonical validation and every output retains JSON-hook isolation and size limits. Weak memo data can remain live as long as its immutable patch; sampled allocation reductions are not retained-memory savings.
+Cold exports reuse canonical JSON fragments of unchanged owned patches. Every miss still runs complete validation, owned null-prototype copying and JSON serialization; only internal canonical values are assembled into the bank array. Only registries with export history add per-patch entries. Aggregate byte/count limits, ordering, hook isolation and invalidation remain unchanged. Weak memo data can remain live as long as its immutable key; sampled allocation reductions are not retained-memory savings.
 
 Owned JSON copying reads existing own-data fields directly. Caller inputs still undergo descriptor-based validation and detached snapshot construction first; the null-prototype copier continues to exclude inherited JSON hooks.
 
