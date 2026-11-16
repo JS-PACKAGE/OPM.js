@@ -4,6 +4,49 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Prepared frame-gain validity
+
+- Remove the private frame-gain buffer clear from pooled `Synth.noteOn()`. Keep `gainsSteady = false`: every live frame prepares all four operators at every oversample position before using that buffer. Finished frames already bypass the buffer entirely, including immediate zero-release notes and stolen fades. No renderer branch, buffer size, pool policy, public API/type, voice format or DSP formula changes.
+- Add one public-consumer regression covering audible recycled slots that are immediately stopped before their first frame, with and without a stolen fade, across all three qualities, 16000/48000 Hz and sine/saw/noise. Both output channels must remain silent and terminal IDs/ownership must remain exact.
+- Final source/minified comparisons each preserve 768 dedicated terminal/fade/callback PCM pairs/4,724,736 exact bytes and 1152 callbacks per variant, plus 198 general lifecycle PCM pairs/12,017,424 exact bytes and 28 fixed-call complete-workload pairs. All algorithms/nine operator shapes, three qualities, 8000/48000 Hz, audible history, exact post-release FIR drain, partial controls, interrupted ramps, live ADSR/release, panic/natural reuse, reentrant admission and bounded slot identity remain covered. Another 1344 exact refusal pairs and two independent accessor refusals preserve zero getter reads and original-note playback.
+
+Final matched Node 26.7 / V8 14.6 darwin-arm64 CPU measurements compare against `9fc4eb8`. Each workload/build uses four fresh process pairs in alternating reference-first/candidate-first order, with separate reference calibration for approximately 120 ms warmup and 220 ms measured work. Each pair uses identical fixed warmup/run counts. Real core admission, raw validation, specified controls/rendering/release/panic and common checksums remain timed; fixture construction and final pool/error checks stay outside. Complete consumed outputs and witnesses match.
+
+Entries are median paired user+system CPU-time changes (`candidate / reference - 1`), not throughput changes or confidence intervals; negative is faster. All 28 profiles, including adverse raw, edited-release and render controls, are retained. Prepared admission improves locally; no universal render, physical allocation, retained-memory, GC-pause, application-deadline or native-browser performance improvement is claimed.
+
+| Complete workload | Source CPU time | Minified CPU time |
+| --- | ---: | ---: |
+| prepared-same-capacity1 | -3.82% | -0.78% |
+| prepared-alternating-capacity1 | -2.80% | -3.54% |
+| prepared-same-capacity8 | -2.40% | -2.59% |
+| prepared-same-capacity32 | -1.51% | -1.52% |
+| prepared-alternating-capacity8 | -1.12% | -0.41% |
+| raw-same-capacity1-control | -0.36% | 0.59% |
+| raw-alternating-capacity1-control | 1.78% | -0.53% |
+| prepared-note-render32-panic | 0.07% | -0.50% |
+| prepared-note-render128-panic | -0.47% | 0.12% |
+| prepared-note-render128-high-panic | 0.04% | -0.43% |
+| prepared-immediate-release-panic | -1.52% | -2.54% |
+| prepared-edit-release-reuse-eco | 0.08% | 0.23% |
+| prepared-edit-release-reuse-standard | 1.34% | -0.05% |
+| prepared-edit-release-reuse-high | -0.24% | 0.25% |
+| prepared-quietest-capacity8 | -2.23% | -3.04% |
+| unchanged-render128-control | -0.48% | -0.35% |
+| prepared-interrupted-ramps-release-eco | 0.63% | 0.69% |
+| prepared-interrupted-ramps-release-standard | -0.30% | 0.34% |
+| prepared-interrupted-ramps-release-high | 0.27% | 0.33% |
+| prepared-immediate-ratio-panic | -1.64% | -3.80% |
+| prepared-immediate-frequency-panic | -2.60% | -2.14% |
+| prepared-immediate-operator-scalar-panic | -0.70% | -3.43% |
+| prepared-gain-buffer-eco-capacity1 | -2.55% | -0.78% |
+| prepared-gain-buffer-high-capacity1 | -3.40% | -1.64% |
+| prepared-audible-panic-unrendered-off-eco | -0.71% | -0.72% |
+| prepared-audible-panic-unrendered-off-standard | -0.85% | -0.54% |
+| prepared-audible-panic-unrendered-off-high | -0.19% | -0.19% |
+| prepared-audible-panic-unrendered-stolen-fade | -0.68% | 0.24% |
+
+Verification: build, all 616 tests, strict source/development/public/core-only TypeScript checks, five byte-identical generated public declarations, the 42-source/55-built security gate and zero runtime dependencies pass. Native Chromium AudioWorklet smoke passes at 48000 Hz with finite stereo/pan, complete lifecycle/context ownership and zero final DSP errors, rejections or pending events. The existing isolated fixture still refuses ancillary non-dist requests; no production control is relaxed. Scoped A/C security review is recorded in SECURITY.md. Physical-device/MIDI and human-listening acceptance remain unverified; no release/publication is authorized.
+
 ### Inactive interpolation state
 
 - Defer pooled operator/ratio/frequency origins, operator targets and scalar origins/start clocks until their controls activate. Remove five bulk initialization calls and the two per-operator origin assignments from `Synth.noteOn()`; keep current values, all ratio/frequency targets and every validity/frame reset. No new pool, cache, slot layout, API/type, voice format or DSP formula is introduced.

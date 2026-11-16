@@ -158,6 +158,34 @@ test('quietest admission scores recycled notes with fresh independent gain', () 
   }
 });
 
+test('recycled zero-release notes stay silent when stopped before their first frame, including stolen fades', () => {
+  for (const quality of ['eco', 'standard', 'high'] as const) for (const rate of [16000, 48000]) {
+    for (const waveform of ['sine', 'saw', 'noise'] as const) for (const steal of [false, true]) {
+      const definition = tone();
+      definition.ops.forEach(op => { op.adsr.r = 0; op.waveform = waveform; });
+      const patch = prepareVoice(definition), synth = new Synth(rate, 1, { quality });
+      synth.noteOn(patch, 69);
+      assert.ok(audio(synth, 257).left.some(sample => sample !== 0));
+      synth.panic();
+      const ended: [number, string][] = [];
+      synth.onVoiceEnded = (id, reason) => { ended.push([id, reason]); };
+      const id = synth.noteOn(patch, 69);
+      assert.equal(synth.updateNote(id, { pitch: 3, glide: 0.01, operatorLevels: [0.2, 1, 0.4, 0.7], ramp: 0.02 }), true);
+      assert.equal(synth.noteOff(id), true);
+      let replacement: number | undefined;
+      if (steal) {
+        replacement = synth.noteOn(patch, 72, undefined, { velocity: 0 });
+        assert.equal(synth.noteOff(replacement), true);
+      }
+      const silent = audio(synth, 512);
+      assert.ok(silent.left.every(sample => sample === 0) && silent.right.every(sample => sample === 0));
+      assert.deepEqual(ended, steal ? [[id, 'stolen'], [replacement, 'ended']] : [[id, 'ended']]);
+      assert.equal(synth.noteOff(id), false);
+      assert.equal(synth.errorCount, 0);
+    }
+  }
+});
+
 test('pitch stays relative to the original note and immediate controls preserve velocity and pan semantics', () => {
   const prepared = prepareVoice(tone());
   const synth = new Synth(16000), reference = new Synth(16000);

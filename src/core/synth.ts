@@ -1875,7 +1875,7 @@ export class Synth {
       active.envelopeSegment.fill(0);
       active.envelopeUntil.fill(0);
       active.envelopeFastUntil = 0;
-      active.gains.fill(0);
+      // Live frames prepare every gain before use; finished frames bypass the buffer.
       active.gainsSteady = false;
       active.foldedLevelsReady = false;
       active.pitchSettled = false;
