@@ -1861,10 +1861,9 @@ export class Synth {
       active.scalarTargets.set(active.scalarValues);
       active.scalarStarts.fill(0);
       active.scalarFrames.fill(0);
-      active.envelopeStart.fill(0);
-      active.envelopeFromDb.fill(FLOOR_DB);
+      // Edit/release origins and steps are written before activation.
+      // Clear validity below, not dormant cells in the recycled slot.
       active.envelopeEdited.fill(0);
-      active.releaseStarts.fill(0);
       active.lfoTurns = active.lfoCycle = 0;
       active.lfoLive = false;
       active.pitchRelease = 0;
@@ -1877,8 +1876,6 @@ export class Synth {
       active.noiseStates.fill(NOISE_SEED);
       active.noiseTurns.fill(0);
       active.values.fill(0);
-      active.releaseDb.fill(0);
-      active.releaseStep.fill(0);
       active.envelopeSegment.fill(0);
       active.envelopeUntil.fill(0);
       active.envelopeFastUntil = 0;

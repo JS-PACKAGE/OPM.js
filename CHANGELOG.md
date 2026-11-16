@@ -4,6 +4,36 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Dormant voice-slot resets
+
+- Remove five four-operator typed-array fill calls from the existing pooled `Synth.noteOn()` initializer. Edited-envelope origins and release origins/steps are overwritten before activation; existing edit/release validity resets remain. Same-patch cache invalidation still observes the previous edit state before clearing it. No new pool, cache, slot layout, public type, voice format or DSP formula is introduced.
+- Source and minified comparisons each preserve 198 complete edited/released/recycled DSP lifecycle pairs and 9,255,264 PCM bytes, plus sixteen fixed-call complete-workload pairs. All eight algorithms, nine operator shapes, three qualities, 8000/48000 Hz, patch switches, natural retirement, panic and reentrant steal/cancellation admissions are covered. Each build also preserves 1344 exact refusal pairs, two independent accessor refusals with zero getter reads, and bounded slot identity/conservation.
+
+Matched Node 26.7 / V8 14.6 darwin-arm64 CPU measurements compare against `8d20027`. Each workload/build uses four fresh process pairs in alternating reference-first/candidate-first order. A separate reference calibration selects about 120 ms warmup and 220 ms measured work; corresponding processes then execute identical fixed warmup/run counts. Actual note admission, raw validation where applicable, rendering/ADSR edits/release/panic where specified and the common checksum remain inside timing; fixture construction and final pool/error checks stay outside. Consumed outputs and complete witnesses match in every timed pair.
+
+Entries are median paired CPU-time changes (`candidate / reference - 1`, user + system), not throughput changes or confidence intervals; negative is faster. All sixteen profiles, including negative and unrelated controls, are retained. Prepared admission is faster in these local measurements; no general render, application, allocation/retained-memory, GC-pause or deadline improvement is claimed.
+
+| Complete workload | Source CPU time | Minified CPU time |
+| --- | ---: | ---: |
+| prepared-same-capacity1 | -9.73% | -9.34% |
+| prepared-alternating-capacity1 | -11.66% | -10.15% |
+| prepared-same-capacity8 | -9.80% | -11.31% |
+| prepared-same-capacity32 | -8.95% | -6.76% |
+| prepared-alternating-capacity8 | -7.11% | -6.61% |
+| raw-same-capacity1-control | -0.36% | -1.95% |
+| raw-alternating-capacity1-control | 0.49% | 2.09% |
+| prepared-note-render32-panic | -1.17% | -1.66% |
+| prepared-note-render128-panic | -0.58% | -0.16% |
+| prepared-note-render128-high-panic | 0.20% | -0.04% |
+| prepared-immediate-release-panic | -8.89% | -8.53% |
+| prepared-edit-release-reuse-eco | 0.62% | -0.85% |
+| prepared-edit-release-reuse-standard | 0.57% | 0.52% |
+| prepared-edit-release-reuse-high | -0.14% | -0.23% |
+| prepared-quietest-capacity8 | -7.50% | -6.68% |
+| unchanged-render128-control | 0.14% | -0.49% |
+
+All 613 tests, strict source/development/public/core-only TypeScript checks, the 42-source/55-built security gate and empty runtime dependencies pass. Five generated core/facade/schema/normalizer declaration files remain byte-identical. Real Chromium 156.0.8078.4 AudioWorklet smoke passes at 48000 Hz, including stereo/pan, note lifecycle, context ownership, suspend/resume and restart with zero final errors/rejections/pending events. Scoped A/C review by the integration owner preserves input boundaries, slot/fade work ceilings and callback safety; physical-device/MIDI and human-listening acceptance remain unverified. No release or publication is performed.
+
 ### Canonical voice JSON fragments
 
 - Replace the existing single weak per-voice canonical memo's FrozenVoice values with complete canonical JSON fragments; no alias, second cache or trust producer is added. Misses retain complete validation, owned null-prototype copying and JSON serialization. Only internally formatted canonical values are assembled, never raw caller text.
