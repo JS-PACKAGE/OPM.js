@@ -4,6 +4,107 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Immutable graph-row admission snapshots
+
+- Read each frozen graph input row once per operator during core note admission. Both inherited input-index reads still run on every admission with the original receiver, nullish fallback and integer coercion order; no input holes are cached across notes.
+- Preserve original getter/conversion exceptions, reentrant admissions, current ID/victim/priority revalidation and fixed spare ownership. No new allocations, persistent metadata, public APIs or rendering math.
+- Verification: 622 behavioral tests, strict source/development/public/core-only types, scoped A/C security review, zero runtime/optional dependencies and five byte-identical public declarations. Source and minified builds agree across 1248 graph-hole/coercion cases (21,096,192 exact PCM bytes), 648 independent reentrant serial-oracle cases, 1536 numeric/typed-state cases (46,817,280 typed-state bytes), metadata and 468 guarded refusals, 768 noise cases, 1536 LFO cases and 283 general/complete-workload pairs.
+
+Complete admission CPU comparison against `51a8b32` on Node.js 26.7.0/V8 14.6.202.34-node.28, macOS arm64: four fresh AB/BA pairs per row, matched call counts, 120ms warm-up and 220ms measurement per variant, process user+system CPU, consumed outputs and actual workload witnesses. Fixture construction, initial normalization and output/witness assertions are outside timing; raw-input and admission validation remain part of the timed core calls. Negative means less CPU. All 85 rows, including slower controls, are reported; these are not universal renderer speedups.
+
+| Complete workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+|`prepared-same-capacity1` | -2.03% | -2.77% |
+|`prepared-alternating-capacity1` | -2.13% | -1.86% |
+|`prepared-same-capacity8` | -1.67% | -0.78% |
+|`prepared-same-capacity32` | -2.07% | -1.08% |
+|`prepared-alternating-capacity8` | 2.37% | -0.89% |
+|`raw-same-capacity1-control` | -0.84% | -1.20% |
+|`raw-alternating-capacity1-control` | -1.11% | -0.84% |
+|`prepared-note-render32-panic` | 0.02% | -2.01% |
+|`prepared-note-render128-panic` | 0.09% | 0.23% |
+|`prepared-note-render128-high-panic` | -0.28% | 0.60% |
+|`prepared-immediate-release-panic` | -2.38% | -1.01% |
+|`prepared-edit-release-reuse-eco` | 0.24% | -0.46% |
+|`prepared-edit-release-reuse-standard` | -0.47% | 0.50% |
+|`prepared-edit-release-reuse-high` | 0.76% | 0.20% |
+|`prepared-quietest-capacity8` | -0.94% | -2.49% |
+|`unchanged-render128-control` | -1.46% | 1.49% |
+|`prepared-interrupted-ramps-release-eco` | -0.83% | -1.01% |
+|`prepared-interrupted-ramps-release-standard` | 0.32% | 0.05% |
+|`prepared-interrupted-ramps-release-high` | -0.17% | 0.36% |
+|`prepared-immediate-ratio-panic` | -0.35% | -1.98% |
+|`prepared-immediate-frequency-panic` | -3.09% | -1.24% |
+|`prepared-immediate-operator-scalar-panic` | -1.80% | 1.27% |
+|`prepared-gain-buffer-eco-capacity1` | -5.65% | -3.88% |
+|`prepared-gain-buffer-high-capacity1` | -1.79% | -1.70% |
+|`prepared-audible-panic-unrendered-off-eco` | 0.68% | 0.28% |
+|`prepared-audible-panic-unrendered-off-standard` | -1.00% | 1.02% |
+|`prepared-audible-panic-unrendered-off-high` | -0.17% | 0.09% |
+|`prepared-audible-panic-unrendered-stolen-fade` | 0.21% | 0.21% |
+|`prepared-saw-capacity1` | -2.33% | -2.79% |
+|`prepared-noise-capacity1-control` | -2.72% | -1.40% |
+|`prepared-mixed-noise-capacity1-control` | -2.04% | -1.05% |
+|`raw-noise-capacity1-control` | 0.79% | 0.84% |
+|`prepared-noise-render128-control` | -0.92% | -0.43% |
+|`prepared-mixed-noise-render128-control` | 0.06% | -0.30% |
+|`prepared-periodic-noise-alternating-capacity1` | -2.27% | -4.12% |
+|`prepared-periodic-noise-alternating-render128` | 0.32% | -3.73% |
+|`prepared-noise-edit-release-control` | 0.11% | 0.30% |
+|`prepared-mixed-noise-interrupted-ramps-control` | -0.19% | -0.58% |
+|`prepared-same-slot-periodic-switch` | -0.54% | -1.44% |
+|`prepared-same-slot-periodic-shape-switch` | -0.90% | -1.97% |
+|`prepared-same-slot-noise-switch-control` | -0.96% | -1.20% |
+|`prepared-same-slot-mixed-switch-control` | 0.20% | -1.38% |
+|`raw-same-slot-periodic-switch-control` | -0.55% | 1.10% |
+|`prepared-same-slot-periodic-eco-switch` | -2.46% | -1.67% |
+|`prepared-same-slot-periodic-high-switch` | -1.93% | -0.75% |
+|`prepared-full-explicit` | -2.32% | -0.67% |
+|`prepared-full-sensitive48` | -2.38% | -4.48% |
+|`prepared-fractional-sensitive48-control` | -2.51% | -0.30% |
+|`prepared-fractional-omitted-control` | -1.39% | -0.06% |
+|`prepared-full-noise-sensitive48` | -2.79% | -3.43% |
+|`raw-full-sensitive48-control` | -1.51% | 0.25% |
+|`prepared-full-key-scaled-sensitive48` | -2.73% | -3.07% |
+|`prepared-nearest-below-full-sensitive48-control` | -2.21% | -1.91% |
+|`prepared-zero-velocity-sensitive48-control` | -0.82% | 1.31% |
+|`prepared-targets-all-unity` | -3.69% | -0.79% |
+|`prepared-am-targets-only` | -2.62% | -4.74% |
+|`prepared-pm-targets-only` | -0.91% | -3.81% |
+|`prepared-both-nonuniform-targets` | -2.91% | -1.02% |
+|`prepared-same-slot-nonuniform-omitted-target-switch` | -1.87% | -1.74% |
+|`prepared-targets-zero-depth-then-live-control` | -2.16% | 0.04% |
+|`prepared-all-zero-targets-control` | -2.18% | -2.91% |
+|`prepared-subnormal-near-unity-targets-control` | -1.21% | -3.45% |
+|`prepared-boolean-targets-control` | -5.52% | -3.64% |
+|`prepared-nonuniform-targets-render128-control` | -0.18% | -0.62% |
+|`raw-nonuniform-targets-control` | 0.70% | 0.62% |
+|`prepared-same-slot-unity-nonuniform-target-switch` | -1.46% | -1.49% |
+|`prepared-same-slot-am-pm-target-switch` | -0.52% | -0.12% |
+|`prepared-detune-all-zero` | -3.98% | -2.93% |
+|`prepared-detune-all-nonzero-control` | -3.82% | -2.54% |
+|`raw-detune-all-nonzero-control` | 1.28% | -0.18% |
+|`prepared-detune-subnormal-control` | -0.88% | -0.68% |
+|`prepared-detune-nearzero-control` | -0.73% | -2.98% |
+|`prepared-detune-bounds-control` | -3.32% | -4.66% |
+|`prepared-same-slot-zero-nonzero-detune-switch` | -2.06% | -0.67% |
+|`prepared-nonzero-detune-render128-control` | -0.70% | 0.20% |
+|`raw-nonzero-detune-targets-control` | 0.57% | 0.34% |
+|`prepared-graph-algorithm0` | -3.35% | -3.15% |
+|`prepared-graph-algorithm1` | -3.27% | -4.00% |
+|`prepared-graph-algorithm2` | 0.27% | -4.63% |
+|`prepared-graph-algorithm3` | -3.04% | -4.06% |
+|`prepared-graph-algorithm4` | -3.04% | -2.10% |
+|`prepared-graph-algorithm5` | -3.30% | -3.74% |
+|`prepared-graph-algorithm6` | -3.77% | 0.37% |
+|`prepared-graph-algorithm7` | -4.86% | -3.04% |
+|`raw-graph-algorithm7-control` | -2.01% | 2.20% |
+
+Prepared same-voice admission measures -2.03% source/-2.77% minified; graph algorithm 7 measures -4.86%/-3.04%. Adverse minified controls include raw algorithm 7 +2.20% (three of four pairs), immediate operator scalar edits +1.27% (all four) and unchanged render control +1.49%. The corresponding source deltas are -2.01%, -1.80% and -1.46%; distribution-specific variation is retained rather than treated as a blanket speedup.
+
+Native Chromium 156.0.8078.4 acceptance: actual 48kHz AudioWorklet stereo/pan output, two complete accepted/started/released/ended lifecycles and final zero active voices/events/errors/rejected notes; eight raw/prepared core reentrancy cases match independent serial stereo oracles over 128,000 PCM bytes with original prototype descriptors and length restored. Physical-device MIDI and human-listening acceptance remain unverified.
+
+
 ### Scoped graph-input test fixtures
 
 - Restore both numeric prototype descriptors and the original `Array.prototype.length` after inherited graph-input getter scenarios so priority tests do not leak prototype state into later cases.

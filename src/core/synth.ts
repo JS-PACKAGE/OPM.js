@@ -1813,8 +1813,9 @@ export class Synth {
       // Cache the fixed topology in pooled typed storage; frozen graph-array
       // indexing otherwise repeats for every operator at every oversampled frame.
       for (let op = 0; op < 4; op++) {
-        active.inputIndices[op * 2] = active.graph.inputs[op][0] ?? -1;
-        active.inputIndices[op * 2 + 1] = active.graph.inputs[op][1] ?? -1;
+        const inputs = active.graph.inputs[op];
+        active.inputIndices[op * 2] = inputs[0] ?? -1;
+        active.inputIndices[op * 2 + 1] = inputs[1] ?? -1;
       }
       // Carriers are dense/frozen; input holes above still observe the admission context.
       if (!sameVoice) active.carrierIndices.set(active.graph.carriers);
