@@ -91,46 +91,47 @@ function dictionary(input: unknown, channels: boolean): Map<string | number, str
   return result;
 }
 
-class Reader {
-  offset: number;
-  constructor(readonly view: DataView, readonly end: number, offset = 0) { this.offset = offset; }
-  need(length: number): void {
-    if (length > this.end - this.offset) throw new RangeError('Truncated MIDI file');
+interface MidiReader { readonly view: DataView; readonly end: number; offset: number }
+// Keep cursor lifetimes local to an import; caching them would retain caller byte buffers.
+function midiReader(view: DataView, end: number, offset = 0): MidiReader {
+  return { view, end, offset };
+}
+function readerNeed(reader: MidiReader, length: number): void {
+  if (length > reader.end - reader.offset) throw new RangeError('Truncated MIDI file');
+}
+function readerByte(reader: MidiReader): number { readerNeed(reader, 1); return reader.view.getUint8(reader.offset++); }
+function readerData(reader: MidiReader): number {
+  const value = readerByte(reader);
+  if (value >= 128) throw new RangeError('MIDI data byte contains a status bit');
+  return value;
+}
+function readerDataPair(reader: MidiReader): number {
+  if (reader.end - reader.offset >= 2) {
+    const value = reader.view.getUint16(reader.offset);
+    if ((value & 0x8080) === 0) { reader.offset += 2; return value; }
   }
-  byte(): number { this.need(1); return this.view.getUint8(this.offset++); }
-  data(): number {
-    const value = this.byte();
-    if (value >= 128) throw new RangeError('MIDI data byte contains a status bit');
-    return value;
+  // Preserve bytewise status-bit/truncation precedence on invalid pairs.
+  return readerData(reader) << 8 | readerData(reader);
+}
+function readerU16(reader: MidiReader): number { readerNeed(reader, 2); const value = reader.view.getUint16(reader.offset); reader.offset += 2; return value; }
+function readerU32(reader: MidiReader): number { readerNeed(reader, 4); const value = reader.view.getUint32(reader.offset); reader.offset += 4; return value; }
+function readerTag(reader: MidiReader, expected: 'MThd' | 'MTrk'): void {
+  if (reader.end - reader.offset >= 4 &&
+      reader.view.getUint32(reader.offset) === (expected === 'MThd' ? 0x4d546864 : 0x4d54726b)) {
+    reader.offset += 4;
+    return;
   }
-  dataPair(): number {
-    if (this.end - this.offset >= 2) {
-      const value = this.view.getUint16(this.offset);
-      if ((value & 0x8080) === 0) { this.offset += 2; return value; }
-    }
-    // Preserve bytewise status-bit/truncation precedence on invalid pairs.
-    return this.data() << 8 | this.data();
+  // Preserve bytewise mismatch/truncation precedence for invalid tags.
+  for (let index = 0; index < expected.length; index++) if (readerByte(reader) !== expected.charCodeAt(index)) throw new TypeError(`Expected MIDI ${expected} chunk`);
+}
+function readerVlq(reader: MidiReader): number {
+  let value = 0;
+  for (let count = 0; count < 4; count++) {
+    const byte = readerByte(reader);
+    value = value * 128 + (byte & 127);
+    if (byte < 128) return value;
   }
-  u16(): number { this.need(2); const value = this.view.getUint16(this.offset); this.offset += 2; return value; }
-  u32(): number { this.need(4); const value = this.view.getUint32(this.offset); this.offset += 4; return value; }
-  tag(expected: 'MThd' | 'MTrk'): void {
-    if (this.end - this.offset >= 4 &&
-        this.view.getUint32(this.offset) === (expected === 'MThd' ? 0x4d546864 : 0x4d54726b)) {
-      this.offset += 4;
-      return;
-    }
-    // Preserve bytewise mismatch/truncation precedence for invalid tags.
-    for (let index = 0; index < expected.length; index++) if (this.byte() !== expected.charCodeAt(index)) throw new TypeError(`Expected MIDI ${expected} chunk`);
-  }
-  vlq(): number {
-    let value = 0;
-    for (let count = 0; count < 4; count++) {
-      const byte = this.byte();
-      value = value * 128 + (byte & 127);
-      if (byte < 128) return value;
-    }
-    throw new RangeError('MIDI VLQ exceeds four bytes');
-  }
+  throw new RangeError('MIDI VLQ exceeds four bytes');
 }
 interface WireEvent { tick: number; track: number; kind: 'on' | 'off' | 'sustain' | 'tempo' | 'meter' | 'expression' | 'program' | 'rpn'; channel: number; a: number; b: number; command?: number }
 type BeatNote = Extract<BeatSequenceEvent, { type: 'note' }>;
@@ -166,7 +167,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   const buffer = typedBuffer.call(source);
   // Shared input could change lengths/status bytes between validation and use.
   try { arrayBufferLength.call(buffer); } catch { throw new TypeError('MIDI source must not use shared memory'); }
-  const reader = new Reader(new DataView(buffer, typedOffset.call(source), length), length);
+  const reader = midiReader(new DataView(buffer, typedOffset.call(source), length), length);
   const warnings = new Map<MidiFileWarningCode, MidiFileWarning>();
   // Legacy imports without mapped programs cannot preserve any source controls.
   const preserved = preserve || (programs?.size ?? 0) > 0 ? new Map<MidiFileControlKind, number>() : undefined;
@@ -176,13 +177,13 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (existing) existing.count += count;
     else warnings.set(code, { code, message, count });
   }
-  reader.tag('MThd');
-  const headerLength = reader.u32();
+  readerTag(reader, 'MThd');
+  const headerLength = readerU32(reader);
   if (headerLength < 6) throw new RangeError('MIDI header must contain six bytes');
-  reader.need(headerLength);
-  const format = reader.u16();
-  const trackCount = reader.u16();
-  const ppqn = reader.u16();
+  readerNeed(reader, headerLength);
+  const format = readerU16(reader);
+  const trackCount = readerU16(reader);
+  const ppqn = readerU16(reader);
   if (format !== 0 && format !== 1) throw new RangeError('Only MIDI format 0 and 1 are supported');
   if (trackCount < 1 || trackCount > MAX_MIDI_FILE_TRACKS || format === 0 && trackCount !== 1) throw new RangeError('Invalid MIDI track count or track budget');
   if (ppqn === 0 || ppqn & 0x8000) throw new RangeError('Only positive PPQN MIDI timing is supported; SMPTE is unsupported');
@@ -193,10 +194,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   let endTick = 0;
   let wireOrdered = true;
   for (let track = 0; track < trackCount; track++) {
-    reader.tag('MTrk');
-    const trackLength = reader.u32();
-    reader.need(trackLength);
-    const input = new Reader(reader.view, reader.offset + trackLength, reader.offset);
+    readerTag(reader, 'MTrk');
+    const trackLength = readerU32(reader);
+    readerNeed(reader, trackLength);
+    const input = midiReader(reader.view, reader.offset + trackLength, reader.offset);
     reader.offset += trackLength;
     let tick = 0;
     let running = 0;
@@ -204,9 +205,9 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     const wireStart = wire.length;
     while (input.offset < input.end) {
       if (++eventCount > MAX_MIDI_FILE_EVENTS) throw new RangeError('MIDI file exceeds event budget');
-      tick += input.vlq();
+      tick += readerVlq(input);
       if (tick > MAX_TRANSPORT_BEATS * ppqn) throw new RangeError('MIDI file exceeds beat horizon');
-      let status = input.byte();
+      let status = readerByte(input);
       let first: number | undefined;
       if (status < 128) {
         if (running === 0) throw new RangeError('MIDI running status has no channel status');
@@ -217,9 +218,9 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         const command = status & 0xf0;
         const single = command === 0xc0 || command === 0xd0;
         let a: number, b: number;
-        if (first !== undefined) { a = first; b = single ? 0 : input.data(); }
-        else if (single) { a = input.data(); b = 0; }
-        else { const pair = input.dataPair(); a = pair >>> 8; b = pair & 127; }
+        if (first !== undefined) { a = first; b = single ? 0 : readerData(input); }
+        else if (single) { a = readerData(input); b = 0; }
+        else { const pair = readerDataPair(input); a = pair >>> 8; b = pair & 127; }
         if (command === 0x90 && b > 0) wire.push({ tick, track, kind: 'on', channel: status & 15, a, b });
         else if (command === 0x80 || command === 0x90) {
           wire.push({ tick, track, kind: 'off', channel: status & 15, a, b });
@@ -240,9 +241,9 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           preserved!.set(kind, (preserved!.get(kind) ?? 0) + 1);
         } else warn('ignored-channel', 'Unsupported channel messages (including banks and omitted expression/RPN) were omitted');
       } else if (status === 0xff) {
-        const type = input.data();
-        const size = input.vlq();
-        input.need(size);
+        const type = readerData(input);
+        const size = readerVlq(input);
+        readerNeed(input, size);
         const payload = input.offset;
         if (Object.hasOwn(META_LENGTHS, type) && size !== META_LENGTHS[type]) throw new RangeError('Invalid MIDI meta-event length');
         input.offset += size;
@@ -277,7 +278,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
           warn('ignored-meta', 'Text, key signatures, sequence/port/channel metadata and other meta events were omitted');
         }
       } else if (status === 0xf0 || status === 0xf7) {
-        const size = input.vlq(); input.need(size); input.offset += size;
+        const size = readerVlq(input); readerNeed(input, size); input.offset += size;
         warn('ignored-sysex', 'Length-framed SysEx and escaped system data were omitted; no messages are transmitted');
       } else throw new RangeError('System status is not a framed MIDI file event');
     }

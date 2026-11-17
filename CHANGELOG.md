@@ -4,6 +4,44 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### MIDI cursor JIT stability
+
+- Replace the private MIDI reader class with import-local own-data cursors and shared bounded readers. Header/track cursor and DataView lifetimes remain local; no caller buffer, reader graph or note payload is cached, pooled or pinned. No per-byte object or copy is added. Byte order, status-bit/tag/truncation precedence, four-byte VLQs, strict input/resource limits and public results/errors remain unchanged.
+- The original reader already shared its methods through a prototype; this is not removal of per-import method closures. A byte-identical diagnostic intervention retaining only the latest reader graph prevented the observed reader-related weak invalidations, but did not isolate a unique Map identity or justify retaining inputs in production. The accepted implementation needs no retention.
+- Node.js 26.7.0 / V8 14.6.202.34-node.28, macOS arm64: actual TypeScript 6.0.3 development-project Source emission and the actual esbuild/Terser runtime pipeline, without altered optimizer settings. Each diagnostic imports 16,384 mapped format-1 notes with single-byte deltas, using four counterbalanced offset/root-order cases and eight balanced measured blocks per fresh process. Source uses 149 imports/block and 406 warm imports; minified uses 173 and 472. All 64 whole paired result witnesses match.
+- The table counts weak-object dependency invalidations logged after the `warm-complete` marker, mapped to the entire `core/midi-file.js` module by normalized SFI address and file/name records, including minified function names. There are no ambiguous/unmapped dependency records. These `--trace-opt --trace-deopt --trace-file-names` runs are **instrumented diagnostics, not throughput measurements**; native/JS stdio placement is not an exact CPU timestamp.
+
+| Offset / imported-root order | Source baseline weak deps | Source cursor weak deps | Minified baseline weak deps | Minified cursor weak deps |
+| --- | ---: | ---: | ---: | ---: |
+| AB / baseline first | 19 | 0 | 12 | 0 |
+| BA / cursor first | 11 | 0 | 35 | 0 |
+| AB / cursor first | 27 | 0 | 20 | 0 |
+| BA / baseline first | 15 | 0 | 30 | 0 |
+
+- Other JIT activity remains: the Source AB/cursor-first case still records three deoptimizations, and non-weak dependency changes remain. This does not establish zero JIT/GC work, exact hidden-class identity, physical allocation/heap savings, universal acceleration or native-browser CPU improvement.
+- **Candidate-only no-change controls:** independent byte-identical new-cursor Source trees (84 regular files each) and minified trees (165 each), with complete path/byte/SHA-256 equality. All twelve predeclared workload/build rows use the unchanged earlier panel's counts/warm totals, four fresh AB/BA-offset processes and eight balanced blocks each. All eight blocks are summed; all 768 raw timing intervals and 384 whole paired witnesses remain, with no selected intervals or rerun winners. Process-total CPU, current-thread CPU and wall time are collected together with their nested-scope/accounting overhead. Negative values below mean less time in the second **identical** tree, not an optimization.
+- The fixed gate requires every metric of every row to have an absolute median difference at most 2% and at least three of four aggregate pairs within 5%. Five rows fail, all in process-total CPU. Passing thread/wall results do not replace that gate: **no full 26+26 matrix or stable CPU speedup claim follows**. Cells show median difference and the number of pairs within 5%.
+
+| Complete no-change workload | Process CPU median (within 5%) | Thread CPU median (within 5%) | Wall median (within 5%) |
+| --- | ---: | ---: | ---: |
+| Source `export-legacy-large` | +0.13% (4/4) | +0.05% (4/4) | +0.07% (4/4) |
+| Source `export-expression-quiet1024` | +0.21% (4/4) | -0.24% (4/4) | -0.09% (4/4) |
+| Source `export-expression-normal1024` | -0.76% (4/4) | -0.27% (4/4) | -0.21% (4/4) |
+| Source `roundtrip-expression-mixed` | -4.23% (2/4) | -1.74% (4/4) | -1.77% (4/4) |
+| Source `import-single-byte-16384` | +0.63% (0/4) | -0.28% (3/4) | -0.54% (3/4) |
+| Source `import-single-byte-32` | +0.06% (4/4) | +0.06% (4/4) | +0.06% (4/4) |
+| Minified `export-legacy-large` | +0.28% (4/4) | -0.17% (4/4) | -0.19% (4/4) |
+| Minified `export-expression-quiet1024` | +1.36% (4/4) | +0.13% (4/4) | +0.16% (4/4) |
+| Minified `export-expression-normal1024` | -3.72% (2/4) | -0.32% (4/4) | -0.16% (4/4) |
+| Minified `roundtrip-expression-mixed` | +2.60% (2/4) | +0.25% (4/4) | +0.21% (4/4) |
+| Minified `import-single-byte-16384` | -2.81% (1/4) | -0.33% (4/4) | -0.55% (4/4) |
+| Minified `import-single-byte-32` | -0.21% (4/4) | -0.21% (4/4) | -0.25% (4/4) |
+
+- Throwaway consumer proofs for both actual compiler-emitted Source and actual minified runtime preserve all 18,823 expression vectors, 74 SMFs/roundtrips, 449 ownership cases and 301,152 binary cases. The binary corpus covers four public SMF fixtures: every alternate octet at each byte position, every truncated prefix, and one-to-four trailing `0xff` bytes, under four import policies. Complete accepted results and exact refusal classes/messages match; inherited `view`/`end`/`offset` hooks are never invoked. MIDI, ownership and binary fingerprints remain `0e8eb185da57bfa93bbfe9ef02b50b3a4e69a651d7efafd6d041344aac40e484`, `ba6df136c9041101b89652ac5f89481fc7002ed5a57cbe2b252811d708bab934` and `d7133cf2f14559758ab6050dab423a992f2aa4ac7a30b4f320123a43eac11ce0`.
+- Verification: actual compile/build, all 626 existing behavioral tests (zero failed/skipped), strict source/development/public/core-only types, 42-source/55-built static security checks and all 55 byte-identical public declarations pass. Both actual emitted runtime files exactly match the respective instrumented compiler/minifier outputs; the generated source map embeds the new TypeScript. All six actual Source/minified whole-consumer proofs match the original complete result/error fingerprints.
+- Owned Chromium 156.0.8078.4 preserves the complete 18,823-vector/74-file/eight-refusal public MIDI proof and its Node fingerprint, then observes genuine 48-kHz, sink-none AudioWorklet playback of a caller-detached exported/imported score. Small/zero/quiet/full expression and hard left/right stereo PCM remain correct; pause preserves the cursor, resume reconstructs current state, and stop drains voices/events/owned IDs/both PCM channels to zero. Closing OPM preserves the borrowed running context. Page/request/HTTP/DSP/rejection errors stay zero.
+- Security: integration-owner scoped **A/C**, not independent review; see [SECURITY](./SECURITY.md#review-record). No API, declaration, voice format, protocol, permission or dependency change; no release/publication or physical-device/listening/deadline acceptance is implied.
+
 ### MIDI benchmark no-change controls
 
 - Qualify the earlier MIDI CPU tables, without changing runtime code or deleting observations. Two Source trees (84 files each) and two actual minified trees (165 files each), all from `457ee20`, have identical paths, bytes and per-file SHA-256 fingerprints. Each comparison runs the same complete public workload against byte-identical code. Negative values mean less CPU in the second identical tree, **not an optimization**.
