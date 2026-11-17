@@ -347,13 +347,14 @@ function renderPlan(events: readonly SequenceEvent[], options: ChunkedSequenceOp
     throw new RangeError('chunkFrames must be an integer in 1..65536');
   }
   // One literal of conditional spreads defines own data; assignment could reach an inherited setter.
+  // Nullish spread sources omit absent settings without constructing empty source objects.
   const engine: SynthOptions = {
-    ...(config.mixGain === undefined ? {} : { mixGain: config.mixGain as SynthOptions['mixGain'] }),
-    ...(config.tuning === undefined ? {} : { tuning: config.tuning as SynthOptions['tuning'] }),
-    ...(config.stealing === undefined ? {} : { stealing: config.stealing as SynthOptions['stealing'] }),
-    ...(config.quality === undefined ? {} : { quality: config.quality as SynthOptions['quality'] }),
-    ...(config.saturation === undefined ? {} : { saturation: config.saturation as SynthOptions['saturation'] }),
-    ...(config.dcBlock === undefined ? {} : { dcBlock: config.dcBlock as SynthOptions['dcBlock'] }),
+    ...(config.mixGain === undefined ? undefined : { mixGain: config.mixGain as SynthOptions['mixGain'] }),
+    ...(config.tuning === undefined ? undefined : { tuning: config.tuning as SynthOptions['tuning'] }),
+    ...(config.stealing === undefined ? undefined : { stealing: config.stealing as SynthOptions['stealing'] }),
+    ...(config.quality === undefined ? undefined : { quality: config.quality as SynthOptions['quality'] }),
+    ...(config.saturation === undefined ? undefined : { saturation: config.saturation as SynthOptions['saturation'] }),
+    ...(config.dcBlock === undefined ? undefined : { dcBlock: config.dcBlock as SynthOptions['dcBlock'] }),
   };
   const settings = readSynthOptions(engine);
   if (settings.tuning !== undefined) settings.tuning = normalizeTuning(settings.tuning);

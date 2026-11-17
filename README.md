@@ -395,6 +395,8 @@ Structured clone does not transfer private prepared trust. Within each offline W
 
 On reuse of a pooled slot with the exact same immutable patch, `Synth` can retain its canonical sustain dB/gain constants. Pristine envelope timing/step coefficients are also reusable when `rateKeyScale` is omitted or zero; every nonzero value still recalculates them. Live ADSR edits force affected constants/coefficients fresh, while raw/new patch identities and note-dependent initialization follow the normal path. Per-note envelope timelines reset as before, without an additional Synth patch cache or pool retention.
 
+Sequence preflight uses nullish spread sources for omitted engine settings while retaining a fresh own-data engine literal and full validation. Own `undefined` still omits a setting; defined values, prepared-score eligibility and all score/frame limits are unchanged. The [scoped Source/minified capacity benchmarks](./CHANGELOG.md#sequence-option-spread-sources) concern default planning work, not DSP rendering, native-browser CPU or physical allocation/heap behavior.
+
 #### Long scores without aggregate PCM
 
 `prepareLongSequence` validates a separate maximum of 65,536 input events and 24 hours including gates/commands. `estimateSequenceCapacity` reports frame/PCM/chunk bytes and short-helper eligibility. `renderSequenceChunks` uses two reusable buffers; consume/copy each chunk's valid `frames` before advancing. `cancel()`, iterator return or an AbortSignal prevents further advancement; optional `maxFrames` caps cumulative work. Full-buffer rendering/`encodeWav` retain their limits; incremental `createWavEncoder` uses a separate RIFF32 file-size bound.

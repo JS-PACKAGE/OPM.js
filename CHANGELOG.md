@@ -4,6 +4,37 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Sequence option spread sources
+
+- Use `undefined` rather than an empty object as each omitted engine setting's private spread source. The fresh own-data engine literal and full `readSynthOptions` call remain; defined settings, own-`undefined` omission, validation/error order, prepared-score trust and all score/frame limits are unchanged. No cache, retained caller data, DSP arithmetic or public API change is added. The minified sequence module grows by 24 bytes; no physical allocation/GC/heap reduction is claimed.
+- Local Node.js 26.7.0 / V8 14.6.202.34-node.28, macOS arm64 measurements use complete compiler-emitted Source and the exact production esbuild/Terser output. All 16 byte-identical no-change rows qualify in process-total CPU, current-thread CPU and wall time: absolute median delta at most 2%, with at least three of four fresh pairs within 5%. The Source first-audio-chunk process-total control retains its one outside-5% pair; no outlier is removed.
+- Before candidate timing, the two prepared capacity workloads in each build require at least 1.5% median improvement and improvement in all four fresh pairs in **each** clock. The other twelve rows allow at most 2% median regression in each clock. All sixteen candidate rows meet these unchanged gates; these are planner/consumer workload observations, not general DSP-rendering or browser speedup claims.
+
+| Build | Actual consumer workload | Process CPU delta | Thread CPU delta | Wall-time delta |
+| --- | --- | --- | --- | --- |
+| Source | Prepared empty capacity (primary) | -3.32% | -3.16% | -3.19% |
+| Source | Prepared one-note capacity (primary) | -3.87% | -3.47% | -3.44% |
+| Source | Raw one-note capacity | +0.09% | -0.18% | -0.26% |
+| Source | Prepared 64-note capacity | -0.48% | -0.44% | -0.44% |
+| Source | Empty capacity, mixGain 0.7 | -1.96% | -1.87% | -1.87% |
+| Source | Empty capacity, dcBlock false | -2.36% | -2.26% | -2.27% |
+| Source | Consume all empty chunks | -0.33% | +0.69% | +0.71% |
+| Source | First 16 audio frames, cancel | +0.50% | +0.45% | +0.49% |
+| Minified | Prepared empty capacity (primary) | -4.19% | -4.01% | -4.02% |
+| Minified | Prepared one-note capacity (primary) | -4.25% | -3.82% | -3.85% |
+| Minified | Raw one-note capacity | -0.25% | -1.19% | -1.18% |
+| Minified | Prepared 64-note capacity | -0.23% | -0.21% | -0.21% |
+| Minified | Empty capacity, mixGain 0.7 | -2.56% | -2.41% | -2.54% |
+| Minified | Empty capacity, dcBlock false | -1.38% | -1.24% | -1.31% |
+| Minified | Consume all empty chunks | -1.14% | -0.17% | -0.09% |
+| Minified | First 16 audio frames, cancel | -0.14% | +0.02% | -0.03% |
+
+Negative deltas improve the measured workload. Each row uses four fresh processes starting AB/BA/AB/BA, with all eight within-process blocks AB/BA/BA/AB/AB/BA/BA/AB or their complement summed before ratios. Each mode/build is calibrated once after 60,000 warm calls using 50,000 calls, targeting 220 ms process CPU per block and 600 ms proportional warm-up; candidate counts are unchanged. Each comparison retains 64 distinct fresh PIDs, 1,024 timed intervals and 512 paired complete final-consumer witnesses, held through the other root's measurement and hashed only after both scopes. Capacity witnesses contain all public data/descriptors/frozen limits, not invented PCM/private Synth state; chunk consumers include actual PCM, backing bytes, offsets, diagnostics and terminal behavior.
+
+Verification: actual build, all 626 existing tests (zero failures/skips), strict source/development/public/core-only type checks, and all 55 byte-identical freshly generated declarations pass. Actual Source/minified runtime bytes match the qualified private outputs; the committed map embeds the exact new TypeScript. Both actual runtimes preserve all 1,491 complete consumer cases, plus 27 lifecycle and two raw-mutation programs: all 64 missing/own-`undefined` masks across six input forms, all 64 mixed-defined masks, exact errors/hooks, limits, full stereo PCM/backings, ownership, cancellation/native abort and six detached-buffer programs. The whole consumer fingerprint remains `75afe60a0eba62055350d3b74cd336e5b1a472c83f297865693bfcdff1de85f7`.
+
+Owned Chromium 156.0.8078.4 preserves 128 public core programs/1,408 chunk results and ten real module-Worker jobs, including acknowledged sink backpressure and abort during a write. The existing sequence page exports finite nonzero 48-kHz float32 stereo WAVs through both main-thread and native Worker paths with zero page/request/HTTP/DSP errors; their separate engine settings are not assumed equal. Physical-device/listening acceptance and native-browser performance remain unverified. Scoped security checklist A/C: integration-owner review recorded in [SECURITY](./SECURITY.md), not independent audit or release/publication approval.
+
 ### MIDI cursor JIT stability
 
 - Replace the private MIDI reader class with import-local own-data cursors and shared bounded readers. Header/track cursor and DataView lifetimes remain local; no caller buffer, reader graph or note payload is cached, pooled or pinned. No per-byte object or copy is added. Byte order, status-bit/tag/truncation precedence, four-byte VLQs, strict input/resource limits and public results/errors remain unchanged.
