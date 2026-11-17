@@ -4,6 +4,45 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Packed mono PCM16 output
+
+- For the existing little-endian, undithered mono PCM16 path at 128 frames or more, pack two ascending samples into one LE32 word instead of two LE16 words. Replace one output view with the captured `NativeUint32Array` and remove the now-unused private Int16 constructor capture. No buffer, cache, state, public API, format, protocol or dependency is added. Accepted stereo16/PCM24 packing is unchanged.
+- Exclude the odd final sample from the word view and byte-write its two quantized bytes. Mono PCM16 data is always RIFF-even: no file/chunk padding is added. Keep each original read, finite/range check, scale/round formula, owned output and atomic frame/RNG transaction. Small chunks, generic big-endian fallback, other formats and dither retain their routes. Existing independent tests are unchanged.
+- Correct the current README stereo16 paragraph so it no longer claims that mono still uses Int16; retain historical per-commit measurements and add the new mono grouping contract. No compatibility alias, shim or stale private constructor remains.
+
+Complete encoding comparison against `8684e6f`, Node.js 26.7.0 on macOS arm64 at 48 kHz: four fresh AB/BA process pairs per row, independently calibrated for source and actual shipped minified modules. Sixteen real warm iterations precede 120 ms reference calibration; fixed measured counts target about 220 ms with identical derived warm counts. Measure process user+system CPU. PCM/chunk views are outside timing; complete public encode or create/header/all-chunks/finalize, validation, quantization, output allocation and accounting are inside. Both `default-` rows genuinely omit format and dither. Complete RIFF/header/PCM/padding and final accounting witnesses are outside CPU. This is codec CPU, not synthesis, file I/O, Worker-host or native-audio CPU.
+
+| Complete WAV encoding workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `full-pcm16-mono128` | -5.02% | -5.01% |
+| `full-pcm16-mono129` | -6.23% | -4.95% |
+| `full-pcm16-mono130` | -7.84% | -6.69% |
+| `full-pcm16-mono131` | -8.34% | -2.11% |
+| `full-pcm16-mono65536` | -25.28% | -25.61% |
+| `full-pcm16-mono65535` | -24.89% | -25.23% |
+| `full-pcm16-mono262144` | -24.46% | -23.45% |
+| `full-pcm16-mono127-control` | -0.01% | 0.79% |
+| `stream-pcm16-mono65536` | -26.15% | -24.64% |
+| `stream-pcm16-mono1024` | -21.31% | -21.58% |
+| `stream-pcm16-mono129` | -9.61% | -10.04% |
+| `stream-pcm16-mono130` | -10.03% | -10.42% |
+| `stream-pcm16-mono131` | -13.64% | -10.75% |
+| `stream-pcm16-mono127-control` | -0.25% | 0.03% |
+| `full-pcm16-stereo-control` | -0.27% | 0.28% |
+| `full-pcm24-stereo-control` | -0.27% | -0.71% |
+| `full-pcm24-mono-control` | 0.36% | -4.04% |
+| `full-float32-mono-control` | 1.65% | -2.05% |
+| `full-pcm16-mono-dither-control` | -0.86% | -0.33% |
+| `stream-pcm16-mono-dither-control` | 0.37% | -0.17% |
+| `default-full-pcm16-mono65536` | -24.57% | -24.71% |
+| `default-stream-pcm16-mono1024` | -21.67% | -21.83% |
+
+Negative CPU deltas are faster. Actual minified format/dither-omitted default full/stream improve 24.71%/21.83% in all four pairs; thirteen of fourteen minified targets improve in every pair. Do not generalize the 131-frame full-file -2.11% mixed result: two pairs regress, one by 13.53%. Keep the small costs: minified 127-frame fallback full +0.79% and stereo control +0.28%, each in three pairs; fallback stream +0.03% is mixed. Source Float32 mono is +1.65% in all four pairs, while minified is -2.05% with three gains, not a universal Float32 gain. The unchanged PCM24 mono control improves 4.04% in all minified pairs; do not attribute that separate-writer result to mono16 packing. All twenty-two rows and raw adverse/unchanged results remain recorded without another variant or CPU rerun. No universal speed, allocation/GC, browser-CPU or audio-deadline claim.
+
+Source and actual minified public proofs each preserve 1,813 complete-file/3,526 streaming cases, 908,139,586 complete WAV bytes, 54,642,433 independent quantized/raw-float sample checks, 151,688 tracked header/state checks, 152,406 ownership checks, 3,626 input-preservation checks and 13,090 refusals with zero caller-metadata getter reads. The 2,462-entry Float32 corpus covers half-LSB neighbors, rails, signed zero, subnormals, packing positions, odd tails, aliases/shared/foreign realms, 3,999,999/4,000,000-frame mono16 parity, other maximum-size cases, RIFF padding and failed-chunk/noise recovery. Both hashes are `fffcb1a0b2f058392f882113868b45735d042121776ca7fd443490082d41ddcf`. All 15 existing focused WAV tests and all 624 tests, strict source/development/public/core-only types, the 42-source/55-built security gate, empty runtime dependencies and six byte-identical generated declarations pass. Checklist A/C was reviewed by the integration owner (not independent); see the [scoped security record](./SECURITY.md#security-review-mechanism).
+
+Chromium 156.0.8078.4 on darwin/arm64 also passes ten real browser-realm public mono cases using 12,476–12,479 nonzero frames: PCM16/PCM24/Float32, dither, even/odd pair tails and two genuinely format/dither-omitted defaults. Full and incremental bytes agree across 128/129/130/131/127-frame prefixes and the remaining tail, and match the accepted encoder on captured PCM. Mono PCM16 uses the optional two-byte sample tail but no RIFF padding, including odd lengths; PCM24 control padding remains correct. The actual omitted-default mono PCM16 Blob download has 25,002 bytes and the exact baseline hash. The unchanged stereo PCM16 example remains a separate control, producing 17,280 frames/69,164 bytes at 48 kHz with zero DSP errors. No page errors or horizontal overflow occur. No AudioContext, audio-file playback, new mono UI control or permission/CSP/MIME relaxation is introduced. This is browser codec behavior, not browser CPU, native audio deadlines, physical-device/MIDI, human-listening or big-endian hardware acceptance.
+
 ### Packed stereo PCM16 output
 
 - For the existing little-endian, undithered PCM16 writer at 128 frames or more, pack each stereo frame into one LE32 word instead of two LE16 words. Reuse the captured `NativeUint32Array`; move the unchanged mono Int16 view inside its existing branch so neither route allocates an unused second view. Add no buffer, cache, state, public API, format, protocol or dependency.

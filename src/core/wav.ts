@@ -29,7 +29,6 @@ const typedArrayKind = Object.getOwnPropertyDescriptor(typedArrayPrototype, Symb
 const typedArrayBuffer = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'buffer')!.get! as (this: unknown) => ArrayBufferLike;
 const typedArrayOffset = Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteOffset')!.get! as (this: unknown) => number;
 const NativeFloat32Array = Float32Array;
-const NativeInt16Array = Int16Array;
 const NativeUint32Array = Uint32Array;
 const typedArraySet = Float32Array.prototype.set;
 const LITTLE_ENDIAN = new Uint8Array(Uint32Array.of(1).buffer)[0] === 1;
@@ -116,11 +115,24 @@ function encodePcm16Words(bytes: Uint8Array, offset: number, left: Float32Array,
   // Amortize the extra output view over at least one ordinary audio quantum.
   if (frames < 128) return encodePcm16(bytes, offset, left, right, frames);
   if (right === undefined) {
-    const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, frames);
-    for (let frame = 0; frame < frames; frame++) {
-      const value = left[frame];
+    // Pair mono samples without including the optional two-byte tail.
+    const pairedFrames = frames & ~1;
+    const samples = new NativeUint32Array(bytes.buffer, bytes.byteOffset + offset, pairedFrames >>> 1);
+    for (let frame = 0, index = 0; frame < pairedFrames; frame += 2, index++) {
+      const first = left[frame];
+      if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+      const firstSample = Math.floor(first * (first < 0 ? 32768 : 32767) + 0.5);
+      const second = left[frame + 1];
+      if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+      const secondSample = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
+      samples[index] = (firstSample & 65535) | (secondSample << 16);
+    }
+    if (pairedFrames !== frames) {
+      const value = left[pairedFrames];
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-      samples[frame] = Math.floor(value * (value < 0 ? 32768 : 32767) + 0.5);
+      const sample = Math.floor(value * (value < 0 ? 32768 : 32767) + 0.5);
+      const tail = offset + pairedFrames * 2;
+      bytes[tail] = sample & 255; bytes[tail + 1] = (sample >> 8) & 255;
     }
     return 0;
   }
