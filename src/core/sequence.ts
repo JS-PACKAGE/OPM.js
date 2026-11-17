@@ -229,8 +229,10 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
     if (controlFree) {
-      // Private snapshots have finite notes and immutable release values already bounded to 0..10.
-      for (const op of event.voice.ops) {
+      // Private snapshots have four immutable operators, finite notes and release values bounded to 0..10.
+      const ops = event.voice.ops;
+      for (let index = 0; index < 4; index++) {
+        const op = ops[index];
         const scale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
         release = Math.max(release, scale === undefined || scale === 0 ? op.adsr.r : operatorDuration(op.adsr.r, event.note, scale));
       }

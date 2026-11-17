@@ -4,6 +4,57 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Fixed-width sequence release iteration
+
+- Visit the four canonical immutable operators by index under the existing exact private control-free snapshot identity. Normal own-data preparation still proves exactly four dense operators before freezing and registration. Controlled, foreign, cloned, wrapped and unregistered frame-planner roots retain the original generic iterator reduction where applicable. Own scaling probes, note-dependent arithmetic, reduction order and shared `operatorDuration`/DSP remain unchanged. No cache, trust flag, public API or retained data is added. The minified sequence module grows by 22 bytes; no physical allocation/GC/heap reduction is claimed.
+- Local Node.js 26.7.0 / V8 14.6.202.34-node.28, macOS arm64 measurements use complete compiler-emitted Source and exact production esbuild/Terser output: all twenty-four new byte-identical no-change rows qualify in process-total CPU, current-thread CPU and wall time, requiring absolute median delta at most 2% and at least three of four fresh pairs within 5%. No retained control pair lies outside 5%; none is removed.
+- Before candidate timing, prepared 64-note and 128-note capacity planning in each build require at least 1.5% median improvement and improvement in all four fresh pairs in **each** clock. The twenty other rows allow at most 2% median regression in each clock. All twenty-four candidate rows meet these unchanged gates; these are not general DSP-rendering or browser speedup claims.
+
+| Build | Actual consumer workload | Process CPU delta | Thread CPU delta | Wall-time delta |
+| --- | --- | ---: | ---: | ---: |
+| Source | Prepared empty capacity | +0.15% | +0.17% | +0.17% |
+| Source | Prepared one-note capacity | -2.73% | -3.00% | -2.98% |
+| Source | Raw one-note capacity | +0.81% | +0.46% | +0.41% |
+| Source | Prepared 64-note capacity (primary) | -13.71% | -13.62% | -13.65% |
+| Source | Empty capacity, mixGain 0.7 | +0.56% | +0.56% | +0.53% |
+| Source | Empty capacity, dcBlock false | +0.14% | +0.12% | +0.08% |
+| Source | Consume all empty chunks | -0.61% | -0.24% | -0.25% |
+| Source | First 16 audio frames, cancel | -0.97% | -0.30% | -0.31% |
+| Source | Prepared 128-note capacity (primary) | -14.23% | -14.14% | -14.19% |
+| Source | Prepared 64-note capacity, nonzero scaling | -9.26% | -9.18% | -9.18% |
+| Source | Prepared 64-note capacity, distinct zero-scale voices | -15.51% | -15.43% | -15.43% |
+| Source | Prepared 128-note capacity, distinct zero-scale voices | -16.07% | -15.98% | -15.98% |
+| Minified | Prepared empty capacity | +0.14% | +0.13% | +0.13% |
+| Minified | Prepared one-note capacity | -3.17% | -3.36% | -3.39% |
+| Minified | Raw one-note capacity | +0.98% | +0.26% | +0.26% |
+| Minified | Prepared 64-note capacity (primary) | -14.92% | -14.83% | -14.85% |
+| Minified | Empty capacity, mixGain 0.7 | +0.02% | +0.02% | +0.01% |
+| Minified | Empty capacity, dcBlock false | -0.41% | -0.41% | -0.41% |
+| Minified | Consume all empty chunks | -0.34% | +0.05% | -0.04% |
+| Minified | First 16 audio frames, cancel | -0.30% | -0.23% | -0.30% |
+| Minified | Prepared 128-note capacity (primary) | -14.76% | -14.66% | -14.67% |
+| Minified | Prepared 64-note capacity, nonzero scaling | -9.85% | -9.76% | -9.71% |
+| Minified | Prepared 64-note capacity, distinct zero-scale voices | -15.36% | -15.29% | -15.38% |
+| Minified | Prepared 128-note capacity, distinct zero-scale voices | -14.27% | -14.19% | -14.19% |
+
+Every mode/build calibrates once with 60,000 warm calls and 50,000 measured calls, then fixes a 220-ms process-CPU target and proportional 600-ms warm-up for both roots. Four fresh processes use AB, BA, AB, BA offsets; after eight alternating warm chunks, all eight within-process blocks (`AB BA BA AB AB BA BA AB`, or the complement) are retained and summed before each fresh-process ratio. Process-total CPU, current-thread CPU and wall clocks are nested and independently gated. Each comparison retains 96 fresh processes, 1,536 timed intervals and 768 complete final public consumer witnesses. No counts, clocks, thresholds, pairs or outliers are retuned or dropped.
+
+Capacity calls consume the actual returned snapshot and seven integer fields, without invented PCM or private Synth-state evidence. Chunk consumers copy actual views/entire backings and consume metadata inside timing; the first-audio consumer reads 16 actual frames, cancels and observes terminal state inside timing. Complete final-result hashing occurs only after both measurements, with the first result still held. Shared nonzero-scaling controls use four immutable scales of 0.25, 0.5, 0.75 and 1. Distinct zero-scale controls prove separate canonical voice identities for every note. All observed regressions above remain published.
+
+Actual Source/minified runtimes preserve 1,491 complete consumer cases, including all option-presence masks, lifecycle/raw-mutation/detachment and typed-length observations. Existing release coverage preserves 9,072 complete frame plans, 1,944 capacity snapshots, 120 full-sequence/40 single-note renders and 8 generic getter/iterator programs. Additional coverage preserves 1,440 multi-note frame plans, 192 capacity snapshots, 42 real full renders and 42 complete chunk streams/197 chunks across shared/distinct/scaled voices, raw per-occurrence Proxy inputs and mutations. Another 7,560 direct window cases preserve 4,238 values, 3,322 errors and all getter/Proxy/coercion traces, plus 120 independent half-open oracle programs. Full descriptors, aliases, signed-zero scalars, queue ordering, stereo views and entire backings agree; inherited rate-scaling getters remain uninvoked.
+
+Complete fingerprints:
+- Public consumers: `75afe60a0eba62055350d3b74cd336e5b1a472c83f297865693bfcdff1de85f7`.
+- Release boundaries: `d90b67ee97fefbed226c5734615c6b8e5b5c40c4790652fd572e1b82170ebca5`.
+- Multi-note consumers: `b6383054c5b19e1a51c0049359fe8b6de02f302779cd7d8383c4cfc8d6cb41e2`.
+- Generic window consumers: `4ac6c0c77e8291f661e53f203ec7ec2863f4b40d9458ff6884cadd7a4951a76e`.
+
+Verification: actual build, all 626 existing tests (zero failures/skips), strict source/development/public/core-only typechecks and all 55 byte-identical freshly generated declarations pass. Actual emitted runtime bytes equal the qualified private Source/production-Min outputs; the production map embeds the exact TypeScript, while development maps retain external TypeScript references. Shared Synth/numeric-helper runtime/maps are unchanged.
+
+Owned Chromium 156.0.8078.4 compares 128 public core programs/1,408 chunks and ten genuine native module-Worker jobs against the frozen pre-change distribution, including sink backpressure and abort during a write. The existing example's separate main-thread and Worker exports produce finite nonzero 48-kHz float32 stereo WAVs with zero page/request/HTTP/DSP errors and no AudioContext; their separate engine settings are not claimed to match. Complete native consumer fingerprint: `2b04bf04946297a16d14d6ff40f5bb6ec613cb466c2e0e94f27b5f3fe09e54e3`.
+
+Security review: owner-scoped A/C, not independent audit or release/publication approval. Physical-device/listening acceptance and native-browser performance remain unverified.
+
 ### Owned sequence release bounds
 
 - Reuse already bounded release values with missing or zero own rate-key scaling only under the existing exact private control-free snapshot identity. Finite notes, detached immutable operators and releases in 0..10 seconds are established by normal preparation. Nonzero scaling, controlled scores and unregistered/foreign frame-planner roots retain their original capped calculations and caller observations. No new trust flag, cache, retained data, public API or shared `operatorDuration`/DSP change is introduced. The minified sequence module grows by 162 bytes; no physical allocation/GC/heap reduction is claimed.
