@@ -4,6 +4,62 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Prototype-aware sequence release scales
+
+- Under the existing exact private control-free snapshot identity, canonical immutable operators have the ordinary `Object.prototype` parent. When that parent lacks `rateKeyScale`, a direct field read has the same missing/own-data result without repeating an own-property probe. Any inherited key, including data `undefined`, retains the original own probes without invoking inherited getters. The guard is fresh per note after frame/time coercions, so direct callers can still change inherited state between coercions/notes. Controlled and unregistered roots retain their generic iterator reduction. Validation, reduction order, arithmetic and shared Synth/numeric helpers are unchanged; no cache, public field or trust shortcut is added. The minified sequence module grows by 40 bytes; no physical allocation/GC/heap reduction is claimed.
+- Local Node.js 26.7.0 / V8 14.6.202.34-node.28, macOS arm64 measurements use complete compiler-emitted Source and exact production esbuild/Terser output: all twenty-six new byte-identical no-change rows qualify in process-total CPU, current-thread CPU and wall time, requiring absolute median delta at most 2% and at least three of four fresh pairs within 5%. The Source prepared-one control retains one outside-5% pair in current-thread CPU and wall time only; all pairs and clocks remain included.
+- Before candidate timing, prepared 64-note and 128-note capacity planning in each build require at least 1.5% median improvement and improvement in all four fresh pairs in **each** clock. The twenty-two other rows allow at most 2% median regression in each clock, including the genuine inherited-key fallback in both builds. All twenty-six candidate rows meet these unchanged gates; these are not general DSP-rendering or browser speedup claims. Deltas are relative to the preceding fixed-width iteration baseline, not summed with older tables.
+
+| Build | Actual consumer workload | Process CPU delta | Thread CPU delta | Wall-time delta |
+| --- | --- | ---: | ---: | ---: |
+| Source | Prepared empty capacity | +0.11% | +0.11% | +0.17% |
+| Source | Prepared one-note capacity | -5.99% | -6.02% | -5.99% |
+| Source | Raw one-note capacity | -0.01% | -0.75% | -0.68% |
+| Source | Prepared 64-note capacity (primary) | -34.91% | -34.99% | -34.97% |
+| Source | Empty capacity, mixGain 0.7 | +0.97% | +0.95% | +0.96% |
+| Source | Empty capacity, dcBlock false | -0.82% | -0.81% | -0.87% |
+| Source | Consume all empty chunks | +0.33% | +0.61% | +0.58% |
+| Source | First 16 audio frames, cancel | +1.13% | +1.20% | +1.23% |
+| Source | Prepared 128-note capacity (primary) | -35.09% | -35.20% | -35.12% |
+| Source | Prepared 64-note capacity, nonzero scaling | -28.08% | -28.12% | -28.15% |
+| Source | Prepared 64-note capacity, distinct zero-scale voices | -34.88% | -34.95% | -34.93% |
+| Source | Prepared 128-note capacity, distinct zero-scale voices | -34.04% | -34.11% | -34.16% |
+| Source | Prepared 64-note capacity, inherited scaling key | -0.96% | -0.95% | -1.05% |
+| Minified | Prepared empty capacity | -1.07% | -1.04% | -1.09% |
+| Minified | Prepared one-note capacity | -5.63% | -5.67% | -5.60% |
+| Minified | Raw one-note capacity | -1.62% | -1.42% | -1.44% |
+| Minified | Prepared 64-note capacity (primary) | -35.39% | -35.47% | -35.47% |
+| Minified | Empty capacity, mixGain 0.7 | +0.46% | +0.36% | +0.43% |
+| Minified | Empty capacity, dcBlock false | +0.45% | +0.44% | +0.67% |
+| Minified | Consume all empty chunks | +1.20% | +0.26% | +0.35% |
+| Minified | First 16 audio frames, cancel | -1.02% | -1.37% | -1.11% |
+| Minified | Prepared 128-note capacity (primary) | -36.33% | -36.40% | -36.39% |
+| Minified | Prepared 64-note capacity, nonzero scaling | -27.94% | -27.98% | -27.95% |
+| Minified | Prepared 64-note capacity, distinct zero-scale voices | -34.44% | -34.51% | -34.40% |
+| Minified | Prepared 128-note capacity, distinct zero-scale voices | -33.71% | -33.81% | -33.97% |
+| Minified | Prepared 64-note capacity, inherited scaling key | -0.40% | -0.42% | -0.42% |
+
+Every mode/build calibrates once with 60,000 warm calls and 50,000 measured calls, then fixes a 220-ms process-CPU target and proportional 600-ms warm-up for both roots. Four fresh processes use AB, BA, AB, BA offsets; after eight alternating warm chunks, all eight within-process blocks (`AB BA BA AB AB BA BA AB`, or the complement) are retained and summed before each fresh-process ratio. Process-total CPU, current-thread CPU and wall clocks are nested and independently gated. Each comparison retains 104 fresh processes, 1,664 timed intervals and 832 complete final public consumer witnesses. No counts, clocks, thresholds, pairs or outliers are retuned or dropped.
+
+All previous twenty-four workloads remain, with two inherited-key fallback rows added before timing. Each such fresh process installs a genuine throwing `Object.prototype.rateKeyScale` getter outside warm-up/timing for both roots; any accidental inherited read fails. Ordinary/scaled/shared/distinct fixtures remain outside timing. Capacity calls consume the actual snapshot and seven integer fields, without invented PCM or private Synth-state evidence. Chunk consumers copy real views/entire backings and metadata inside timing; the first-audio consumer reads 16 actual frames, cancels and observes terminal state. Final-result hashing occurs only after both measurements, with the first result held. All observed regressions above remain published.
+
+Actual Source/minified runtimes preserve the preceding complete public/release/multi-note/window matrices: 1,491 public cases, 9,072 release frame plans, 1,944 release capacities, 120 full-sequence/40 single-note renders, 8 generic getter/iterator programs, 1,440 multi-note frame plans/192 capacities/42 full renders/42 complete chunk streams, and 7,560 direct window cases/120 independent half-open oracle programs. Full descriptors, aliases, signed-zero values, exact refusals, caller observations, queue ordering, real stereo views and entire backings remain equal.
+
+Additional coverage preserves 13,140 complete prototype/coercion programs across owned, foreign and cloned roots, shared/distinct voices, all six scaling shapes, explicit stops and operator controls. This includes 648 static inherited contexts, 11,952 inherited-key transitions at every observed original rate/origin coercion site, 108 site-probe programs and 432 exact caller-coercion exceptions. Complete frame plans and caller input ownership agree, with zero inherited getter/setter invocations; these frame-only programs do not invent PCM or private DSP-state evidence.
+
+Complete fingerprints:
+- Public consumers: `75afe60a0eba62055350d3b74cd336e5b1a472c83f297865693bfcdff1de85f7`.
+- Release boundaries: `d90b67ee97fefbed226c5734615c6b8e5b5c40c4790652fd572e1b82170ebca5`.
+- Multi-note consumers: `b6383054c5b19e1a51c0049359fe8b6de02f302779cd7d8383c4cfc8d6cb41e2`.
+- Generic window consumers: `4ac6c0c77e8291f661e53f203ec7ec2863f4b40d9458ff6884cadd7a4951a76e`.
+- Prototype/coercion consumers: `ff219594eadb26deba9a871a23aada883bb6af6506a9c173b1f89a7f3fc3668e`.
+
+Verification: actual build, all 626 existing tests (zero failures/skips), strict source/development/public/core-only typechecks and all 55 byte-identical fresh compiler declarations pass. Actual runtime bytes equal the qualified private Source/production-Min outputs; the production map embeds the exact TypeScript, while development maps retain external TypeScript references. All unrelated runtime/maps, including shared Synth/numeric helpers, are unchanged.
+
+Owned Chromium 156.0.8078.4 compares 128 public core programs/1,408 chunks and ten genuine native module-Worker jobs against the frozen pre-change distribution, including sink backpressure and abort during a write. The existing example's separate main-thread and Worker exports produce finite nonzero 48-kHz float32 stereo WAVs with zero page/request/HTTP/DSP errors and no AudioContext; their separate engine settings are not claimed to match. Complete native consumer fingerprint: `2b04bf04946297a16d14d6ff40f5bb6ec613cb466c2e0e94f27b5f3fe09e54e3`.
+
+Security review: owner-scoped A/C, not independent audit or release/publication approval. Physical-device/listening acceptance and native-browser performance remain unverified.
+
 ### Fixed-width sequence release iteration
 
 - Visit the four canonical immutable operators by index under the existing exact private control-free snapshot identity. Normal own-data preparation still proves exactly four dense operators before freezing and registration. Controlled, foreign, cloned, wrapped and unregistered frame-planner roots retain the original generic iterator reduction where applicable. Own scaling probes, note-dependent arithmetic, reduction order and shared `operatorDuration`/DSP remain unchanged. No cache, trust flag, public API or retained data is added. The minified sequence module grows by 22 bytes; no physical allocation/GC/heap reduction is claimed.

@@ -231,9 +231,11 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     if (controlFree) {
       // Private snapshots have four immutable operators, finite notes and release values bounded to 0..10.
       const ops = event.voice.ops;
+      // Check after frame coercions; direct callers can change prototypes between notes.
+      const inheritedRateScale = 'rateKeyScale' in Object.prototype;
       for (let index = 0; index < 4; index++) {
         const op = ops[index];
-        const scale = Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
+        const scale = !inheritedRateScale || Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined;
         release = Math.max(release, scale === undefined || scale === 0 ? op.adsr.r : operatorDuration(op.adsr.r, event.note, scale));
       }
     } else for (const op of event.voice.ops) release = Math.max(release, operatorDuration(op.adsr.r, event.note, Object.hasOwn(op, 'rateKeyScale') ? op.rateKeyScale : undefined));
