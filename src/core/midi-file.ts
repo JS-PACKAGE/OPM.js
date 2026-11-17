@@ -290,7 +290,11 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
   // Stable sorting retains tick/track ties when captured track ranges overlap.
   if (!wireOrdered) wire.sort((a, b) => a.tick - b.tick || a.track - b.track);
   const events: BeatSequenceEvent[] = [];
-  const queues = new Map<number, NoteQueue>();
+  // Parsed channel/key bytes are bounded; empty slots never retain old queue payloads.
+  const queues: ((NoteQueue | undefined)[] | undefined)[] = [
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+    undefined, undefined, undefined, undefined, undefined, undefined, undefined, undefined,
+  ];
   let liveCount = 0;
   // Own placeholders keep lazy writes/reads clear of inherited index accessors.
   const sustained: (Set<HeldNote> | undefined)[] = [
@@ -362,7 +366,7 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
       let isModulation = false;
       if (item.command === 0xa0) {
         // Like live MIDI, poly pressure owns the newest still-pressed key, not every repeated pitch.
-        const queue = queues.get(item.channel * 128 + item.a);
+        const queue = queues[item.channel]?.[item.a];
         const held = queue && queue.head < queue.notes.length ? queue.notes[queue.notes.length - 1] : undefined;
         if (held) {
           held.modulation = 1 + item.b / 127;
@@ -428,16 +432,21 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
         owners.add(held);
       }
       liveCount++;
-      const key = item.channel * 128 + item.a;
-      const queue = queues.get(key);
+      let channelQueues = queues[item.channel];
+      if (!channelQueues) {
+        channelQueues = [];
+        Object.setPrototypeOf(channelQueues, null);
+        queues[item.channel] = channelQueues;
+      }
+      const queue = channelQueues[item.a];
       if (queue) queue.notes.push(held);
-      else queues.set(key, { notes: [held], head: 0 });
+      else channelQueues[item.a] = { notes: [held], head: 0 };
     } else {
-      const key = item.channel * 128 + item.a;
-      const queue = queues.get(key);
+      const channelQueues = queues[item.channel];
+      const queue = channelQueues?.[item.a];
       if (!queue || queue.head === queue.notes.length) throw new RangeError('MIDI note-off has no owned note-on');
       const held = queue.notes[queue.head++];
-      if (queue.head === queue.notes.length) queues.delete(key);
+      if (queue.head === queue.notes.length) channelQueues![item.a] = undefined;
       if (pedals & (1 << item.channel)) {
         let pending = sustained[item.channel];
         if (!pending) { pending = new Set(); sustained[item.channel] = pending; }
@@ -449,7 +458,10 @@ export function importMidiFile(source: Uint8Array, options: MidiImportOptions = 
     if (unclosed === 'reject') throw new RangeError('MIDI contains unclosed notes or sustain gates');
     warn('unclosed-notes', 'Unclosed notes and sustain gates were closed at the final end-of-track tick', false, liveCount);
     // Pressed queue suffixes and sustained releases are disjoint owners.
-    for (const queue of queues.values()) for (let index = queue.head; index < queue.notes.length; index++) close(queue.notes[index], endTick);
+    for (const channel of queues) if (channel) for (let key = 0; key < channel.length; key++) {
+      const queue = channel[key];
+      if (queue) for (let index = queue.head; index < queue.notes.length; index++) close(queue.notes[index], endTick);
+    }
     for (const channel of sustained) if (channel) for (const held of channel) close(held, endTick);
   }
   const snapshot = Object.freeze([...warnings.values()].map(warning => Object.freeze(warning)));

@@ -380,6 +380,27 @@ test('private channel placeholders cannot invoke an inherited numeric getter dur
   ]);
 });
 
+test('pressed-key ownership ignores inherited numeric queue slots', () => {
+  const bytes = smf([[
+    0, 0x9f, 126, 110, 0, 0xaf, 127, 64, 0, 0x9f, 127, 100,
+    60, 0xaf, 127, 96, 60, 0x8f, 127, 0, 0, 0xaf, 127, 127,
+    0, 0x8f, 126, 0, ...end,
+  ]]);
+  const inherited = Object.freeze({
+    notes: Object.freeze([Object.freeze({
+      event: Object.freeze(note(99, 0, 1, 127)), tick: 0, channel: 15, modulation: undefined,
+    })]),
+    head: 0,
+  });
+  for (const controls of ['omit', 'preserve'] as const) {
+    const config = { controls, channelVoices: { 15: 'brass' } };
+    const clean = importMidiFile(bytes, config);
+    const polluted = withNamedAccessor('127', () => importMidiFile(bytes, config), inherited);
+    assert.equal(polluted.setterHits, 0);
+    assert.deepStrictEqual(polluted.value, clean);
+  }
+});
+
 test('preserved bends retain initial range until their channel selects and changes RPN', () => {
   const bytes = smf([[
     0, 0xef, 127, 127, 0, 0x9f, 60, 127,

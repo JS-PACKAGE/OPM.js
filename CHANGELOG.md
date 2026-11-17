@@ -4,6 +4,47 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Indexed MIDI note ownership
+
+- Replace only the private active pressed-note Map with sixteen own channel slots and lazy null-prototype note arrays. Existing validated channel/key bytes bound indices to 0–15/0–127. Keep the existing FIFO queue payload and head, newest-still-pressed poly pressure, disjoint sustained/expressive owners, live counts, controls and all parser/event/fanout limits. Clear a drained slot to `undefined`; do not cache or pool old queue payloads. No API, declaration, default, voice/score format, worklet protocol or dependency change.
+- End-of-file slot traversal changes only private closure visit order: existing note durations, owner deletion and counters. Returned onset IDs/order, warnings, loss metadata, errors and mutable detached results remain exact. Logical ownership capacity is bounded by 16 × 128; this is not a physical allocation, retained-heap or GC measurement. Existing numeric keys and monotone-track sort skipping were already optimized and are not new work.
+- The retained full SMF4096 import profile sampled active Map deletion at 171 of 699 samples (24.46%); VLQ decoding was not the target. Node.js 26.7.0, macOS arm64: four fresh AB/BA `process.cpuUsage()` pairs per row, separately reference-calibrated to about 220 ms CPU with proportional 120 ms warm-up counts. Complete public import/export/roundtrip, including validation, allocation and metadata, is measured; fixture export/setup and full final-byte/result witnesses are outside timing. All prior 21 legal fixtures and five high-key/all-channel/one-note/empty controls remain. Negative change means less CPU; all 52 comparisons are retained without rerunning completed rows.
+
+| Complete MIDI-file workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| `export-legacy-small` | -1.38% | +0.01% |
+| `export-legacy-large` | +0.95% | -0.60% |
+| `export-expression-quiet256` | -1.32% | -0.44% |
+| `export-expression-quiet1024` | +0.89% | -0.72% |
+| `export-expression-normal1024` | -1.54% | -5.93% |
+| `export-expression-mixed1024` | +3.00% | +1.08% |
+| `export-expression-quiet-format0` | +2.91% | -0.62% |
+| `import-legacy-large-control` | -27.64% | -28.93% |
+| `import-expression-large-control` | +4.09% | -24.05% |
+| `roundtrip-expression-mixed` | +37.44% | -9.20% |
+| `import-single-byte-32` | -14.25% | -13.71% |
+| `import-single-byte-1024` | -32.10% | -31.94% |
+| `import-single-byte-4096` | -30.74% | -30.15% |
+| `import-single-byte-16384` | -35.46% | -30.57% |
+| `import-single-byte-format0-4096` | -31.20% | -31.16% |
+| `import-three-byte-1024` | -26.51% | -26.70% |
+| `import-four-byte-128` | -19.04% | -20.52% |
+| `roundtrip-single-byte-1024` | -3.89% | -2.78% |
+| `import-polyphony8-4096` | -27.37% | -30.12% |
+| `import-polyphony32-4096` | -26.60% | -25.02% |
+| `import-long-overlap-prefix4096` | +28.61% | -14.74% |
+| `import-channel15-key127-one-control` | +6.15% | +5.97% |
+| `import-channel15-edgekeys4096` | -30.35% | -31.13% |
+| `import-all16-edgekeys-format0-4096` | -45.83% | -35.01% |
+| `import-all16-edgekeys-format1-4096` | -34.85% | -20.58% |
+| `import-empty-control` | +0.40% | +0.65% |
+
+The actual shipped minified build improves repeated note imports, including 32-note, high-channel/key, both formats, 8/32-way polyphony and overlapping gates. Costs remain visible: one channel-15/key-127 note is +5.97% in all four minified pairs; empty import is +0.65% with mixed pairs. Source expression roundtrip is +37.44% in all four pairs and overlapped import is +28.61% with mixed pairs, whereas their actual minified counterparts are -9.20% (three pairs) and -14.74% (all four). The short diagnostic profiles did not establish a cause for the Source regressions; they do not replace those measurements. Unmodified export controls are retained, not advertised as an export optimization. This is host MIDI-file CPU, not synthesis, native-browser CPU, a universal speedup, heap/GC savings or a scheduling/deadline guarantee.
+
+Both Source and actual minified modules preserve all 449 ownership cases (328 successes/121 refusals), including the original 406 public lifecycle/metadata/truncation/ownership cases, all 2048 keys over three sequential/simultaneous passes under both control policies, reverse/reinserted all-channel end-of-file gates, exact 65536-wire-event/32767-pressed-key boundary and one-over-budget refusal. They match 1,283,003 numeric, 1,778,066 descriptor, 182,578 ownership and 906 input-preservation checks plus 234 canonical roundtrips; fingerprint `ba6df136c9041101b89652ac5f89481fc7002ed5a57cbe2b252811d708bab934`. Four Object/Array key-127 getter/setter contexts have zero hook calls. The existing 18,823-vector expression proof also retains 74 files, 74 roundtrips and exact bytes/semantics (`0e8eb185da57bfa93bbfe9ef02b50b3a4e69a651d7efafd6d041344aac40e484`). A new permanent consumer regression checks inherited numeric holes and ignored unknown/released poly pressure without corrupting independent note ownership. All 626 tests, strict source/development/public/core-only contracts, scoped integration-owner A/C review (not independent), 42-source/55-built security checks, zero runtime dependencies and all 55 byte-identical generated declarations pass.
+
+Chromium 156.0.8078.4 validates 140 public import cases (136 successes/four exact refusals), 14,378 own descriptors and 8,196 Float64 values against the accepted baseline, including both formats/running-status/control policies, all sixteen channels, reverse/reinserted end-of-file gates and zero Object/Array key-127 getter/setter calls. Caller mutation cannot poison a fresh import. The actual three-note, pedal-held/re-on 6/8 import also drives a genuine 48-kHz AudioContext/AudioWorklet/analyser via a trusted gesture and native silent sink: held/resumed voices stay at three with finite nonzero PCM (observed peak 0.20465756952762604), zero DSP errors/rejections, then zero active/pending/owned gates after stop. Borrowed-context preservation is checked before test-owned close; no page/Transport errors or CSP/MIME/autoplay/permission relaxation. Physical devices/MIDI, human listening and native-browser CPU/deadline acceptance remain unverified.
+
 ### Trusted tempo-map edits
 
 - Reuse the existing private normalized-snapshot identity for `Transport.setTempo()` and `Arrangement.setTempo()` edits instead of rechecking internally owned point descriptors. Keep fresh canonical frozen point/array identities, the 1024-point/86400-beat and 1–1000-BPM bounds, edited ramp-end validation, every finite-slope check, exact prefix/full-span caches and successive inverse subtraction. Mutable, unbranded frozen, unsafe source-prototype and oversized-map paths retain the original validation/refusal behavior. No API, declaration, voice or score-format change.
