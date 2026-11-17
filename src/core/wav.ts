@@ -158,20 +158,38 @@ function encodePcm24(bytes: Uint8Array, offset: number, left: Float32Array, righ
   return 0;
 }
 
-// Six stereo PCM24 bytes form three aligned LE16 words; the middle joins Lhi8/Rlo8.
+// Pack L0/R0/L1/R1 into three aligned LE32 words; an odd frame stays byte-written.
 function encodeStereoPcm24Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
   if (frames < 128) return encodePcm24(bytes, offset, left, right, frames);
-  const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, frames * 3);
-  for (let frame = 0, index = 0; frame < frames; frame++, index += 3) {
+  const pairedFrames = frames & ~1;
+  const samples = new NativeUint32Array(bytes.buffer, bytes.byteOffset + offset, (pairedFrames >>> 1) * 3);
+  for (let frame = 0, index = 0; frame < pairedFrames; frame += 2, index += 3) {
     const first = left[frame];
     if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
     const firstSample = Math.floor(first * (first < 0 ? 8388608 : 8388607) + 0.5);
-    samples[index] = firstSample;
     const second = right![frame];
     if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
     const secondSample = Math.floor(second * (second < 0 ? 8388608 : 8388607) + 0.5);
-    samples[index + 1] = ((firstSample >>> 16) & 255) | (secondSample << 8);
-    samples[index + 2] = secondSample >> 8;
+    const third = left[frame + 1];
+    if (!(Math.abs(third) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const thirdSample = Math.floor(third * (third < 0 ? 8388608 : 8388607) + 0.5);
+    const fourth = right![frame + 1];
+    if (!(Math.abs(fourth) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const fourthSample = Math.floor(fourth * (fourth < 0 ? 8388608 : 8388607) + 0.5);
+    samples[index] = (firstSample & 0xffffff) | (secondSample << 24);
+    samples[index + 1] = ((secondSample >>> 8) & 0xffff) | (thirdSample << 16);
+    samples[index + 2] = ((thirdSample >>> 16) & 255) | (fourthSample << 8);
+  }
+  if (pairedFrames !== frames) {
+    const tail = offset + pairedFrames * 6;
+    const first = left[pairedFrames];
+    if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const firstSample = Math.floor(first * (first < 0 ? 8388608 : 8388607) + 0.5);
+    bytes[tail] = firstSample & 255; bytes[tail + 1] = (firstSample >> 8) & 255; bytes[tail + 2] = (firstSample >> 16) & 255;
+    const second = right![pairedFrames];
+    if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
+    const secondSample = Math.floor(second * (second < 0 ? 8388608 : 8388607) + 0.5);
+    bytes[tail + 3] = secondSample & 255; bytes[tail + 4] = (secondSample >> 8) & 255; bytes[tail + 5] = (secondSample >> 16) & 255;
   }
   return 0;
 }

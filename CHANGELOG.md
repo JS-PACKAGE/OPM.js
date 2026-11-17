@@ -4,6 +4,40 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Packed stereo PCM24 output
+
+- For the existing little-endian, undithered stereo PCM24 path at 128 frames or more, pack L0/R0/L1/R1 into three aligned LE32 words instead of six LE16 words. Reuse the already-captured `NativeUint32Array` constructor; replace one output view with one view, without adding a buffer, cache or flag. An odd final frame stays byte-written.
+- Preserve each original finite/range check, one-time left/right sample capture, scaling and rounding formula. Both full-file and incremental output own their bytes; sample errors still commit neither frames nor RNG state. Small chunks, big-endian fallback, mono, PCM16, Float32 and dither retain their original writers. No public API, declaration, format, protocol, DSP formula or dependency changes.
+
+Complete encoding comparison against `5ded665`, Node.js 26.7.0 on macOS arm64 at 48 kHz: four fresh AB/BA process pairs per row, independently calibrated for source and actual shipped minified modules. Sixteen real warm iterations precede 120 ms reference calibration; fixed measured counts target about 220 ms and both variants use identical derived warm counts. Measure process user+system CPU. Input PCM and chunk views are prepared outside timing; every public full encoding or encoder/header/all-chunks/finalize transaction, sample validation, quantization, output allocation and accounting is inside timing. Complete RIFF/header/PCM/padding and final frame/finished/byte-count witnesses are checked outside CPU. This is codec CPU, not synthesis, file I/O, Worker-host or native-audio CPU.
+
+| Complete WAV encoding workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `full-pcm24-stereo128` | -8.80% | -8.47% |
+| `full-pcm24-stereo129` | -10.17% | -9.84% |
+| `full-pcm24-stereo65536` | -25.27% | -25.98% |
+| `full-pcm24-stereo65535` | -26.80% | -26.52% |
+| `full-pcm24-stereo262144` | -26.28% | -26.00% |
+| `full-pcm24-stereo127-control` | 0.56% | 0.08% |
+| `stream-pcm24-stereo65536` | -25.19% | -24.23% |
+| `stream-pcm24-stereo1024` | -23.55% | -23.71% |
+| `stream-pcm24-stereo129` | -12.39% | -10.98% |
+| `stream-pcm24-stereo127-control` | -0.79% | 0.22% |
+| `full-pcm24-mono-control` | 1.26% | 0.31% |
+| `stream-pcm24-mono-control` | 2.16% | 2.29% |
+| `full-pcm16-stereo-control` | 0.74% | -0.17% |
+| `full-float32-stereo-control` | 1.49% | 0.24% |
+| `full-pcm24-dither-control` | -0.11% | -0.13% |
+| `stream-pcm24-dither-control` | -1.51% | 0.05% |
+| `full-pcm24-stereo-exact-alias` | -26.48% | -25.49% |
+| `full-pcm24-stereo-overlap` | -26.81% | -25.59% |
+
+Negative CPU deltas are faster. All ten changed stereo24 targets improve in all four source and all four actual minified pairs: source medians improve 8.80–26.81%, minified 8.47–26.52%. Retain the costs: source mono chunking is 2.16% slower in all four pairs, full mono 1.26% slower in three, PCM16 0.74% slower in all four and Float32 1.49% slower in three. Actual minified mono chunking is 2.29% slower with mixed pairs; the other minified controls range from -0.17% to +0.31%. All eighteen rows per distribution are retained without another variant, CPU rerun or discarded unchanged result. This is not universal acceleration or an allocation/GC, browser-CPU or audio-deadline claim.
+
+Source and actual minified modules each preserve 1,807 complete-file cases and 3,514 streaming cases: 585,452,356 complete WAV bytes, 30,642,440 independently checked quantized/raw-float samples, 130,338 tracked header/state checks, 147,534 ownership checks, 3,614 input-preservation checks and 7,090 refusals agree, with zero caller-metadata getter reads. The 2,462-entry Float32 bit corpus covers half-LSB neighbors, signed zero, subnormals and rails; thresholds, every packing lane, odd tails, partial/overlapping/exact aliases, shared buffers, foreign realms, 3,999,999/4,000,000-frame bounds and failed-chunk recovery retain exact bytes and accounting. Both proof hashes are `8f9ced67b394d0b6d78ef0a778bb6839e2d40c7ca446f61e6123236454b614af`. All 15 focused WAV tests and all 624 tests, strict source/development/public/core-only types, the 42-source/55-built security gate, empty runtime dependencies and six byte-identical generated declarations pass. Checklist A/C was reviewed by the integration owner (not independent); the [scoped security record](./SECURITY.md#security-review-mechanism) records ownership, alignment and numeric boundaries.
+
+Chromium 156.0.8078.4 on darwin/arm64 also passes actual browser-realm deployed modules, offline synthesis and real Blob downloads: the unchanged PCM16 example produces 17,280 stereo frames at 48 kHz with zero DSP errors, while a separate public-API invocation produces 12,477 odd-length frames with nonzero unequal channels. Six PCM16/PCM24/Float32, dither and exact-alias cases preserve full/stream bytes across 128/129/127/12093-frame chunks and match the accepted encoder on captured PCM. The downloaded stereo PCM24 file has 74,906 bytes and the exact baseline hash. No page errors or horizontal overflow occur. The example still exposes PCM16 only; no PCM24 UI feature is claimed. No AudioContext, audio-file playback or permission/CSP/MIME relaxation is introduced. This verifies browser codec behavior, not browser CPU, native audio deadlines, physical-device/MIDI, human-listening or big-endian hardware acceptance.
+
 ### Small worklet queue append
 
 - After the unchanged small-queue search proves `index === length`, use the same `events.push` operation already used for larger tail insertions instead of requesting an unused zero-delete `splice` result. Keep all other small inserts, binary search, event key reads, stop/onset/control ordering and stable arrival ties unchanged.
