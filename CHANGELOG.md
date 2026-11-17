@@ -4,6 +4,55 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Batched live control snapshots
+
+- Build multi-field raw control snapshots with checked writes to a private null-prototype result, restoring its ordinary prototype before the existing deep freeze and private identity registration. Single-field inputs retain descriptor construction without prototype transitions. Every own-key/descriptor, type, finite/range, dense-tuple, ADSR/sustain-rate and related-field check still runs in its original order. Published keys/order, prototypes, descriptor flags, detached ownership, errors and genuine-snapshot identity reuse remain exact. No API, declaration, trust flag, raw-input cache, format, protocol or dependency change.
+- A retained complete expressive-roundtrip Source profile sampled validation at 44 of 198 self samples, including 20 at snapshot property definition. An unconditional private-write variant improved live batches but regressed actual minified single-expression export and roundtrip; it was rejected before this split. The construction choice uses the already captured own-key count, not a caller-supplied optimization flag or a validation shortcut.
+- Node.js 26.7.0, macOS arm64: medians of four fresh AB/BA `process.cpuUsage()` pairs per row, separately reference-calibrated to about 220 ms CPU with proportional 120 ms warm-up counts. Live rows measure complete prepared-voice admission, eight update/render steps and natural release at 16 kHz, including both PCM channels and all ending notifications. One/eight voices use 32-frame steps; the scalar/branded-scalar/no-update controls use 64-frame steps. MIDI rows retain all 26 complete public import/export/roundtrip workloads. Setup and complete final PCM/byte/result witnesses are outside timing; validation, construction and processing remain inside. Negative change means less CPU. All 68 comparisons, including adverse controls, are retained without selective remeasurement.
+
+| Complete consumer workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| `live-raw-scalar1-onevoice64` | -0.34% | +0.33% |
+| `live-raw-sixfields-onevoice32` | -7.56% | -7.05% |
+| `live-raw-all15fields-onevoice32` | -8.03% | -7.01% |
+| `live-branded-scalar1-onevoice64-control` | -0.21% | -0.38% |
+| `live-branded-sixfields-onevoice32-control` | +0.19% | -0.45% |
+| `live-branded-all15fields-onevoice32-control` | -0.45% | -0.07% |
+| `live-no-update-onevoice64-control` | +0.30% | -0.37% |
+| `live-raw-sixfields-eightvoices32` | -11.14% | -12.19% |
+| `export-legacy-small` | +1.52% | -0.83% |
+| `export-legacy-large` | +1.81% | -1.53% |
+| `export-expression-quiet256` | +1.53% | -0.90% |
+| `export-expression-quiet1024` | -0.11% | -0.43% |
+| `export-expression-normal1024` | +1.12% | +0.24% |
+| `export-expression-mixed1024` | +1.11% | -0.11% |
+| `export-expression-quiet-format0` | -0.65% | +4.66% |
+| `import-legacy-large-control` | -1.12% | -0.10% |
+| `import-expression-large-control` | +6.95% | +5.03% |
+| `roundtrip-expression-mixed` | -5.14% | -7.35% |
+| `import-single-byte-32` | -2.77% | -3.40% |
+| `import-single-byte-1024` | +0.56% | -3.64% |
+| `import-single-byte-4096` | -0.45% | +0.44% |
+| `import-single-byte-16384` | +4.40% | -14.98% |
+| `import-single-byte-format0-4096` | +0.59% | +0.31% |
+| `import-three-byte-1024` | +0.07% | -0.30% |
+| `import-four-byte-128` | -0.36% | +0.11% |
+| `roundtrip-single-byte-1024` | -0.55% | -1.91% |
+| `import-polyphony8-4096` | -0.42% | +0.31% |
+| `import-polyphony32-4096` | +66.88% | -0.14% |
+| `import-long-overlap-prefix4096` | +1.24% | +0.29% |
+| `import-channel15-key127-one-control` | -0.35% | +3.79% |
+| `import-channel15-edgekeys4096` | -0.51% | +0.94% |
+| `import-all16-edgekeys-format0-4096` | -0.14% | +0.35% |
+| `import-all16-edgekeys-format1-4096` | -1.61% | -1.74% |
+| `import-empty-control` | +0.53% | -2.49% |
+
+All three multi-field live targets improve all four pairs in Source and actual shipped minified modules. Private-branded and no-update controls stay near zero; this is raw multi-field control work, not a general oscillator/rendering optimization. Costs remain visible: actual minified format-0 quiet export is +4.66% in three pairs, single channel-15/key-127 import +3.79% in all four, and expressive import +5.03% with mixed pairs. The unmodified Source 32-way import control is +66.88% in three pairs, versus -0.14% minified; no causal explanation or universal import gain is claimed. These host CPU comparisons do not measure native-browser CPU, retained memory/GC, hardware deadlines or uninterrupted audio.
+
+Source and actual minified modules preserve 1,577 direct control cases (591 successes/986 exact refusals), 77,766 numeric and 252,745 own-descriptor checks, 3,154 input checks, genuine-only private identity reuse, caller mutation detachment, raw Proxy reflection/mutation/revocation order, and 22 inherited field/descriptor contexts with zero getter/setter calls; fingerprint `168dcdcb8566bfcc39eca31189a7b57aab77fb7150c09b1f7695dcaf5f427f09`. The existing 3,264 DSP/207 containment cases retain 51,881,592 PCM bytes, 547,216,895 typed-state bytes and 11,690,406 scalar comparisons (`4d8f0626688d810683762b68c887e4fd845041a0ba79119fb6e2403bcd8ab625`). All 449 MIDI ownership cases and the 18,823-vector/74-file expression proof also remain exact. All 626 existing behavioral tests, strict source/development/public/core-only types, 42-source/55-built security gate and all 55 byte-identical generated declarations pass. Scoped A/C review is integration-owner review, not independent audit.
+
+Owned-process Playwright Chromium 156.0.8078.4 repeats the complete 1,577-case public-module proof with the same fingerprint and zero page/request errors. A trusted gesture drives a genuine 48-kHz silent AudioContext/AudioWorklet and separate left/right analysers through all fifteen raw fields, nested caller mutation, accessor refusal, raw single-field and private-branded bulk updates. Hard pans produce exact silence on the opposite channel with nonzero finite signal on the selected channel; natural release leaves zero voices/pending events and silent PCM. DSP errors/rejections stay zero, and OPM close preserves the borrowed running context before test-owned cleanup. Physical-device/MIDI, listening and deadline acceptance remain unverified.
+
 ### Indexed MIDI note ownership
 
 - Replace only the private active pressed-note Map with sixteen own channel slots and lazy null-prototype note arrays. Existing validated channel/key bytes bound indices to 0–15/0–127. Keep the existing FIFO queue payload and head, newest-still-pressed poly pressure, disjoint sustained/expressive owners, live counts, controls and all parser/event/fanout limits. Clear a drained slot to `undefined`; do not cache or pool old queue payloads. No API, declaration, default, voice/score format, worklet protocol or dependency change.

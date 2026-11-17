@@ -313,6 +313,8 @@ Stereo PCM24 output packs pairs of frames into three little-endian 32-bit words 
 
 Control reuse trusts only private output identity, never raw inputs, frozen lookalikes, proxies, clones or another validator module's output. Structured-cloned controls still validate at the receiving boundary. Only immutable data is shared: every update applies fresh per-note/rate-dependent ramps, envelope anchoring and live DSP state. Weak membership does not keep an otherwise-unheld snapshot alive.
 
+Multi-field raw control snapshots use private checked writes, restoring the ordinary result prototype before freezing; single-field controls retain descriptor construction. Validation, published metadata and fresh per-update DSP application are unchanged. [Complete live-control measurements and adverse controls](./CHANGELOG.md#batched-live-control-snapshots) describe the workload-scoped benefit, not universal rendering, MIDI-file or real-time acceleration.
+
 `renderNote()` uses `Synth` for identical envelope timing, LFO, filtering, velocity, pan, and saturation. It retains `ceil((duration + longestEffectiveRelease + 0.01) * sampleRate)` frames, including note-dependent rate scaling, with a 4,000,000-frame budget.
 
 `Synth` preallocates `maxVoices + 9` state slots: logical voices, eight possible fades and one admission scratch slot. Prepared admission allocates no new per-voice typed state. Browser snapshots use a content-keyed 128-slot LRU cache; validated replacement reuses a registration ID after saturation rather than falling back to inline transport. Queued/active notes retain their original immutable prepared snapshot. Raw browser inputs still validate freshly.
