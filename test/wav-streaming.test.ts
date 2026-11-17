@@ -48,7 +48,7 @@ for (const format of ['pcm16', 'pcm24', 'float32'] as const) test(`${format} chu
 const decode24 = (bytes: Uint8Array, offset: number): number => ((bytes[offset] | bytes[offset + 1] << 8 | bytes[offset + 2] << 16) << 8) >> 8;
 
 test('undithered PCM preserves half-LSB neighbours, signed zero and rails across chunk sizes', () => {
-  for (const format of ['pcm16', 'pcm24'] as const) for (const frames of [16, 127, 128, 129, 257]) {
+  for (const format of ['pcm16', 'pcm24'] as const) for (const frames of [16, 127, 128, 129, 130, 131, 257]) {
     const scale = format === 'pcm16' ? 32768 : 8388608;
     const unit = 0.5 / scale, step = unit * 2 ** -23;
     const center = Math.fround(0.5 / (scale - 1));
