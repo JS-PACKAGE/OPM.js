@@ -4,6 +4,39 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Literal tempo-point snapshots
+
+- Capture `curve`/`endBpm` once from the existing private null-prototype own-data record and reuse them through the unchanged checks. After validation, freeze one of the three valid own-data literal shapes: `beat,bpm`, plus `curve`, or plus `curve,endBpm`. A defined end BPM still requires a linear curve. This removes conditional spread sources without ordinary assignments that could invoke inherited setters. Optional-key absence, property order, ordinary prototypes, frozen flags, fresh identities, exact errors and raw descriptor/reflection order remain. No API, declaration, format, protocol, dependency, input flag, raw-input cache or schema-field hoisting.
+- Fresh complete raw-1024 normalization profiles on the accepted minified baseline sampled the point callback at 125 of 549 ramp self samples and 84 of 569 step samples. These are function-entry mappings, not allocation-line, physical-memory or GC measurements. An output-literals-only Source variant missed the predeclared 2% step threshold at -1.93% and was not built as a minified candidate. The accepted variant additionally reuses the private optional values through validation; its separate rows and the original failed gate remain recorded without rerunning the same candidate.
+- Node.js 26.7.0, macOS arm64: medians of four fresh AB/BA `process.cpuUsage()` pairs per row, separately reference-calibrated to about 220 ms CPU with proportional 120 ms warm-up counts. All sixteen existing complete tempo workloads remain, plus raw-step and caller-frozen raw-ramp 1024-point normalization. Paused public OPM/Transport edits include set/reload, snapshots, validation, preflight and scoped ownership cancellation; standalone rows include complete raw replacement/normalization, trusted/default conversions and exact point-budget refusal. Setup and final full-result witnesses are outside timing; no AudioContext is initialized in these CPU rows. Negative change means less CPU. All 36 accepted Source/minified comparisons, including small adverse controls, are retained.
+
+| Complete tempo consumer workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| `transport-step1-at-zero` | +0.10% | -0.35% |
+| `transport-step2-mid` | -0.70% | -0.22% |
+| `transport-step32-late` | -0.58% | -0.76% |
+| `transport-ramp2-mid` | +0.97% | -0.71% |
+| `transport-ramp32-late` | -1.31% | -0.21% |
+| `transport-ramp1024-late` | -0.70% | -1.03% |
+| `transport-ramp1024-reload-early` | -12.48% | -10.49% |
+| `transport-ramp1024-exact-boundary` | -1.53% | -1.15% |
+| `transport-explicit-end128-late` | +0.29% | -0.36% |
+| `replace-raw128-control` | -7.69% | -9.13% |
+| `replace-frozen-unbranded128-control` | -9.17% | -7.88% |
+| `numeric-omitted-map-control` | -1.26% | -1.79% |
+| `numeric-trusted-ramp1024-control` | +0.01% | -0.22% |
+| `normalize-raw-ramp32-control` | -9.79% | -8.16% |
+| `normalize-raw-ramp1024-control` | -9.50% | -9.07% |
+| `transport-max-points-refusal-control` | -28.61% | -28.24% |
+| `normalize-raw-step1024` | -6.08% | -5.84% |
+| `normalize-frozen-ramp1024` | -8.82% | -10.75% |
+
+Raw normalization, replacement, reload and the unchanged point-budget refusal improve all four minified pairs; both predeclared raw-1024 targets exceed the same 2% gate in Source and minified modules. Trusted/default conversions and existing normalized-map edits generally stay near zero. Small Source costs remain visible for two-point ramp edits and explicit-end 128-point edits, plus the step-one/trusted-numeric controls. This is not universal tempo-edit, conversion or rendering acceleration, nor a native-browser CPU, retained-heap/GC, hardware-deadline or uninterrupted-audio claim.
+
+Source and actual minified modules preserve all 4,139 tempo cases (3,985 successes/154 exact refusals), 12,504,055 Float64 checks, 22,996,466 descriptor checks, 1,012,152 ownership checks, 16,380 input checks, 142,604 numeric conversions, twelve inherited-context variants per module and 24 real paused public OPM/Transport programs with 120 edits and zero coercions; fingerprint `708d60890ee79776b6945909befc4bd74b47d8622d13bde9dc370b3af8ab89a9`. Existing 3,264 DSP/207 containment cases retain 51,881,592 PCM bytes, 547,216,895 typed-state bytes and 11,690,406 scalar comparisons. The 449-case MIDI ownership and 18,823-vector/74-file expression proofs also remain exact. All 626 existing behavioral tests, strict source/development/public/core-only types, 42-source/55-built static checks and all 55 byte-identical public declarations pass. Scoped A/C integration-owner review, not independent audit, is recorded in SECURITY.
+
+Owned-process Playwright Chromium 156.0.8078.4 compares 64 public cases (52 successes/12 exact refusals), 172,226 Float64/294,624 descriptor checks, 128 preserved inputs, 25,610 fresh points, 1,248 conversions and three inherited-setter contexts with zero getter/setter calls; fingerprint `d1f91376dccc8cf1df67dfabbb36662da85c6516c7105eb8afd7241c4fc8bb18`. A trusted gesture drives genuine 48-kHz silent AudioContext/AudioWorklet Transport playback through raw 1024-point mixed, null-prototype/caller-frozen step and ramp maps, all three own-field shapes, detached caller mutation, atomic getter refusal, pause/cursor preservation, resume and running-map reconstruction observed after actual audio-clock progress. Stop leaves zero voices/pending events/owned IDs and silent stereo PCM. Errors/rejections and page/request errors stay zero; OPM close preserves the borrowed running context before test-owned cleanup. Physical-device/MIDI, listening and deadline acceptance remain unverified.
+
 ### Single-field own control snapshots
 
 - Replace the private single-field property descriptor with one computed own-data placeholder. Its key comes from the already captured native `Reflect.ownKeys()` result; its initial value is only `undefined`, never caller data. Checked scalar/tuple writes hit that own property, not inherited setters. Even an invalid `__proto__`, `constructor` or Symbol key creates only private own data and still rejects before freezing, private branding or publication. All allowlist, descriptor, type, finite/range, dense-tuple, ADSR/sustain-rate and related-field checks retain their original order. The accepted multi-field private null-prototype path is unchanged. No API, declaration, format, protocol, dependency, raw-input cache or trust flag change.

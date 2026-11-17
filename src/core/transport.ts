@@ -80,15 +80,20 @@ function readTempoMap(input?: readonly TempoPoint[], bpm = 120): readonly Readon
     const data = sequenceOwnData(point, ['beat', 'bpm', 'curve', 'endBpm'], ['beat', 'bpm'], 'tempo point');
     const beat = transportNumber(data.beat, 0, MAX_TRANSPORT_BEATS, 'tempo beat');
     const tempo = transportNumber(data.bpm, 1, 1000, 'bpm');
-    if (data.curve !== undefined && data.curve !== 'step' && data.curve !== 'linear') throw new TypeError('tempo curve must be step or linear');
-    if (data.curve === 'linear' && index === points.length - 1) throw new RangeError('last tempo point cannot have a linear curve');
-    if (data.endBpm !== undefined) {
-      transportNumber(data.endBpm, 1, 1000, 'endBpm');
-      if (data.curve !== 'linear') throw new TypeError('endBpm requires a linear curve');
+    const curve = data.curve;
+    const endBpm = data.endBpm;
+    if (curve !== undefined && curve !== 'step' && curve !== 'linear') throw new TypeError('tempo curve must be step or linear');
+    if (curve === 'linear' && index === points.length - 1) throw new RangeError('last tempo point cannot have a linear curve');
+    if (endBpm !== undefined) {
+      transportNumber(endBpm, 1, 1000, 'endBpm');
+      if (curve !== 'linear') throw new TypeError('endBpm requires a linear curve');
     }
     if (beat <= previous || previous === -1 && beat !== 0) throw new RangeError('tempoMap must begin at zero and increase strictly');
     previous = beat;
-    return Object.freeze({ beat, bpm: tempo, ...(data.curve === undefined ? {} : { curve: data.curve as 'step' | 'linear' }), ...(data.endBpm === undefined ? {} : { endBpm: data.endBpm as number }) });
+    // Fixed own-data shapes omit absent fields without spread sources or inherited setters.
+    return Object.freeze(curve === undefined ? { beat, bpm: tempo }
+      : endBpm === undefined ? { beat, bpm: tempo, curve }
+      : { beat, bpm: tempo, curve, endBpm: endBpm as number });
   });
   return finishTempoMap(result);
 }
