@@ -223,6 +223,8 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
+**MIDI CPU measurement caveat:** Earlier short-protocol MIDI timing percentages are not stable causal improvement evidence; byte-identical controls also vary substantially, including with a longer proportional warm-up. See [the complete no-change controls](./CHANGELOG.md#midi-benchmark-no-change-controls). Original observations and failed gates remain recorded. This does not retract byte/metadata, determinism, type or genuine playback evidence, and does not grant independent security, release or publication approval.
+
 Scoped A/C review for Dense quiet expression products: integration-owner review of `src/core/midi-file.ts` and generated assets; **not independent** security review.
 
 - A — Only private validated expression-product selection changes. All raw config/event/control validation, own-descriptor/allowlist/type/finite/range/tuple checks, private identity trust, unknown/accessor/prototype refusals and exact error order remain. No raw getter, coercion, validation bypass, caller-data cache, API, declaration, format, protocol, I/O, permission or dependency change.

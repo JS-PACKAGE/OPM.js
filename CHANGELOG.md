@@ -4,6 +4,46 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### MIDI benchmark no-change controls
+
+- Qualify the earlier MIDI CPU tables, without changing runtime code or deleting observations. Two Source trees (84 files each) and two actual minified trees (165 files each), all from `457ee20`, have identical paths, bytes and per-file SHA-256 fingerprints. Each comparison runs the same complete public workload against byte-identical code. Negative values mean less CPU in the second identical tree, **not an optimization**.
+- Node.js 26.7.0, macOS arm64: four fresh AB/BA process pairs per row, reference-calibrated to about 220 ms measured CPU. The original proportional warm-up is 120 ms. Before running the controls, the diagnostic flag was fixed at an absolute median difference above 2% with at least three of four pairs in the same direction; any flagged row required the separate complete 600-ms proportional-warm-up control matrix. All 26 Source and 26 minified workloads, byte/result witnesses and pair ratios remain in each matrix. No AudioContext is initialized.
+
+| Complete MIDI workload | Source, 120-ms warm | Minified, 120-ms warm | Source, 600-ms warm | Minified, 600-ms warm |
+| --- | ---: | ---: | ---: | ---: |
+| `export-legacy-small` | +0.49% | -0.21% | +0.99% | +0.22% |
+| `export-legacy-large` | -2.97% | +0.72% | +5.62% | +0.88% |
+| `export-expression-quiet256` | -0.29% | +0.12% | +0.25% | +1.31% |
+| `export-expression-quiet1024` | -2.32% | -6.04% | -2.18% | -7.18% |
+| `export-expression-normal1024` | -1.57% | +4.17% | -0.25% | +8.87% |
+| `export-expression-mixed1024` | +8.68% | +8.75% | -9.22% | -10.89% |
+| `export-expression-quiet-format0` | -1.16% | +9.02% | -1.65% | -0.58% |
+| `import-legacy-large-control` | -0.47% | +0.41% | +0.28% | +0.03% |
+| `import-expression-large-control` | +5.92% | +0.91% | +4.57% | -0.26% |
+| `roundtrip-expression-mixed` | -9.18% | -2.38% | +53.72% | +47.85% |
+| `import-single-byte-32` | -0.02% | +2.24% | +0.11% | +0.55% |
+| `import-single-byte-1024` | +1.65% | +0.16% | +0.73% | -0.74% |
+| `import-single-byte-4096` | +0.20% | -0.42% | -0.51% | -0.05% |
+| `import-single-byte-16384` | +21.51% | -16.51% | -5.82% | +14.51% |
+| `import-single-byte-format0-4096` | +0.06% | +0.48% | -1.74% | -0.07% |
+| `import-three-byte-1024` | -0.11% | -2.04% | +0.06% | -0.92% |
+| `import-four-byte-128` | -0.07% | -2.81% | +4.92% | -0.63% |
+| `roundtrip-single-byte-1024` | +0.15% | +1.10% | -0.57% | -0.50% |
+| `import-polyphony8-4096` | +0.19% | +0.32% | +2.57% | -0.27% |
+| `import-polyphony32-4096` | -0.51% | +0.24% | -0.89% | -0.36% |
+| `import-long-overlap-prefix4096` | -0.20% | +0.02% | -0.16% | -0.13% |
+| `import-channel15-key127-one-control` | -2.19% | +1.52% | +1.79% | +0.81% |
+| `import-channel15-edgekeys4096` | +0.48% | -0.49% | -1.32% | -0.78% |
+| `import-all16-edgekeys-format0-4096` | +0.27% | -0.88% | -2.28% | +2.99% |
+| `import-all16-edgekeys-format1-4096` | -1.18% | -1.43% | -0.66% | +1.42% |
+| `import-empty-control` | +0.55% | +1.97% | +0.19% | +0.04% |
+
+The original controls flag 13 of 52 comparisons; the 600-ms controls still flag 12 of 52. These are diagnostic flags, not statistical significance or false-positive-rate estimates. Longer proportional warm-up alone did not establish stable measurement: the largest observed absolute median difference is 21.51% in the original matrix and 53.72% in the longer-warm matrix, despite identical code. Individual pairs and unflagged mixed-direction rows also remain recorded. No JIT, GC or OS cause has been identified by this study.
+
+Earlier MIDI CPU percentages are therefore **not stable causal improvement evidence**. Their original observations remain recorded, including adverse rows and rejected candidates; do not subtract these independent control medians from old candidate medians to invent adjusted gains. Old failed gates remain failed and were not selectively rerun. Future small CPU-gain acceptance needs a measurement method that first passes suitable no-change controls; simply increasing this proportional warm-up is not a validated remedy.
+
+This study changes documentation only. Canonical byte/metadata equality, determinism, type checks and genuine AudioWorklet playback evidence are separate observations and are not retracted. It neither attributes performance to a code change nor establishes physical allocation/GC, native-browser CPU, hardware deadlines, listening, release or publication acceptance.
+
 ### Dense quiet expression products
 
 - In `quantizedControls()`, every integer product from 0 through 127 is representable by CC7/CC11. For targets above 0.5 in this dense range, the original descending-volume search chooses the nearest integer, including the higher-product half-unit tie. At exactly 0.5 it instead encounters `127*0` first; `Math.floor()` for targets at or below 0.5 retains that choice and signed zero. Use this equivalent result directly; targets above 127 keep the original bounded product-lattice search. All raw control validation, private trust, output metadata, canonical highest-divisor CC7/CC11 decomposition, event order and budgets remain. No API, declaration, format, protocol, dependency, caller-data cache or DSP change.
