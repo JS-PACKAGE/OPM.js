@@ -115,8 +115,8 @@ function encodePcm16(bytes: Uint8Array, offset: number, left: Float32Array, righ
 function encodePcm16Words(bytes: Uint8Array, offset: number, left: Float32Array, right: Float32Array | undefined, frames: number): number {
   // Amortize the extra output view over at least one ordinary audio quantum.
   if (frames < 128) return encodePcm16(bytes, offset, left, right, frames);
-  const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, right === undefined ? frames : frames * 2);
   if (right === undefined) {
+    const samples = new NativeInt16Array(bytes.buffer, bytes.byteOffset + offset, frames);
     for (let frame = 0; frame < frames; frame++) {
       const value = left[frame];
       if (!(Math.abs(value) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
@@ -124,13 +124,16 @@ function encodePcm16Words(bytes: Uint8Array, offset: number, left: Float32Array,
     }
     return 0;
   }
-  for (let frame = 0, index = 0; frame < frames; frame++, index += 2) {
+  // One interleaved stereo PCM16 frame fits an aligned LE32 word.
+  const samples = new NativeUint32Array(bytes.buffer, bytes.byteOffset + offset, frames);
+  for (let frame = 0; frame < frames; frame++) {
     const first = left[frame];
     if (!(Math.abs(first) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    samples[index] = Math.floor(first * (first < 0 ? 32768 : 32767) + 0.5);
+    const firstSample = Math.floor(first * (first < 0 ? 32768 : 32767) + 0.5);
     const second = right[frame];
     if (!(Math.abs(second) <= 1)) throw new RangeError('WAV samples must be finite and in -1..1');
-    samples[index + 1] = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
+    const secondSample = Math.floor(second * (second < 0 ? 32768 : 32767) + 0.5);
+    samples[frame] = (firstSample & 65535) | (secondSample << 16);
   }
   return 0;
 }
