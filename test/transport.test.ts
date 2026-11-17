@@ -737,6 +737,32 @@ test('inverse tempo snapshots remain bit-identical across equivalent contexts', 
   assert.ok(Object.is(secondsToBeats(seconds, snapshot), secondsToBeats(seconds, equivalent)));
 });
 
+test('tempo edits revalidate slopes after inherited optional context changes', async () => {
+  const original = Object.getOwnPropertyDescriptor(Object.prototype, 'endBpm');
+  const restore = () => {
+    if (original) Object.defineProperty(Object.prototype, 'endBpm', original);
+    else Reflect.deleteProperty(Object.prototype, 'endBpm');
+  };
+  const opm = new OPM({ sampleRate });
+  let transport: MusicalTransport | undefined;
+  try {
+    Object.defineProperty(Object.prototype, 'endBpm', { value: 60, writable: true, configurable: true });
+    transport = createTransport(opm, [note()], { tempoMap: [
+      { beat: 0, bpm: 60, curve: 'linear' }, { beat: Number.MIN_VALUE, bpm: 120 }, { beat: 1, bpm: 180 },
+    ] });
+    transport.seek(0.5);
+    const before = transport.snapshot.tempoMap;
+    restore();
+    assert.throws(() => transport!.setTempo(200), /slope/);
+    assert.equal(transport.snapshot.tempoMap, before);
+    assert.equal(transport.position, 0.5);
+  } finally {
+    restore();
+    transport?.dispose();
+    await opm.dispose();
+  }
+});
+
 test('quantization and swing keep beat grids monotonic', () => {
   assert.equal(quantizeBeat(1.2, 1), 2);
   assert.equal(quantizeBeat(2, 1), 2);

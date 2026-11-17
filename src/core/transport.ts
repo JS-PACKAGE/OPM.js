@@ -90,6 +90,10 @@ function readTempoMap(input?: readonly TempoPoint[], bpm = 120): readonly Readon
     previous = beat;
     return Object.freeze({ beat, bpm: tempo, ...(data.curve === undefined ? {} : { curve: data.curve as 'step' | 'linear' }), ...(data.endBpm === undefined ? {} : { endBpm: data.endBpm as number }) });
   });
+  return finishTempoMap(result);
+}
+
+function finishTempoMap(result: Readonly<TempoPoint>[]): readonly Readonly<TempoPoint>[] {
   for (let index = 0; index + 1 < result.length; index++) {
     if (!Number.isFinite(slope(result[index], result[index + 1]))) {
       throw new RangeError('linear tempo slope must be finite');
@@ -146,6 +150,28 @@ export function tempoBPM(beat: number, map: readonly Readonly<TempoPoint>[]): nu
 export function replaceTempoFrom(beat: number, bpm: number, map: readonly Readonly<TempoPoint>[]): readonly Readonly<TempoPoint>[] {
   transportNumber(beat, 0, MAX_TRANSPORT_BEATS, 'beat');
   transportNumber(bpm, 1, 1000, 'bpm');
+  // Only our canonical immutable snapshots can skip external own-data validation.
+  // Fresh points and the shared finalizer preserve identity and exact integral checks.
+  if (tempoOffsets.has(map) && stableTempoContext(map.length)) {
+    let count = 0;
+    while (count < map.length && map[count].beat < beat) count++;
+    if (count < MAX_TEMPO_POINTS) {
+      const result: Readonly<TempoPoint>[] = [];
+      Object.setPrototypeOf(result, null);
+      for (let index = 0; index < count; index++) {
+        const point = map[index], curve = point.curve;
+        const endBpm = index === count - 1 && curve === 'linear'
+          ? transportNumber(tempoBPM(beat, map), 1, 1000, 'endBpm') : point.endBpm;
+        result[index] = Object.freeze({ beat: point.beat, bpm: point.bpm,
+          ...(curve === undefined ? {} : { curve }), ...(endBpm === undefined ? {} : { endBpm }) });
+      }
+      result[count] = Object.freeze({ beat, bpm });
+      Object.setPrototypeOf(result, Array.prototype);
+      const snapshot = finishTempoMap(result);
+      if (count === 0) tempoOffsets.set(snapshot, undefined);
+      return snapshot;
+    }
+  }
   const kept = map.filter(point => point.beat < beat);
   // Spreads define own data: assigning endBpm could reach an inherited setter and drop the ramp end.
   const points: TempoPoint[] = kept.map((point, index) => index === kept.length - 1 && point.curve === 'linear'

@@ -4,6 +4,37 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Trusted tempo-map edits
+
+- Reuse the existing private normalized-snapshot identity for `Transport.setTempo()` and `Arrangement.setTempo()` edits instead of rechecking internally owned point descriptors. Keep fresh canonical frozen point/array identities, the 1024-point/86400-beat and 1–1000-BPM bounds, edited ramp-end validation, every finite-slope check, exact prefix/full-span caches and successive inverse subtraction. Mutable, unbranded frozen, unsafe source-prototype and oversized-map paths retain the original validation/refusal behavior. No API, declaration, voice or score-format change.
+- Profiled the full real `OPM` + paused `Transport.setTempo()` + `snapshot` operation, including preflight and ownership cancellation: repeated own-data/array validation accounted for 618 of 1001 self samples; BPM lookup only 5. Do not describe this as a BPM-lookup or rendering optimization.
+- Node.js 26.7.0, macOS arm64: medians of four fresh AB/BA `process.cpuUsage()` pairs per workload, with reference-only calibration to about 220 ms CPU and proportional 120 ms warm-up counts. Each edited row uses a real OPM/Transport, not a replacement host. Negative change means less CPU for the same work; retain all rows, including adverse controls, without rerunning completed comparisons.
+
+| Workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| `transport-step1-at-zero` | -38.50% | -37.73% |
+| `transport-step2-mid` | -42.91% | -42.00% |
+| `transport-step32-late` | -76.78% | -76.51% |
+| `transport-ramp2-mid` | -47.00% | -47.68% |
+| `transport-ramp32-late` | -75.38% | -75.86% |
+| `transport-ramp1024-late` | -84.26% | -84.19% |
+| `transport-ramp1024-reload-early` | -6.16% | -7.39% |
+| `transport-ramp1024-exact-boundary` | -84.82% | -84.61% |
+| `transport-explicit-end128-late` | -82.74% | -82.33% |
+| `replace-raw128-control` | 3.70% | 4.27% |
+| `replace-frozen-unbranded128-control` | -0.21% | 1.90% |
+| `numeric-omitted-map-control` | 0.98% | 2.65% |
+| `numeric-trusted-ramp1024-control` | -0.79% | 0.30% |
+| `normalize-raw-ramp32-control` | 2.94% | 2.33% |
+| `normalize-raw-ramp1024-control` | 1.16% | -0.45% |
+| `transport-max-points-refusal-control` | -0.75% | 1.04% |
+
+All nine edited workloads won all four pairs in Source and actual built minified modules. `reload-early` revalidates the original external 1024-point map with `setTempoMap()` on every operation before its early edit; it is not a steady three-point edit advertised as a large map. Modest costs in unnormalized/frozen, normalization and numeric controls are retained: the benefit is repeated privately owned edits, not universal conversion throughput or a cross-device/deadline guarantee.
+
+Source and actual minified modules match the original across 4,139 numeric/state/ownership/refusal cases, including 12 inherited-context variants and 12 real public OPM/Transport programs per baseline/candidate. Float64/descriptor fingerprint: `708d60890ee79776b6945909befc4bd74b47d8622d13bde9dc370b3af8ab89a9`. A permanent consumer regression confirms that a map normalized under inherited `endBpm` still rejects a newly overflowing slope atomically after the context is restored. The full 625-test suite, strict public/core-only contracts, scoped A/C review and 42-source/55-built security gate pass; all 55 generated declarations are byte-identical.
+
+Chromium 156.0.8078.4 also passes a real 48-kHz AudioContext/AudioWorklet/analyser smoke (silent sink), covering a 32-point exact-boundary edit, live reconstruction, paused edit/resume, owned idle cleanup and borrowed-context preservation with zero DSP errors. The unchanged sequence example passes trusted start/pause/apply-180-BPM-and-seek-2.25/resume/stop/dispose actions. Physical devices/MIDI, human listening and deadline acceptance remain unverified.
+
 ### Packed mono PCM16 output
 
 - For the existing little-endian, undithered mono PCM16 path at 128 frames or more, pack two ascending samples into one LE32 word instead of two LE16 words. Replace one output view with the captured `NativeUint32Array` and remove the now-unused private Int16 constructor capture. No buffer, cache, state, public API, format, protocol or dependency is added. Accepted stereo16/PCM24 packing is unchanged.
