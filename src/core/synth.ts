@@ -115,10 +115,10 @@ export function validateNoteControls(input: NoteControls): NoteControls {
   }
   const keys = Reflect.ownKeys(input);
   if (keys.length === 0) throw new TypeError('controls must not be empty');
-  const result: NoteControls & Record<string, unknown> = {};
-  // Single-field controls avoid prototype transitions; batches use private checked writes.
-  const property = keys.length === 1 ? { __proto__: null, value: undefined as unknown, enumerable: true } : undefined;
-  if (!property) Object.setPrototypeOf(result, null);
+  const oneField = keys.length === 1;
+  // An own placeholder blocks inherited setters; caller values still validate before copying.
+  const result: NoteControls & Record<string, unknown> = oneField ? { [keys[0]!]: undefined } : {};
+  if (!oneField) Object.setPrototypeOf(result, null);
   for (const key of keys) {
     const operatorTuple = key === 'operatorLevels' || key === 'operatorRatios' || key === 'operatorFrequencies' || key === 'operatorADSR';
     if (typeof key !== 'string' || !operatorTuple && !Object.hasOwn(CONTROL_LIMITS, key)) throw new TypeError('controls has an unknown field');
@@ -156,10 +156,7 @@ export function validateNoteControls(input: NoteControls): NoteControls {
           tuple[op] = item;
         }
       }
-      if (property) {
-        property.value = Object.freeze(tuple);
-        Object.defineProperty(result, key, property);
-      } else (result as Record<string, unknown>)[key] = Object.freeze(tuple);
+      (result as Record<string, unknown>)[key] = Object.freeze(tuple);
       continue;
     }
     const control = key as keyof typeof CONTROL_LIMITS;
@@ -167,16 +164,13 @@ export function validateNoteControls(input: NoteControls): NoteControls {
     if (typeof value !== 'number' || !Number.isFinite(value) || value < min || value > max) {
       throw new RangeError(`controls.${key} must be finite and in ${min}..${max}`);
     }
-    if (property) {
-      property.value = value;
-      Object.defineProperty(result, key, property);
-    } else result[control] = value;
+    result[control] = value;
   }
   if (Object.hasOwn(result, 'glide') && !Object.hasOwn(result, 'pitch')) throw new TypeError('glide requires pitch');
   if (Object.hasOwn(result, 'ramp') && !keys.some(key => key !== 'ramp' && key !== 'pitch' && key !== 'glide' && key !== 'operatorADSR')) {
     throw new TypeError('ramp requires a rampable control');
   }
-  if (!property) Object.setPrototypeOf(result, Object.prototype);
+  if (!oneField) Object.setPrototypeOf(result, Object.prototype);
   Object.freeze(result);
   controlSnapshots.add(result);
   return result;
