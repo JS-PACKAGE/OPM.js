@@ -521,17 +521,22 @@ function quantizedControls(input: unknown, range: number): Partial<ExpressiveSta
   if (rawExpression !== undefined) {
     // CC7*CC11 has a product lattice, not one seven-bit expression axis.
     const target = rawExpression * 16129;
-    let best = 0;
-    let error = Infinity;
-    for (let volume = 127; volume > 0; volume--) {
-      const product = volume * Math.min(127, Math.round(target / volume));
-      const difference = Math.abs(target - product);
-      if (difference < error) { best = product; error = difference; }
-      // Integer products cannot improve the half-unit bound. Smaller volumes
-      // also cannot improve once their maximum product is already too low.
-      if (error <= 0.5 || target - (volume - 1) * 127 >= error) break;
+    if (target <= 127) {
+      // This product range contains every integer; 0.5 ties first with 127*0.
+      expression = target <= 0.5 ? Math.floor(target) : Math.round(target);
+    } else {
+      let best = 0;
+      let error = Infinity;
+      for (let volume = 127; volume > 0; volume--) {
+        const product = volume * Math.min(127, Math.round(target / volume));
+        const difference = Math.abs(target - product);
+        if (difference < error) { best = product; error = difference; }
+        // Integer products cannot improve the half-unit bound. Smaller volumes
+        // also cannot improve once their maximum product is already too low.
+        if (error <= 0.5 || target - (volume - 1) * 127 >= error) break;
+      }
+      expression = best;
     }
-    expression = best;
   }
   if (rawPan !== undefined) pan = Math.max(1, Math.min(127, Math.round(64 + rawPan * 63)));
   if (rawModulation !== undefined) {

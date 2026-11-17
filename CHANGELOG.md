@@ -4,6 +4,47 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Dense quiet expression products
+
+- In `quantizedControls()`, every integer product from 0 through 127 is representable by CC7/CC11. For targets above 0.5 in this dense range, the original descending-volume search chooses the nearest integer, including the higher-product half-unit tie. At exactly 0.5 it instead encounters `127*0` first; `Math.floor()` for targets at or below 0.5 retains that choice and signed zero. Use this equivalent result directly; targets above 127 keep the original bounded product-lattice search. All raw control validation, private trust, output metadata, canonical highest-divisor CC7/CC11 decomposition, event order and budgets remain. No API, declaration, format, protocol, dependency, caller-data cache or DSP change.
+- A fresh complete quiet1024 export profile on the accepted actual minified baseline maps `quantizedControls` to 59 of 518 self samples; 515 node hits and three unattributed samples are retained. This is a source-map function-entry mapping, not an exact instruction, allocation or GC measurement. An earlier divisor-initializer candidate passed Source but failed the unchanged actual-minified quiet1024 gate and was restored; its complete results remain recorded. The accepted dense-product branch is a distinct change, not a selective rerun of that candidate.
+- Node.js 26.7.0, macOS arm64: medians of four fresh AB/BA `process.cpuUsage()` pairs per row, separately reference-calibrated to about 220 ms CPU with proportional 120 ms warm-up counts. Rows consume complete public export/import/roundtrip results, with setup and final full byte/result witnesses outside timing. No AudioContext is initialized in these CPU rows. Negative change means less CPU. All 52 Source/minified comparisons remain:
+
+| Complete MIDI consumer workload | Source CPU change | Minified CPU change |
+| --- | ---: | ---: |
+| `export-legacy-small` | -0.60% | +0.13% |
+| `export-legacy-large` | -4.17% | +4.34% |
+| `export-expression-quiet256` | -10.48% | -9.60% |
+| `export-expression-quiet1024` | -3.05% | -32.75% |
+| `export-expression-normal1024` | +0.46% | +7.25% |
+| `export-expression-mixed1024` | -3.01% | -5.44% |
+| `export-expression-quiet-format0` | -7.97% | -17.43% |
+| `import-legacy-large-control` | +0.25% | -0.54% |
+| `import-expression-large-control` | +5.02% | +0.10% |
+| `roundtrip-expression-mixed` | +17.89% | -4.26% |
+| `import-single-byte-32` | +0.77% | +1.36% |
+| `import-single-byte-1024` | -0.26% | +0.24% |
+| `import-single-byte-4096` | +0.19% | -0.23% |
+| `import-single-byte-16384` | +11.70% | -8.58% |
+| `import-single-byte-format0-4096` | +0.03% | +3.12% |
+| `import-three-byte-1024` | -0.06% | +1.02% |
+| `import-four-byte-128` | +0.08% | +2.93% |
+| `roundtrip-single-byte-1024` | +1.78% | -0.74% |
+| `import-polyphony8-4096` | +11.77% | -0.55% |
+| `import-polyphony32-4096` | +0.44% | -0.70% |
+| `import-long-overlap-prefix4096` | +0.31% | +0.03% |
+| `import-channel15-key127-one-control` | -0.00% | +0.12% |
+| `import-channel15-edgekeys4096` | -0.35% | -0.03% |
+| `import-all16-edgekeys-format0-4096` | -0.20% | -2.88% |
+| `import-all16-edgekeys-format1-4096` | -0.50% | -0.32% |
+| `import-empty-control` | +1.29% | -2.47% |
+
+Both predeclared quiet256/quiet1024 targets exceed the same 2% gate in Source and actual minified modules, with all four pairs lower. Minified mixed export improves all four pairs; quiet format-0 and expressive roundtrip improve three. Costs remain: minified normal1024 is +7.25% and legacy-large export +4.34%, each with three higher pairs; Source expressive roundtrip is +17.89% with all four higher. Import-only controls also vary, without a demonstrated causal attribution. This is not universal MIDI acceleration, a native-browser CPU, physical allocation/GC, deadline or uninterrupted-audio claim.
+
+Source and actual minified modules match all 18,823 expression vectors, including all integer products 0–16129, signed zero/subnormals, quiet half-unit IEEE neighbors and 2,048 deterministic random inputs; all 74 files and canonical roundtrips, 1,056,418 wire bytes and 75,292 imported semantic events remain exact. Fingerprint: `0e8eb185da57bfa93bbfe9ef02b50b3a4e69a651d7efafd6d041344aac40e484`. The 449 ownership cases retain 328 successes/121 exact refusals, all 2,048 channel/key combinations, three-pass sequential/simultaneous ownership under both control policies, all-channel EOF order and exact wire/key-budget boundaries. All 3,264 DSP/207 containment cases retain 51,881,592 PCM bytes, 547,216,895 typed-state bytes and 11,690,406 scalar comparisons. All 626 existing behavioral tests, strict source/development/public/core-only types, 42-source/55-built static security checks and all 55 byte-identical public declarations pass.
+
+Owned Playwright Chromium 156.0.8078.4 repeats all 18,823 real public expression vectors, 74 files/roundtrips and eight expected invalid refusals with the same Node fingerprint, full own-data descriptors and `Object.is()` numeric comparisons. A trusted gesture drives a genuine 48-kHz silent AudioContext/AudioWorklet through a 107-byte exported/imported score: product 1 onset, zero-expression silence while held, product 126 stereo, full expression with hard left/right pan, pause/cursor preservation, resume reconstruction and stop. Caller wire mutation is detached; stop drains voices/events/owned IDs/both PCM to zero, with zero page/request/HTTP/DSP/rejection errors. Import still normalizes each CC factor separately before multiplying; no combined-division arithmetic rewrite. OPM close preserves the borrowed running context. Scoped A/C review is integration-owner review, **not independent** security review. No physical-device, listening, release or publication acceptance is implied.
+
 ### Literal tempo-point snapshots
 
 - Capture `curve`/`endBpm` once from the existing private null-prototype own-data record and reuse them through the unchanged checks. After validation, freeze one of the three valid own-data literal shapes: `beat,bpm`, plus `curve`, or plus `curve,endBpm`. A defined end BPM still requires a linear curve. This removes conditional spread sources without ordinary assignments that could invoke inherited setters. Optional-key absence, property order, ordinary prototypes, frozen flags, fresh identities, exact errors and raw descriptor/reflection order remain. No API, declaration, format, protocol, dependency, input flag, raw-input cache or schema-field hoisting.
