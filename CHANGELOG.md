@@ -4,6 +4,40 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Small worklet queue append
+
+- After the unchanged small-queue search proves `index === length`, use the same `events.push` operation already used for larger tail insertions instead of requesting an unused zero-delete `splice` result. Keep all other small inserts, binary search, event key reads, stop/onset/control ordering and stable arrival ties unchanged.
+- Preserve 256 pending events/tracked IDs, duplicate/late rejection, pop-before-dispatch callbacks, automatic-stop cleanup and cancellation/refill. No queue cursor, heap, cache, flag, buffer, protocol, API, voice format, DSP formula, runtime dependency or public declaration changes.
+
+Complete comparison against `bc0e969`, Node.js 26.7.0 on macOS arm64 at 48 kHz: four fresh AB/BA process pairs per row, independently calibrated for source and actual shipped minified modules. Sixteen real warm iterations precede 120 ms reference calibration; fixed measured counts target about 220 ms and both variants use identical derived warm counts. Measure process user+system CPU. The production processor, validation, scheduling, voice admission, DSP and callbacks are real; only its Node host shell follows the existing benchmark fixture. Pending workloads enqueue future notes, optionally gain ramps, panic and actually process a 128-frame block; raw voice validation stays inside timing. Prepared registration and held-note setup are outside timing. Burst modes render four immediate and four sub-block starts, automatic stops and stealing; the held mode is a rendering control. The 257-note row intentionally rejects exactly one admission at the 256-event boundary. Final complete PCM, queue/maps, numeric/typed state, messages and diagnostics must agree outside timing. Node shell CPU is not native MessagePort/audio-thread, allocation/GC or underrun evidence.
+
+| Complete processor workload | Source CPU delta | Minified CPU delta |
+| --- | ---: | ---: |
+| `pending-raw-1` | -0.19% | -1.12% |
+| `pending-raw-4` | -0.39% | 1.09% |
+| `pending-raw-8` | -0.59% | -1.25% |
+| `pending-prepared-1` | -0.83% | 1.07% |
+| `pending-prepared-4` | -1.22% | -3.23% |
+| `pending-prepared-8` | 1.98% | -1.38% |
+| `pending-prepared-16` | -2.26% | -2.19% |
+| `pending-reverse-8` | 0.70% | 1.49% |
+| `pending-ties-8` | -0.29% | 1.54% |
+| `pending-prepared-64` | -1.34% | 1.04% |
+| `pending-prepared-128` | 1.71% | -2.06% |
+| `pending-capacity-257` | 0.46% | -0.68% |
+| `pending-controls-4` | -3.46% | -3.42% |
+| `burst-prepared-8` | 0.43% | 1.74% |
+| `burst-raw-8` | -0.20% | 0.28% |
+| `held-processor-8-control` | -0.15% | -0.57% |
+
+Negative CPU deltas are faster. The prepared 16-note and gain-control four-note targets improve in all four source and all four actual minified pairs; prepared four-note minified admission also improves in all four pairs. Retain the costs: actual minified prepared one-note admission is 1.07% slower in all four pairs and prepared eight-note rendering bursts are 1.74% slower in all four; reverse/tied pending notes, raw four-note and prepared 64-note controls are 1.04–1.54% slower in three pairs. Source prepared eight-note and 128-note medians are 1.98% and 1.71% slower in three pairs, while actual minified medians are 1.38% faster with mixed pairs and 2.06% faster in three. All sixteen rows per distribution are retained, without another variant or unchanged retry. No universal speedup, physical allocation/retained-memory/GC reduction or real-time guarantee is claimed.
+
+Source and actual minified processors each preserve 9,216 insertion cases over every pre-insert length 0–255, all three event priorities, four input orders and head/middle/tail positions; 1,275,989 private-event read-trace entries agree. Forty-eight raw/prepared rendered lifecycles retain sub-block starts, gain/pitch automation, stealing callbacks, cancellation/refill, panic/allNotesOff and close: 10,080 full-state witnesses and 786,432 stereo PCM bytes agree, including the exact 256/257 boundary. All 624 tests, strict source/development/public/core-only types, the 42-source/55-built-module security gate, empty runtime dependencies and five byte-identical generated public declarations pass.
+
+Chromium 156.0.8078.4 on darwin/arm64 also passes the genuine 48 kHz AudioWorklet/AudioContext lifecycle using the native silent sink (`setSinkId({ type: "none" })`) and a trusted gesture: finite held stereo, full-right pan, a public frequency ramp, release, scheduled cancellation, suspend/resume, borrowed/owned context close/restart and zero final active/pending/error/rejection diagnostics. Its isolated fixture still refuses ancillary non-dist requests; no autoplay/CSP/MIME/permission control is relaxed. This is not physical-device/MIDI, human-listening or native audio-deadline acceptance.
+
+
+
 ### Stationary pitch preparation
 
 - Specialize finite, zero-glide, envelope-free pitch preparation only inside the existing operator Hz/ratio-ramp caller dispatch, reusing its local classification and leaving the general preparation helper unchanged. Avoid the duplicate endpoint pitch/envelope queries and time arithmetic; keep the original semitone division, zero-exponent factor and `fastExp2` rounding.

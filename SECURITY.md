@@ -223,6 +223,15 @@ Run development commands from a source checkout after `npm ci`; installed npm pa
 
 Each release notes in the CHANGELOG which checklist sections were exercised (A/B/C/D) and by whom. Checklist failures block release; waivers require a written reason in the CHANGELOG.
 
+Scoped A/B/C review for Small worklet queue append:
+
+- **A/B (integration-owner scope; not independent):** Only the final private small-queue insertion changes. Fresh owned scheduled-event literals still come from strict own-data/numeric message validation. After the same reverse scan, `index === length` uses `events.push`; all other positions retain `events.splice`. Preserve `EVENT_ORDER`, stable arrival ties, 256-event/tracked-ID bounds, duplicate/late rejection, registration identity and queued snapshots. No new queue state, cursor, heap, cache, flag, buffer, permission, dependency, protocol, export or public declaration.
+- **C (state/callbacks):** Every original frame/type read and comparator remains in place. Large-queue append and binary search are untouched. Pop-before-dispatch, core terminal/stealing callbacks, obsolete automatic-stop removal, cancellation/refill and panic/allNotesOff/close are unchanged; DSP arithmetic and all PCM boundaries are untouched.
+- **Evidence:** All 624 tests, strict source/development/public/core-only types, 42-source/55-built security checks, empty runtime dependencies and five byte-identical declarations pass. Source and actual minified modules each preserve 9,216 ordered insertion cases, 1,275,989 private-event read-trace entries, 48 rendered lifecycle cases, 10,080 complete-state witnesses and 786,432 PCM bytes, plus exact 256/257 capacity behavior. All sixteen whole-consumer CPU rows per distribution and adverse results are retained: minified prepared one-note and prepared-burst controls regress 1.07% and 1.74% in all four pairs. No physical allocation/GC, native audio deadline or universal acceleration claim.
+
+- **Native check:** Chromium 156.0.8078.4 on darwin/arm64 also passes the genuine 48 kHz AudioWorklet/AudioContext lifecycle using the native silent sink (`setSinkId({ type: "none" })`) and a trusted gesture: finite held stereo, full-right pan, a public frequency ramp, release, scheduled cancellation, suspend/resume, borrowed/owned context close/restart and zero final active/pending/error/rejection diagnostics. Its isolated fixture still refuses ancillary non-dist requests; no autoplay/CSP/MIME/permission control is relaxed. This is not physical-device/MIDI, human-listening or native audio-deadline acceptance. This is a scoped integration-owner review, not an independent release or publication approval.
+
+
 Scoped A/C review for Stationary pitch preparation:
 
 - **A (integration-owner scope; not independent):** Only the existing private render caller frequency-ramp dispatch changes. Reuse its local classifications; the original general preparation helper is unchanged. No new API, export, voice format, validator, protocol, worker/serialization, dependency, permission, persistent flag/cache/buffer or per-frame allocation. No release or distribution publication.

@@ -182,7 +182,8 @@ class OPMProcessor extends AudioWorkletProcessor {
         if (previous.frame < event.frame || previous.frame === event.frame && EVENT_ORDER[previous.type] <= order) break;
         index--;
       }
-      events.splice(index, 0, event);
+      if (index === length) events.push(event);
+      else events.splice(index, 0, event);
       return;
     }
     const last = events[length - 1];
