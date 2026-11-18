@@ -77,6 +77,13 @@ function createTrack(note: Note): Track {
   return { note, end: note.time + note.duration, controls: [] };
 }
 
+function appendOwned<T>(array: T[], value: T): void {
+  const index = array.length;
+  // Keep native appends on the clean path; inherited slots must never observe trusted records.
+  if (!(index in Array.prototype)) { array.push(value); return; }
+  Object.defineProperty(array, index, { __proto__: null, value, writable: true, enumerable: true, configurable: true } as PropertyDescriptor);
+}
+
 const EPSILON = 1e-9;
 
 
@@ -114,7 +121,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
         if (event.type === 'note') continue;
         const track = tracks.get(event.id)!;
         if (event.type === 'stop') track.end = Math.min(track.end, event.time);
-        else track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
+        else appendOwned(track.controls, { beat: Math.max(event.time, track.note.time), controls: event.controls });
       }
       notes = [...tracks.values()];
       for (const track of notes) if (track.controls.length > 1) track.controls.sort((a, b) => a.beat - b.beat);
@@ -182,7 +189,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     if (gains.length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds pending gain capacity');
     const at = audioTime(beat);
     const from = gainAt(layer, at, context!.sampleRate).value;
-    gains.push(gainChange({ beat, layer, target, fade, from, applied: false, activation }));
+    appendOwned(gains, gainChange({ beat, layer, target, fade, from, applied: false, activation }));
     gains.sort((a, b) => a.beat - b.beat);
   }
   function applyGain(id: number, value: number, target: number, remaining: number, at: number): number {
@@ -209,11 +216,11 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
     const command: Command = { at: undefined, controls: undefined, ...fields };
     const length = queue.length;
     if (length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds queued command capacity');
-    if (length === 0) { queue.push(command); return; }
+    if (length === 0) { appendOwned(queue, command); return; }
     const after = command.at ?? audioTime(command.beat);
     const last = queue[length - 1]!;
     const lastAt = last.at ?? audioTime(last.beat);
-    if (lastAt < after || lastAt === after && last.order <= command.order) { queue.push(command); return; }
+    if (lastAt < after || lastAt === after && last.order <= command.order) { appendOwned(queue, command); return; }
     // Upper bound keeps equal-time, equal-priority commands in insertion order.
     let low = 0, high = length - 1;
     while (low < high) {
@@ -222,12 +229,17 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       if (before < after || before === after && previous.order <= command.order) low = middle + 1;
       else high = middle;
     }
-    queue.splice(low, 0, command);
+    if (length in Array.prototype) {
+      appendOwned(queue, last);
+      for (let index = length - 1; index > low; index--) queue[index] = queue[index - 1]!;
+      queue[low] = command;
+    } else queue.splice(low, 0, command);
   }
   function scheduleNext(gate: Gate): void {
-    const control = gate.track.controls[gate.nextControl++];
-    const beat = control ? gate.start - gate.track.note.time + control.beat : gate.end;
-    if (control && (gate.cutAt === undefined || audioTime(beat) < gate.cutAt)) {
+    if (gate.nextControl >= gate.track.controls.length) return;
+    const control = gate.track.controls[gate.nextControl++]!;
+    const beat = gate.start - gate.track.note.time + control.beat;
+    if (gate.cutAt === undefined || audioTime(beat) < gate.cutAt) {
       insert({ beat, order: 2, gate, controls: control.controls });
     }
   }
@@ -284,7 +296,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
         const current = gainAt(layer, at, sampleRate);
         return gainChange({ beat, layer, from: current.value, target: current.target, fade: current.remaining, applied: true });
       });
-      gains.push(...future);
+      for (const change of future) appendOwned(gains, change);
     }
     generation++;
     starting = undefined;
@@ -526,7 +538,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       }
     }
     if (previous.beat === beat) changes[changes.length - 1] = { beat, section, layers };
-    else changes.push({ beat, section, layers });
+    else appendOwned(changes, { beat, section, layers });
     for (const pattern of patterns.values()) {
       if (before.layers.has(pattern.name) !== layers.has(pattern.name) && (layers.has(pattern.name) || fade > 0)) {
         addGain(pattern.name, layers.has(pattern.name) ? pattern.gain : 0, beat, fade, true);
@@ -620,7 +632,7 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
         addGain(layerName, effective(beat).layers.has(layerName) ? gain : 0, beat, fade);
       } else {
         gains = gains.filter(change => change.layer !== layerName);
-        gains.push(gainChange({ beat: position, layer: layerName, from: gain,
+        appendOwned(gains, gainChange({ beat: position, layer: layerName, from: gain,
           target: effective(position).layers.has(layerName) ? gain : 0, fade: 0, applied: true }));
         gains.sort((a, b) => a.beat - b.beat);
       }

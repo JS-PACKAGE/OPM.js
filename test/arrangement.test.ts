@@ -112,6 +112,26 @@ const lead: ArrangementLayer = { name: 'lead', length: 4, events: [{ type: 'note
 const arp: ArrangementLayer = { name: 'arp', length: 8, events: [{ type: 'note', id: 1, beat: 2, duration: 6, note: 60, voice }] };
 const sections = [{ name: 'explore', layers: ['pad', 'drums', 'arp'] }, { name: 'combat', layers: ['pad', 'lead'] }];
 
+test('authored controls remain ordered and finish without extra updates', async () => {
+  const { opm, updates } = await host();
+  const layer: ArrangementLayer = { name: 'controlled', length: 4, events: [
+    { type: 'note', id: 1, beat: 0, duration: 1, note: 60, voice },
+    { type: 'control', id: 1, beat: 0.3, controls: { expression: 0.75 } },
+    { type: 'control', id: 1, beat: 0.1, controls: { expression: 0.25 } },
+    { type: 'control', id: 1, beat: 0.2, controls: { expression: 0.5 } },
+  ] };
+  const arrangement = createArrangement(opm, {
+    layers: [layer], sections: [{ name: 'main', layers: [layer.name] }], initialSection: 'main', bpm: 120,
+  });
+  try {
+    await arrangement.start();
+    run(opm, arrangement, 0.75);
+    assert.equal(arrangement.state, 'running');
+    assert.deepEqual(updates.map(update => update.controls), [{ expression: 0.25 }, { expression: 0.5 }, { expression: 0.75 }]);
+    assert.deepEqual(updates.map(update => update.at), [0.1, 0.15, 0.2]);
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
 test('bar switch commits after admitted notes without retriggering a layer both sections share', async () => {
   const { opm, calls, stops } = await host();
   const arrangement = createArrangement(opm, { layers: [pad, drums, lead, arp], sections, initialSection: 'explore', bpm: 120 });
