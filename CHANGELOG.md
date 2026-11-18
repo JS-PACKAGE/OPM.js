@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Direct AudioWorklet note notifications
+
+- Construct either complete note notification record directly, omitting `reason` when absent. State, ID, frame, time, property order and command/reset records are unchanged.
+- On macOS arm64 / Node 26.7.0, production modules took 43.9% less median thread CPU in an isolated notification-helper benchmark with a Node port stub. Whole-processor raw and prepared note bursts had medians of −1.4% and −0.5%; those are within or near the byte-identical control dispersion, so no full-path speedup is established.
+- Compared all 11,984 emitted records including key order; actual processor burst stereo PCM and diagnostics also matched the baseline.
+
 ### Streaming sequence slot compaction
 
 - Compact admitted lookahead slots in place on clock expiry or terminal note events. Preserve the order of every surviving slot, keep the exact expiry-frame boundary and release the same slot reservations without allocating replacement arrays on the pump path.

@@ -79,6 +79,21 @@ function diagnostics(processor: TestProcessor) {
 // A hard gain step rings through the shared post-mix decimator before it snaps to zero.
 const DECIMATOR_SETTLE_FRAMES = 64;
 
+test('note notifications omit absent reasons and retain rejection reasons at the dispatch frame', () => {
+  const frame = 256;
+  Object.assign(globalThis, { currentFrame: frame });
+  const processor = new Processor();
+  processor.receive(note(1, frame));
+  processor.receive(note(1, frame));
+  block(processor, frame, 1);
+  const time = frame / sampleRate;
+  assert.deepEqual(processor.messages, [
+    { type: 'note', id: 1, state: 'accepted', frame, time },
+    { type: 'note', id: 1, state: 'rejected', frame, time, reason: 'duplicate-id' },
+    { type: 'note', id: 1, state: 'started', frame, time },
+  ]);
+});
+
 test('a stream longer than the pending cap reclaims stolen offs and retains only live note IDs', () => {
   Object.assign(globalThis, { currentFrame: 0 });
   const processor = new Processor();

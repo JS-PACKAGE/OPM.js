@@ -140,10 +140,9 @@ class OPMProcessor extends AudioWorkletProcessor {
   }
 
   noteEvent(id: number, state: NoteState, reason?: string, frame = this.dispatchFrame): void {
-    // Optional fields join through a spread: assignment could reach an inherited setter.
-    const message: NoteEvent = { type: 'note', id, state, frame, time: frame / sampleRate,
-      ...(reason === undefined ? {} : { reason }) };
-    this.send(message);
+    const time = frame / sampleRate;
+    this.send(reason === undefined ? { type: 'note', id, state, frame, time }
+      : { type: 'note', id, state, frame, time, reason });
   }
 
   reject(id: unknown, reason: string): void {

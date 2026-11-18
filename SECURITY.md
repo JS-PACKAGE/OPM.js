@@ -225,6 +225,11 @@ Each release notes in the CHANGELOG which checklist sections were exercised (A/B
 
 **MIDI CPU measurement caveat:** Earlier short-protocol MIDI timing percentages are not stable causal improvement evidence; byte-identical controls also vary substantially, including with a longer proportional warm-up. See [the complete no-change controls](./CHANGELOG.md#midi-benchmark-no-change-controls). Original observations and failed gates remain recorded. This does not retract byte/metadata, determinism, type or genuine playback evidence, and does not grant independent security, release or publication approval.
 
+Scoped B/C review for direct note notification records: integration-owner review, not an independent audit.
+
+- B — Only outbound note record construction changes. Both literals define own data, with `reason` absent unless supplied. Raw message allowlists, ID tracking, event ordering, clocks, error reporting and command/reset records retain their original paths. The worklet regression checks full records for acceptance, duplicate rejection and onset at the same dispatch frame.
+- C — No synthesis, frame splitting, queue capacity or callback-order changes.
+
 Scoped A/C review for stereo effects sample sanitization: integration-owner review, not an independent audit.
 
 - A — Native buffer/range and effect-option admission is unchanged. The sanitizer's magnitude checks retain the original finite bounds; NaN and both infinities reach the zero fallback rather than the finite clipping branch.
