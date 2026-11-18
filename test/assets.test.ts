@@ -94,7 +94,7 @@ test('existing deployment rejects a file replaced by a same-size symlink before 
       const target = join(destination, 'api', 'index.js'), metadata = join(destination, 'opm-assets.json');
       const bytes = await fs.readFile(target);
       // Match lstat's symlink size to the expected payload; size and hash alone admit it.
-      const relative = '../../' + 'x'.repeat(bytes.length - 6);
+      const relative = join('..', '..', 'x'.repeat(bytes.length - 6));
       const outside = resolve(dirname(target), relative);
       await fs.writeFile(outside, bytes);
       const originalReadFile = fs.readFile;
