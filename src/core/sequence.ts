@@ -206,7 +206,10 @@ const EVENT_ORDER = { stop: 0, note: 1, control: 2 } as const;
 /** Shared sample-frame ordering, including automatic releases and pending controls. */
 export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number, origin = 0): { queue: SequenceFrameEvent[]; length: number } {
   // Only privately registered immutable metadata can prove the non-note pass unnecessary.
-  const controlFree = controlFreeScoreSnapshots.get(score.events) === score;
+  // Reuse the identity read only; generic event getters keep their original loop reads.
+  const events = score.events;
+  const controlFree = controlFreeScoreSnapshots.get(events) === score;
+  const ownedScore = controlFree || controlledScoreSnapshots.get(events) === score;
   const noteOnly = controlFree && score.noteCount === score.events.length;
   // Explicit stops do not read onsets; unregistered snapshots retain the generic path.
   const onsets = controlFree ? undefined : new Map<number, { frame: number; event: Extract<PreparedSequenceEvent, { type: 'note' }> }>();
@@ -228,7 +231,7 @@ export function sequenceFrameEvents(score: SequenceSnapshot, sampleRate: number,
     queue.push(onset);
     queue.push({ frame: endFrame, order: EVENT_ORDER.stop, event: { type: 'stop', id: event.id, time: endFrame / sampleRate - origin } });
     let release = 0;
-    if (controlFree) {
+    if (ownedScore) {
       // Private snapshots have four immutable operators, finite notes and release values bounded to 0..10.
       const ops = event.voice.ops;
       // Check after frame coercions; direct callers can change prototypes between notes.
