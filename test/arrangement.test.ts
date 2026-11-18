@@ -334,6 +334,23 @@ test('a wrapped onset at an exact lookahead boundary admits its chord once in sc
   } finally { arrangement.dispose(); await opm.dispose(); }
 });
 
+test('interleaved layer chords retain layer order at the same time in a populated lookahead queue', async () => {
+  const { opm, calls } = await host();
+  const layers: ArrangementLayer[] = Array.from({ length: 3 }, (_, layer) => ({
+    name: `layer-${layer}`, length: 1,
+    events: Array.from({ length: 8 }, (_, index) => ({
+      type: 'note', id: index + 1, beat: .02 + index / 256, note: 48 + layer * 8 + index, duration: 1, voice,
+    })),
+  }));
+  const arrangement = createArrangement(opm, { layers, bpm: 60,
+    sections: [{ name: 'all', layers: layers.map(layer => layer.name) }], initialSection: 'all' });
+  try {
+    await arrangement.start();
+    assert.deepEqual(calls.map(call => call.note),
+      Array.from({ length: 8 }, (_, index) => [48 + index, 56 + index, 64 + index]).flat());
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
 test('crossfades leave shared gates continuous and give newly admitted notes the remaining layer envelope', async () => {
   const { opm, calls, stops, updates } = await host();
   const old: ArrangementLayer = { name: 'old', length: 16,

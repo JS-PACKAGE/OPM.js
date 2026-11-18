@@ -202,16 +202,22 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   function insert(fields: Omit<Command, 'at' | 'controls'> & Pick<Partial<Command>, 'at' | 'controls'>): void {
     // Own `at`/`controls` slots: a read of an omitted one must not reach Object.prototype.
     const command: Command = { at: undefined, controls: undefined, ...fields };
-    if (queue.length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds queued command capacity');
-    let index = queue.length;
-    while (index > 0) {
-      const previous = queue[index - 1]!;
+    const length = queue.length;
+    if (length >= MAX_SEQUENCE_SLOTS) throw new RangeError('Arrangement exceeds queued command capacity');
+    if (length === 0) { queue.push(command); return; }
+    const after = command.at ?? audioTime(command.beat);
+    const last = queue[length - 1]!;
+    const lastAt = last.at ?? audioTime(last.beat);
+    if (lastAt < after || lastAt === after && last.order <= command.order) { queue.push(command); return; }
+    // Upper bound keeps equal-time, equal-priority commands in insertion order.
+    let low = 0, high = length - 1;
+    while (low < high) {
+      const middle = (low + high) >>> 1, previous = queue[middle]!;
       const before = previous.at ?? audioTime(previous.beat);
-      const after = command.at ?? audioTime(command.beat);
-      if (before < after || before === after && previous.order <= command.order) break;
-      index--;
+      if (before < after || before === after && previous.order <= command.order) low = middle + 1;
+      else high = middle;
     }
-    queue.splice(index, 0, command);
+    queue.splice(low, 0, command);
   }
   function scheduleNext(gate: Gate): void {
     const control = gate.track.controls[gate.nextControl++];

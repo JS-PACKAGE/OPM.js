@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Arrangement command insertion
+
+- Append commands already at the back of the lookahead queue; otherwise use a stable upper bound on time and event order. Convert the incoming beat to audio time once per nonempty insertion. Keep the existing stop/onset/control precedence and bounded queue.
+- Four production-module pairs on macOS arm64 / Node 26.7.0 showed 24.6% lower median current-thread CPU for 16 interleaved layers of 96 notes under a 128-point tempo map, with reductions in all four pairs. The same-tempo control pairs ranged from +1.1% to +5.7%. The constant-tempo dense fixture measured an 11.9% median reduction but showed a +7.9% byte-identical control bias, so treat its exact gain as uncertain. Sparse and medium constant-tempo cases showed no clear difference. These are simulated audio-clock scheduler measurements, not DSP or device timings.
+- Compared 24 complete command traces and periodic public snapshots across 29,184 paired pumps, including live tempo replacement. A regression test covers simultaneous chords interleaved across layers in a populated queue.
+
 ### Direct AudioWorklet note notifications
 
 - Construct either complete note notification record directly, omitting `reason` when absent. State, ID, frame, time, property order and command/reset records are unchanged.
