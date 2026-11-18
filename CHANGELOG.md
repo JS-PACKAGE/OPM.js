@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Streaming sequence slot compaction
+
+- Compact admitted lookahead slots in place on clock expiry or terminal note events. Preserve the order of every surviving slot, keep the exact expiry-frame boundary and release the same slot reservations without allocating replacement arrays on the pump path.
+- On macOS arm64 / Node 26.7.0, four production-module process pairs per workload measured median current-thread CPU changes of −49.7% for dense mixed-event playback, −51.1% with early stolen-note notifications, and −15.3% for sparse playback. These use a simulated 48 kHz clock with a 200 ms lookahead and 1 ms pump cadence, not device playback measurements. Short sparse controls were noisy (−25.5% to +10.4% CPU); the reported sparse result uses longer intervals, with byte-identical control pairs between −1.5% and +3.6% CPU.
+- Compared 2,097 old/new host commands, plus owned-ID snapshots, over 3,450 paired pumps across dense, sparse, and stolen-note streams.
+
 ### Arrangement lookahead indexing
 
 - Binary-search each sorted layer iteration for the first onset in the lookahead window, then stop at the exclusive upper bound. Use the original absolute onset addition for both comparisons; simultaneous note ordering and the existing wrap, candidate, and admission limits remain unchanged.

@@ -136,7 +136,7 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
   const runtimeIds = new Map<number, number>();
   const cancelledNotes = new Set<number>();
   const pendingNotes = new Set(score.events.filter(event => event.type === 'note').map(event => event.id));
-  let queued: { frame: number; id: number }[] = [];
+  const queued: { frame: number; id: number }[] = [];
   let queue: SequenceFrameEvent[] = [];
   let cursor = 0;
   let context: AudioContext | null = null;
@@ -171,7 +171,7 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
     runtimeIds.clear();
     cancelledNotes.clear();
     pendingNotes.clear();
-    queued = [];
+    queued.length = 0;
     queue = [];
     if (failure !== undefined) throw failure;
   }
@@ -198,7 +198,15 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
       if (scoreId !== undefined) {
         ids.delete(scoreId);
         runtimeIds.delete(event.id);
-        queued = queued.filter(entry => entry.id !== event.id);
+        const length = queued.length;
+        let kept = 0;
+        for (let index = 0; index < length; index++) {
+          const entry = queued[index];
+          if (entry.id === event.id) continue;
+          if (kept !== index) queued[kept] = entry;
+          kept++;
+        }
+        if (kept !== length) queued.length = kept;
         if (event.state === 'rejected') fail(new Error(`Sequence note rejected: ${event.reason ?? 'unknown'}`));
       }
     }
@@ -212,7 +220,17 @@ export function streamSequence(opm: OPM, events: readonly SequenceEvent[], optio
       if (opm.context !== context || opm.node !== node || !context || context.state !== 'running') throw new Error('Sequence context changed or interrupted');
       const nowFrame = Math.round(context.currentTime * context.sampleRate);
       const toFrame = Math.round((context.currentTime + horizon) * context.sampleRate);
-      queued = queued.filter(entry => entry.frame > nowFrame);
+      const length = queued.length;
+      let kept = 0;
+      // Reuse the admitted-slot list, leaving entries before the first expiry in place.
+      for (let index = 0; index < length; index++) {
+        const entry = queued[index];
+        if (entry.frame > nowFrame) {
+          if (kept !== index) queued[kept] = entry;
+          kept++;
+        }
+      }
+      if (kept !== length) queued.length = kept;
       let end = cursor;
       while (end < queue.length && queue[end].frame < toFrame) end++;
       if (end > cursor && queue[cursor].frame < nowFrame) throw new Error('Sequence lookahead missed a score event');
