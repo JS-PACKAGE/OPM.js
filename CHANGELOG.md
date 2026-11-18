@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Arrangement track preparation
+
+- Build tracks directly for validated note-only layers without a temporary note-ID map. Mixed layers still match stops and automation by ID and stably sort controls that need ordering. Controls before an onset remain anchored to that onset.
+- Four production-module pairs on macOS arm64 / Node 26.7.0 measured 7.3% lower median current-thread CPU when creating and disposing a layer containing 4,096 notes with a reused prepared voice. All four pairs improved; their byte-identical controls ranged from −2.3% to +1.1%. The three-note and 256-note mixed fixtures did not show a clear material gain, and the larger benchmark did not finish. This measures setup, not playback.
+- Compared public snapshots and complete host command traces across 20 old/new playback programs, covering note-only and mixed layers, early controls, tied controls, explicit stops, and raw or prepared voices.
+
 ### Arrangement command insertion
 
 - Append commands already at the back of the lookahead queue; otherwise use a stable upper bound on time and event order. Convert the incoming beat to audio time once per nonempty insertion. Keep the existing stop/onset/control precedence and bounded queue.

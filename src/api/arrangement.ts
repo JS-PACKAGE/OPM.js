@@ -73,6 +73,10 @@ interface GainChange { beat: number; layer: string; target: number; fade: number
 // Own `at`/`forcedFrom` slots: later writes would otherwise reach inherited setters.
 const gainChange = (fields: Omit<GainChange, 'at' | 'forcedFrom'>): GainChange => ({ ...fields, at: undefined, forcedFrom: undefined });
 
+function createTrack(note: Note): Track {
+  return { note, end: note.time + note.duration, controls: [] };
+}
+
 const EPSILON = 1e-9;
 
 
@@ -99,23 +103,24 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
   for (let index = 0; index < definition.layers.length; index++) {
     const layer = definition.layers[index]!;
     const score = scores[index]!;
-    const tracks = new Map<number, Track>();
-    for (const event of score.events) if (event.type === 'note') {
-      tracks.set(event.id, { note: event, end: event.time + event.duration, controls: [] });
-    }
-    for (const event of score.events) {
-      const track = tracks.get(event.id)!;
-      if (event.type === 'stop') track.end = Math.min(track.end, event.time);
-      else if (event.type === 'control') {
-        track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
+    let notes: Track[];
+    if (score.noteCount === score.events.length) {
+      // The validated score has no stops or controls that need note-ID lookup.
+      notes = (score.events as readonly Note[]).map(createTrack);
+    } else {
+      const tracks = new Map<number, Track>();
+      for (const event of score.events) if (event.type === 'note') tracks.set(event.id, createTrack(event));
+      for (const event of score.events) {
+        if (event.type === 'note') continue;
+        const track = tracks.get(event.id)!;
+        if (event.type === 'stop') track.end = Math.min(track.end, event.time);
+        else track.controls.push({ beat: Math.max(event.time, track.note.time), controls: event.controls });
       }
+      notes = [...tracks.values()];
+      for (const track of notes) if (track.controls.length > 1) track.controls.sort((a, b) => a.beat - b.beat);
     }
-    for (const track of tracks.values()) {
-      track.controls = track.controls.filter(control => control.beat >= track.note.time);
-      track.controls.sort((a, b) => a.beat - b.beat);
-    }
-    patterns.set(layer.name, { name: layer.name, length: layer.length, priority: layer.voicePriority, gain: layer.gain,
-      notes: [...tracks.values()].sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id) });
+    notes.sort((a, b) => a.note.time - b.note.time || a.note.id - b.note.id);
+    patterns.set(layer.name, { name: layer.name, length: layer.length, priority: layer.voicePriority, gain: layer.gain, notes });
   }
   const sections = new Map<string, ReadonlySet<string>>(definition.sections.map(section => [section.name, new Set(section.layers)]));
   const initial = definition.initialSection;
