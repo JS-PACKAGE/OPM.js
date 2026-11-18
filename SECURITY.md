@@ -225,6 +225,11 @@ Each release notes in the CHANGELOG which checklist sections were exercised (A/B
 
 **MIDI CPU measurement caveat:** Earlier short-protocol MIDI timing percentages are not stable causal improvement evidence; byte-identical controls also vary substantially, including with a longer proportional warm-up. See [the complete no-change controls](./CHANGELOG.md#midi-benchmark-no-change-controls). Original observations and failed gates remain recorded. This does not retract byte/metadata, determinism, type or genuine playback evidence, and does not grant independent security, release or publication approval.
 
+Scoped A/C review for stereo effects sample sanitization: integration-owner review, not an independent audit.
+
+- A — Native buffer/range and effect-option admission is unchanged. The sanitizer's magnitude checks retain the original finite bounds; NaN and both infinities reach the zero fallback rather than the finite clipping branch.
+- C — All tiny magnitudes, including signed zeros, still sanitize to positive zero; the threshold and clipping endpoints are unchanged. No delay state, parameter smoothing, frame arithmetic, buffer ownership or worklet protocol changed. Differential PCM comparisons include shared views of the same backing buffer and update/reset transitions.
+
 Scoped A/C review for Owned controlled-score release bounds: integration-owner review of `src/core/sequence.ts` and generated assets; **not independent** security review.
 
 - A — Both existing private score registries receive only fully validated, detached, deeply immutable canonical voices and finite notes. Exact wrapper identity selects the bounded indexed initial-voice reduction; event-array identity, shape, freezing, a Proxy or a caller wrapper alone cannot grant trust. One original identity read feeds both lookups while subsequent generic loop getter reads stay at their original sites. Only control-free snapshots may omit the onset map and a proved-unnecessary non-note pass; all control processing and conservative live-ADSR tails remain unchanged. The inherited-scaling guard stays fresh per note after coercions.

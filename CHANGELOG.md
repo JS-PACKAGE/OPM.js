@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Stereo effects sample sanitization
+
+- Use a single sample magnitude to flush tiny values and pass bounded samples through without clamping math. Over-range finite values still clamp to ±1,000,000; nonfinite samples and signed zero still become positive zero inside the network. Dry bypass remains unchanged.
+- On macOS arm64 / Node 26.7.0, four fresh-process pairs of the production modules at 48 kHz and 128 frames per block showed median current-thread CPU changes of −4.0% for chorus plus reverb, −7.2% for reverb alone, −1.2% for chorus alone, −1.6% for dry, −1.5% for silence and −2.6% for mixed nonfinite/extreme input. The paired byte-identical controls had median deltas within 0.6% across all six workloads. The silence candidate included one +9.3% CPU / +31.9% wall-time pair; the other three CPU pairs were +0.03%, −3.0% and −4.8%. These are local Node measurements, not browser deadline or physical-device claims.
+- Compared complete stereo buffers bit-for-bit across 108 old/new programs and 3,810,240 frames, including six sample rates, overlapping views, invalid/extreme samples, parameter ramps and reset.
+
 ### Owned controlled-score release bounds
 
 - Extend the existing bounded, four-operator initial-voice release reduction to exact privately registered controlled snapshots. Both registries receive only detached, validated, deeply immutable canonical voices and finite notes. Only control-free snapshots may omit the onset map and a proved-unnecessary non-note pass; all control handling, conservative live-ADSR tails, sort order, limits and shared numeric/Synth DSP remain unchanged. Reuse the original event-array identity read for the two private lookups, leaving generic loop getter/iterator observations intact. A wrapper, Proxy, clone or frozen lookalike cannot gain trust. No new cache, trust flag, public API or retained collection is added; the minified sequence module grows by 22 bytes.

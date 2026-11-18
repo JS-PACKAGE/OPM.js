@@ -59,7 +59,12 @@ function frames(left: Float32Array, right: Float32Array, offset: number, length?
   if (!Number.isSafeInteger(count) || count < 0 || offset + count > size.call(left) || offset + count > size.call(right)) throw new RangeError('Invalid effects buffer range');
   return count;
 }
-function clean(value: number): number { return !Number.isFinite(value) || Math.abs(value) < 1e-20 ? 0 : Math.max(-1e6, Math.min(1e6, value)); }
+function clean(value: number): number {
+  const magnitude = Math.abs(value);
+  if (magnitude < 1e-20) return 0;
+  if (magnitude <= 1e6) return value;
+  return magnitude < Infinity ? (value < 0 ? -1e6 : 1e6) : 0;
+}
 class Delay {
   readonly data: Float64Array;
   position = 0;

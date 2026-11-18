@@ -184,6 +184,23 @@ test('extreme parameters and invalid samples cannot poison subsequent output', (
   const left = new Float32Array(60000), right = new Float32Array(60000); left.set([NaN, Infinity, -Infinity, 3e38]); right.set(left); fx.process(left, right);
   assert.ok(left.every(Number.isFinite)); assert.ok(right.every(Number.isFinite));
 });
+test('wet effects flush tiny samples and clamp finite extremes before mixing and delay', () => {
+  const sampleRate = 8000, delay = 80;
+  const input = Float32Array.of(NaN, Infinity, -Infinity, -0, 1e-21, -1e-21, 4e-20, -4e-20,
+    999_999.9375, -999_999.9375, 1_000_000, -1_000_000, 1_000_000.0625, -1_000_000.0625);
+  const cleaned = Float32Array.of(0, 0, 0, 0, 0, 0, 4e-20, -4e-20,
+    999_999.9375, -999_999.9375, 1_000_000, -1_000_000, 1_000_000, -1_000_000);
+  const left = new Float32Array(delay + input.length);
+  left.set(input);
+  const right = left.slice();
+  createStereoEffects(sampleRate, { chorus: { rate: 1, depth: 0, mix: .5, voices: 1 } }).process(left, right);
+  const expected = new Float32Array(left.length);
+  for (let i = 0; i < cleaned.length; i++) {
+    expected[i] = .5 * cleaned[i]!;
+    expected[delay + i] = .7 * cleaned[i]! * .5;
+  }
+  assert.deepEqual(left, expected); assert.deepEqual(right, expected);
+});
 test('parameter replacement ramps through bypass and order changes without clicks', () => {
   const fx = createStereoEffects(rate), left = new Float32Array(rate).fill(.5), right = left.slice(); fx.process(left, right);
   fx.update({ chorus: { rate: .05, depth: 1, mix: 1 }, reverb: { size: 1, damping: 1, mix: 1 } }); left.fill(.5); right.fill(.5); fx.process(left, right);
