@@ -6,6 +6,16 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 Package version 1.15.0, distributed on GitHub. This release focuses on performance and hardening; canonical voice format v8 is unchanged. Measurements below are workload-specific, not device guarantees.
 
+### Release hardening
+
+- Consume the same own-data descriptors used for voice-version and tuning validation, including array lengths; legacy snapshots cannot adopt newer fields during copying.
+- Read only actual FM graph edges, bound allocation by own lengths, and keep pool slots own data throughout admission and recycling. Keep Performance automation, MIDI releases and Arrangement controls bound to their authorized notes and layers, including exact MIDI port/channel cleanup.
+- Keep deployable asset inventory slots own data; validate and join the same relative path before staging, copying or checking existing assets. The same-size symlink test now constructs its relative target with native path separators.
+
+Release security review: FinalInputs rechecked checklist A (voice and tuning validation, MIDI and Performance ownership, and Arrangement control/queue boundaries) and the affected B protocol paths. FinalDspSupply rechecked C (graph, pool and render bounds) and D (asset containment and package scope). Read-only rechecks closed the remaining findings in these paths; runtime and package gates are separate.
+
+The checkout-only Vite example's development audit is waived for the **GitHub runtime artifact only**: [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf) affects `picomatch@4.0.7`, with no patched release available at review. The fixture uses fixed build configuration and does not take untrusted glob patterns; neither Vite nor picomatch is in the OPM.js archive or required at runtime. This does not clear the audit or authorize distributing the example's toolchain, exposing it to untrusted inputs, or publishing to npm.
+
 ### Arrangement track preparation
 
 - Build tracks directly for validated note-only layers without a temporary note-ID map. Mixed layers still match stops and automation by ID and stably sort controls that need ordering. Controls before an onset remain anchored to that onset.
