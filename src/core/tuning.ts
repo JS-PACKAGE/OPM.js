@@ -15,24 +15,30 @@ export function normalizeTuning(input: TuningOptions): NormalizedTuning {
   }
   for (const key of Reflect.ownKeys(input)) {
     if (key !== 'referenceHz' && key !== 'offsets') throw new TypeError('tuning has an unknown field');
-    if (!Object.hasOwn(Object.getOwnPropertyDescriptor(input, key)!, 'value')) {
-      throw new TypeError(`tuning.${key} must be data`);
-    }
   }
-  const referenceHz: unknown = Object.hasOwn(input, 'referenceHz')
-    ? Object.getOwnPropertyDescriptor(input, 'referenceHz')!.value : 440;
+  const referenceDescriptor = Object.getOwnPropertyDescriptor(input, 'referenceHz');
+  if (referenceDescriptor !== undefined && !Object.hasOwn(referenceDescriptor, 'value')) {
+    throw new TypeError('tuning.referenceHz must be data');
+  }
+  const referenceHz: unknown = referenceDescriptor === undefined ? 440 : referenceDescriptor.value;
   if (typeof referenceHz !== 'number' || !Number.isFinite(referenceHz) || referenceHz < 20 || referenceHz > 20000) {
     throw new RangeError('referenceHz must be finite and in 20..20000');
   }
   let offsets = ZERO_OFFSETS;
-  if (Object.hasOwn(input, 'offsets')) {
-    const source: unknown = Object.getOwnPropertyDescriptor(input, 'offsets')!.value;
+  const offsetsDescriptor = Object.getOwnPropertyDescriptor(input, 'offsets');
+  if (offsetsDescriptor !== undefined) {
+    if (!Object.hasOwn(offsetsDescriptor, 'value')) throw new TypeError('tuning.offsets must be data');
+    const source: unknown = offsetsDescriptor.value;
     if (!Array.isArray(source)) {
       throw new TypeError('offsets must contain exactly 128 own data cents values');
     }
     const known = validatedOffsets.has(source);
-    if (!known && (source.length !== 128 || Reflect.ownKeys(source).length !== 129)) {
-      throw new TypeError('offsets must contain exactly 128 own data cents values');
+    if (!known) {
+      const length = Object.getOwnPropertyDescriptor(source, 'length');
+      if (length === undefined || !Object.hasOwn(length, 'value') || length.value !== 128 ||
+          Reflect.ownKeys(source).length !== 129) {
+        throw new TypeError('offsets must contain exactly 128 own data cents values');
+      }
     }
     // Identity membership guarantees immutable own cells; raw or merely frozen copies still detach.
     const copy: number[] = known ? source : [];

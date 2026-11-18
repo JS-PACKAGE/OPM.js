@@ -201,6 +201,32 @@ test('legacy formats retain their old operator and LFO boundaries', () => {
   assert.equal(normalizeVoice(third as unknown as VoiceInput).ops[0].velocitySensitivity, 12);
 });
 
+test('optional fields preserve absence but reject explicitly undefined data', () => {
+  const operator = () => ({ ratio: 1, level: 1, detune: 0, adsr: { a: 0, d: 0, s: 1, r: 0 } });
+  const minimal = { algorithm: 0, feedback: 0, ops: [operator(), operator(), operator(), operator()] } as const;
+  const normalized = normalizeVoice(minimal);
+  assert.equal(normalized.modIndex, 4);
+  for (const key of ['name', 'pan', 'pitchEnvelope']) assert.equal(Object.hasOwn(normalized, key), false);
+  for (const key of ['keyScale', 'velocitySensitivity', 'frequency', 'rateKeyScale', 'waveform', 'noiseRate']) {
+    assert.equal(Object.hasOwn(normalized.ops[0], key), false);
+    const ops = minimal.ops.map((op, index) => index === 0 ? { ...op, [key]: undefined } : op);
+    assert.throws(() => normalizeVoice({ ...minimal, ops } as unknown as VoiceInput));
+  }
+  assert.equal(Object.hasOwn(normalized.ops[0].adsr, 'sr'), false);
+  const ops = minimal.ops.map((op, index) => index === 0 ? { ...op, adsr: { ...op.adsr, sr: undefined } } : op);
+  assert.throws(() => normalizeVoice({ ...minimal, ops } as unknown as VoiceInput), RangeError);
+  for (const key of ['name', 'version', 'modIndex', 'pan', 'pitchEnvelope', 'lfo']) {
+    assert.throws(() => normalizeVoice({ ...minimal, [key]: undefined } as unknown as VoiceInput));
+  }
+  const lfo = { rate: 0, amDepth: 0, pmDepth: 0 };
+  const withLfo = normalizeVoice({ ...minimal, lfo });
+  assert.equal(withLfo.lfo.waveform, 'sine');
+  for (const key of ['delay', 'sync', 'phase', 'amTargets', 'pmTargets']) assert.equal(Object.hasOwn(withLfo.lfo, key), false);
+  for (const key of ['waveform', 'delay', 'sync', 'phase', 'amTargets', 'pmTargets']) {
+    assert.throws(() => normalizeVoice({ ...minimal, lfo: { ...lfo, [key]: undefined } } as unknown as VoiceInput));
+  }
+});
+
 test('current LFO inputs default to sine and preserve every supported waveform', () => {
   const { waveform: _, ...lfo } = voice().lfo;
   for (const version of [undefined, 4, 5, 6] as const) {
