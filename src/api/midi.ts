@@ -68,7 +68,7 @@ export interface MidiAdapter {
   dispose(): void;
 }
 
-interface Owned { part: number; key: number; slot: string }
+interface Owned { part: number; key: number; input: string }
 interface PartState { volume: number; expression: number }
 
 const MAX_INPUTS = 32;
@@ -194,6 +194,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     onError?.(error instanceof Error ? error : new Error(String(error)));
   }
   function release(owned: Owned, force = false): void {
+    if (ownedKeys.get(owned.key) !== owned) return;
     try {
       performance.noteOff(owned.part, owned.key, force ? FORCE_RELEASE : undefined);
       if (force) ownedKeys.delete(owned.key);
@@ -209,15 +210,16 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     } catch (error) { report(error); return; }
     for (const key of ownedKeys.keys()) if (!live.has(key)) ownedKeys.delete(key);
   }
-  function releasePrefix(prefix: string | undefined, force = true): void {
+  function releaseMatching(input?: string, part?: number, force = true): void {
     if (force) pruneOwnership();
-    for (const [key, owners] of held) {
-      if (prefix !== undefined && !key.startsWith(prefix)) continue;
-      held.delete(key);
+    for (const [slot, owners] of held) {
+      const first = owners[0]!;
+      if (input !== undefined && first.input !== input || part !== undefined && first.part !== part) continue;
+      held.delete(slot);
       for (const owned of owners) { heldKeys--; if (!force) release(owned); }
     }
     if (force) for (const owned of ownedKeys.values()) {
-      if (prefix === undefined || owned.slot.startsWith(prefix)) release(owned, true);
+      if ((input === undefined || owned.input === input) && (part === undefined || owned.part === part)) release(owned, true);
     }
   }
   function pedalOn(channel: number): boolean {
@@ -246,7 +248,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       if (controller === 7) state.volume = value / 127; else state.expression = value / 127;
       performance.updatePart(channel, { expression: state.volume * state.expression });
     } else if (controller === 10) performance.updatePart(channel, { pan: Math.max(-1, (value - 64) / 63) });
-    else if (controller === 120 || controller === 123) releasePrefix(`${input}\u0000${channel}\u0000`, controller === 120);
+    else if (controller === 120 || controller === 123) releaseMatching(input, channel, controller === 120);
     else if (controller === 121) {
       state.volume = 1; state.expression = 1;
       Object.assign(rpn[channel]!, midiRpnState(range));
@@ -287,8 +289,10 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
         const id = performance.noteOn(channel, data[1]!, { velocity: data[2]! / 127 });
         const key = `${input}\u0000${channel}\u0000${data[1]}`;
         const owners = held.get(key) ?? [];
-        const owned = { part: channel, key: id, slot: key };
-        owners.push(owned);
+        const owned = { part: channel, key: id, input };
+        // Keep every queue slot own data; shift() must never consume a substituted owner.
+        Object.defineProperty(owners, owners.length, { __proto__: null,
+          value: owned, writable: true, enumerable: true, configurable: true } as PropertyDescriptor);
         ownedKeys.set(id, owned);
         held.set(key, owners);
         heldKeys++;
@@ -329,7 +333,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
     if (!entry) return;
     listeners.delete(id);
     entry.input.removeEventListener('midimessage', entry.listener);
-    releasePrefix(`${id}\u0000`);
+    releaseMatching(id);
     const channels = sustained.get(id);
     sustained.delete(id);
     if (channels) for (const channel of channels) {
@@ -357,7 +361,7 @@ export function createMidiAdapter(performance: Performance, access: MidiAccessLi
       return Object.freeze({ inputs: Object.freeze([...listeners.keys()]), heldKeys, ignoredMessages: ignored, disposed });
     },
     releaseAll() {
-      try { releasePrefix(undefined); }
+      try { releaseMatching(); }
       finally { if (disposed && ownedKeys.size === 0) onError = undefined; }
     },
     dispose() {

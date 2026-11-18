@@ -62,6 +62,9 @@ test('per-key and per-part controls address sounding gates and later notes witho
   try {
     const a = performance.noteOn(0, 60);
     const b = performance.noteOn(0, 64);
+    const foreign = performance.noteOn(1, 72);
+    const foreignGate = performance.getPart(1).keys.find(key => key.key === foreign)!.gateId!;
+    const foreignControls = performance.getPartControls(1);
     const ids = new Map(performance.getPart(0).keys.map(key => [key.key, key.gateId!]));
     updates.length = 0;
     assert.equal(performance.updateKey(0, a, { feedback: 5 }), true);
@@ -71,6 +74,8 @@ test('per-key and per-part controls address sounding gates and later notes witho
     performance.updatePartNotes(0, { operatorRatios: [2, 1, 1, 1] });
     assert.deepEqual(new Set(updates.map(update => update.id)), new Set([ids.get(a), ids.get(b)]));
     assert.ok(updates.every(update => update.controls.operatorRatios?.[0] === 2));
+    assert.ok(updates.every(update => update.id !== foreignGate), 'part updates cannot target another part');
+    assert.deepEqual(performance.getPartControls(1), foreignControls);
     assert.equal(updates.find(update => update.id === ids.get(a))!.controls.feedback, 5, 'key-specific state survives part updates');
     assert.equal(updates.find(update => update.id === ids.get(b))!.controls.feedback, undefined);
     const c = performance.noteOn(0, 67);

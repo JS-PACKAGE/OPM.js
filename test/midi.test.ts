@@ -170,6 +170,8 @@ test('channel notes map to parts; repeated pitches have separate identities and 
     input.send(0x90, 60, 100);
     input.send(0x91, 64, 1);
     input.send(0x90, 60, 90);
+    const repeated = performance.getPart(0).keys.map(key => key.key);
+    const foreign = performance.getPart(1).keys[0]!.key;
     assert.deepEqual(held(performance, 0), [60, 60]);
     assert.deepEqual(held(performance, 1), [64]);
     assert.equal(adapter.snapshot.heldKeys, 3);
@@ -178,6 +180,9 @@ test('channel notes map to parts; repeated pitches have separate identities and 
     // Oldest key is released, but the pedal keeps it in the part as a pedal-only key.
     assert.deepEqual(held(performance, 0), [60]);
     assert.equal(performance.getPart(0).keys.length, 2);
+    assert.deepEqual(performance.getPart(0).keys.map(key => [key.key, key.held]),
+      [[repeated[0], false], [repeated[1], true]], 'note-off consumes the oldest owned identity');
+    assert.equal(performance.getPart(1).keys[0]!.key, foreign, 'another part retains its key');
     input.send(0x90, 60, 0);
     input.send(0xb0, 64, 0);
     assert.equal(performance.getPart(0).keys.length, 0);

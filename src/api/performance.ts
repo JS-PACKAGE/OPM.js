@@ -383,12 +383,16 @@ export function createPerformance(opm: OPM, options: PerformanceOptions = {}): P
       const updates: [number, Gate, NoteControls][] = [];
       p.controls = next;
       try {
-        for (const [id, gate] of gates) if (gate.part === p) updates.push([id, gate, controlsFor(p, gate.controls, gate.offset)]);
+        for (const [id, gate] of gates) if (gate.part === p) {
+          // Define the slot directly so inherited index setters cannot replace a gate's authority.
+          Object.defineProperty(updates, updates.length, { __proto__: null,
+            value: [id, gate, controlsFor(p, gate.controls, gate.offset)], writable: true, enumerable: true, configurable: true } as PropertyDescriptor);
+        }
         for (const key of p.keys.values()) controlsFor(p, key.controls, 0);
       } catch (error) { p.controls = previous; throw error; }
       let failure: unknown;
       for (const [id, gate, controls] of updates) {
-        if (gates.has(id)) try { updateGate(id, gate, controls); } catch (error) { failure ??= error; }
+        if (gate.part === p && gates.get(id) === gate) try { updateGate(id, gate, controls); } catch (error) { failure ??= error; }
       }
       if (failure !== undefined) throw failure;
     },
