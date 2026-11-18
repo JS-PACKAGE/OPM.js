@@ -4,6 +4,12 @@ For installation and executable examples, see the [README](./README.md#getting-s
 
 ## Unreleased
 
+### Arrangement lookahead indexing
+
+- Binary-search each sorted layer iteration for the first onset in the lookahead window, then stop at the exclusive upper bound. Use the original absolute onset addition for both comparisons; simultaneous note ordering and the existing wrap, candidate, and admission limits remain unchanged.
+- On macOS arm64 / Node 26.7.0, four fresh-process pairs of the production scheduler with a simulated 48 kHz audio clock and 20 ms lookahead showed median current-thread CPU changes of −0.6%, −61.8%, −95.8%, and −98.4% for 1, 128, 2,048, and 32,768 notes per 256-beat layer. The byte-identical controls had median deltas within 3.4%; the one-note candidate fluctuated from −7.8% to +4.4%. These numbers measure live scheduling only, not arrangement loading, DSP, or browser timing.
+- Compared commands and snapshots against the previous scheduler over 148,800 paired pumps. A regression test covers a wrapped chord exactly on a window boundary where the inverse subtraction rounds differently.
+
 ### Stereo effects sample sanitization
 
 - Use a single sample magnitude to flush tiny values and pass bounded samples through without clamping math. Over-range finite values still clamp to ±1,000,000; nonfinite samples and signed zero still become positive zero inside the network. Dry bypass remains unchanged.

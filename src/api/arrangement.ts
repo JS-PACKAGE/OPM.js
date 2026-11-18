@@ -237,11 +237,23 @@ export function createArrangement(opm: OPM, options: ArrangementOptions): Arrang
       if (pattern.notes.length === 0) continue;
       if (!effective(from).layers.has(pattern.name) &&
           !changes.some(change => change.beat >= from && change.beat < to && change.layers.has(pattern.name))) continue;
+      const notes = pattern.notes;
       for (let loop = Math.floor(from / pattern.length); loop * pattern.length < to; loop++) {
         const base = loop * pattern.length;
-        for (const track of pattern.notes) {
+        let first = 0;
+        if (base < from) {
+          // Compare the actual summed onset: subtracting base from the bound can round differently.
+          let end = notes.length;
+          while (first < end) {
+            const middle = (first + end) >>> 1;
+            if (base + notes[middle]!.note.time < from) first = middle + 1;
+            else end = middle;
+          }
+        }
+        for (let index = first; index < notes.length; index++) {
+          const track = notes[index]!;
           const start = base + track.note.time;
-          if (start < from || start >= to) continue;
+          if (start >= to) break;
           if (!effective(start).layers.has(pattern.name)) continue;
           const end = base + track.end;
           if (end <= start) continue;

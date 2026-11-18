@@ -315,6 +315,25 @@ function audio(opm: OPM, arrangement: Arrangement, frames: number): Float32Array
   return output;
 }
 
+test('a wrapped onset at an exact lookahead boundary admits its chord once in score ID order', async () => {
+  const { opm, calls } = await host();
+  const layer: ArrangementLayer = { name: 'tone', length: 1,
+    events: [[2, .1, 61], [3, .25, 62], [1, .1, 60], [4, .05, 59]].map(([id, beat, note]) =>
+      ({ type: 'note', id, beat, note, duration: .015625, voice })) };
+  const arrangement = createArrangement(opm, { layers: [layer], sections: [{ name: 'all', layers: ['tone'] }],
+    initialSection: 'all', bpm: 60, horizon: .0625 });
+  try {
+    await arrangement.start();
+    const target = 18100 / sampleRate;
+    // At frame 17100 the window ends at beat 1.1, where 1 + .1 is exact
+    // but 1.1 - 1 rounds greater than .1.
+    audio(opm, arrangement, 17100);
+    assert.deepEqual(calls.filter(call => call.at === target), []);
+    audio(opm, arrangement, 256);
+    assert.deepEqual(calls.filter(call => call.at === target).map(call => call.note), [60, 61]);
+  } finally { arrangement.dispose(); await opm.dispose(); }
+});
+
 test('crossfades leave shared gates continuous and give newly admitted notes the remaining layer envelope', async () => {
   const { opm, calls, stops, updates } = await host();
   const old: ArrangementLayer = { name: 'old', length: 16,
