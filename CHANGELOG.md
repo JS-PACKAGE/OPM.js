@@ -2,7 +2,9 @@
 
 For installation and executable examples, see the [README](./README.md#getting-started) and the [English](./doc/usage.en.md) / [繁體中文](./doc/usage.zh-TW.md) usage guides.
 
-## Unreleased
+## v1.15.0
+
+Package version 1.15.0, distributed on GitHub. This release focuses on performance and hardening; canonical voice format v8 is unchanged. Measurements below are workload-specific, not device guarantees.
 
 ### Arrangement track preparation
 
