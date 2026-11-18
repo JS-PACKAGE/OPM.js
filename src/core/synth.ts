@@ -331,7 +331,7 @@ export function operatorDuration(seconds: number, note: number, rateKeyScale = 0
   return Math.min(cap, seconds * 2 ** (-rateKeyScale * (note - 60) / 12));
 }
 
-// Required ADSR fields are own data; omitted timing fields still inherit.
+// Only reuse timing coefficients in the ordinary prototype context.
 function stableEnvelopeContext(): boolean {
   // Native Object.prototype has an immutable null parent; `in` never runs getters.
   return !('sr' in Object.prototype) && !('rateKeyScale' in Object.prototype);
@@ -568,6 +568,14 @@ function updatePan(active: ActiveVoice): void {
   active.leftGain = pan === 1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * active.panCos;
   active.rightGain = pan === -1 ? 0 : pan === 0 ? gain : gain * Math.SQRT2 * active.panSin;
 }
+function appendVoice(slots: ActiveVoice[], voice: ActiveVoice): void {
+  const index = slots.length;
+  // A new cell must not dispatch an inherited setter while the pool is changing.
+  if (index in Array.prototype) {
+    Object.defineProperty(slots, index, { __proto__: null, value: voice, writable: true, enumerable: true, configurable: true } as PropertyDescriptor);
+  } else slots[index] = voice;
+}
+
 function removeAt<T>(items: T[], index: number): T {
   const removed = items[index];
   for (let i = index + 1; i < items.length; i++) items[i - 1] = items[i];
@@ -1763,7 +1771,9 @@ export class Synth {
     this.maxVoices = maxVoices;
     this.voices = [];
     this.fades = [];
-    this.freeVoices = Array.from({ length: maxVoices + MAX_FADES + 1 }, () => createVoiceSlot(this.oversample));
+    // Use array-like lengths without consulting an inherited iterator.
+    this.freeVoices = Array.from({ __proto__: null, length: maxVoices + MAX_FADES + 1 } as ArrayLike<unknown>,
+      () => createVoiceSlot(this.oversample));
     this.terminalIds = new Float64Array(maxVoices);
     this.terminalErrors = new Uint8Array(maxVoices);
     this.rendering = false;
@@ -1776,7 +1786,8 @@ export class Synth {
     this.currentFrame = 0;
     this.errorCount = 0;
     this.nextId = 1;
-    this.subTimes = Float64Array.from({ length: this.oversample }, (_, sub) => sub / (sampleRate * this.oversample));
+    this.subTimes = Float64Array.from({ __proto__: null, length: this.oversample } as ArrayLike<number>,
+      (_, sub) => sub / (sampleRate * this.oversample));
     this.sequence = 0;
     this.decimatorCoefficients = createDecimatorCoefficients(sampleRate, this.quality);
     this.mixLeft = new Float64Array(this.oversample);
@@ -1862,8 +1873,7 @@ export class Synth {
     if (id === undefined && this.nextId > Number.MAX_SAFE_INTEGER) throw new RangeError('Note ID space exhausted');
     if (id !== undefined && (!Number.isSafeInteger(id) || id <= 0)) throw new RangeError('id must be a positive safe integer');
     if (id !== undefined) for (const active of this.voices) if (active.id === id) throw new RangeError('id already active');
-    const admissionSequence = this.sequence, admissionSize = this.voices.length;
-    let stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
+    const stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
     if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
     if (id === undefined) id = this.nextId++;
     if (id >= this.nextId) this.nextId = id + 1;
@@ -1907,7 +1917,6 @@ export class Synth {
           sustainGain[i] = sustainDb[i] <= FLOOR_DB ? 0 : 10 ** (sustainDb[i] / 20);
         }
         steps[i] = Math.min(MAX_STEP, increments[i]);
-        // Earlier optional getters may change the context during this admission.
         envelopeTimingCacheable &&= stableEnvelopeContext();
         // Pristine coefficients without rate key scaling are note-independent.
         if (!sameVoice || active.envelopeEdited[i] || !active.envelopeTimingCacheable || !envelopeTimingCacheable || (rateKeyScale ?? 0) !== 0) {
@@ -1968,14 +1977,13 @@ export class Synth {
           if (unused === 3 && waveforms[2] === 8 && carriers.length === 1 && carriers[0] === 3) active.frameKernel = lateNoiseFrame;
         }
       }
-      // Cache the fixed topology in pooled typed storage; frozen graph-array
-      // indexing otherwise repeats for every operator at every oversampled frame.
+      // Frozen graph rows are dense. Only read actual edges; absent edges must
+      // not reach prototype hooks while the spare is outside the pool.
       for (let op = 0; op < 4; op++) {
         const inputs = active.graph.inputs[op];
-        active.inputIndices[op * 2] = inputs[0] ?? -1;
-        active.inputIndices[op * 2 + 1] = inputs[1] ?? -1;
+        active.inputIndices[op * 2] = inputs.length > 0 ? inputs[0] : -1;
+        active.inputIndices[op * 2 + 1] = inputs.length > 1 ? inputs[1] : -1;
       }
-      // Carriers are dense/frozen; input holes above still observe the admission context.
       if (!sameVoice) active.carrierIndices.set(active.graph.carriers);
       active.velocity = velocity;
       active.expression = 1;
@@ -2055,17 +2063,11 @@ export class Synth {
         }
       }
       active.releaseTime = active.releaseEnd = -1;
-      // Inherited graph-input getters may admit or cancel notes while this spare is held.
-      if (this.sequence !== admissionSequence + 1 || this.voices.length !== admissionSize) {
-        for (const existing of this.voices) if (existing.id === id) throw new RangeError('id already active');
-        stolenIndex = this.voices.length >= this.maxVoices ? this.stealingIndex(voicePriority) : -1;
-        if (this.voices.length >= this.maxVoices && stolenIndex < 0) throw new VoiceAdmissionError();
-      }
     } catch (error) {
       // A failed spare must not retain partial coefficients or escape the pool.
       active.voice = null!;
       active.envelopeTimingCacheable = false;
-      this.freeVoices.push(active);
+      appendVoice(this.freeVoices, active);
       throw error;
     }
     (this as MutableCounters).lastStolenId = null;
@@ -2080,13 +2082,13 @@ export class Synth {
         this.spillLeft += retired.lastSample * retired.leftGain * gain;
         this.spillRight += retired.lastSample * retired.rightGain * gain;
         this.spillRemaining = this.fadeFrames;
-        this.freeVoices.push(retired);
+        appendVoice(this.freeVoices, retired);
       }
       stolen.fadeRemaining = this.fadeFrames;
       stolen.lastFadeGain = 1;
-      this.fades.push(stolen);
+      appendVoice(this.fades, stolen);
     }
-    this.voices.push(active);
+    appendVoice(this.voices, active);
     // Notify only after admission: callbacks may start another note reentrantly.
     if (this.lastStolenId !== null) this.ended(this.lastStolenId, 'stolen');
     return id;
@@ -2126,7 +2128,7 @@ export class Synth {
   }
 
   panic(): void {
-    while (this.fades.length > 0) this.freeVoices.push(this.fades.pop()!);
+    while (this.fades.length > 0) appendVoice(this.freeVoices, this.fades.pop()!);
     this.spillLeft = this.spillRight = this.spillRemaining = 0;
     this.resetDecimator();
     this.dcState.fill(0);
@@ -2147,7 +2149,7 @@ export class Synth {
     if (this.voices.length === 0) return;
     const active = this.voices.pop()!;
     const id = active.id;
-    this.freeVoices.push(active);
+    appendVoice(this.freeVoices, active);
     // At most maxVoices (32) stack-local IDs survive recycling. Unlike shared
     // scratch storage, they cannot be overwritten by reentrant callbacks.
     this.cancelVoices();
@@ -2590,7 +2592,7 @@ export class Synth {
             (this as MutableCounters).errorCount++;
             this.terminalIds[terminalCount] = active.id;
             this.terminalErrors[terminalCount++] = (index << 1) | 1;
-            this.freeVoices.push(active);
+            appendVoice(this.freeVoices, active);
             continue;
           }
           // Envelope-based retirement: once every operator release has ended the
@@ -2598,7 +2600,7 @@ export class Synth {
           if (active.releaseTime >= 0 && (active.elapsed - 1) / this.sampleRate >= active.releaseEnd) {
             this.terminalIds[terminalCount] = active.id;
             this.terminalErrors[terminalCount++] = index << 1;
-            this.freeVoices.push(active);
+            appendVoice(this.freeVoices, active);
           }
         }
         if (terminalCount > 0) compactTerminals(this.voices, this.terminalErrors, terminalCount);
@@ -2607,11 +2609,11 @@ export class Synth {
           const gain = active.fadeRemaining / this.fadeFrames;
           if (!this.renderVoice(active, true)) {
             (this as MutableCounters).errorCount++;
-            this.freeVoices.push(removeAt(this.fades, index--));
+            appendVoice(this.freeVoices, removeAt(this.fades, index--));
             continue;
           }
           active.lastFadeGain = gain;
-          if (--active.fadeRemaining === 0) this.freeVoices.push(removeAt(this.fades, index--));
+          if (--active.fadeRemaining === 0) appendVoice(this.freeVoices, removeAt(this.fades, index--));
         }
         if (this.spillRemaining > 0) {
           for (let sub = 0; sub < oversample; sub++) {
