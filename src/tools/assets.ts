@@ -81,6 +81,11 @@ async function inventory(root: string): Promise<Manifest> {
   if (typeof pkg.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(pkg.version)) throw new Error('Invalid package version');
   const assets: Asset[] = [];
   let total = 0;
+  function append(asset: Asset): void {
+    const index = assets.length;
+    if (!(index in Array.prototype)) { assets.push(asset); return; }
+    Object.defineProperty(assets, index, { __proto__: null, value: asset, writable: true, enumerable: true, configurable: true } as PropertyDescriptor);
+  }
   async function visit(directory: string, prefix = ''): Promise<void> {
     const info = await lstat(directory);
     if (!info.isDirectory() || info.isSymbolicLink()) throw new Error('Distribution directories must not be symlinks');
@@ -97,7 +102,7 @@ async function inventory(root: string): Promise<Manifest> {
         if (assets.length >= MAX_FILES || total > MAX_BYTES) throw new RangeError('Distribution exceeds deployment budget');
         const bytes = await readFile(source);
         if (bytes.byteLength !== stat.size) throw new Error('Distribution changed during inspection');
-        assets.push({ path, bytes: bytes.byteLength, sha256: digest(bytes) });
+        append({ path, bytes: bytes.byteLength, sha256: digest(bytes) });
       }
     }
   }
@@ -115,9 +120,15 @@ async function inventory(root: string): Promise<Manifest> {
   const license = await readFile(licensePath);
   total += license.byteLength;
   if (total > MAX_BYTES) throw new RangeError('Distribution exceeds deployment budget');
-  assets.push({ path: 'LICENSE', bytes: license.byteLength, sha256: digest(license) });
+  append({ path: 'LICENSE', bytes: license.byteLength, sha256: digest(license) });
   return { format: 1, package: 'opm.js', version: pkg.version, assets };
 }
+function isAssetPath(path: string): boolean {
+  return path === 'LICENSE' ||
+    (/^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*(?![\s\S])/.test(path) &&
+      !/(?:^|\/)\.{1,2}(?:\/|$)/.test(path) && /\.(?:js|js\.map|d\.ts)$/.test(path));
+}
+
 async function matching(destination: string, manifest: Manifest): Promise<boolean> {
   const stat = await lstat(destination);
   if (!stat.isDirectory() || stat.isSymbolicLink()) return false;
@@ -149,7 +160,8 @@ async function matching(destination: string, manifest: Manifest): Promise<boolea
   // Avoid loading host metadata whose inspected size already rules out a match.
   if (manifestSize !== Buffer.byteLength(text) || (await readFile(join(destination, MANIFEST), 'utf8')) !== text) return false;
   for (const asset of manifest.assets) {
-    const path = join(destination, ...asset.path.split('/'));
+    if (!isAssetPath(asset.path)) return false;
+    const path = join(destination, asset.path);
     const stat = await lstat(path);
     if (!stat.isFile() || stat.size !== asset.bytes || digest(await readFile(path)) !== asset.sha256) return false;
   }
@@ -194,13 +206,15 @@ export async function copyAssets(options: CopyAssetsOptions): Promise<AssetDeplo
     // Remember only adjacent parents inside this fresh private staging tree.
     let previousDirectory = staging;
     for (const asset of manifest.assets) {
-      const target = join(staging, ...asset.path.split('/'));
+      // Join the same primitive path that was validated, without splitting into replaceable components.
+      if (!isAssetPath(asset.path)) throw new Error('Unexpected distribution path');
+      const target = join(staging, asset.path);
       const directory = dirname(target);
       if (directory !== previousDirectory) {
         await mkdir(directory, { recursive: true });
         previousDirectory = directory;
       }
-      await copyFile(asset.path === 'LICENSE' ? join(root, 'LICENSE') : join(source, ...asset.path.split('/')), target, constants.COPYFILE_EXCL);
+      await copyFile(asset.path === 'LICENSE' ? join(root, 'LICENSE') : join(source, asset.path), target, constants.COPYFILE_EXCL);
       if (digest(await readFile(target)) !== asset.sha256) throw new Error('Distribution changed during copying');
     }
     await writeFile(join(staging, MANIFEST), JSON.stringify(manifest, null, 2) + '\n', { flag: 'wx' });

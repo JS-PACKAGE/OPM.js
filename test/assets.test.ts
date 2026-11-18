@@ -79,6 +79,25 @@ test('copyAssets atomically creates a complete verified tree and never overwrite
   } finally { await rm(temp, { recursive: true, force: true }); }
 });
 
+test('copyAssets preserves deeply nested distribution paths and reuses the same inventory', async () => {
+  const { root, temp } = await fixture();
+  try {
+    const stem = 'extra/nested/module-1';
+    const base = join(root, 'dist', stem);
+    await mkdir(dirname(base), { recursive: true });
+    for (const suffix of ['.js', '.js.map', '.d.ts']) await writeFile(base + suffix, `nested ${suffix}\n`);
+    const destination = join(temp, 'deployment');
+    const first = await copyAssets({ destination, packageRoot: root });
+    assert.equal(first.files, REQUIRED.length * 3 + 5);
+    const manifest = JSON.parse(await readFile(join(destination, 'opm-assets.json'), 'utf8')) as { assets: { path: string }[] };
+    for (const suffix of ['.js', '.js.map', '.d.ts']) {
+      assert.ok(manifest.assets.some(asset => asset.path === stem + suffix));
+      assert.equal(await readFile(join(destination, stem + suffix), 'utf8'), `nested ${suffix}\n`);
+    }
+    assert.equal((await copyAssets({ destination, packageRoot: root })).reused, true);
+  } finally { await rm(temp, { recursive: true, force: true }); }
+});
+
 test('existing deployment rejects a file replaced by a same-size symlink before hashing', async () => {
   const { root, temp } = await fixture();
   try {
